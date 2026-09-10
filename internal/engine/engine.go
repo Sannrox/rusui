@@ -150,10 +150,7 @@ func (e *Engine) ExpireRefreshOwners() error {
 			if n >= RefreshRetryLimit {
 				st = "failed"
 			}
-			backoff := time.Duration(1<<min(n-1, 6)) * time.Second
-			if backoff > time.Minute {
-				backoff = time.Minute
-			}
+			backoff := min(time.Duration(1<<min(n-1, 6))*time.Second, time.Minute)
 			nb := now.Add(backoff).Format(time.RFC3339Nano)
 			if _, err = tx.Exec(`UPDATE refresh_requests SET owner=0, retry_count=?, state=?, not_before=?, generation=generation+1 WHERE repo=? AND item=?`,
 				n, st, nb, r.repo, r.item); err != nil {
@@ -1036,11 +1033,4 @@ func (e *Engine) ReconcileDeliveries(repo string) error {
 		})
 	}
 	return nil
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

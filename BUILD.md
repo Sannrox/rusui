@@ -144,7 +144,7 @@ Constraints:
   internal/lease, internal/exec, internal/reconcile, internal/refresh
 - No production credentials in the repo
 
-Verification — go test ./... must include:
+Verification — `make all && make test && make validate`. `go test ./...` must include:
 
 1. Expired worker heartbeats, then completes → heartbeat rejected,
    complete rejected; pending review still queued

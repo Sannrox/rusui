@@ -5,3 +5,9 @@
 /rusui-worker
 /server
 /worker
+_output/
+.version
+coverage.out
+coverage.html
+gotest*.xml
+*.stdout

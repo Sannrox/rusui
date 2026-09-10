@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -16,11 +17,27 @@ import (
 	"github.com/sannrox/rusui/internal/store"
 )
 
+var (
+	Version      = "dev"
+	GitCommit    = "unknown"
+	BuildTime    = "unknown"
+	GitMajor     = ""
+	GitMinor     = ""
+	PlatformName = ""
+	BuildArch    = ""
+	BuildOs      = ""
+)
+
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen")
 	db := flag.String("db", "rusui.db", "sqlite path")
 	pol := flag.String("policy", "policy.yaml", "policy file")
+	printVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+	if *printVersion {
+		fmt.Printf("rusui %s commit=%s time=%s\n", Version, GitCommit, BuildTime)
+		return
+	}
 	st, err := store.Open(*db)
 	if err != nil {
 		log.Fatal(err)
@@ -68,6 +85,6 @@ func main() {
 			_, _ = eng.StepRefresh()
 		}
 	}()
-	log.Printf("listen %s api=%s", *addr, api.BaseURL)
+	log.Printf("rusui %s listen %s api=%s", Version, *addr, api.BaseURL)
 	log.Fatal(http.ListenAndServe(*addr, srv.Handler()))
 }

@@ -132,8 +132,8 @@ func TestWebhookNoFetch(t *testing.T) {
 	if rr.Code != 200 {
 		t.Fatalf("code %d %s", rr.Code, rr.Body.Bytes())
 	}
-	if h.f.FetchCalls != 0 {
-		t.Fatalf("fetch during webhook: %d", h.f.FetchCalls)
+	if h.f.CallCount() != 0 {
+		t.Fatalf("fetch during webhook: %d", h.f.CallCount())
 	}
 }
 
@@ -233,7 +233,7 @@ func TestCatchUpUnchangedDuringReview(t *testing.T) {
 	h.putRefresh(it)
 	c := h.claim()
 	rev := c.Job.PendingRevision
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		h.putRefresh(it)
 	}
 	j, _ := store.JobState(h.st, it.Repo, it.Item)
@@ -271,7 +271,7 @@ func TestCompleteAThenClaimB(t *testing.T) {
 func TestClaimReapRetryLimit(t *testing.T) {
 	h := setup(t)
 	h.putRefresh(issue(1))
-	for i := 0; i < engine.RetryLimit; i++ {
+	for range engine.RetryLimit {
 		_ = h.claim()
 		h.clk.Advance(4 * time.Minute)
 	}
@@ -461,7 +461,7 @@ func TestStaleThresholds(t *testing.T) {
 func TestOperatorRetry(t *testing.T) {
 	h := setup(t)
 	h.putRefresh(issue(1))
-	for i := 0; i < engine.RetryLimit; i++ {
+	for range engine.RetryLimit {
 		_ = h.claim()
 		h.clk.Advance(4 * time.Minute)
 	}
@@ -570,10 +570,10 @@ func TestStartupExpiresOwner(t *testing.T) {
 	it := issue(1)
 	h.f.Put(it)
 	_ = h.e.CatchUpItem(it.Repo, it.Item, it.ItemKind)
-	h.f.FetchHang = 5 * time.Second
+	h.f.SetFetchHang(5 * time.Second)
 	go h.e.StepRefresh()
 	time.Sleep(20 * time.Millisecond)
-	h.f.FetchHang = 0
+	h.f.SetFetchHang(0)
 	if err := h.e.StartupExpireOwners(); err != nil {
 		t.Fatal(err)
 	}
@@ -631,7 +631,7 @@ func TestReconcileDetailFail(t *testing.T) {
 	}}
 	h.f.DetailFailIDs["x1"] = 5
 	h.f.Put(issue(3))
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		_ = h.e.ReconcileDeliveries("example/test-repo")
 	}
 	_ = h.e.ReconcileDeliveries("example/test-repo")
@@ -641,7 +641,7 @@ func TestReconcileDetailFail(t *testing.T) {
 func TestSlackRetry(t *testing.T) {
 	h := setup(t)
 	h.putRefresh(issue(1))
-	for i := 0; i < engine.RetryLimit; i++ {
+	for range engine.RetryLimit {
 		_ = h.claim()
 		h.clk.Advance(4 * time.Minute)
 	}

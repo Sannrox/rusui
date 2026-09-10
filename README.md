@@ -7,12 +7,47 @@ server admits work, records immutable reviews, and dry-runs apply.
 
 See `ARCHITECTURE.md` and `BUILD.md`.
 
+## Build
+
+Run this before committing:
+
+```bash
+make all && make test && make validate
+```
+
+| Target | What it does |
+|---|---|
+| `make all` | Host-platform binaries into `_output/local/bin/$(go env GOOS)/$(go env GOARCH)/` |
+| `make test` | Unit tests (`COVER=1` writes coverage HTML) |
+| `make validate` | golangci-lint, govulncheck, go-fix, shellcheck |
+| `make update` | Apply go-fix modernizations |
+| `make release-images` | Docker build image, linux binaries, `rusui`/`rusui-worker` runtime images |
+| `make docker-clean` | Remove docker build containers/tags and `_output` |
+| `make clean` | Remove `_output` |
+
+Dockerized Makefile (reproducible toolchain):
+
+```bash
+./build/run.sh make all
+./build/run.sh make test
+./build/run.sh make validate
+make release-images
+```
+
+See `build/README.md`. Runtime images still bind loopback unless you pass `-addr 0.0.0.0:8080`.
+
+```bash
+make all WHAT=cmd/rusui
+make test WHAT=./internal/engine GOFLAGS="-v" TEST_ARGS='-run ^TestClaim$$'
+make test COVER=1
+```
+
 ## Run (loopback)
 
 ```bash
-go test ./...
-go run ./cmd/rusui -addr 127.0.0.1:8080 -policy policy.yaml -db rusui.db
-go run ./cmd/rusui-worker -url http://127.0.0.1:8080 -repo Sannrox/rusui
+make all
+_output/local/bin/$(go env GOOS)/$(go env GOARCH)/rusui -addr 127.0.0.1:8080 -policy policy.yaml -db rusui.db
+_output/local/bin/$(go env GOOS)/$(go env GOARCH)/rusui-worker -url http://127.0.0.1:8080 -repo Sannrox/rusui
 ```
 
 GitHub and Slack cannot reach loopback. Point a tunnel at the process.

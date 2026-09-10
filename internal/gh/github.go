@@ -96,6 +96,33 @@ func (f *Fake) Put(it snapshot.Item) {
 	cur.Item = it
 }
 
+func (f *Fake) SetFetchHang(d time.Duration) {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	f.FetchHang = d
+}
+
+func (f *Fake) SetBlockFetch(ch chan struct{}) {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	f.BlockFetch = ch
+}
+
+func (f *Fake) CloseBlockFetch() {
+	f.Mu.Lock()
+	ch := f.BlockFetch
+	f.Mu.Unlock()
+	if ch != nil {
+		close(ch)
+	}
+}
+
+func (f *Fake) CallCount() int {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	return f.FetchCalls
+}
+
 func (f *Fake) GetItem(repo string, item int, kind string) (snapshot.Item, error) {
 	f.Mu.Lock()
 	delay, hang := f.FetchDelay, f.FetchHang

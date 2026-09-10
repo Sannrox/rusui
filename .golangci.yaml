@@ -1,0 +1,25 @@
+version: "2"
+run:
+  concurrency: 4
+  go: "1.26"
+  modules-download-mode: mod
+  issues-exit-code: 1
+  tests: true
+  allow-parallel-runners: false
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+linters:
+  default: standard
+  enable:
+    - misspell
+    - unconvert
+    - durationcheck
+    - errorlint
+formatters:
+  enable:
+    - gofmt
+    - goimports

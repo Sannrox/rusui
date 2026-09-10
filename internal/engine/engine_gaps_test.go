@@ -62,14 +62,14 @@ func TestPauseDuringEvidenceFetch(t *testing.T) {
 		t.Fatalf("intended after paused complete %d", n)
 	}
 	_ = h.e.SetPause("example/test-repo", false)
-	h.f.BlockFetch = make(chan struct{})
+	h.f.SetBlockFetch(make(chan struct{}))
 	done := make(chan error, 1)
 	go func() { done <- h.e.ApplyAttempt(it.Repo, it.Item) }()
 	waitFetch(t, h.f, 1)
 	if err := h.e.SetPause("example/test-repo", true); err != nil {
 		t.Fatal(err)
 	}
-	close(h.f.BlockFetch)
+	h.f.CloseBlockFetch()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestDeliveryDuringOwnerFetch(t *testing.T) {
 	if err := h.e.CatchUpItem(it.Repo, it.Item, it.ItemKind); err != nil {
 		t.Fatal(err)
 	}
-	h.f.BlockFetch = make(chan struct{})
+	h.f.SetBlockFetch(make(chan struct{}))
 	done := make(chan error, 1)
 	go func() {
 		_, err := h.e.StepRefresh()
@@ -104,7 +104,7 @@ func TestDeliveryDuringOwnerFetch(t *testing.T) {
 		t.Fatalf("needs_another=%d", needs)
 	}
 	_ = body
-	close(h.f.BlockFetch)
+	h.f.CloseBlockFetch()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestHangingRefreshReaper(t *testing.T) {
 	if err := h.e.CatchUpItem(it.Repo, it.Item, it.ItemKind); err != nil {
 		t.Fatal(err)
 	}
-	h.f.BlockFetch = make(chan struct{})
+	h.f.SetBlockFetch(make(chan struct{}))
 	done := make(chan error, 1)
 	go func() {
 		_, err := h.e.StepRefresh()
@@ -145,7 +145,7 @@ func TestHangingRefreshReaper(t *testing.T) {
 	if err := h.e.ExpireRefreshOwners(); err != nil {
 		t.Fatal(err)
 	}
-	close(h.f.BlockFetch)
+	h.f.CloseBlockFetch()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestReconcileCheckpointSkip(t *testing.T) {
 	if id := checkpointID(t, h.st, "example/test-repo"); id != "" {
 		t.Fatalf("early checkpoint %s", id)
 	}
-	for i := 0; i < engine.RefreshRetryLimit-1; i++ {
+	for range engine.RefreshRetryLimit - 1 {
 		if err := h.e.ReconcileDeliveries("example/test-repo"); err == nil {
 			t.Fatal("expected detail fail")
 		}
@@ -433,7 +433,7 @@ func TestOwnerFetchDiscardedAfterExpire(t *testing.T) {
 	if err := h.e.CatchUpItem(it.Repo, it.Item, it.ItemKind); err != nil {
 		t.Fatal(err)
 	}
-	h.f.BlockFetch = make(chan struct{})
+	h.f.SetBlockFetch(make(chan struct{}))
 	done := make(chan error, 1)
 	go func() {
 		_, err := h.e.StepRefresh()
@@ -446,7 +446,7 @@ func TestOwnerFetchDiscardedAfterExpire(t *testing.T) {
 	}
 	it.Body = "from-b"
 	h.f.Put(it)
-	close(h.f.BlockFetch)
+	h.f.CloseBlockFetch()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}

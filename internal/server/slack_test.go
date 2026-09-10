@@ -142,7 +142,7 @@ func TestSlackCommands(t *testing.T) {
 		t.Fatal(text)
 	}
 
-	for i := 0; i < engine.RetryLimit; i++ {
+	for range engine.RetryLimit {
 		c, err := e.Claim("example/test-repo")
 		if err != nil || c == nil {
 			t.Fatal(err)
@@ -184,7 +184,7 @@ func TestSlackExceptionNotify(t *testing.T) {
 	f.Put(it)
 	_ = e.CatchUpItem(it.Repo, it.Item, it.ItemKind)
 	_, _ = e.StepRefresh()
-	for i := 0; i < engine.RetryLimit; i++ {
+	for range engine.RetryLimit {
 		c, err := e.Claim("example/test-repo")
 		if err != nil || c == nil {
 			t.Fatal(err)

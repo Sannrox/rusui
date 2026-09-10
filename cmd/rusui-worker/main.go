@@ -13,12 +13,28 @@ import (
 	"time"
 )
 
+var (
+	Version      = "dev"
+	GitCommit    = "unknown"
+	BuildTime    = "unknown"
+	GitMajor     = ""
+	GitMinor     = ""
+	PlatformName = ""
+	BuildArch    = ""
+	BuildOs      = ""
+)
+
 func main() {
 	base := flag.String("url", "http://127.0.0.1:8080", "server")
 	repo := flag.String("repo", "", "repo")
 	token := flag.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "worker token")
 	codex := flag.String("codex", "codex", "cli")
+	printVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+	if *printVersion {
+		fmt.Printf("rusui-worker %s commit=%s time=%s\n", Version, GitCommit, BuildTime)
+		return
+	}
 	if *repo == "" {
 		logf("need -repo")
 		os.Exit(1)
