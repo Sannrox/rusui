@@ -1,0 +1,251 @@
+package eval
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/sannrox/rusui/internal/clock"
+	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/policy"
+	"github.com/sannrox/rusui/internal/snapshot"
+	"github.com/sannrox/rusui/internal/store"
+)
+
+const pol = `version: 1
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+  review: true
+  comments: true
+  close: true
+  implement: false
+  land: false
+  max_reviews_per_repo_per_utc_day: 50
+repos:
+  example/test-repo:
+    visibility: public
+    review: true
+    comments: true
+    close: true
+`
+
+type row struct {
+	ID, Item, Reason, Operator, Notes string
+	Number                            int
+	Kind                              string
+	Setup                             func(now time.Time, f *gh.Fake)
+	Art                               func(c *engine.Claim) engine.Artifact
+}
+
+type result struct {
+	ID, Item, Reason, Operator string
+	System                     string
+	Evidence                   string
+	Agree                      bool
+	Note                       string
+}
+
+func TestEvalSet(t *testing.T) {
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	repo := "example/test-repo"
+	cases := evalCases(now)
+
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "eval.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	p, err := policy.Parse([]byte(pol))
+	if err != nil {
+		t.Fatal(err)
+	}
+	clk := &clock.Fake{T: now}
+	f := gh.NewFake()
+	f.Put(snapshot.Item{Repo: repo, Item: 1, ItemKind: "issue", State: "open", Title: "canonical", Body: "the original"})
+	e := engine.New(st, p, f, clk)
+	e.ReloadPolicy(p)
+
+	var rows []result
+	unexpected := 0
+	for _, c := range cases {
+		c.Setup(now, f)
+		if err := e.CatchUpItem(repo, c.Number, c.Kind); err != nil {
+			t.Fatal(c.ID, err)
+		}
+		if _, err := e.StepRefresh(); err != nil {
+			t.Fatal(c.ID, err)
+		}
+		cl, err := e.Claim(repo)
+		if err != nil || cl == nil {
+			t.Fatalf("%s claim: %v", c.ID, err)
+		}
+		art := c.Art(cl)
+		if _, err := e.Complete(cl.Job.ID, cl.Job.LeaseGeneration, cl.Job.ClaimedRevision, art); err != nil {
+			t.Fatal(c.ID, err)
+		}
+		bodies, _ := store.IntendedBodies(st, repo, c.Number)
+		sys, ev := classify(c.Reason, bodies)
+		agree := match(c.Operator, sys)
+		note := c.Notes
+		if c.ID == "E4" {
+			note = "expected mismatch: server verifies canonical exists, not sameness"
+		}
+		if c.ID == "E4" {
+			if agree {
+				t.Errorf("E4 should disagree (false close)")
+			}
+		} else if !agree {
+			unexpected++
+			t.Errorf("%s: operator=%s system=%s", c.ID, c.Operator, sys)
+		}
+		rows = append(rows, result{c.ID, c.Item, c.Reason, c.Operator, sys, ev, agree, note})
+	}
+
+	var b strings.Builder
+	b.WriteString("# eval results\n\n")
+	b.WriteString(fmt.Sprintf("Ran %s against dry-run apply (policy.fixture-style close/comments on).\n\n", now.Format("2006-01-02")))
+	b.WriteString("| id | item | reason | operator | system | evidence | agree |\n|---|---|---|---|---|---|---|\n")
+	for _, r := range rows {
+		ag := "yes"
+		if !r.Agree {
+			ag = "no"
+		}
+		b.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s | %s | %s |\n", r.ID, r.Item, r.Reason, r.Operator, r.System, r.Evidence, ag))
+	}
+	b.WriteString("\nE4 is the designed false close: `duplicate_or_superseded` only checks that the canonical item exists.\n")
+	out := filepath.Join("results.md")
+	if err := os.WriteFile(out, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Log("\n" + b.String())
+	if unexpected > 0 {
+		t.Fatalf("%d unexpected mismatches", unexpected)
+	}
+}
+
+func classify(reason string, bodies []string) (system, evidence string) {
+	if len(bodies) == 0 {
+		switch reason {
+		case "incoherent", "not_reproducible_on_main":
+			return "advisory", "model_assertion"
+		case "keep":
+			return "keep", "—"
+		default:
+			return "keep", "not eligible"
+		}
+	}
+	body := bodies[0]
+	ev := "server_verified"
+	if strings.Contains(body, "model_assertion") {
+		ev = "model_assertion"
+	}
+	if strings.Contains(body, "comment") && strings.Contains(body, "dry-run comment") {
+		return "comment", ev
+	}
+	if strings.Contains(body, "dry-run close") {
+		return "close", ev
+	}
+	if strings.Contains(body, "dry-run comment") {
+		return "comment", ev
+	}
+	return "close", ev
+}
+
+func match(operator, system string) bool {
+	if operator == "advisory" {
+		return system == "advisory" || system == "keep"
+	}
+	return operator == system
+}
+
+func evalCases(now time.Time) []row {
+	repo := "example/test-repo"
+	issue := func(n int, title, body, created, last string) snapshot.Item {
+		return snapshot.Item{
+			Repo: repo, Item: n, ItemKind: "issue", State: "open",
+			Title: title, Body: body, DefaultBranch: "main", MainSHA: "aaa",
+			CreatedAt: created, UpdatedAt: created, LastNonBotCommentAt: last,
+		}
+	}
+	pr := func(n int, base string, onDefault bool, merge string) snapshot.Item {
+		return snapshot.Item{
+			Repo: repo, Item: n, ItemKind: "pull", State: "closed", Title: "fix", Body: "done",
+			DefaultBranch: "main", MainSHA: "aaa", HeadSHA: "h", BaseSHA: "b",
+			BaseRef: base, Merged: true, MergedIntoDefault: onDefault, MergeCommitSHA: merge,
+			CreatedAt: now.Add(-10 * 24 * time.Hour).Format(time.RFC3339),
+			UpdatedAt: now.Add(-1 * 24 * time.Hour).Format(time.RFC3339),
+		}
+	}
+	old := now.Add(-90 * 24 * time.Hour).Format(time.RFC3339)
+	recent := now.Add(-10 * 24 * time.Hour).Format(time.RFC3339)
+	base := func(c *engine.Claim, verdict, typ, reason string) engine.Artifact {
+		return engine.Artifact{
+			SchemaVersion: 1, Repo: c.Job.Repo, Item: c.Job.Item, ItemKind: c.Job.ItemKind,
+			ClaimedRevision: c.Job.ClaimedRevision, SnapshotHash: c.ItemHash,
+			Verdict: verdict, Confidence: "high",
+			ProposedActions: []engine.ProposedAction{{Type: typ, ReasonCode: reason}},
+		}
+	}
+	return []row{
+		{ID: "E1", Item: "issue/stale-old", Reason: "stale_insufficient_info", Operator: "close", Notes: "90 days", Number: 101, Kind: "issue",
+			Setup: func(_ time.Time, f *gh.Fake) { f.Put(issue(101, "old bug", "repro", old, old)) },
+			Art: func(c *engine.Claim) engine.Artifact {
+				return base(c, "propose_close", "close", "stale_insufficient_info")
+			}},
+		{ID: "E2", Item: "issue/stale-recent", Reason: "stale_insufficient_info", Operator: "keep", Notes: "comment 10d", Number: 102, Kind: "issue",
+			Setup: func(_ time.Time, f *gh.Fake) { f.Put(issue(102, "old bug", "repro", old, recent)) },
+			Art: func(c *engine.Claim) engine.Artifact {
+				return base(c, "propose_close", "close", "stale_insufficient_info")
+			}},
+		{ID: "E3", Item: "issue/dup", Reason: "duplicate_or_superseded", Operator: "close", Notes: "same as #1", Number: 103, Kind: "issue",
+			Setup: func(_ time.Time, f *gh.Fake) { f.Put(issue(103, "dup", "see #1", recent, recent)) },
+			Art: func(c *engine.Claim) engine.Artifact {
+				a := base(c, "propose_close", "close", "duplicate_or_superseded")
+				a.ProposedActions[0].Canonical = 1
+				return a
+			}},
+		{ID: "E4", Item: "issue/not-dup", Reason: "duplicate_or_superseded", Operator: "keep", Notes: "different bug", Number: 104, Kind: "issue",
+			Setup: func(_ time.Time, f *gh.Fake) { f.Put(issue(104, "other", "unrelated", recent, recent)) },
+			Art: func(c *engine.Claim) engine.Artifact {
+				a := base(c, "propose_close", "close", "duplicate_or_superseded")
+				a.ProposedActions[0].Canonical = 1
+				return a
+			}},
+		{ID: "E5", Item: "issue/fixed", Reason: "implemented_on_main", Operator: "close", Notes: "on default branch", Number: 105, Kind: "pull",
+			Setup: func(_ time.Time, f *gh.Fake) { f.Put(pr(105, "main", true, "c-main")) },
+			Art: func(c *engine.Claim) engine.Artifact {
+				a := base(c, "propose_close", "close", "implemented_on_main")
+				a.HeadSHA = "h"
+				a.ProposedActions[0].CommitSHA = "c-main"
+				return a
+			}},
+		{ID: "E6", Item: "pr/release-only", Reason: "implemented_on_main", Operator: "keep", Notes: "release branch", Number: 106, Kind: "pull",
+			Setup: func(_ time.Time, f *gh.Fake) { f.Put(pr(106, "release-1", false, "c-rel")) },
+			Art: func(c *engine.Claim) engine.Artifact {
+				a := base(c, "propose_close", "close", "implemented_on_main")
+				a.HeadSHA = "h"
+				a.ProposedActions[0].CommitSHA = "c-rel"
+				return a
+			}},
+		{ID: "E7", Item: "issue/vague", Reason: "incoherent", Operator: "advisory", Notes: "no close", Number: 107, Kind: "issue",
+			Setup: func(_ time.Time, f *gh.Fake) { f.Put(issue(107, "???", "asdf", recent, recent)) },
+			Art:   func(c *engine.Claim) engine.Artifact { return base(c, "propose_close", "close", "incoherent") }},
+		{ID: "E8", Item: "issue/flaky", Reason: "not_reproducible_on_main", Operator: "advisory", Notes: "never live close", Number: 108, Kind: "issue",
+			Setup: func(_ time.Time, f *gh.Fake) { f.Put(issue(108, "flake", "sometimes", recent, recent)) },
+			Art: func(c *engine.Claim) engine.Artifact {
+				return base(c, "propose_close", "close", "not_reproducible_on_main")
+			}},
+		{ID: "E9", Item: "issue/nudge", Reason: "note", Operator: "comment", Notes: "useful comment", Number: 109, Kind: "issue",
+			Setup: func(_ time.Time, f *gh.Fake) { f.Put(issue(109, "nudge", "please docs", recent, recent)) },
+			Art:   func(c *engine.Claim) engine.Artifact { return base(c, "propose_comment", "comment", "note") }},
+		{ID: "E10", Item: "issue/ok", Reason: "keep", Operator: "keep", Notes: "abstain", Number: 110, Kind: "issue",
+			Setup: func(_ time.Time, f *gh.Fake) { f.Put(issue(110, "ok", "working", recent, recent)) },
+			Art:   func(c *engine.Claim) engine.Artifact { return base(c, "keep", "", "") }},
+	}
+}

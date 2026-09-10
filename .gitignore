@@ -1,0 +1,7 @@
+*.db
+*.db-shm
+*.db-wal
+/rusui
+/rusui-worker
+/server
+/worker

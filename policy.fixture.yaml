@@ -1,0 +1,20 @@
+# Test fixture only. Authorizes v1 dry-run simulation of comments/close.
+# Operator default remains policy.example.yaml (mutations off).
+version: 1
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+  review: true
+  comments: false
+  close: false
+  implement: false
+  land: false
+  max_reviews_per_repo_per_utc_day: 50
+repos:
+  example/test-repo:
+    visibility: public
+    review: true
+    comments: true
+    close: true
+    implement: false
+    land: false

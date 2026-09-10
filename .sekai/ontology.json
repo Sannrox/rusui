@@ -1,0 +1,353 @@
+{
+  "schema_version": 1,
+  "classes": [
+    {
+      "name": "RusuiApplyAttempt",
+      "description": "Deterministic attempt keyed by stable action_id. v1 success is one intended-action record; GitHub-side outcome reconciliation is v2.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiApplyLane",
+      "description": "Deterministic server-side executor. Must not write pending snapshots. Item-hash mismatch or failed default-branch reachability: one txn cancel + optional evidence_invalidation + refresh_request. implemented_on_main requires merge commit ancestor of default-branch tip. v1 dry-run only.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiCompletionReceipt",
+      "description": "Accepted complete or fail result keyed by (job_id, lease_generation, claimed_revision). Lookup does not depend on current job state. Fail receipts have kind=fail and no review revision. Missing key stays rejected.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiControlPlane",
+      "description": "Personal GitHub maintenance server: admits work, leases jobs, stores policy revisions, and coordinates unattended lanes.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiImplementLane",
+      "description": "v3 only. Model and trusted proofs run without publish credentials. Publish consumes the exact verified artifact (head_sha and proof digests) then uses the server write token. A profile command name is not a security boundary.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiEvidenceInvalidation",
+      "description": "Unique (review_revision_id, action_id) row inserted in the same transaction as apply cancellation and force refresh_request enqueue. Force admit consumes it once so recovery cannot increment pending_revision twice.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiIntendedAction",
+      "description": "v1 dry-run success record written once per action_id. Stores evidence class and the server-limit sentence (on-branch is not solved; item exists is not duplicate).",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiJobLease",
+      "description": "Exclusive lease per repo, item, and lane. Admit while paused keeps state=leased if a worker is live. Claim rechecks repo still configured and review enabled. Unreceipted stale complete is rejected. operator_retry requeues failed jobs on an unchanged revision only.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiPolicyOverlay",
+      "description": "Durable SQLite overlay that may only narrow policy.yaml. Pause stops new claims and apply. Admit of a new snapshot during pause does not demote a live lease. In-flight complete/fail still succeed. Pause does not reset failed jobs.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiPolicyRevision",
+      "description": "Immutable parsed snapshot of policy.yaml. Jobs bind to a revision; apply rechecks current policy immediately before action.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiPublicContext",
+      "description": "Only approved public GitHub fields for a public-repo job. Private plan notes, Slack, other repos, and Aldunis are excluded. Publishable review fields are the only public write inputs.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiRefreshRequest",
+      "description": "Durable per-item work to fetch live GitHub state. One owner with refresh_generation and owner_expires_at. Fetch timeout 30s. Crashed or hung owners are expired on reaper/startup, backoff, max 5 retries. Late results with expired ownership are discarded. Apply enqueues these requests instead of calling admit.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiReconcileCheckpoint",
+      "description": "Durable (repo, last_processed_delivered_at, last_processed_delivery_id). Distinct from GitHub list-deliveries pagination cursor.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiReviewLane",
+      "description": "Claimed worker runs the Codex CLI adapter on server-built input.v1.json pinned to the claimed snapshot SHAs (main_sha from admit, not claim-time fetch) and reads output.v1.json. Model must not fetch live GitHub.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiReviewRevision",
+      "description": "Immutable canonical review JSON stored in SQLite with the completion receipt. Filesystem JSON/MD are optional exports. Identity and SHAs must match server-owned claim data. Model assertions are not server_verified evidence.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiStandingPlan",
+      "description": "Executable baseline is policy.yaml. Optional prose notes are not executable.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiWebhookReconciler",
+      "description": "Webhook ACKs delivery plus a refresh_request with no live fetch. Reconcile lists deliveries then fetches detail payloads; checkpoint advances only after detail plus refresh_request. Failed detail retries; after limit, skip only that delivery_id. Refresh coordinator is the only pending-snapshot writer.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiWorkerSandbox",
+      "description": "v1 trusted local execution as the same OS user. Env and cwd isolation are defense in depth, not a filesystem jail. Write tokens stay in the server. Filesystem and network jails are v2.",
+      "superclasses": [],
+      "properties": []
+    }
+  ],
+  "relations": [
+    {
+      "name": "rusui_admits_review",
+      "description": "Control plane admits review jobs under current policy.",
+      "domain": "RusuiControlPlane",
+      "range": "RusuiReviewLane",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_binds_policy_revision",
+      "description": "Admitted jobs store a policy revision id.",
+      "domain": "RusuiControlPlane",
+      "range": "RusuiPolicyRevision",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_dispatches_apply",
+      "description": "Control plane dispatches deterministic apply attempts.",
+      "domain": "RusuiControlPlane",
+      "range": "RusuiApplyLane",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_finalizes_with_receipt",
+      "description": "Review finalization writes a completion receipt in the same transaction as publication.",
+      "domain": "RusuiReviewRevision",
+      "range": "RusuiCompletionReceipt",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_issues_lease",
+      "description": "Control plane issues exclusive job leases with generations.",
+      "domain": "RusuiControlPlane",
+      "range": "RusuiJobLease",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_narrows_with_overlay",
+      "description": "Overlay pauses may only narrow the baseline policy revision.",
+      "domain": "RusuiPolicyOverlay",
+      "range": "RusuiPolicyRevision",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_records_evidence_invalidation",
+      "description": "Apply records a unique evidence invalidation before force refresh.",
+      "domain": "RusuiApplyLane",
+      "range": "RusuiEvidenceInvalidation",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_enqueues_refresh",
+      "description": "Control plane turns deliveries and catch-up into refresh_requests.",
+      "domain": "RusuiControlPlane",
+      "range": "RusuiRefreshRequest",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_reconciles_deliveries",
+      "description": "Control plane recovers missed or failed GitHub deliveries.",
+      "domain": "RusuiControlPlane",
+      "range": "RusuiWebhookReconciler",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_review_produces_revision",
+      "description": "Review lane produces immutable review revisions.",
+      "domain": "RusuiReviewLane",
+      "range": "RusuiReviewRevision",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_apply_references_revision",
+      "description": "Apply attempts reference an immutable review revision and action_id.",
+      "domain": "RusuiApplyLane",
+      "range": "RusuiApplyAttempt",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_records_intended_action",
+      "description": "v1 apply writes one intended-action record per action_id.",
+      "domain": "RusuiApplyLane",
+      "range": "RusuiIntendedAction",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_stores_reconcile_checkpoint",
+      "description": "Control plane stores a durable delivery checkpoint separate from pagination cursors.",
+      "domain": "RusuiWebhookReconciler",
+      "range": "RusuiReconcileCheckpoint",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_sandboxes_model",
+      "description": "Review lane runs the model inside the worker sandbox.",
+      "domain": "RusuiReviewLane",
+      "range": "RusuiWorkerSandbox",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_uses_public_context",
+      "description": "Public-repo review jobs receive only PublicContext.",
+      "domain": "RusuiReviewLane",
+      "range": "RusuiPublicContext",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_uses_standing_plan",
+      "description": "Control plane loads policy.yaml as the executable baseline.",
+      "domain": "RusuiControlPlane",
+      "range": "RusuiStandingPlan",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    }
+  ],
+  "provenance": [
+    {
+      "subject": "RusuiControlPlane",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#rusui-architecture",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiStandingPlan",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#executable-policy",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiPolicyRevision",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#bind-and-recheck",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiPolicyOverlay",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#precedence",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiCompletionReceipt",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#lease-state-machine",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiJobLease",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#lease-state-machine",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiWebhookReconciler",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#webhook-intake-and-recovery",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiWorkerSandbox",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#process-boundary",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiReviewRevision",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#review-artifacts",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiApplyAttempt",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#apply-deterministic",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiPublicContext",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#public-output",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiImplementLane",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#implement-v3-only",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiReviewLane",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#process-boundary",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiApplyLane",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#apply-deterministic",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiIntendedAction",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#apply-deterministic",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiEvidenceInvalidation",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#apply-deterministic",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiRefreshRequest",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#webhook-intake-and-recovery",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiReconcileCheckpoint",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#webhook-intake-and-recovery",
+      "confidence": 1.0
+    }
+  ]
+}
