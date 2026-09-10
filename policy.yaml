@@ -9,7 +9,7 @@ defaults:
   land: false
   max_reviews_per_repo_per_utc_day: 50
 repos:
-  sannrox/rusui:
+  Sannrox/rusui:
     visibility: private
     review: true
     comments: false

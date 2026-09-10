@@ -12,7 +12,7 @@ See `ARCHITECTURE.md` and `BUILD.md`.
 ```bash
 go test ./...
 go run ./cmd/rusui -addr 127.0.0.1:8080 -policy policy.yaml -db rusui.db
-go run ./cmd/rusui-worker -url http://127.0.0.1:8080 -repo sannrox/rusui
+go run ./cmd/rusui-worker -url http://127.0.0.1:8080 -repo Sannrox/rusui
 ```
 
 GitHub and Slack cannot reach loopback. Point a tunnel at the process.
