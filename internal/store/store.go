@@ -412,3 +412,43 @@ func TurnCredentialValid(s *Store, turnID int64, tokenHash string, now time.Time
 	}
 	return now.Before(t), nil
 }
+
+func InsertAction(s *Store, a Action) error {
+	return s.Tx(func(tx *sql.Tx) error {
+		return InsertActionTx(tx, a)
+	})
+}
+
+func InsertActionTx(tx *sql.Tx, a Action) error {
+	_, err := tx.Exec(`INSERT INTO actions (action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		a.ID, a.SessionID, a.TurnID, a.ReviewRevisionID, a.Repo, a.Item, a.Type, a.ReasonCode, a.EvidenceClass, a.LimitSentence, a.Body)
+	return err
+}
+
+func ListActions(s *Store, repo string, item int) ([]Action, error) {
+	rows, err := s.DB.Query(`SELECT action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body FROM actions WHERE repo=? AND item=? ORDER BY action_id`,
+		repo, item)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Action
+	for rows.Next() {
+		var a Action
+		var sid, tid, rid sql.NullInt64
+		if err := rows.Scan(&a.ID, &sid, &tid, &rid, &a.Repo, &a.Item, &a.Type, &a.ReasonCode, &a.EvidenceClass, &a.LimitSentence, &a.Body); err != nil {
+			return nil, err
+		}
+		if sid.Valid {
+			a.SessionID = &sid.Int64
+		}
+		if tid.Valid {
+			a.TurnID = &tid.Int64
+		}
+		if rid.Valid {
+			a.ReviewRevisionID = &rid.Int64
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}

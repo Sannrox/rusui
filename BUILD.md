@@ -97,9 +97,12 @@ Build this v1:
 
 4. Review lane
    - Spawn only after claim. Trusted local execution as specified.
-   - One adapter: Codex CLI; server-built input.v1.json pinned to
-     claimed snapshot SHAs; output.v1.json. Size limits as
-     ARCHITECTURE.md. Model must not fetch live GitHub.
+   - Review driver: `rusui-runner` execs `-driver`; JSON artifact on
+     stdout. `internal/acp` hosts Grok over ACP
+     (`agent --permission-mode default agent stdio`) and records
+     inbound tool and permission requests as action receipts. The
+     runner does not spawn that client yet. Model must not fetch live
+     GitHub.
    - main_sha on the review row is the admitted snapshot SHA, not a
      claim-time fetch.
    - Kill CLI at execution_deadline_at even if heartbeats succeed.
