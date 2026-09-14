@@ -11,7 +11,8 @@
 - Related: [VISION.md](../../VISION.md), [ROADMAP.md](../../ROADMAP.md),
   [ARCHITECTURE.md](../../ARCHITECTURE.md) (the v1 contract this ADR
   eventually supersedes in part),
-  [ADR 0002](0002-grok-acp-agent-set.md) (amends D2's chosen agent set)
+  [ADR 0002](0002-grok-acp-agent-set.md) (amends D2's chosen agent set),
+  [ADR 0003](0003-operator-surface.md) (amends D6 and D7)
 
 ## Context
 

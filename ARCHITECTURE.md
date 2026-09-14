@@ -63,6 +63,10 @@ The tunnel is operator infrastructure, not part of this repo. Document the
 forward target in run docs. If the tunnel is down, refresh of locally
 tracked items and delivery reconcile still recover missed work.
 
+Later operator reachability (not this milestone) replaces loopback-as-security
+with a token plus identity-aware proxy or tailnet. Surfaces stay viewers of
+the same object API. See [ADR 0003](docs/decisions/0003-operator-surface.md).
+
 ## Executable policy
 
 Prose is not executable. `policy.yaml` is the only baseline that can

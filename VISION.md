@@ -57,8 +57,9 @@ operator's perimeter and there is no per-minute meter.
    transaction that commits the action.
 5. **Fail closed.** Missing secrets, unknown policy fields, unreachable
    required governance, and unmatched permission requests all refuse.
-6. **API first.** CLI, editors via ACP, the embedded console, and chat adapters
-   are clients of one API.
+6. **API first.** Every surface is a view of the same object types. CLI,
+   editors via ACP, the embedded console, and chat adapters are clients of
+   one HTTP+SSE API ([ADR 0003](docs/decisions/0003-operator-surface.md)).
 7. **Self-hosted, single binary, your metal.** SQLite by default; Postgres and
    high availability are options, never requirements.
 8. **Dogfood gates.** Every phase ends in a measurement on the maintainer's own
