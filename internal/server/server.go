@@ -40,6 +40,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /hooks/slack", s.slackHook)
 	mux.HandleFunc("POST /runners/hello", s.runnerHello)
 	mux.HandleFunc("POST /sessions/{id}/events", s.sessionEvents)
+	mux.HandleFunc("POST /turns/{id}/actions", s.turnActions)
 	mux.HandleFunc("POST /jobs/claim", s.claim)
 	mux.HandleFunc("POST /jobs/{id}/heartbeat", s.heartbeat)
 	mux.HandleFunc("POST /jobs/{id}/complete", s.complete)
@@ -217,6 +218,40 @@ func (s *Server) sessionEvents(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
+func (s *Server) turnActions(w http.ResponseWriter, r *http.Request) {
+	tid, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || tid == 0 {
+		http.Error(w, "turn", http.StatusNotFound)
+		return
+	}
+	if _, err := store.GetTurn(s.Eng.Store, tid); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "turn", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !s.runnerOrTurnOK(r, tid) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	var rec struct {
+		Type   string `json:"type"`
+		Reason string `json:"reason"`
+		Body   any    `json:"body"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.Eng.IngestTurnAction(tid, rec.Type, rec.Reason, rec.Body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
 func issueTurnToken(st *store.Store, turnID int64, gen int, now time.Time) (string, time.Time, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
@@ -254,7 +289,7 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]any{
+	out := map[string]any{
 		"job_id":             c.Job.ID,
 		"turn_id":            c.Job.ID,
 		"lease_generation":   c.Job.LeaseGeneration,
@@ -268,7 +303,11 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		"turn_token":         tok,
 		"turn_token_expires": exp.UTC().Format(time.RFC3339Nano),
 		"input":              s.Eng.BuildInput(c),
-	})
+	}
+	if turn, err := store.GetTurn(s.Eng.Store, c.Job.ID); err == nil {
+		out["session_id"] = turn.SessionID
+	}
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {

@@ -36,6 +36,7 @@ type Assignment struct {
 	Item              int             `json:"item"`
 	ItemKind          string          `json:"item_kind"`
 	ItemHash          string          `json:"item_hash"`
+	SessionID         int64           `json:"session_id"`
 	TurnToken         string          `json:"turn_token"`
 	ExecutionDeadline *time.Time      `json:"execution_deadline"`
 	Input             json.RawMessage `json:"input"`

@@ -23,6 +23,7 @@ func main() {
 	token := flag.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "runner bootstrap token")
 	name := flag.String("name", "local", "runner name")
 	driver := flag.String("driver", "", "process driver command (space-separated)")
+	acpHost := flag.Bool("acp", false, "host one ACP turn with Grok instead of the process driver")
 	once := flag.Bool("once", false, "claim at most one turn and exit")
 	printVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
@@ -30,14 +31,20 @@ func main() {
 		fmt.Printf("rusui-runner %s commit=%s time=%s\n", Version, GitCommit, BuildTime)
 		return
 	}
-	if *repo == "" || *driver == "" {
-		fmt.Fprintln(os.Stderr, "need -repo and -driver")
+	if *repo == "" || (*driver == "" && !*acpHost) {
+		fmt.Fprintln(os.Stderr, "need -repo and -driver, or -repo and -acp")
 		os.Exit(1)
 	}
 	c := &runner.Client{Base: *base, Bootstrap: *token, Repo: *repo, Name: *name}
 	cmd := strings.Fields(*driver)
 	for {
-		if err := runner.OneTurn(context.Background(), c, cmd); err != nil {
+		var err error
+		if *acpHost {
+			err = runner.OneACPTurn(context.Background(), c, runner.GrokHost(c))
+		} else {
+			err = runner.OneTurn(context.Background(), c, cmd)
+		}
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "turn: %v\n", err)
 		}
 		if *once {

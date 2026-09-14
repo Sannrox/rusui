@@ -3,12 +3,14 @@ package runner_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/clock"
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/gh"
@@ -137,4 +139,46 @@ func TestDriverEnvHasTurnTokenNotPlaneSecret(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
+}
+
+func TestACPHostCompletesWithReceipts(t *testing.T) {
+	_, st, hs := setup(t)
+	cli := &runner.Client{Base: hs.URL, Bootstrap: "wsec", Repo: "example/test-repo", Name: "local"}
+	err := runner.OneACPTurn(context.Background(), cli, func(a *runner.Assignment, dir string) (*acp.Client, func(), error) {
+		return startFakeACP(t, runner.HTTPRecorder{Base: hs.URL, Token: a.TurnToken, TurnID: a.TurnID})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	acts, err := store.ListActions(st, "example/test-repo", 1)
+	if err != nil || len(acts) == 0 {
+		t.Fatalf("actions %d %v", len(acts), err)
+	}
+	var turnID int64
+	if err := st.DB.QueryRow(`SELECT id FROM turns WHERE state='completed'`).Scan(&turnID); err != nil {
+		t.Fatal(err)
+	}
+	n, err := store.CountReceipts(st, turnID)
+	if err != nil || n < 1 {
+		t.Fatalf("receipts %d %v", n, err)
+	}
+}
+
+func startFakeACP(t *testing.T, rec acp.Recorder) (*acp.Client, func(), error) {
+	t.Helper()
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = (&acp.FakeAgent{In: agentIn, Out: agentOut}).Run()
+	}()
+	stop := func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+		_ = agentOut.Close()
+		<-done
+	}
+	return &acp.Client{In: clientIn, Out: clientOut, Rec: rec, Perm: acp.DenyUnmatched{}}, stop, nil
 }
