@@ -422,6 +422,13 @@ What v1 does enforce:
 v3 push/PR uses the server-side write token only in the publish step
 after proofs succeeded without that token.
 
+`internal/acp` is the host-side Agent Client Protocol client. The P1
+guest spawn is `agent --permission-mode default agent stdio` (Grok).
+Every inbound `fs/*`, `terminal/*`, and `session/request_permission`
+is recorded as an `actions` row. Permission requests with no matching
+rule are denied and stored as approvals. The process driver is still
+the review lane; the runner does not spawn this client yet.
+
 ## Review artifacts
 
 Canonical review JSON lives in SQLite on the `review_revisions` row,
