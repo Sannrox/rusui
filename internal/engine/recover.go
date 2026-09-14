@@ -23,6 +23,9 @@ func (e *Engine) Recover() error {
 		e.exception("catch-up: " + err.Error())
 	}
 	_ = e.RetryApplyAttempts()
+	if err := e.ReapEnvironments(); err != nil {
+		e.exception("reap environments: " + err.Error())
+	}
 	return nil
 }
 

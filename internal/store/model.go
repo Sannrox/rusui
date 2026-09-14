@@ -6,12 +6,25 @@ import "time"
 // session; GitHub (repo, item) is a source attribute of that session.
 
 type Environment struct {
-	ID        int64
-	Name      string
-	Driver    string
-	State     string
-	CreatedAt time.Time
+	ID          int64
+	Name        string
+	Driver      string
+	State       string
+	Handle      string
+	SourceHash  string
+	ExpiresAt   *time.Time
+	SleptAt     *time.Time
+	CPUMillis   int
+	MemoryBytes int64
+	CreatedAt   time.Time
 }
+
+const (
+	EnvReady    = "ready"
+	EnvSleeping = "sleeping"
+	EnvExpired  = "expired"
+	EnvTTL      = 72 * time.Hour
+)
 
 type Runner struct {
 	ID         int64

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sannrox/rusui/internal/clock"
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/snapshot"
@@ -47,6 +48,8 @@ type Engine struct {
 	FetchTimeout time.Duration
 	OwnerTTL     time.Duration
 	ExecDeadline time.Duration
+	Env          env.Driver
+	EnvTTL       time.Duration
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {
