@@ -9,6 +9,7 @@ type Runtime interface {
 	Start(id string) error
 	Remove(id string) error
 	HasFile(id, path string) bool
+	ReadFile(id, path string) ([]byte, error)
 	Exec(id string, cmd []string) error
 }
 

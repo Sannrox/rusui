@@ -71,6 +71,30 @@ func TestContainerDriverLifecycleAndScripts(t *testing.T) {
 	}
 }
 
+func TestContainerWakeStartsServices(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{DefaultContents: map[string][]byte{
+		env.ServicesRusuiPath: []byte("services:\n  web:\n    command: pnpm dev\n"),
+	}}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	created, err := h.e.ProvisionEnvironment(engine.EnvSpec{Name: "box-svc", Kind: env.KindContainer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rt.Execs) != 1 || rt.Execs[0][len(rt.Execs[0])-1] != "pnpm dev" {
+		t.Fatalf("create execs %#v", rt.Execs)
+	}
+	if _, err := h.e.SleepEnvironment(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.WakeEnvironment(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(rt.Execs) != 2 || rt.Execs[1][len(rt.Execs[1])-1] != "pnpm dev" {
+		t.Fatalf("wake execs %#v", rt.Execs)
+	}
+}
+
 func TestContainerDriverSkippedWithoutRuntime(t *testing.T) {
 	h := setup(t)
 	if _, err := h.e.ProvisionEnvironment(engine.EnvSpec{Name: "box", Kind: env.KindContainer}); err == nil {

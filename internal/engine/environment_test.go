@@ -3,6 +3,9 @@ package engine_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -88,5 +91,43 @@ func TestRecoverReapsExpiredEnvironments(t *testing.T) {
 	}
 	if got.State != store.EnvExpired {
 		t.Fatalf("recover state %s", got.State)
+	}
+}
+
+func TestWakeRestartsServicesYAML(t *testing.T) {
+	h := setup(t)
+	h.e.Env = env.Process{Root: t.TempDir()}
+	created, err := h.e.CreateEnvironment("ws-svc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(created.Handle, ".rusui"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(created.Handle, env.ServicesRusuiPath), []byte("services:\n  sleeper:\n    command: sleep 30\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.SleepEnvironment(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.WakeEnvironment(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	pidb, err := os.ReadFile(filepath.Join(created.Handle, ".rusui", "svc", "sleeper.pid"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(pidb)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(pid, 0); err != nil {
+		t.Fatalf("not running after wake: %v", err)
+	}
+	if _, err := h.e.SleepEnvironment(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Kill(pid, 0); err == nil {
+		t.Fatal("still running after sleep")
 	}
 }
