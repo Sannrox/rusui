@@ -4,7 +4,7 @@ Decisions that must outlive a single pull request.
 
 | ADR | Title | Status |
 | --- | --- | --- |
-| [0001](0001-environment-plane.md) | rusui becomes the environment plane for coding agents | Proposed |
+| [0001](0001-environment-plane.md) | rusui becomes the environment plane for coding agents | Accepted |
 
 ## When to write an ADR
 

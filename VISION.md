@@ -1,8 +1,8 @@
 # Vision
 
-Status: proposed in [ADR 0001](docs/decisions/0001-environment-plane.md).
-Until that ADR is accepted, [ARCHITECTURE.md](ARCHITECTURE.md) remains the
-product contract.
+Status: accepted in [ADR 0001](docs/decisions/0001-environment-plane.md).
+[ARCHITECTURE.md](ARCHITECTURE.md) remains the v1 product contract until
+follow-up Issues rewrite it for the new nouns.
 
 ## Purpose
 

@@ -1,13 +1,13 @@
 # ADR 0001: rusui becomes the environment plane for coding agents
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-14
-- Resolves: nothing yet. Tracks
+- Resolves: [PR #12](https://github.com/Sannrox/rusui/pull/12). Tracks
   [#2](https://github.com/Sannrox/rusui/issues/2) to
   [#11](https://github.com/Sannrox/rusui/issues/11).
 - Discussion: none. GitHub Discussions are disabled on this repository; the
-  pull request that adds this file is the review venue, and merging it with
-  status `Accepted` is the acceptance act.
+  pull request that added this file was the review venue. Merging with this
+  status is the acceptance act.
 - Related: [VISION.md](../../VISION.md), [ROADMAP.md](../../ROADMAP.md),
   [ARCHITECTURE.md](../../ARCHITECTURE.md) (the v1 contract this ADR
   eventually supersedes in part)
