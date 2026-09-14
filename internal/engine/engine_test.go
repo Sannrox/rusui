@@ -268,6 +268,45 @@ func TestCompleteAThenClaimB(t *testing.T) {
 	}
 }
 
+func TestClaimDoesNotBlockOtherQueuedItem(t *testing.T) {
+	h := setup(t)
+	h.putRefresh(issue(1))
+	h.putRefresh(issue(2))
+	c1 := h.claim()
+	if c1.Job.Item != 1 {
+		t.Fatalf("first claim item %d", c1.Job.Item)
+	}
+	c2, err := h.e.Claim("example/test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c2 == nil {
+		t.Fatal("live lease on #1 blocked #2")
+	}
+	if c2.Job.Item != 2 {
+		t.Fatalf("second claim item %d", c2.Job.Item)
+	}
+	c3, err := h.e.Claim("example/test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c3 != nil {
+		t.Fatalf("expected no work, got #%d", c3.Job.Item)
+	}
+	j1, _ := store.JobState(h.st, "example/test-repo", 1)
+	j2, _ := store.JobState(h.st, "example/test-repo", 2)
+	if j1.State != "leased" || j2.State != "leased" {
+		t.Fatalf("states %s %s", j1.State, j2.State)
+	}
+	var n int
+	if err := h.st.DB.QueryRow(`SELECT count FROM daily_review_counts WHERE repo=?`, "example/test-repo").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("daily budget %d", n)
+	}
+}
+
 func TestClaimReapRetryLimit(t *testing.T) {
 	h := setup(t)
 	h.putRefresh(issue(1))

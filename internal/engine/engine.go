@@ -332,6 +332,39 @@ func (e *Engine) expireLeaseTx(tx *sql.Tx, j *store.Job) error {
 	return store.UpdateJobTx(tx, j)
 }
 
+func (e *Engine) expireDeadLeasesTx(tx *sql.Tx, repo, lane string) error {
+	rows, err := tx.Query(`SELECT id FROM jobs WHERE repo=? AND lane=? AND state='leased'`, repo, lane)
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		j, err := store.GetJobByIDTx(tx, id)
+		if err != nil {
+			return err
+		}
+		if err := e.expireLeaseTx(tx, j); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (e *Engine) Claim(repo string) (*Claim, error) {
 	var c *Claim
 	err := e.Store.Tx(func(tx *sql.Tx) error {
@@ -355,10 +388,13 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 			e.exception(fmt.Sprintf("daily review budget exhausted for %s", repo))
 			return errBudget
 		}
+		if err := e.expireDeadLeasesTx(tx, repo, "review"); err != nil {
+			return err
+		}
 		var id int64
-		err = tx.QueryRow(`SELECT id FROM jobs WHERE repo=? AND lane=? AND state IN ('queued', 'leased') ORDER BY id LIMIT 1`, repo, "review").Scan(&id)
+		err = tx.QueryRow(`SELECT id FROM jobs WHERE repo=? AND lane=? AND state='queued' ORDER BY id LIMIT 1`, repo, "review").Scan(&id)
 		if err == sql.ErrNoRows {
-			return errNoWork
+			return nil
 		}
 		if err != nil {
 			return err
@@ -366,18 +402,6 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		j, err := store.GetJobByIDTx(tx, id)
 		if err != nil {
 			return err
-		}
-		if j.State == "leased" {
-			if err := e.expireLeaseTx(tx, j); err != nil {
-				return err
-			}
-			j, err = store.GetJobByIDTx(tx, id)
-			if err != nil {
-				return err
-			}
-			if j.State != "queued" {
-				return nil
-			}
 		}
 		now := e.now()
 		exp := now.Add(Liveness)
@@ -400,9 +424,6 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		c = &Claim{Job: j, Snapshot: snap, ItemHash: snapshot.ItemHash(snap)}
 		return nil
 	})
-	if err == errNoWork {
-		return nil, nil
-	}
 	return c, err
 }
 
