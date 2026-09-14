@@ -380,3 +380,23 @@ func (a *API) GetDelivery(repo, id string) (*DeliveryDetail, error) {
 		Payload:     raw.Payload,
 	}, nil
 }
+
+func (a *API) ListOpenItems(repo string) ([]snapshot.Item, error) {
+	owner, name, err := splitRepo(repo)
+	if err != nil {
+		return nil, err
+	}
+	var issues []ghIssue
+	if err := a.get(fmt.Sprintf("/repos/%s/%s/issues?state=open&per_page=100", owner, name), &issues); err != nil {
+		return nil, err
+	}
+	out := make([]snapshot.Item, 0, len(issues))
+	for _, issue := range issues {
+		kind := "issue"
+		if issue.PullRequest != nil {
+			kind = "pull"
+		}
+		out = append(out, snapshot.Item{Repo: repo, Item: issue.Number, ItemKind: kind, State: issue.State})
+	}
+	return out, nil
+}

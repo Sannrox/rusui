@@ -21,6 +21,7 @@ type Client interface {
 	GetItemExists(repo string, item int) (bool, error)
 	ListDeliveries(repo string) ([]DeliveryListItem, error)
 	GetDelivery(repo, id string) (*DeliveryDetail, error)
+	ListOpenItems(repo string) ([]snapshot.Item, error)
 }
 
 type DeliveryListItem struct {
@@ -195,6 +196,18 @@ func (f *Fake) ListDeliveries(repo string) ([]DeliveryListItem, error) {
 	var out []DeliveryListItem
 	for _, d := range f.Deliveries {
 		out = append(out, DeliveryListItem{ID: d.ID, DeliveredAt: d.DeliveredAt, Status: "OK"})
+	}
+	return out, nil
+}
+
+func (f *Fake) ListOpenItems(repo string) ([]snapshot.Item, error) {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	var out []snapshot.Item
+	for _, rec := range f.Items {
+		if rec.Repo == repo && rec.State == "open" {
+			out = append(out, rec.Item)
+		}
 	}
 	return out, nil
 }

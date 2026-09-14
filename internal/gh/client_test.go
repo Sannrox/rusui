@@ -184,6 +184,31 @@ func TestAPIDeliveries(t *testing.T) {
 	}
 }
 
+func TestAPIListOpenItems(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/example/test-repo/issues", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("state") != "open" {
+			http.Error(w, "state", 400)
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"number": 1, "state": "open"},
+			{"number": 7, "state": "open", "pull_request": map[string]string{"url": "https://example/pulls/7"}},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	api := NewAPI("tok", nil)
+	api.BaseURL = srv.URL
+	list, err := api.ListOpenItems("example/test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 2 || list[0].Item != 1 || list[0].ItemKind != "issue" || list[1].Item != 7 || list[1].ItemKind != "pull" {
+		t.Fatalf("%+v", list)
+	}
+}
+
 func TestAPIErrorStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(403)

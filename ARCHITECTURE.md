@@ -242,6 +242,13 @@ admitted (closed state is a content change).
 
 Duplicate `delivery_id` is a committed no-op.
 
+The process runs these paths at startup (`Engine.Recover`) and on a
+cadence: refresh reaper and `StepRefresh` every second, delivery
+reconcile every 5 minutes, open-item and locally-tracked catch-up every
+15 minutes, and apply-attempt retry every minute. When
+`RUSUI_GITHUB_HOOK_IDS` is unset, reconcile is skipped with a log
+reason and does not fail the scheduler.
+
 ### Admission
 
 Admission compares the freshly fetched **item** snapshot hash to the

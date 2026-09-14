@@ -27,16 +27,21 @@ const (
 	OwnerTTL          = 2 * time.Minute
 	FetchTimeout      = 30 * time.Second
 	StaleAge          = 60 * 24 * time.Hour
+	RefreshTick       = time.Second
+	ReconcileEvery    = 5 * time.Minute
+	CatchUpEvery      = 15 * time.Minute
+	ApplyRetryEvery   = time.Minute
 )
 
 type Engine struct {
-	Store  *store.Store
-	Policy *policy.Effective
-	GitHub gh.Client
-	Clock  clock.Clock
-	Log    *log.Logger
-	HookID string
-	Notify func(string)
+	Store   *store.Store
+	Policy  *policy.Effective
+	GitHub  gh.Client
+	Clock   clock.Clock
+	Log     *log.Logger
+	HookID  string
+	HookIDs map[string]string
+	Notify  func(string)
 
 	FetchTimeout time.Duration
 	OwnerTTL     time.Duration

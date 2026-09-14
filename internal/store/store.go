@@ -431,6 +431,28 @@ func JobState(s *Store, repo string, item int) (*Job, error) {
 	return j, err
 }
 
+type ApplyTarget struct {
+	Repo string
+	Item int
+}
+
+func ListRetryableApply(s *Store) ([]ApplyTarget, error) {
+	rows, err := s.DB.Query(`SELECT DISTINCT repo, item FROM apply_attempts WHERE state IN ('planned','in_flight','uncertain')`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []ApplyTarget
+	for rows.Next() {
+		var t ApplyTarget
+		if err := rows.Scan(&t.Repo, &t.Item); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 func ListLocalTrackedItems(s *Store) ([][3]any, error) {
 	rows, err := s.DB.Query(`SELECT repo, item, item_kind FROM jobs WHERE state IN ('queued','leased','failed')`)
 	if err != nil {
