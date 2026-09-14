@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestParseServicesAmpShape(t *testing.T) {
+func TestParseServicesMapping(t *testing.T) {
 	svcs, err := ParseServices([]byte(`
 services:
   web:
@@ -42,21 +42,27 @@ func TestParseServicesRejectsEmptyAndBadName(t *testing.T) {
 	}
 }
 
-func TestLoadPrefersRusuiOverAmp(t *testing.T) {
+func TestLoadRequiresRusuiFile(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ".rusui"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".amp"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, ".amp"), 0o700); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ".amp", "services.yaml"), []byte("services:\n  other:\n    command: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	svcs, err := loadServices(func(path string) ([]byte, error) {
+		return readWorkspaceFile(root, path)
+	})
+	if err != nil || len(svcs) != 0 {
+		t.Fatalf("foreign file must be ignored: %v %#v", err, svcs)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".rusui"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, ServicesRusuiPath), []byte("services:\n  rusui:\n    command: true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ServicesAmpPath), []byte("services:\n  amp:\n    command: true\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	svcs, err := loadServices(func(path string) ([]byte, error) {
+	svcs, err = loadServices(func(path string) ([]byte, error) {
 		return readWorkspaceFile(root, path)
 	})
 	if err != nil || len(svcs) != 1 || svcs[0].Name != "rusui" {
@@ -124,7 +130,7 @@ func TestContainerStartServicesExecsCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rt.SetFileContent(id, ServicesAmpPath, []byte("services:\n  web:\n    command: pnpm dev\n"))
+	rt.SetFileContent(id, ServicesRusuiPath, []byte("services:\n  web:\n    command: pnpm dev\n"))
 	if err := c.StartServices(id); err != nil {
 		t.Fatal(err)
 	}
