@@ -71,9 +71,9 @@ Read-only. Do not give the model process this token.
 | `RUSUI_GITHUB_TOKEN` or `GITHUB_TOKEN` | Bearer token for the REST API |
 | `RUSUI_GITHUB_HOOK_IDS` | `owner/repo=hookid` pairs, comma-separated; required for delivery reconcile |
 | `RUSUI_GITHUB_API` | API base URL (default `https://api.github.com`) |
-| `RUSUI_WEBHOOK_SECRET` | `X-Hub-Signature-256` for `POST /hooks/github` |
-| `RUSUI_WORKER_SECRET` | Bearer token for `/jobs/*` |
-| `RUSUI_SLACK_SECRET` | Slack signing secret (`X-Slack-Signature`) |
+| `RUSUI_WEBHOOK_SECRET` | Required. `X-Hub-Signature-256` for `POST /hooks/github` |
+| `RUSUI_WORKER_SECRET` | Required. Bearer token for `/jobs/*` |
+| `RUSUI_SLACK_SECRET` | Required. Slack signing secret (`X-Slack-Signature`) |
 | `RUSUI_SLACK_USERS` | Comma-separated Slack `user_id` allowlist |
 | `RUSUI_SLACK_BOT_TOKEN` | Bot token for exception `chat.postMessage` (optional) |
 | `RUSUI_SLACK_CHANNEL` | Channel for exceptions |
@@ -89,8 +89,12 @@ retry repo[#item]
 reload
 ```
 
-`implement` is rejected. GitHub webhooks do not require Slack. If Slack
-secrets are unset, exceptions stay in the process log.
+`implement` is rejected. GitHub webhooks do not require Slack. The
+process refuses to start if `RUSUI_WEBHOOK_SECRET`, `RUSUI_WORKER_SECRET`,
+or `RUSUI_SLACK_SECRET` is unset, and unsigned requests on those
+surfaces receive 401. Pass `-allow-insecure` only for local experiments;
+it logs the missing variables at startup. If the Slack bot token is
+unset, exceptions stay in the process log.
 
 The client is read-only: issues, pulls, refs, compare, and hook deliveries.
 It never comments, closes, or merges. Default-branch reachability uses
