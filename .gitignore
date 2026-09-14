@@ -11,3 +11,6 @@ coverage.out
 coverage.html
 gotest*.xml
 *.stdout
+
+# Delivery lane worktrees (AGENTS.md, "Parallel delivery lanes")
+/.worktrees/
