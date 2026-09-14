@@ -99,4 +99,8 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM runners WHERE name=?`, LocalRunnerName).Scan(&runners); err != nil || runners != 1 {
 		t.Fatalf("runners %d %v", runners, err)
 	}
+	var handle sql.NullString
+	if err := s.DB.QueryRow(`SELECT handle FROM environments WHERE id=?`, DefaultEnvironmentID).Scan(&handle); err != nil {
+		t.Fatalf("v4 handle column: %v", err)
+	}
 }

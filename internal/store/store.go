@@ -413,6 +413,90 @@ func TurnCredentialValid(s *Store, turnID int64, tokenHash string, now time.Time
 	return now.Before(t), nil
 }
 
+func GetEnvironment(s *Store, id int64) (*Environment, error) {
+	row := s.DB.QueryRow(`SELECT id, name, driver, state, handle, source_hash, expires_at, slept_at, cpu_millis, memory_bytes, created_at FROM environments WHERE id=?`, id)
+	return scanEnvironment(row)
+}
+
+func InsertEnvironment(s *Store, e Environment) (int64, error) {
+	var exp, slept any
+	if e.ExpiresAt != nil {
+		exp = e.ExpiresAt.UTC().Format(time.RFC3339Nano)
+	}
+	if e.SleptAt != nil {
+		slept = e.SleptAt.UTC().Format(time.RFC3339Nano)
+	}
+	res, err := s.DB.Exec(`INSERT INTO environments (name, driver, state, handle, source_hash, expires_at, slept_at, cpu_millis, memory_bytes, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		e.Name, e.Driver, e.State, e.Handle, e.SourceHash, exp, slept, e.CPUMillis, e.MemoryBytes, e.CreatedAt.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func UpdateEnvironment(s *Store, e Environment) error {
+	var exp, slept any
+	if e.ExpiresAt != nil {
+		exp = e.ExpiresAt.UTC().Format(time.RFC3339Nano)
+	}
+	if e.SleptAt != nil {
+		slept = e.SleptAt.UTC().Format(time.RFC3339Nano)
+	}
+	_, err := s.DB.Exec(`UPDATE environments SET state=?, handle=?, source_hash=?, expires_at=?, slept_at=?, cpu_millis=?, memory_bytes=? WHERE id=?`,
+		e.State, e.Handle, e.SourceHash, exp, slept, e.CPUMillis, e.MemoryBytes, e.ID)
+	return err
+}
+
+func ListExpiredEnvironments(s *Store, now time.Time) ([]Environment, error) {
+	rows, err := s.DB.Query(`SELECT id, name, driver, state, handle, source_hash, expires_at, slept_at, cpu_millis, memory_bytes, created_at FROM environments WHERE name!=? AND state!=? AND expires_at IS NOT NULL AND expires_at<=?`,
+		LocalEnvironmentName, EnvExpired, now.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Environment
+	for rows.Next() {
+		env, err := scanEnvironment(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *env)
+	}
+	return out, rows.Err()
+}
+
+func scanEnvironment(row interface{ Scan(...any) error }) (*Environment, error) {
+	var e Environment
+	var handle, source, exp, slept, created sql.NullString
+	if err := row.Scan(&e.ID, &e.Name, &e.Driver, &e.State, &handle, &source, &exp, &slept, &e.CPUMillis, &e.MemoryBytes, &created); err != nil {
+		return nil, err
+	}
+	e.Handle = handle.String
+	e.SourceHash = source.String
+	if exp.Valid {
+		t, err := time.Parse(time.RFC3339Nano, exp.String)
+		if err != nil {
+			return nil, err
+		}
+		e.ExpiresAt = &t
+	}
+	if slept.Valid {
+		t, err := time.Parse(time.RFC3339Nano, slept.String)
+		if err != nil {
+			return nil, err
+		}
+		e.SleptAt = &t
+	}
+	if created.Valid {
+		t, err := time.Parse(time.RFC3339Nano, created.String)
+		if err != nil {
+			return nil, err
+		}
+		e.CreatedAt = t
+	}
+	return &e, nil
+}
+
 func InsertAction(s *Store, a Action) error {
 	return s.Tx(func(tx *sql.Tx) error {
 		return InsertActionTx(tx, a)
