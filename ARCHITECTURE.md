@@ -43,9 +43,9 @@ flowchart LR
   Server -->|async refresh per item| Fetch[live GitHub fetch]
   Fetch -->|admit| Server
 
-  Worker -->|authenticated claim / heartbeat / complete / fail| Server
-  Worker -->|spawn sandboxed CLI| ReviewCLI[one model CLI]
-  ReviewCLI -->|JSON artifact| Worker
+  Runner -->|outbound hello / claim / heartbeat / complete / fail| Server
+  Runner -->|process driver + per-turn token| Driver[process driver]
+  Driver -->|JSON artifact on stdout| Runner
 
   Apply[apply executor] -->|dry-run in v1; live later| GitHub
   Server --> Apply
@@ -408,8 +408,12 @@ What v1 does enforce:
 - The model child gets an env allowlist, ephemeral cwd, isolated CLI
   home, and a short-lived **read-only** GitHub token minted for that
   job.
-- Worker HTTP endpoints require a worker shared secret.
-  `complete`/`fail` include `lease_generation` and `claimed_revision`.
+- Runner hello and claim require the bootstrap secret. Heartbeat,
+  complete, and fail accept that secret or the per-turn token.
+  The process driver environment contains only an allowlist and
+  `RUSUI_TURN_TOKEN` (32 random bytes, hashed at rest, ten-minute
+  TTL). `complete`/`fail` include `lease_generation` and
+  `claimed_revision`. The runner opens no inbound port.
 
 v3 push/PR uses the server-side write token only in the publish step
 after proofs succeeded without that token.
@@ -425,9 +429,9 @@ and are not required for recovery.
 Each accepted `/complete` inserts an **immutable** review revision.
 Apply stores `review_revision_id` and never reads a superseded row.
 
-**v1 CLI adapter:** one adapter, Codex CLI. The worker writes
-`input.v1.json` in the job workspace and expects `output.v1.json`
-on stdout path. No other CLI in v1.
+**Process driver:** `rusui-runner` execs `-driver` in an ephemeral
+cwd. The driver prints a review artifact as JSON on stdout. There
+is no `input.v1.json` / `output.v1.json` contract.
 
 **Input (versioned, server-built, pinned):** the model may reason
 only over this blob. It must not call live GitHub for the item.

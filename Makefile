@@ -32,7 +32,7 @@ test:
 	./scripts/make-targets/test.sh $(WHAT)
 
 .PHONY: release-images
-# Linux binaries in the docker build image, then rusui and rusui-worker images.
+# Linux binaries in the docker build image, then rusui and rusui-runner images.
 # Defaults to the Docker engine's linux arch. Override:
 #   BUILD_PLATFORMS='linux/amd64 linux/arm64' make release-images
 release-images:

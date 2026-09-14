@@ -3,6 +3,7 @@
 *.db-wal
 /rusui
 /rusui-worker
+/rusui-runner
 /server
 /worker
 _output/

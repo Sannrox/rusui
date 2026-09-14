@@ -60,7 +60,7 @@ function build::check_docker_if_in_path(){
 function build::get_docker_wrapped_binaries() {
   local targets=(
     "rusui,${RUNTIME_IMAGE}"
-    "rusui-worker,${RUNTIME_IMAGE}"
+    "rusui-runner,${RUNTIME_IMAGE}"
   )
 
   echo "${targets[@]}"

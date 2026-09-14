@@ -385,3 +385,30 @@ func SplitRepo(name string) (owner, repo string, err error) {
 	}
 	return a, b, nil
 }
+
+func PutTurnCredential(s *Store, turnID int64, gen int, tokenHash, expiresAt string) error {
+	_, err := s.DB.Exec(`INSERT OR REPLACE INTO turn_credentials (turn_id, lease_generation, token_hash, expires_at) VALUES (?,?,?,?)`,
+		turnID, gen, tokenHash, expiresAt)
+	return err
+}
+
+func TouchRunner(s *Store, name string, at time.Time) error {
+	_, err := s.DB.Exec(`UPDATE runners SET last_seen_at=?, state='ready' WHERE name=?`, at.UTC().Format(time.RFC3339Nano), name)
+	return err
+}
+
+func TurnCredentialValid(s *Store, turnID int64, tokenHash string, now time.Time) (bool, error) {
+	var exp string
+	err := s.DB.QueryRow(`SELECT expires_at FROM turn_credentials WHERE turn_id=? AND token_hash=?`, turnID, tokenHash).Scan(&exp)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	t, err := time.Parse(time.RFC3339Nano, exp)
+	if err != nil {
+		return false, err
+	}
+	return now.Before(t), nil
+}

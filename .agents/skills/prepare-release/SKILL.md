@@ -26,7 +26,7 @@ GitHub state unless the maintainer explicitly authorizes that action.
    - SQLite schema and immutable review-artifact compatibility;
    - environment variables, secrets, loopback bind, and operator tunnel docs;
    - security, backup, rollback, and operator actions;
-   - `rusui` / `rusui-worker` binaries and runtime images.
+   - `rusui` / `rusui-runner` binaries and runtime images.
    Complete when every applicable item is resolved or a named blocker.
 4. Use `verify-change` for the full local gates
    (`make all && make test && make validate`). Confirm current GitHub CI when
