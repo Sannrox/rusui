@@ -12,7 +12,7 @@ ROOT_PATH="$(cd "$(dirname "$0")/../.." && pwd -P)"
 run_cmd(){
     filname="${##*/validate-}"
 
-    "$@"
+    bash "$@"
 }
 
 run_validate(){
