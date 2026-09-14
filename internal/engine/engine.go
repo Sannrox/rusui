@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -994,8 +995,7 @@ func (e *Engine) ReconcileDeliveries(repo string) error {
 		_ = tx.QueryRow(`SELECT last_delivered_at, last_delivery_id FROM reconcile_checkpoints WHERE repo=?`, repo).Scan(&lastAt, &lastID)
 		return nil
 	})
-	for i := len(list) - 1; i >= 0; i-- {
-		d := list[i]
+	for _, d := range slices.Backward(list) {
 		if lastID != "" && d.ID == lastID {
 			continue
 		}
