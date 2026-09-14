@@ -5,7 +5,8 @@ server admits work, records immutable reviews, and dry-runs apply.
 
 留守居 is the steward who keeps house while you are away.
 
-See `ARCHITECTURE.md` and `BUILD.md`.
+See `ARCHITECTURE.md` and `BUILD.md`. The proposed direction beyond v1 is
+in `VISION.md`, `ROADMAP.md`, and `docs/decisions/`.
 
 ## Build
 
