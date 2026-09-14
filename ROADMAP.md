@@ -1,7 +1,8 @@
 # Roadmap
 
-Sequencing context for [ADR 0001](docs/decisions/0001-environment-plane.md)
-and [VISION.md](VISION.md). Phases, effort, and quarters are estimates for one
+Sequencing context for [ADR 0001](docs/decisions/0001-environment-plane.md),
+[ADR 0002](docs/decisions/0002-grok-acp-agent-set.md), and
+[VISION.md](VISION.md). Phases, effort, and quarters are estimates for one
 developer with agent assistance (about 45 productive weeks per year, plus or
 minus 50 percent). They are not deadlines, priorities, or release commitments.
 GitHub Issues remain the planning source of truth; this file links to them
@@ -32,14 +33,15 @@ bets that need earlier evidence.
 
 ## P0 Reset and wire (Q4 2026, 6 weeks)
 
-Gate: ACP headless viability confirmed for the chosen agent set; a KVM-capable
-host identified.
+Gate: Grok ACP headless viability recorded in
+[ADR 0002](docs/decisions/0002-grok-acp-agent-set.md); a KVM-capable host
+identified.
 
 | Item | Effort | Success measure | Kill signal | Depends on | Issues |
 | --- | --- | --- | --- | --- | --- |
 | P0.1 Production wiring and fail-closed fixes | 1 wk | Recovery paths run at startup and periodically; secrets unset means refuse to start; head-of-line claim fixed; toolchain aligned | None: mandatory | — | [#2](https://github.com/Sannrox/rusui/issues/2), [#3](https://github.com/Sannrox/rusui/issues/3), [#4](https://github.com/Sannrox/rusui/issues/4), [#5](https://github.com/Sannrox/rusui/issues/5) |
 | P0.2 Domain model v2 with versioned migrations; port lease, receipt, and fencing code to session, turn, environment identities | 2 wks | All scenario tests pass against the new schema; N parallel turns per project | If porting exceeds 3 weeks, write the v2 store fresh and keep the old tests as the spec | P0.1, ADR 0001 accepted | [#8](https://github.com/Sannrox/rusui/issues/8) |
-| P0.3 ACP viability decision, then `internal/acp` client with conformance harness | 2 wks | One prompt round-trips headless through Gemini CLI, Codex, and Claude Code adapters; 24 h soak on one agent | Two of three agents block third-party headless use: wedge shrinks to shikigami plus API-key agents; re-plan P1 | — | [#6](https://github.com/Sannrox/rusui/issues/6), [#10](https://github.com/Sannrox/rusui/issues/10) |
+| P0.3 ACP viability decision, then `internal/acp` client with conformance harness | 2 wks | Decision names Grok CLI as the P1 guest; one prompt round-trips headless through `agent --permission-mode default agent stdio`; 24 h soak on that spawn | Grok drops stdio ACP or stops emitting `session/request_permission` for shell: re-plan P1 around shikigami `serve` plus API-key agents | — | [#6](https://github.com/Sannrox/rusui/issues/6), [#10](https://github.com/Sannrox/rusui/issues/10) |
 | P0.4 Runner protocol v1 and `rusui-runner` with the process driver (heartbeat, deadline kill, env allowlist) | 1.5 wks | Plane on a VPS, runner on a laptop behind NAT; a session completes and survives a plane restart | None | P0.2 | [#9](https://github.com/Sannrox/rusui/issues/9), supersedes [#11](https://github.com/Sannrox/rusui/issues/11) |
 | P0.5 Operator surface decision | 2 wks, parallel | Surface list per phase, console stack, authentication model, onmyoji fit decided | None | — | [#7](https://github.com/Sannrox/rusui/issues/7) |
 
@@ -103,7 +105,7 @@ security review closed; one external embedder.
 
 | # | Assumption | Verify | If false |
 | --- | --- | --- | --- |
-| A1 | Codex and Claude Code ACP adapters permit unattended third-party-client use under the operator's own subscription | [#6](https://github.com/Sannrox/rusui/issues/6): scripted probe, provider terms, 24 h soak | The wedge shrinks to shikigami plus API-key agents; P1 stands, positioning changes. This is the assumption whose failure most changes the plan. |
+| A1 | Grok CLI keeps stdio ACP and `session/request_permission` under `--permission-mode default` with the operator's own login | [ADR 0002](docs/decisions/0002-grok-acp-agent-set.md); [#10](https://github.com/Sannrox/rusui/issues/10) soak | Drive shikigami through `serve`; P1 stands, positioning changes from "popular coding agents" to the family agent |
 | A2 | A KVM-capable Linux host is available before P2 | `ls /dev/kvm` on the target | P2.1 collapses to containers plus gVisor; sleep and wake parity is not reached |
 | A3 | GitHub App tokens plus a git smart-HTTP proxy can enforce repository and branch scope | One-week spike in P1.3 against a real push | Fall back to GitHub rulesets and post-push verification; record the residual risk |
 | A4 | Amp keeps orbs closed to third-party agents and does not ship a self-hosted plane | Re-read the documentation quarterly | Compete on receipts, policy, and cost rather than self-hosting alone |
@@ -118,6 +120,6 @@ security review closed; one external embedder.
 | --- | --- | --- | --- |
 | Open the orb API to third-party agents or ship a self-hosted plane | Amp | Low: cannibalizes metered compute and their agent | Stay agent-agnostic and self-hosted; if Amp ships ACP, its agent becomes one more agent rusui runs |
 | Add microVM backends, webhooks, and portals to an open-source canvas | OpenHands | Medium: open source, ACP, remote backends exist | Pull P2.1 ahead of P2.2 and P2.3; interoperate through ACP both ways |
-| Restrict headless third-party use of Codex CLI and Claude Code | OpenAI, Anthropic | Medium | API-key agents, shikigami first-party, local model gateway (P4.2); hence [#6](https://github.com/Sannrox/rusui/issues/6) is a gate |
+| Restrict headless third-party use of Grok ACP | xAI | Medium | shikigami `serve`, later local model gateway (P4.2); [#10](https://github.com/Sannrox/rusui/issues/10) soak is the remaining gate |
 | Kubernetes agent-sandbox becomes the standard sandbox API | k8s-sigs | Medium | Driver plus conformance facade in P3.4; the plane never depends on one driver |
 | Self-hosted runners in the customer's VPC with the vendor's plane | Cursor, Claude Code | High: already shipping | The differentiator is the whole plane on the operator's side plus agent choice, receipts, and policy |

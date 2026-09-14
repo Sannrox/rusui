@@ -14,7 +14,8 @@ sessions, and records every external action.
 留守居 is the steward who keeps house while you are away. The steward now runs
 the workshop too.
 
-It is agent-agnostic through the Agent Client Protocol.
+It is agent-agnostic through the Agent Client Protocol. The P1 supported
+guest is Grok CLI ([ADR 0002](docs/decisions/0002-grok-acp-agent-set.md)).
 [shikigami](https://github.com/Sannrox/shikigami) is the first-party agent,
 [sekai-chisei](https://github.com/Sannrox/sekai-chisei) the optional
 governance plane, [tenkai](https://github.com/Sannrox/tenkai) the delivery

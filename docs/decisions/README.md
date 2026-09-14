@@ -5,6 +5,7 @@ Decisions that must outlive a single pull request.
 | ADR | Title | Status |
 | --- | --- | --- |
 | [0001](0001-environment-plane.md) | rusui becomes the environment plane for coding agents | Accepted |
+| [0002](0002-grok-acp-agent-set.md) | P1 agent set is Grok CLI over ACP | Accepted |
 
 ## When to write an ADR
 

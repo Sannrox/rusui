@@ -10,7 +10,8 @@
   status is the acceptance act.
 - Related: [VISION.md](../../VISION.md), [ROADMAP.md](../../ROADMAP.md),
   [ARCHITECTURE.md](../../ARCHITECTURE.md) (the v1 contract this ADR
-  eventually supersedes in part)
+  eventually supersedes in part),
+  [ADR 0002](0002-grok-acp-agent-set.md) (amends D2's chosen agent set)
 
 ## Context
 
