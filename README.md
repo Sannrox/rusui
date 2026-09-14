@@ -1,7 +1,8 @@
 # Rusui (留守居)
 
-Personal GitHub maintenance control plane. You write `policy.yaml`. The
-server admits work, records immutable reviews, and dry-runs apply.
+Personal environment plane. You write `policy.yaml`. The server admits
+work onto sessions and turns, records immutable reviews, and dry-runs
+apply.
 
 留守居 is the steward who keeps house while you are away.
 

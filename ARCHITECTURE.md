@@ -1,27 +1,31 @@
 # Rusui architecture
 
-Personal GitHub maintenance control plane (留守居: the steward who keeps
-house while you are away). You write structured policy. The server admits
-work, records immutable review revisions, and runs later lanes unattended.
+Self-hosted environment plane (留守居: the steward who keeps house while
+you are away). You write structured policy. The server admits work onto
+typed records — environment, session, turn, runner, event, action —
+records immutable review revisions, and dry-runs apply. GitHub review is
+the first session kind, not the identity of the system.
 
 This is not ClawSweeper, Tatara, or a Kafka fleet. GitHub is intake. The
 server is the source of truth. Slack is the human socket. Model CLIs never
-receive GitHub write tokens.
+receive GitHub write tokens. Schema changes are versioned migrations
+(`schema_migrations`), not `CREATE IF NOT EXISTS` drift.
 
 ## Milestones
 
-**v1 (build this):** one repository profile, one model CLI, signed GitHub
-intake, claim/lease, immutable review artifacts in SQLite, deterministic
-**dry-run** apply, pause/status/retry, daily review budget. No live GitHub
-mutation, no implement, no land.
+**Current contract:** one repository profile, one model CLI, signed GitHub
+intake, claim/lease on a **turn**, immutable review artifacts in SQLite,
+deterministic **dry-run** apply, pause/status/retry, daily review budget.
+No live GitHub mutation, no implement, no land. The domain nouns are the
+environment-plane set from [ADR 0001](docs/decisions/0001-environment-plane.md).
 
-**v2:** live apply actions enabled one at a time (comment, then close)
-only after recovery tests **and** a recorded review-quality evaluation
-against operator judgments. Model `confidence = high` is not the
-promotion criterion.
+**Live apply (later):** comment, then close, enabled one at a time only
+after recovery tests **and** a recorded review-quality evaluation against
+operator judgments. Model `confidence = high` is not the promotion
+criterion.
 
-**v3:** implement-to-PR (proofs without publish credentials; publish
-consumes the exact verified artifact) and land with `sha` precondition.
+**Implement-to-PR (later):** proofs without publish credentials; publish
+consumes the exact verified artifact and lands with a `sha` precondition.
 
 ## System
 
@@ -275,7 +279,11 @@ not make the worker finish behind pending.
 
 ## Lease state machine
 
-Identity: `(repo, item, lane)` with `lane ∈ {review, apply, implement}`.
+Identity: a **turn** (`turns.id`) on a **session**. A session is
+`(kind, repo, item)` for the review workflow — GitHub item numbers are
+source attributes, not the lease key. `lane` on the turn is
+`review` / `apply` / `implement`. A lease belongs to one turn, so a live
+lease on session A cannot block claiming session B.
 
 | Field | Meaning |
 |---|---|
@@ -288,8 +296,8 @@ Identity: `(repo, item, lane)` with `lane ∈ {review, apply, implement}`.
 | `state` | `queued` / `leased` / `completed` / `failed` |
 
 Completion receipts are stored by
-`(job_id, lease_generation, claimed_revision)` and are looked up
-**before** reading job state.
+`(turn_id, lease_generation, claimed_revision)` (column `job_id` on
+`receipts` is the turn id) and are looked up **before** reading turn state.
 
 ```text
 admit(live_snapshot, force=false)
@@ -372,10 +380,10 @@ hits, even if heartbeats still succeed.
 
 **Concurrency**
 
-- At most one in-flight refresh per `(repo, item)`.
-- Review and apply: at most one live lease per `(repo, item, lane)`.
-- Implement (v3): at most one live implement lease per **item**, and at
-  most one live implement lease per **repo**.
+- At most one in-flight refresh per `(repo, item)` (session source).
+- Review and apply: at most one live lease per turn.
+- Implement (later): at most one live implement lease per session, and at
+  most one live implement lease per environment.
 
 v1 timeouts: heartbeat every 60 seconds, liveness 3 minutes without
 heartbeat, execution deadline 12 minutes from claim, retry limit 3.

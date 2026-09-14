@@ -1,12 +1,13 @@
 # Repository Guidelines
 
-`rusui` is a personal GitHub maintenance control plane. You write
-`policy.yaml`. The server admits work, records immutable reviews, and
-dry-runs apply. `ARCHITECTURE.md` is the product contract. Do not
-implement v2/v3 behavior except as types or comments needed to keep
-state machines honest. Direction beyond v1 is proposed in `VISION.md`
-and `ROADMAP.md`; decisions live in `docs/decisions/`. A proposed ADR
-does not change the contract until it is accepted.
+`rusui` is a personal environment plane. You write `policy.yaml`. The
+server admits work onto environments, sessions, turns, runners, events,
+and actions; records immutable reviews; and dry-runs apply.
+`ARCHITECTURE.md` is the product contract. Do not implement live apply
+or implement-to-PR except as types or comments needed to keep state
+machines honest. Direction beyond the current contract is proposed in
+`VISION.md` and `ROADMAP.md`; decisions live in `docs/decisions/`. A
+proposed ADR does not change the contract until it is accepted.
 
 GitHub Issues are the planning source of truth. Project-specific Skills
 under `.agents/skills/` define the expected workflows for shaping,
