@@ -49,6 +49,7 @@ type Engine struct {
 	OwnerTTL     time.Duration
 	ExecDeadline time.Duration
 	Env          env.Driver
+	Container    env.Driver
 	EnvTTL       time.Duration
 }
 
