@@ -6,10 +6,15 @@ import (
 	"path/filepath"
 )
 
-const KindProcess = "process"
+const (
+	KindProcess   = "process"
+	KindContainer = "container"
+	SetupPath     = ".agents/setup"
+	ResumePath    = ".agents/resume"
+)
 
-// Driver owns an environment handle. The process driver is a workspace
-// directory; container runtimes implement the same methods later.
+// Driver owns an environment handle. Process uses a workspace directory.
+// Container uses a Docker/Podman-compatible runtime.
 type Driver interface {
 	Kind() string
 	Create(name string) (handle string, err error)

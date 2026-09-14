@@ -429,10 +429,12 @@ is recorded as an `actions` row. Permission requests with no matching
 rule are denied and stored as approvals. The process driver is still
 the review lane; the runner does not spawn this client yet.
 
-Environments have a create / sleep / wake / expire lifecycle. The first
-driver is `process` (a workspace directory). The default `local`
-environment is not expired. Other environments expire after 72 hours.
-Docker/Podman is a later driver on the same interface.
+Environments have a create / sleep / wake / expire lifecycle. Drivers
+implement the same interface: `process` (a workspace directory) and
+`container` (Docker/Podman-compatible runtime). Create runs
+`.agents/setup` once per environment source hash; wake runs
+`.agents/resume` when present. The default `local` environment is not
+expired. Other environments expire after 72 hours.
 
 ## Review artifacts
 

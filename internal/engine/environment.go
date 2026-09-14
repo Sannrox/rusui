@@ -8,11 +8,33 @@ import (
 	"github.com/sannrox/rusui/internal/store"
 )
 
+type EnvSpec struct {
+	Name        string
+	Kind        string
+	SourceHash  string
+	CPUMillis   int
+	MemoryBytes int64
+}
+
 func (e *Engine) envDriver() env.Driver {
 	if e.Env != nil {
 		return e.Env
 	}
 	return env.Process{Root: "environments"}
+}
+
+func (e *Engine) driverFor(kind string) (env.Driver, error) {
+	switch kind {
+	case "", env.KindProcess:
+		return e.envDriver(), nil
+	case env.KindContainer:
+		if e.Container == nil {
+			return nil, fmt.Errorf("env: container driver not configured")
+		}
+		return e.Container, nil
+	default:
+		return nil, fmt.Errorf("env: unknown driver %s", kind)
+	}
 }
 
 func (e *Engine) envTTL() time.Duration {
@@ -23,23 +45,46 @@ func (e *Engine) envTTL() time.Duration {
 }
 
 func (e *Engine) CreateEnvironment(name string) (*store.Environment, error) {
-	if name == "" || name == store.LocalEnvironmentName {
-		return nil, fmt.Errorf("env: name %q reserved", name)
+	return e.ProvisionEnvironment(EnvSpec{Name: name})
+}
+
+func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) {
+	if spec.Name == "" || spec.Name == store.LocalEnvironmentName {
+		return nil, fmt.Errorf("env: name %q reserved", spec.Name)
 	}
-	d := e.envDriver()
-	handle, err := d.Create(name)
+	d, err := e.driverFor(spec.Kind)
 	if err != nil {
 		return nil, err
+	}
+	var handle string
+	if sc, ok := d.(env.SpecCreator); ok {
+		handle, err = sc.CreateSpec(env.Spec{
+			Name: spec.Name, CPUMillis: spec.CPUMillis, MemoryBytes: spec.MemoryBytes,
+		})
+	} else {
+		handle, err = d.Create(spec.Name)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if p, ok := d.(env.Preparer); ok {
+		if err := p.Setup(handle, spec.SourceHash); err != nil {
+			_ = d.Destroy(handle)
+			return nil, err
+		}
 	}
 	now := e.now()
 	exp := now.Add(e.envTTL())
 	id, err := store.InsertEnvironment(e.Store, store.Environment{
-		Name:      name,
-		Driver:    d.Kind(),
-		State:     store.EnvReady,
-		Handle:    handle,
-		ExpiresAt: &exp,
-		CreatedAt: now,
+		Name:        spec.Name,
+		Driver:      d.Kind(),
+		State:       store.EnvReady,
+		Handle:      handle,
+		SourceHash:  spec.SourceHash,
+		ExpiresAt:   &exp,
+		CPUMillis:   spec.CPUMillis,
+		MemoryBytes: spec.MemoryBytes,
+		CreatedAt:   now,
 	})
 	if err != nil {
 		_ = d.Destroy(handle)
@@ -59,7 +104,11 @@ func (e *Engine) SleepEnvironment(id int64) (*store.Environment, error) {
 	if envRow.State != store.EnvReady {
 		return nil, fmt.Errorf("env: sleep requires ready, have %s", envRow.State)
 	}
-	if err := e.envDriver().Sleep(envRow.Handle); err != nil {
+	d, err := e.driverFor(envRow.Driver)
+	if err != nil {
+		return nil, err
+	}
+	if err := d.Sleep(envRow.Handle); err != nil {
 		return nil, err
 	}
 	now := e.now()
@@ -85,8 +134,17 @@ func (e *Engine) WakeEnvironment(id int64) (*store.Environment, error) {
 	if envRow.ExpiresAt != nil && !e.now().Before(*envRow.ExpiresAt) {
 		return nil, fmt.Errorf("env: expired")
 	}
-	if err := e.envDriver().Wake(envRow.Handle); err != nil {
+	d, err := e.driverFor(envRow.Driver)
+	if err != nil {
 		return nil, err
+	}
+	if err := d.Wake(envRow.Handle); err != nil {
+		return nil, err
+	}
+	if r, ok := d.(env.Resumer); ok {
+		if err := r.Resume(envRow.Handle); err != nil {
+			return nil, err
+		}
 	}
 	now := e.now()
 	exp := now.Add(e.envTTL())
@@ -104,8 +162,12 @@ func (e *Engine) ReapEnvironments() error {
 	if err != nil {
 		return err
 	}
-	d := e.envDriver()
 	for _, envRow := range stale {
+		d, err := e.driverFor(envRow.Driver)
+		if err != nil {
+			e.exception("expire environment " + envRow.Name + ": " + err.Error())
+			continue
+		}
 		if err := d.Destroy(envRow.Handle); err != nil {
 			e.exception("expire environment " + envRow.Name + ": " + err.Error())
 			continue
