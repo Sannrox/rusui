@@ -120,6 +120,21 @@ func (e *Engine) IngestEvent(deliveryID, source, repo string, item int, kind str
 	})
 }
 
+func (e *Engine) IngestGuestEvent(sessionID int64, deliveryID, kind string) error {
+	if deliveryID == "" {
+		return fmt.Errorf("event: delivery_id required")
+	}
+	_ = kind
+	sess, err := store.GetSession(e.Store, sessionID)
+	if err != nil {
+		return err
+	}
+	return e.Store.Tx(func(tx *sql.Tx) error {
+		_, err := store.InsertEventTx(tx, deliveryID, "guest", sess.Repo, sess.Item, sess.ItemKind, e.now())
+		return err
+	})
+}
+
 func (e *Engine) CatchUpItem(repo string, item int, kind string) error {
 	return e.Store.Tx(func(tx *sql.Tx) error {
 		return store.EnsureRefreshQueuedTx(tx, repo, item, kind, false)

@@ -428,6 +428,36 @@ func TouchRunner(s *Store, name string, at time.Time) error {
 	return err
 }
 
+func GetSession(s *Store, id int64) (*Session, error) {
+	var sess Session
+	var created string
+	err := s.DB.QueryRow(`SELECT id, environment_id, kind, repo, item, item_kind, state, created_at FROM sessions WHERE id=?`, id).Scan(
+		&sess.ID, &sess.EnvironmentID, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &created)
+	if err != nil {
+		return nil, err
+	}
+	if t, err := time.Parse(time.RFC3339Nano, created); err == nil {
+		sess.CreatedAt = t
+	}
+	return &sess, nil
+}
+
+func TurnTokenSession(s *Store, tokenHash string, now time.Time) (sessionID, turnID int64, ok bool, err error) {
+	var exp string
+	err = s.DB.QueryRow(`SELECT t.session_id, t.id, c.expires_at FROM turn_credentials c JOIN turns t ON t.id=c.turn_id WHERE c.token_hash=?`, tokenHash).Scan(&sessionID, &turnID, &exp)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, false, nil
+	}
+	if err != nil {
+		return 0, 0, false, err
+	}
+	t, err := time.Parse(time.RFC3339Nano, exp)
+	if err != nil {
+		return 0, 0, false, err
+	}
+	return sessionID, turnID, now.Before(t), nil
+}
+
 func TurnCredentialValid(s *Store, turnID int64, tokenHash string, now time.Time) (bool, error) {
 	var exp string
 	err := s.DB.QueryRow(`SELECT expires_at FROM turn_credentials WHERE turn_id=? AND token_hash=?`, turnID, tokenHash).Scan(&exp)

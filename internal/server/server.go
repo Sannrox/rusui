@@ -3,8 +3,10 @@ package server
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -37,6 +39,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /hooks/events", s.eventsHook)
 	mux.HandleFunc("POST /hooks/slack", s.slackHook)
 	mux.HandleFunc("POST /runners/hello", s.runnerHello)
+	mux.HandleFunc("POST /sessions/{id}/events", s.sessionEvents)
 	mux.HandleFunc("POST /jobs/claim", s.claim)
 	mux.HandleFunc("POST /jobs/{id}/heartbeat", s.heartbeat)
 	mux.HandleFunc("POST /jobs/{id}/complete", s.complete)
@@ -166,6 +169,52 @@ func (s *Server) turnOK(r *http.Request, turnID int64) bool {
 
 func (s *Server) runnerOrTurnOK(r *http.Request, turnID int64) bool {
 	return s.workerOK(r) || s.turnOK(r, turnID)
+}
+
+func (s *Server) sessionEventOK(r *http.Request, sessionID int64) bool {
+	if s.workerOK(r) {
+		return true
+	}
+	tok := bearer(r)
+	if tok == "" {
+		return false
+	}
+	sum := sha256.Sum256([]byte(tok))
+	sid, _, ok, err := store.TurnTokenSession(s.Eng.Store, hex.EncodeToString(sum[:]), s.Eng.Clock.Now())
+	return err == nil && ok && sid == sessionID
+}
+
+func (s *Server) sessionEvents(w http.ResponseWriter, r *http.Request) {
+	sid, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || sid == 0 {
+		http.Error(w, "session", http.StatusNotFound)
+		return
+	}
+	if _, err := store.GetSession(s.Eng.Store, sid); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "session", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !s.sessionEventOK(r, sid) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	var ev struct {
+		DeliveryID string `json:"delivery_id"`
+		Kind       string `json:"kind"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&ev); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := s.Eng.IngestGuestEvent(sid, ev.DeliveryID, ev.Kind); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func issueTurnToken(st *store.Store, turnID int64, gen int, now time.Time) (string, time.Time, error) {
