@@ -45,7 +45,7 @@ func (s *Server) githubHook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	if s.WebhookSec != "" && !gh.Verify(s.WebhookSec, r.Header.Get("X-Hub-Signature-256"), body) {
+	if s.WebhookSec == "" || !gh.Verify(s.WebhookSec, r.Header.Get("X-Hub-Signature-256"), body) {
 		http.Error(w, "bad sig", 401)
 		return
 	}
@@ -71,6 +71,9 @@ func (s *Server) githubHook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) workerOK(r *http.Request) bool {
+	if s.WorkerSec == "" {
+		return false
+	}
 	return r.Header.Get("Authorization") == "Bearer "+s.WorkerSec || r.Header.Get("X-Worker-Token") == s.WorkerSec
 }
 
@@ -177,11 +180,9 @@ func (s *Server) slackHook(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(ch))
 		return
 	}
-	if s.SlackSec != "" {
-		if err := slack.Verify(s.SlackSec, r.Header.Get("X-Slack-Request-Timestamp"), r.Header.Get("X-Slack-Signature"), body, s.Eng.Clock.Now()); err != nil {
-			http.Error(w, err.Error(), 401)
-			return
-		}
+	if err := slack.Verify(s.SlackSec, r.Header.Get("X-Slack-Request-Timestamp"), r.Header.Get("X-Slack-Signature"), body, s.Eng.Clock.Now()); err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
 	}
 	cmd := slack.ParseForm(body)
 	if s.SlackUsers != nil && !s.SlackUsers[cmd.UserID] {

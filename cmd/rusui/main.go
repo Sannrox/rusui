@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/sannrox/rusui/internal/clock"
@@ -33,10 +34,18 @@ func main() {
 	db := flag.String("db", "rusui.db", "sqlite path")
 	pol := flag.String("policy", "policy.yaml", "policy file")
 	printVersion := flag.Bool("version", false, "print version and exit")
+	allowInsecure := flag.Bool("allow-insecure", false, "start without webhook, worker, and Slack secrets")
 	flag.Parse()
 	if *printVersion {
 		fmt.Printf("rusui %s commit=%s time=%s\n", Version, GitCommit, BuildTime)
 		return
+	}
+	missing := missingRequiredSecrets(os.Getenv)
+	if len(missing) > 0 && !*allowInsecure {
+		log.Fatalf("set %s (or pass -allow-insecure)", strings.Join(missing, ", "))
+	}
+	if *allowInsecure && len(missing) > 0 {
+		log.Printf("WARNING: insecure start; unset %s", strings.Join(missing, ", "))
 	}
 	st, err := store.Open(*db)
 	if err != nil {
@@ -119,4 +128,14 @@ func runScheduler(eng *engine.Engine) {
 			}
 		}
 	}
+}
+
+func missingRequiredSecrets(getenv func(string) string) []string {
+	var miss []string
+	for _, k := range []string{"RUSUI_WEBHOOK_SECRET", "RUSUI_WORKER_SECRET", "RUSUI_SLACK_SECRET"} {
+		if getenv(k) == "" {
+			miss = append(miss, k)
+		}
+	}
+	return miss
 }
