@@ -18,7 +18,7 @@ const maxSkew = 5 * time.Minute
 
 func ParseUsers(s string) map[string]bool {
 	out := map[string]bool{}
-	for _, p := range strings.Split(s, ",") {
+	for p := range strings.SplitSeq(s, ",") {
 		p = strings.TrimSpace(p)
 		if p != "" {
 			out[p] = true
