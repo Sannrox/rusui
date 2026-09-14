@@ -61,6 +61,8 @@ Build this v1:
    - Startup + periodic: that reconcile; open-item catch-up; refresh
      of locally tracked non-terminal items even if they are no longer
      open (closed during outage). Slack waits until the slice is green.
+     Cadence: refresh tick 1s, reconcile 5m, catch-up 15m, apply retry
+     1m. Unset `RUSUI_GITHUB_HOOK_IDS` skips reconcile with a log.
 
 2. Store (SQLite)
    - deliveries, refresh_requests, policy_revisions, policy_overlay,

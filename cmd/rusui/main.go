@@ -58,6 +58,7 @@ func main() {
 		api.BaseURL = u
 	}
 	eng := engine.New(st, p, api, clock.Real{})
+	eng.HookIDs = api.HookIDs
 	eng.ReloadPolicy(p)
 	poster := &slackpkg.Poster{
 		Token:   os.Getenv("RUSUI_SLACK_BOT_TOKEN"),
@@ -78,13 +79,44 @@ func main() {
 		SlackUsers: slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
 		PolicyPath: *pol,
 	}
-	go func() {
-		t := time.NewTicker(time.Second)
-		for range t.C {
-			_ = eng.ExpireRefreshOwners()
-			_, _ = eng.StepRefresh()
-		}
-	}()
-	log.Printf("rusui %s listen %s api=%s", Version, *addr, api.BaseURL)
+	if err := eng.Recover(); err != nil {
+		log.Printf("recover: %v", err)
+	}
+	go runScheduler(eng)
+	log.Printf("rusui %s listen %s api=%s reconcile=%s catch-up=%s apply=%s", Version, *addr, api.BaseURL, engine.ReconcileEvery, engine.CatchUpEvery, engine.ApplyRetryEvery)
 	log.Fatal(http.ListenAndServe(*addr, srv.Handler()))
+}
+
+func runScheduler(eng *engine.Engine) {
+	refresh := time.NewTicker(engine.RefreshTick)
+	reconcile := time.NewTicker(engine.ReconcileEvery)
+	catchup := time.NewTicker(engine.CatchUpEvery)
+	apply := time.NewTicker(engine.ApplyRetryEvery)
+	defer refresh.Stop()
+	defer reconcile.Stop()
+	defer catchup.Stop()
+	defer apply.Stop()
+	for {
+		select {
+		case <-refresh.C:
+			if err := eng.ExpireRefreshOwners(); err != nil {
+				eng.Notify("expire owners: " + err.Error())
+			}
+			if _, err := eng.StepRefresh(); err != nil {
+				eng.Notify("step refresh: " + err.Error())
+			}
+		case <-reconcile.C:
+			if err := eng.ReconcileConfigured(); err != nil {
+				eng.Notify("reconcile: " + err.Error())
+			}
+		case <-catchup.C:
+			if err := eng.CatchUpConfigured(); err != nil {
+				eng.Notify("catch-up: " + err.Error())
+			}
+		case <-apply.C:
+			if err := eng.RetryApplyAttempts(); err != nil {
+				eng.Notify("apply retry: " + err.Error())
+			}
+		}
+	}
 }
