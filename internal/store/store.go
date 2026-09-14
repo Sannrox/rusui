@@ -276,6 +276,37 @@ func InsertDeliveryTx(tx *sql.Tx, id, repo string, item int, kind string, at tim
 	return n == 1, nil
 }
 
+func InsertEventTx(tx *sql.Tx, id, source, repo string, item int, kind string, at time.Time) (inserted bool, err error) {
+	if source == "" {
+		source = "generic"
+	}
+	res, err := tx.Exec(`INSERT OR IGNORE INTO deliveries (delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?)`,
+		id, repo, item, kind, at.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	if n == 1 {
+		var sid sql.NullInt64
+		_ = tx.QueryRow(`SELECT id FROM sessions WHERE kind=? AND repo=? AND item=?`, SessionKindReview, repo, item).Scan(&sid)
+		var session any
+		if sid.Valid {
+			session = sid.Int64
+		}
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO events (session_id, source, delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?,?,?)`,
+			session, source, id, repo, item, kind, at.UTC().Format(time.RFC3339Nano)); err != nil {
+			return false, err
+		}
+	}
+	return n == 1, nil
+}
+
+func CountEvents(s *Store, repo string, item int) (int, error) {
+	var n int
+	err := s.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE repo=? AND item=?`, repo, item).Scan(&n)
+	return n, err
+}
+
 func CountIntended(s *Store, repo string, item int) (int, error) {
 	var n int
 	err := s.DB.QueryRow(`SELECT COUNT(*) FROM actions WHERE repo=? AND item=?`, repo, item).Scan(&n)
