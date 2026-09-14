@@ -34,6 +34,7 @@ func (s *Server) Handler() http.Handler {
 		w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("POST /hooks/github", s.githubHook)
+	mux.HandleFunc("POST /hooks/events", s.eventsHook)
 	mux.HandleFunc("POST /hooks/slack", s.slackHook)
 	mux.HandleFunc("POST /runners/hello", s.runnerHello)
 	mux.HandleFunc("POST /jobs/claim", s.claim)
@@ -93,6 +94,50 @@ func (s *Server) githubHook(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(200)
 	w.Write([]byte("ok"))
+}
+
+func (s *Server) eventsHook(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	sig := r.Header.Get("X-Rusui-Signature-256")
+	if sig == "" {
+		sig = r.Header.Get("X-Hub-Signature-256")
+	}
+	if s.WebhookSec == "" || !gh.Verify(s.WebhookSec, sig, body) {
+		http.Error(w, "bad sig", http.StatusUnauthorized)
+		return
+	}
+	var ev struct {
+		DeliveryID string `json:"delivery_id"`
+		Source     string `json:"source"`
+		Repo       string `json:"repo"`
+		Item       int    `json:"item"`
+		ItemKind   string `json:"item_kind"`
+		OccurredAt string `json:"occurred_at"`
+	}
+	if err := json.Unmarshal(body, &ev); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	var occurred time.Time
+	if ev.OccurredAt != "" {
+		occurred, err = time.Parse(time.RFC3339, ev.OccurredAt)
+		if err != nil {
+			occurred, err = time.Parse(time.RFC3339Nano, ev.OccurredAt)
+			if err != nil {
+				http.Error(w, "occurred_at", http.StatusBadRequest)
+				return
+			}
+		}
+	}
+	if err := s.Eng.IngestEvent(ev.DeliveryID, ev.Source, ev.Repo, ev.Item, ev.ItemKind, occurred); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func (s *Server) workerOK(r *http.Request) bool {

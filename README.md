@@ -54,6 +54,8 @@ _output/local/bin/$(go env GOOS)/$(go env GOARCH)/rusui-runner -url http://127.0
 
 GitHub and Slack cannot reach loopback. Point a tunnel at the process.
 Webhook path ACKs without fetching GitHub; refresh runs asynchronously.
+`POST /hooks/events` is the generic signed intake: HMAC
+(`X-Rusui-Signature-256`, same secret as GitHub), store, then 202.
 At startup the server expires hung refresh owners, reconciles missed
 hook deliveries, catches up open and locally tracked items, and retries
 unpublished apply attempts. The same paths repeat: refresh every 1s,

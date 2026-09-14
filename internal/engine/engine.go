@@ -33,6 +33,7 @@ const (
 	ReconcileEvery    = 5 * time.Minute
 	CatchUpEvery      = 15 * time.Minute
 	ApplyRetryEvery   = time.Minute
+	EventMaxAge       = 24 * time.Hour
 )
 
 type Engine struct {
@@ -86,6 +87,29 @@ func (e *Engine) ReloadPolicy(p *policy.Effective) {
 func (e *Engine) IngestWebhook(deliveryID, repo string, item int, kind string) error {
 	return e.Store.Tx(func(tx *sql.Tx) error {
 		ins, err := store.InsertDeliveryTx(tx, deliveryID, repo, item, kind, e.now())
+		if err != nil {
+			return err
+		}
+		if !ins {
+			return nil
+		}
+		return store.EnsureRefreshQueuedTx(tx, repo, item, kind, false)
+	})
+}
+
+func (e *Engine) IngestEvent(deliveryID, source, repo string, item int, kind string, occurredAt time.Time) error {
+	if deliveryID == "" || repo == "" || item == 0 || kind == "" {
+		return fmt.Errorf("event: delivery_id, repo, item, and item_kind required")
+	}
+	if !occurredAt.IsZero() && e.now().Sub(occurredAt) > EventMaxAge {
+		return nil
+	}
+	at := occurredAt
+	if at.IsZero() {
+		at = e.now()
+	}
+	return e.Store.Tx(func(tx *sql.Tx) error {
+		ins, err := store.InsertEventTx(tx, deliveryID, source, repo, item, kind, at)
 		if err != nil {
 			return err
 		}
