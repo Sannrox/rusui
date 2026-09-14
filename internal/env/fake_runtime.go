@@ -3,6 +3,7 @@ package env
 import (
 	"fmt"
 	"maps"
+	"os"
 	"sync"
 )
 
@@ -10,9 +11,11 @@ import (
 type FakeRuntime struct {
 	mu           sync.Mutex
 	next         int
-	DefaultFiles map[string]bool
-	Files        map[string]map[string]bool
-	Created      []Spec
+	DefaultFiles    map[string]bool
+	DefaultContents map[string][]byte
+	Files           map[string]map[string]bool
+	Contents        map[string]map[string][]byte
+	Created         []Spec
 	Stopped      []string
 	Started      []string
 	Removed      []string
@@ -35,6 +38,21 @@ func (f *FakeRuntime) CreateAndStart(spec Spec) (string, error) {
 			f.Files = map[string]map[string]bool{}
 		}
 		f.Files[id] = maps.Clone(f.DefaultFiles)
+	}
+	if len(f.DefaultContents) > 0 {
+		if f.Contents == nil {
+			f.Contents = map[string]map[string][]byte{}
+		}
+		f.Contents[id] = maps.Clone(f.DefaultContents)
+		if f.Files == nil {
+			f.Files = map[string]map[string]bool{}
+		}
+		if f.Files[id] == nil {
+			f.Files[id] = map[string]bool{}
+		}
+		for path := range f.DefaultContents {
+			f.Files[id][path] = true
+		}
 	}
 	return id, nil
 }
@@ -71,10 +89,26 @@ func (f *FakeRuntime) Remove(id string) error {
 func (f *FakeRuntime) HasFile(id, path string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.Contents != nil {
+		if _, ok := f.Contents[id][path]; ok {
+			return true
+		}
+	}
 	if f.Files == nil {
 		return false
 	}
 	return f.Files[id][path]
+}
+
+func (f *FakeRuntime) ReadFile(id, path string) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Contents != nil {
+		if b, ok := f.Contents[id][path]; ok {
+			return b, nil
+		}
+	}
+	return nil, os.ErrNotExist
 }
 
 func (f *FakeRuntime) Exec(id string, cmd []string) error {
@@ -95,4 +129,23 @@ func (f *FakeRuntime) SetFile(id, path string) {
 		f.Files[id] = map[string]bool{}
 	}
 	f.Files[id][path] = true
+}
+
+func (f *FakeRuntime) SetFileContent(id, path string, data []byte) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Files == nil {
+		f.Files = map[string]map[string]bool{}
+	}
+	if f.Files[id] == nil {
+		f.Files[id] = map[string]bool{}
+	}
+	f.Files[id][path] = true
+	if f.Contents == nil {
+		f.Contents = map[string]map[string][]byte{}
+	}
+	if f.Contents[id] == nil {
+		f.Contents[id] = map[string][]byte{}
+	}
+	f.Contents[id][path] = data
 }

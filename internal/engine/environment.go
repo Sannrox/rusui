@@ -73,6 +73,10 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 			return nil, err
 		}
 	}
+	if err := startServices(d, handle); err != nil {
+		_ = d.Destroy(handle)
+		return nil, err
+	}
 	now := e.now()
 	exp := now.Add(e.envTTL())
 	id, err := store.InsertEnvironment(e.Store, store.Environment{
@@ -106,6 +110,9 @@ func (e *Engine) SleepEnvironment(id int64) (*store.Environment, error) {
 	}
 	d, err := e.driverFor(envRow.Driver)
 	if err != nil {
+		return nil, err
+	}
+	if err := stopServices(d, envRow.Handle); err != nil {
 		return nil, err
 	}
 	if err := d.Sleep(envRow.Handle); err != nil {
@@ -146,6 +153,9 @@ func (e *Engine) WakeEnvironment(id int64) (*store.Environment, error) {
 			return nil, err
 		}
 	}
+	if err := startServices(d, envRow.Handle); err != nil {
+		return nil, err
+	}
 	now := e.now()
 	exp := now.Add(e.envTTL())
 	envRow.State = store.EnvReady
@@ -168,6 +178,7 @@ func (e *Engine) ReapEnvironments() error {
 			e.exception("expire environment " + envRow.Name + ": " + err.Error())
 			continue
 		}
+		_ = stopServices(d, envRow.Handle)
 		if err := d.Destroy(envRow.Handle); err != nil {
 			e.exception("expire environment " + envRow.Name + ": " + err.Error())
 			continue
@@ -179,4 +190,20 @@ func (e *Engine) ReapEnvironments() error {
 		}
 	}
 	return nil
+}
+
+func startServices(d env.Driver, handle string) error {
+	s, ok := d.(env.ServiceCtl)
+	if !ok {
+		return nil
+	}
+	return s.StartServices(handle)
+}
+
+func stopServices(d env.Driver, handle string) error {
+	s, ok := d.(env.ServiceCtl)
+	if !ok {
+		return nil
+	}
+	return s.StopServices(handle)
 }
