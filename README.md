@@ -23,7 +23,7 @@ make all && make test && make validate
 | `make test` | Unit tests (`COVER=1` writes coverage HTML) |
 | `make validate` | golangci-lint, govulncheck, go-fix, shellcheck |
 | `make update` | Apply go-fix modernizations |
-| `make release-images` | Docker build image, linux binaries, `rusui`/`rusui-worker` runtime images |
+| `make release-images` | Docker build image, linux binaries, `rusui`/`rusui-runner` runtime images |
 | `make docker-clean` | Remove docker build containers/tags and `_output` |
 | `make clean` | Remove `_output` |
 
@@ -49,7 +49,7 @@ make test COVER=1
 ```bash
 make all
 _output/local/bin/$(go env GOOS)/$(go env GOARCH)/rusui -addr 127.0.0.1:8080 -policy policy.yaml -db rusui.db
-_output/local/bin/$(go env GOOS)/$(go env GOARCH)/rusui-worker -url http://127.0.0.1:8080 -repo Sannrox/rusui
+_output/local/bin/$(go env GOOS)/$(go env GOARCH)/rusui-runner -url http://127.0.0.1:8080 -repo Sannrox/rusui -driver ./review-driver
 ```
 
 GitHub and Slack cannot reach loopback. Point a tunnel at the process.

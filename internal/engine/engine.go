@@ -46,6 +46,7 @@ type Engine struct {
 
 	FetchTimeout time.Duration
 	OwnerTTL     time.Duration
+	ExecDeadline time.Duration
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {
@@ -62,6 +63,13 @@ func (e *Engine) exception(msg string) {
 }
 
 func (e *Engine) now() time.Time { return e.Clock.Now().UTC() }
+
+func (e *Engine) execDeadline() time.Duration {
+	if e.ExecDeadline > 0 {
+		return e.ExecDeadline
+	}
+	return ExecDeadline
+}
 
 func (e *Engine) ReloadPolicy(p *policy.Effective) {
 	e.Policy = p
@@ -411,7 +419,7 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		}
 		now := e.now()
 		exp := now.Add(Liveness)
-		dead := now.Add(ExecDeadline)
+		dead := now.Add(e.execDeadline())
 		j.LeaseGeneration++
 		j.ClaimedRevision = j.PendingRevision
 		j.State = "leased"

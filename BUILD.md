@@ -146,7 +146,7 @@ Constraints:
 - Do not couple this repo to aldunis-platform or sekai-chisei code
 - Do not treat model confidence as eligibility
 - Do not use filesystem JSON as canonical recovery
-- Modules: cmd/rusui, cmd/rusui-worker, internal/store, internal/github,
+- Modules: cmd/rusui, cmd/rusui-runner, internal/store, internal/github,
   internal/slack, internal/policy, internal/review, internal/apply,
   internal/lease, internal/exec, internal/reconcile, internal/refresh
 - No production credentials in the repo

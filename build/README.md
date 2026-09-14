@@ -22,7 +22,7 @@ data containers and tags rebuild.
 `make release-images` (or `./build/release-images.sh`):
 
 1. Build the toolchain image
-2. Compile `cmd/rusui` and `cmd/rusui-worker` for `BUILD_PLATFORMS`
+2. Compile `cmd/rusui` and `cmd/rusui-runner` for `BUILD_PLATFORMS`
    (defaults to the Docker engine's linux arch)
 3. Wrap each binary in `build/server-image/Dockerfile` (`debian:trixie-slim`
    + ca-certificates)

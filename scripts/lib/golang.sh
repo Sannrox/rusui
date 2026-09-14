@@ -14,7 +14,7 @@ readonly SUPPORTED_SERVER_PLATFORMS=(
 function golang::server_targets() {
   local -r targets=(
     "cmd/rusui"
-    "cmd/rusui-worker"
+    "cmd/rusui-runner"
   )
   echo "${targets[@]}"
 }

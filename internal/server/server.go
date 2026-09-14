@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,10 +11,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/slack"
+	"github.com/sannrox/rusui/internal/store"
 )
 
 type Server struct {
@@ -32,11 +35,33 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("POST /hooks/github", s.githubHook)
 	mux.HandleFunc("POST /hooks/slack", s.slackHook)
+	mux.HandleFunc("POST /runners/hello", s.runnerHello)
 	mux.HandleFunc("POST /jobs/claim", s.claim)
 	mux.HandleFunc("POST /jobs/{id}/heartbeat", s.heartbeat)
 	mux.HandleFunc("POST /jobs/{id}/complete", s.complete)
 	mux.HandleFunc("POST /jobs/{id}/fail", s.fail)
 	return mux
+}
+
+const turnTokenTTL = 10 * time.Minute
+
+func (s *Server) runnerHello(w http.ResponseWriter, r *http.Request) {
+	if !s.workerOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	if req.Name == "" {
+		req.Name = store.LocalRunnerName
+	}
+	if err := store.TouchRunner(s.Eng.Store, req.Name, s.Eng.Clock.Now()); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.WriteHeader(200)
 }
 
 func (s *Server) githubHook(w http.ResponseWriter, r *http.Request) {
@@ -77,6 +102,41 @@ func (s *Server) workerOK(r *http.Request) bool {
 	return r.Header.Get("Authorization") == "Bearer "+s.WorkerSec || r.Header.Get("X-Worker-Token") == s.WorkerSec
 }
 
+func bearer(r *http.Request) string {
+	if tok, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+		return tok
+	}
+	return r.Header.Get("X-Worker-Token")
+}
+
+func (s *Server) turnOK(r *http.Request, turnID int64) bool {
+	tok := bearer(r)
+	if tok == "" {
+		return false
+	}
+	sum := sha256.Sum256([]byte(tok))
+	ok, err := store.TurnCredentialValid(s.Eng.Store, turnID, hex.EncodeToString(sum[:]), s.Eng.Clock.Now())
+	return err == nil && ok
+}
+
+func (s *Server) runnerOrTurnOK(r *http.Request, turnID int64) bool {
+	return s.workerOK(r) || s.turnOK(r, turnID)
+}
+
+func issueTurnToken(st *store.Store, turnID int64, gen int, now time.Time) (string, time.Time, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", time.Time{}, err
+	}
+	token := hex.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(token))
+	exp := now.Add(turnTokenTTL)
+	if err := store.PutTurnCredential(st, turnID, gen, hex.EncodeToString(sum[:]), exp.UTC().Format(time.RFC3339Nano)); err != nil {
+		return "", time.Time{}, err
+	}
+	return token, exp, nil
+}
+
 func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 	if !s.workerOK(r) {
 		http.Error(w, "auth", 401)
@@ -95,8 +155,14 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(204)
 		return
 	}
+	tok, exp, err := issueTurnToken(s.Eng.Store, c.Job.ID, c.Job.LeaseGeneration, s.Eng.Clock.Now())
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	json.NewEncoder(w).Encode(map[string]any{
 		"job_id":             c.Job.ID,
+		"turn_id":            c.Job.ID,
 		"lease_generation":   c.Job.LeaseGeneration,
 		"claimed_revision":   c.Job.ClaimedRevision,
 		"repo":               c.Job.Repo,
@@ -105,16 +171,18 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		"snapshot":           c.Snapshot,
 		"item_hash":          c.ItemHash,
 		"execution_deadline": c.Job.ExecutionDeadlineAt,
+		"turn_token":         tok,
+		"turn_token_expires": exp.UTC().Format(time.RFC3339Nano),
 		"input":              s.Eng.BuildInput(c),
 	})
 }
 
 func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if !s.runnerOrTurnOK(r, id) {
 		http.Error(w, "auth", 401)
 		return
 	}
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	var req struct {
 		LeaseGeneration int `json:"lease_generation"`
 		ClaimedRevision int `json:"claimed_revision"`
@@ -128,11 +196,11 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) complete(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if !s.runnerOrTurnOK(r, id) {
 		http.Error(w, "auth", 401)
 		return
 	}
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	var req struct {
 		LeaseGeneration int             `json:"lease_generation"`
 		ClaimedRevision int             `json:"claimed_revision"`
@@ -151,11 +219,11 @@ func (s *Server) complete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) fail(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if !s.runnerOrTurnOK(r, id) {
 		http.Error(w, "auth", 401)
 		return
 	}
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	var req struct {
 		LeaseGeneration int `json:"lease_generation"`
 		ClaimedRevision int `json:"claimed_revision"`
