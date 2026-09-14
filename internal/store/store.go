@@ -428,6 +428,16 @@ func TouchRunner(s *Store, name string, at time.Time) error {
 	return err
 }
 
+func GetTurn(s *Store, id int64) (*Turn, error) {
+	var t Turn
+	err := s.DB.QueryRow(`SELECT id, session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state FROM turns WHERE id=?`, id).Scan(
+		&t.ID, &t.SessionID, &t.Lane, &t.PendingRevision, &t.ClaimedRevision, &t.LeaseGeneration, &t.RetryCount, &t.State)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
 func GetSession(s *Store, id int64) (*Session, error) {
 	var sess Session
 	var created string

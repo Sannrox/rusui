@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -118,6 +119,56 @@ func (e *Engine) IngestEvent(deliveryID, source, repo string, item int, kind str
 		}
 		return store.EnsureRefreshQueuedTx(tx, repo, item, kind, false)
 	})
+}
+
+func (e *Engine) IngestTurnAction(turnID int64, typ, reason string, body any) error {
+	if typ == "" {
+		return fmt.Errorf("action: type required")
+	}
+	turn, err := store.GetTurn(e.Store, turnID)
+	if err != nil {
+		return err
+	}
+	sess, err := store.GetSession(e.Store, turn.SessionID)
+	if err != nil {
+		return err
+	}
+	payload := []byte("{}")
+	if body != nil {
+		var err error
+		payload, err = json.Marshal(body)
+		if err != nil {
+			return err
+		}
+	}
+	if reason == "" {
+		reason = "recorded"
+	}
+	sid, tid := turn.SessionID, turn.ID
+	id, err := newActionID()
+	if err != nil {
+		return err
+	}
+	return store.InsertAction(e.Store, store.Action{
+		ID:            id,
+		SessionID:     &sid,
+		TurnID:        &tid,
+		Repo:          sess.Repo,
+		Item:          sess.Item,
+		Type:          typ,
+		ReasonCode:    reason,
+		EvidenceClass: "plane_observed",
+		LimitSentence: "ACP client recorded the request; no request bypasses stdio dispatch.",
+		Body:          string(payload),
+	})
+}
+
+func newActionID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
 }
 
 func (e *Engine) IngestGuestEvent(sessionID int64, deliveryID, kind string) error {
