@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -32,134 +33,6 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.DB.Close() }
-
-func (s *Store) migrate() error {
-	_, err := s.DB.Exec(`
-CREATE TABLE IF NOT EXISTS deliveries (
-  delivery_id TEXT PRIMARY KEY,
-  repo TEXT NOT NULL,
-  item INTEGER NOT NULL,
-  item_kind TEXT NOT NULL,
-  received_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS refresh_requests (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  repo TEXT NOT NULL,
-  item INTEGER NOT NULL,
-  item_kind TEXT NOT NULL,
-  generation INTEGER NOT NULL DEFAULT 0,
-  owner INTEGER NOT NULL DEFAULT 0,
-  owner_expires_at TEXT,
-  retry_count INTEGER NOT NULL DEFAULT 0,
-  needs_another INTEGER NOT NULL DEFAULT 0,
-  force INTEGER NOT NULL DEFAULT 0,
-  state TEXT NOT NULL DEFAULT 'queued',
-  not_before TEXT,
-  UNIQUE(repo, item)
-);
-CREATE TABLE IF NOT EXISTS snapshots (
-  repo TEXT NOT NULL,
-  item INTEGER NOT NULL,
-  revision INTEGER NOT NULL,
-  item_kind TEXT NOT NULL,
-  item_hash TEXT NOT NULL,
-  main_sha TEXT NOT NULL,
-  payload TEXT NOT NULL,
-  PRIMARY KEY (repo, item, revision)
-);
-CREATE TABLE IF NOT EXISTS jobs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  repo TEXT NOT NULL,
-  item INTEGER NOT NULL,
-  item_kind TEXT NOT NULL,
-  lane TEXT NOT NULL,
-  pending_revision INTEGER NOT NULL DEFAULT 0,
-  claimed_revision INTEGER NOT NULL DEFAULT 0,
-  lease_generation INTEGER NOT NULL DEFAULT 0,
-  lease_expires_at TEXT,
-  execution_deadline_at TEXT,
-  retry_count INTEGER NOT NULL DEFAULT 0,
-  state TEXT NOT NULL DEFAULT 'queued',
-  UNIQUE(repo, item, lane)
-);
-CREATE TABLE IF NOT EXISTS receipts (
-  job_id INTEGER NOT NULL,
-  lease_generation INTEGER NOT NULL,
-  claimed_revision INTEGER NOT NULL,
-  kind TEXT NOT NULL,
-  payload TEXT,
-  PRIMARY KEY (job_id, lease_generation, claimed_revision)
-);
-CREATE TABLE IF NOT EXISTS review_revisions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  job_id INTEGER NOT NULL,
-  claimed_revision INTEGER NOT NULL,
-  item_hash TEXT NOT NULL,
-  main_sha TEXT NOT NULL,
-  payload TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS apply_attempts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  action_id TEXT NOT NULL,
-  review_revision_id INTEGER,
-  repo TEXT NOT NULL,
-  item INTEGER NOT NULL,
-  state TEXT NOT NULL,
-  UNIQUE(action_id)
-);
-CREATE TABLE IF NOT EXISTS intended_actions (
-  action_id TEXT PRIMARY KEY,
-  review_revision_id INTEGER,
-  repo TEXT NOT NULL,
-  item INTEGER NOT NULL,
-  action_type TEXT NOT NULL,
-  reason_code TEXT NOT NULL,
-  evidence_class TEXT NOT NULL,
-  limit_sentence TEXT NOT NULL,
-  body TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS evidence_invalidations (
-  review_revision_id INTEGER NOT NULL,
-  action_id TEXT NOT NULL,
-  consumed INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (review_revision_id, action_id)
-);
-CREATE TABLE IF NOT EXISTS policy_revisions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  hash TEXT NOT NULL,
-  payload TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS overlay (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS daily_review_counts (
-  repo TEXT NOT NULL,
-  day TEXT NOT NULL,
-  count INTEGER NOT NULL,
-  PRIMARY KEY (repo, day)
-);
-CREATE TABLE IF NOT EXISTS retry_audit (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  job_id INTEGER NOT NULL,
-  actor TEXT,
-  ts TEXT NOT NULL,
-  pending_revision INTEGER NOT NULL,
-  previous_retry_count INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS reconcile_checkpoints (
-  repo TEXT PRIMARY KEY,
-  last_delivered_at TEXT,
-  last_delivery_id TEXT
-);
-CREATE TABLE IF NOT EXISTS failed_deliveries (
-  delivery_id TEXT PRIMARY KEY,
-  repo TEXT NOT NULL,
-  retries INTEGER NOT NULL
-);
-`)
-	return err
-}
 
 func (s *Store) Tx(fn func(*sql.Tx) error) error {
 	tx, err := s.DB.Begin()
@@ -227,19 +100,40 @@ func UpdateJobTx(tx *sql.Tx, j *Job) error {
 	if j.ExecutionDeadlineAt != nil {
 		dead = j.ExecutionDeadlineAt.UTC().Format(time.RFC3339Nano)
 	}
-	_, err := tx.Exec(`UPDATE jobs SET pending_revision=?, claimed_revision=?, lease_generation=?, lease_expires_at=?, execution_deadline_at=?, retry_count=?, state=? WHERE id=?`,
+	_, err := tx.Exec(`UPDATE turns SET pending_revision=?, claimed_revision=?, lease_generation=?, lease_expires_at=?, execution_deadline_at=?, retry_count=?, state=? WHERE id=?`,
 		j.PendingRevision, j.ClaimedRevision, j.LeaseGeneration, exp, dead, j.RetryCount, j.State, j.ID)
 	return err
 }
 
 func InsertJobTx(tx *sql.Tx, j *Job) error {
-	res, err := tx.Exec(`INSERT INTO jobs (repo, item, item_kind, lane, pending_revision, claimed_revision, lease_generation, retry_count, state) VALUES (?,?,?,?,?,?,?,?,?)`,
-		j.Repo, j.Item, j.ItemKind, j.Lane, j.PendingRevision, j.ClaimedRevision, j.LeaseGeneration, j.RetryCount, j.State)
+	sid, err := ensureReviewSessionTx(tx, j.Repo, j.Item, j.ItemKind)
+	if err != nil {
+		return err
+	}
+	res, err := tx.Exec(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state) VALUES (?,?,?,?,?,?,?)`,
+		sid, j.Lane, j.PendingRevision, j.ClaimedRevision, j.LeaseGeneration, j.RetryCount, j.State)
 	if err != nil {
 		return err
 	}
 	j.ID, err = res.LastInsertId()
 	return err
+}
+
+func ensureReviewSessionTx(tx *sql.Tx, repo string, item int, kind string) (int64, error) {
+	var id int64
+	err := tx.QueryRow(`SELECT id FROM sessions WHERE kind=? AND repo=? AND item=?`, SessionKindReview, repo, item).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (?,?,?,?,?,?,?)`,
+		DefaultEnvironmentID, SessionKindReview, repo, item, kind, "open", time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
 }
 
 func SaveSnapshotTx(tx *sql.Tx, repo string, item, rev int, it snapshot.Item) error {
@@ -367,12 +261,24 @@ func InsertDeliveryTx(tx *sql.Tx, id, repo string, item int, kind string, at tim
 		return false, err
 	}
 	n, _ := res.RowsAffected()
+	if n == 1 {
+		var sid sql.NullInt64
+		_ = tx.QueryRow(`SELECT id FROM sessions WHERE kind=? AND repo=? AND item=?`, SessionKindReview, repo, item).Scan(&sid)
+		var session any
+		if sid.Valid {
+			session = sid.Int64
+		}
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO events (session_id, source, delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?,?,?)`,
+			session, "github", id, repo, item, kind, at.UTC().Format(time.RFC3339Nano)); err != nil {
+			return false, err
+		}
+	}
 	return n == 1, nil
 }
 
 func CountIntended(s *Store, repo string, item int) (int, error) {
 	var n int
-	err := s.DB.QueryRow(`SELECT COUNT(*) FROM intended_actions WHERE repo=? AND item=?`, repo, item).Scan(&n)
+	err := s.DB.QueryRow(`SELECT COUNT(*) FROM actions WHERE repo=? AND item=?`, repo, item).Scan(&n)
 	return n, err
 }
 
@@ -395,7 +301,7 @@ func LatestReviewJSON(s *Store, jobID int64) (string, error) {
 }
 
 func IntendedBodies(s *Store, repo string, item int) ([]string, error) {
-	rows, err := s.DB.Query(`SELECT body FROM intended_actions WHERE repo=? AND item=?`, repo, item)
+	rows, err := s.DB.Query(`SELECT body FROM actions WHERE repo=? AND item=?`, repo, item)
 	if err != nil {
 		return nil, err
 	}

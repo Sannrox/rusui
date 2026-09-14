@@ -1,8 +1,10 @@
-# Build prompt — rusui v1
+# Build prompt — rusui
 
 Paste this whole file to a coding agent in a fresh checkout of `rusui`.
-Read `ARCHITECTURE.md` first. It is the authority. Do not implement v2/v3
-behavior except as types/comments needed to keep the state machines honest.
+Read `ARCHITECTURE.md` first. It is the authority. Do not implement live
+apply or implement-to-PR except as types/comments needed to keep the
+state machines honest. The domain nouns are environment, session, turn,
+runner, event, and action. A review job is a turn on a session.
 
 First working slice: fake GitHub (webhook POST plus list/detail delivery
 shape), webhook → refresh → claim → Codex `input.v1.json`/`output.v1.json`
@@ -65,11 +67,14 @@ Build this v1:
      1m. Unset `RUSUI_GITHUB_HOOK_IDS` skips reconcile with a log.
 
 2. Store (SQLite)
-   - deliveries, refresh_requests, policy_revisions, policy_overlay,
-     jobs, leases, review_revisions (canonical JSON blob),
-     apply_attempts, intended_actions, reconcile_checkpoints,
-     completion_receipts, retry_audit, daily_review_counts,
+   - schema_migrations (versioned; no CREATE IF NOT EXISTS drift)
+   - environments, sessions, turns, runners, events, actions
+   - deliveries, refresh_requests, policy_revisions, overlay,
+     review_revisions (canonical JSON blob), apply_attempts,
+     reconcile_checkpoints, receipts, retry_audit, daily_review_counts,
      evidence_invalidations
+   - `jobs` is a read view of turns joined to sessions; writes go to
+     `turns` / `sessions`. A lease belongs to a turn.
    - Lease fields as ARCHITECTURE.md
    - completion_receipts keyed by (job_id, lease_generation,
      claimed_revision)

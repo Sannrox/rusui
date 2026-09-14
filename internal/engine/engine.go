@@ -750,13 +750,22 @@ func (e *Engine) runApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Item, revID 
 		return err
 	}
 	body := fmt.Sprintf("dry-run %s %s evidence_class=%s. %s", a.Type, a.ReasonCode, class, sentence)
-	_, err = tx.Exec(`INSERT OR IGNORE INTO intended_actions (action_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body) VALUES (?,?,?,?,?,?,?,?,?)`,
-		actionID, revID, j.Repo, j.Item, a.Type, a.ReasonCode, class, sentence, body)
+	var sid sql.NullInt64
+	_ = tx.QueryRow(`SELECT id FROM sessions WHERE kind=? AND repo=? AND item=?`, store.SessionKindReview, j.Repo, j.Item).Scan(&sid)
+	_, err = tx.Exec(`INSERT OR IGNORE INTO actions (action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		actionID, nullableInt(sid), j.ID, revID, j.Repo, j.Item, a.Type, a.ReasonCode, class, sentence, body)
 	if err != nil {
 		return err
 	}
 	_, err = tx.Exec(`UPDATE apply_attempts SET state='succeeded' WHERE action_id=?`, actionID)
 	return err
+}
+
+func nullableInt(n sql.NullInt64) any {
+	if !n.Valid {
+		return nil
+	}
+	return n.Int64
 }
 
 func actionHash(repo string, item int, typ string, revID int64, target string) string {
