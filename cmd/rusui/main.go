@@ -32,9 +32,18 @@ var (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "run" {
-		runCLI(os.Args[2:])
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "run":
+			runCLI(os.Args[2:])
+			return
+		case "sessions":
+			sessionsCLI(os.Args[2:])
+			return
+		case "attach":
+			attachCLI(os.Args[2:])
+			return
+		}
 	}
 	addr := flag.String("addr", "127.0.0.1:8080", "listen")
 	db := flag.String("db", "rusui.db", "sqlite path")
