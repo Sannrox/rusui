@@ -17,6 +17,15 @@ import (
 	"github.com/sannrox/rusui/internal/store"
 )
 
+func (s *Server) githubAuthToken() string {
+	if s.GitHubTokens != nil {
+		if t, err := s.GitHubTokens.Token(); err == nil && t != "" {
+			return t
+		}
+	}
+	return s.GitHubToken
+}
+
 func gitProxyBaseURL(r *http.Request, driver string) string {
 	u, err := url.Parse(modelBaseURL(r, driver))
 	if err != nil {
@@ -87,7 +96,7 @@ func (s *Server) gitProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
-	if s.GitHubToken == "" {
+	if s.githubAuthToken() == "" {
 		http.Error(w, "github token unset", http.StatusServiceUnavailable)
 		return
 	}
@@ -140,7 +149,7 @@ func (s *Server) forwardGit(w http.ResponseWriter, r *http.Request, owner, name,
 	path := "/" + owner + "/" + name + ".git" + rest
 	query := r.URL.RawQuery
 	proxy := httputil.NewSingleHostReverseProxy(upstream)
-	token := s.GitHubToken
+	token := s.githubAuthToken()
 	orig := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		orig(req)
