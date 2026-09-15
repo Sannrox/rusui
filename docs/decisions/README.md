@@ -35,5 +35,7 @@ tests, and the pull request description instead.
 - **Superseded**: a newer ADR links here and this file links forward. Historical
   text is retained.
 
-Template: title, status block, context, decision, consequences, rejected
-alternatives, validation and reversal, sources. See 0001 for style.
+Template: [template.md](template.md). Title, status block, context, decision,
+consequences, rejected alternatives, validation and reversal, sources. See
+0001 for style. An accepted ADR does not change
+[ARCHITECTURE.md](../../ARCHITECTURE.md) until that file is rewritten.

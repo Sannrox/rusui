@@ -9,10 +9,10 @@ Build an evidence-backed impact map before implementation or review.
 
 ## Procedure
 
-1. Read the linked Issue or request, `README.md`, `ARCHITECTURE.md`, `BUILD.md`,
-   and the relevant code. For a diff, inspect every changed file and its direct
-   callers or implementors. Complete when the claimed outcome and actual change
-   surface are both known.
+1. Read the linked Issue or request, `README.md`, `ARCHITECTURE.md`,
+   `docs/README.md`, and the relevant code. For a diff, inspect every changed
+   file and its direct callers or implementors. Complete when the claimed
+   outcome and actual change surface are both known.
 2. Trace applicable boundaries:
    - hard defaults versus `policy.yaml` baseline versus SQLite overlay
      (overlay may only narrow);

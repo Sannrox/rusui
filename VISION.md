@@ -1,8 +1,9 @@
 # Vision
 
-Status: accepted in [ADR 0001](docs/decisions/0001-environment-plane.md).
-[ARCHITECTURE.md](ARCHITECTURE.md) remains the v1 product contract until
-follow-up Issues rewrite it for the new nouns.
+> **Not the runbook.** Accepted product direction
+> ([ADR 0001](docs/decisions/0001-environment-plane.md)).
+> The current contract is [ARCHITECTURE.md](ARCHITECTURE.md). Do not treat
+> this file as shipped operator behavior.
 
 ## Purpose
 

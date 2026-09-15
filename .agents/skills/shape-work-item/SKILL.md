@@ -10,11 +10,11 @@ explicitly authorizes publishing to GitHub.
 
 ## Procedure
 
-1. Read `README.md`, `ARCHITECTURE.md`, `BUILD.md`, and representative live
-   Issues for the maintained body format. Inspect affected code or docs when
-   named. Complete when the request is framed against actual project
-   boundaries, the current milestone (v1 dry-run; v2 live apply; v3
-   implement/land), and current Issue conventions.
+1. Read `README.md`, `ARCHITECTURE.md`, `docs/README.md`, and representative
+   live Issues for the maintained body format. Inspect affected code or docs
+   when named. Complete when the request is framed against actual project
+   boundaries, the current contract (dry-run apply; no implement-to-PR), and
+   current Issue conventions.
 2. Search open and closed Issues, Discussions, and PRs when GitHub access is
    available. Record possible duplicates or state that the search was not run.
    Complete when overlapping work is linked or ruled out.
@@ -26,8 +26,9 @@ explicitly authorizes publishing to GitHub.
    Route sensitive or exploitable behavior through a private maintainer report
    or GitHub security advisory rather than a public Issue. Route
    cross-boundary, trust-model, policy-capability, or difficult-to-reverse
-   choices to a Design Discussion before implementation. Complete when exactly
-   one primary route is selected and exceptions are explained.
+   choices to an ADR pull request (GitHub Discussions are disabled) before
+   implementation. Complete when exactly one primary route is selected and
+   exceptions are explained.
 4. Draft the work item with a problem statement, observable outcome, non-goals,
    acceptance evidence, affected boundary, and compatibility/security/data
    risks. Preserve uncertainty as an explicit question. Complete when another

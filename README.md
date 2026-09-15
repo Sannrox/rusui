@@ -1,104 +1,77 @@
 # Rusui (留守居)
 
-Personal environment plane. You write `policy.yaml`. The server admits
-work onto sessions and turns, records immutable reviews, and dry-runs
-apply.
+Self-hosted environment plane for coding agents. You write `policy.yaml`.
+The server admits work onto sessions and turns, records immutable reviews,
+and **dry-runs** apply. It does not comment, close, or merge on GitHub.
 
 留守居 is the steward who keeps house while you are away.
 
-See `ARCHITECTURE.md` and `BUILD.md`. The proposed direction beyond v1 is
-in `VISION.md`, `ROADMAP.md`, and `docs/decisions/`.
+**Status:** personal operator tool, loopback by default, dry-run apply.
+Not a hosted product.
 
-## Build
+[Docs](docs/README.md) · [Architecture](ARCHITECTURE.md) ·
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) ·
+[License](LICENSE)
 
-Run this before committing:
+## What it is
 
-```bash
-make all && make test && make validate
-```
+GitHub is intake. The rusui server is the source of truth. Slack is the
+optional human socket. A runner claims turns and hosts a guest CLI (process
+driver or ACP). Model processes never receive GitHub write tokens.
 
-| Target | What it does |
-|---|---|
-| `make all` | Host-platform binaries into `_output/local/bin/$(go env GOOS)/$(go env GOARCH)/` |
-| `make test` | Unit tests (`COVER=1` writes coverage HTML) |
-| `make validate` | golangci-lint, govulncheck, go-fix, shellcheck |
-| `make update` | Apply go-fix modernizations |
-| `make release-images` | Docker build image, linux binaries, `rusui`/`rusui-runner` runtime images |
-| `make docker-clean` | Remove docker build containers/tags and `_output` |
-| `make clean` | Remove `_output` |
+Nouns (project, session, turn, environment, runner): [CONTEXT.md](CONTEXT.md).
+The v1 contract: [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Dockerized Makefile (reproducible toolchain):
+## What it is not
 
-```bash
-./build/run.sh make all
-./build/run.sh make test
-./build/run.sh make validate
-make release-images
-```
+Live GitHub mutation, implement-to-PR, land, a dashboard, or a multi-tenant
+SaaS. Later milestones and competitive sequencing live in
+[VISION.md](VISION.md) and [ROADMAP.md](ROADMAP.md); they are not the
+runbook.
 
-See `build/README.md`. Runtime images still bind loopback unless you pass `-addr 0.0.0.0:8080`.
+## Quick start
+
+Prerequisites: Go 1.26 (`make` pins [`.go-version`](.go-version), currently
+1.26.6) and a **read-only** GitHub token.
 
 ```bash
-make all WHAT=cmd/rusui
-make test WHAT=./internal/engine GOFLAGS="-v" TEST_ARGS='-run ^TestClaim$$'
-make test COVER=1
-```
-
-## Run (loopback)
-
-```bash
+git clone https://github.com/Sannrox/rusui.git
+cd rusui
+cp policy.example.yaml policy.yaml    # set your project and owner/repo
 make all
-_output/local/bin/$(go env GOOS)/$(go env GOARCH)/rusui -addr 127.0.0.1:8080 -policy policy.yaml -db rusui.db
-_output/local/bin/$(go env GOOS)/$(go env GOARCH)/rusui-runner -url http://127.0.0.1:8080 -repo Sannrox/rusui -driver ./review-driver
+
+export RUSUI_GITHUB_TOKEN=...                    # required
+export RUSUI_WEBHOOK_SECRET="$(openssl rand -hex 16)"
+export RUSUI_WORKER_SECRET="$(openssl rand -hex 16)"
+export RUSUI_SLACK_SECRET="$(openssl rand -hex 16)"   # replace with the Slack signing secret if you use Slack
+
+BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
+"$BIN/rusui" -addr 127.0.0.1:8080 -policy policy.yaml -db rusui.db
 ```
 
-GitHub and Slack cannot reach loopback. Point a tunnel at the process.
-Webhook path ACKs without fetching GitHub; refresh runs asynchronously.
-`POST /hooks/events` is the generic signed intake: HMAC
-(`X-Rusui-Signature-256`, same secret as GitHub), store, then 202.
-At startup the server expires hung refresh owners, reconciles missed
-hook deliveries, catches up open and locally tracked items, and retries
-unpublished apply attempts. The same paths repeat: refresh every 1s,
-reconcile every 5m, catch-up every 15m, apply retry every 1m. Reconcile
-is skipped with a log when `RUSUI_GITHUB_HOOK_IDS` is unset.
+In another terminal, export the same `RUSUI_WORKER_SECRET`:
 
-Copy `policy.example.yaml` to `policy.yaml`. Tests use the fixture policy
-(comments/close simulation on).
-
-## GitHub credentials
-
-Read-only. Do not give the model process this token.
-
-| Variable | Purpose |
-|---|---|
-| `RUSUI_GITHUB_TOKEN` or `GITHUB_TOKEN` | Bearer token for the REST API |
-| `RUSUI_GITHUB_HOOK_IDS` | `owner/repo=hookid` pairs, comma-separated; required for delivery reconcile |
-| `RUSUI_GITHUB_API` | API base URL (default `https://api.github.com`) |
-| `RUSUI_WEBHOOK_SECRET` | Required. `X-Hub-Signature-256` for `POST /hooks/github` |
-| `RUSUI_WORKER_SECRET` | Required. Bearer token for `/jobs/*` |
-| `RUSUI_SLACK_SECRET` | Required. Slack signing secret (`X-Slack-Signature`) |
-| `RUSUI_SLACK_USERS` | Comma-separated Slack `user_id` allowlist |
-| `RUSUI_SLACK_BOT_TOKEN` | Bot token for exception `chat.postMessage` (optional) |
-| `RUSUI_SLACK_CHANNEL` | Channel for exceptions |
-
-Slash command `/rusui` → `POST /hooks/slack`:
-
-```
-status [repo]
-pause [repo]
-resume [repo]
-sweep [repo]
-retry repo[#item]
-reload
+```bash
+BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
+"$BIN/rusui-runner" -url http://127.0.0.1:8080 -repo OWNER/REPO -driver ./review-driver
 ```
 
-`implement` is rejected. GitHub webhooks do not require Slack. The
-process refuses to start if `RUSUI_WEBHOOK_SECRET`, `RUSUI_WORKER_SECRET`,
-or `RUSUI_SLACK_SECRET` is unset, and unsigned requests on those
-surfaces receive 401. Pass `-allow-insecure` only for local experiments;
-it logs the missing variables at startup. If the Slack bot token is
-unset, exceptions stay in the process log.
+`GET http://127.0.0.1:8080/healthz` returns `ok`.
 
-The client is read-only: issues, pulls, refs, compare, and hook deliveries.
-It never comments, closes, or merges. Default-branch reachability uses
-`GET /repos/.../compare/{commit}...{defaultTip}` (`ahead` or `identical`).
+The process refuses to start if webhook, worker, or Slack secrets are unset.
+Pass `-allow-insecure` only for local experiments. GitHub and Slack cannot
+reach loopback: [docs/operator.md](docs/operator.md).
+
+Contributor gate before a PR: `make all && make test && make validate`.
+
+## Next
+
+| I want to… | Read |
+| --- | --- |
+| Run it against a real repository | [docs/operator.md](docs/operator.md) |
+| Look up flags, env, HTTP, policy | [docs/configuration.md](docs/configuration.md) |
+| Learn the nouns | [CONTEXT.md](CONTEXT.md) |
+| Build, test, images | [docs/development.md](docs/development.md) |
+| Read the contract | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| See accepted direction | [VISION.md](VISION.md), [ROADMAP.md](ROADMAP.md), [docs/decisions/](docs/decisions/) |
+| Contribute | [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md) |

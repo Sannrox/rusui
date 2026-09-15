@@ -12,7 +12,7 @@ GitHub state unless the maintainer explicitly authorizes that action.
 
 1. Identify the target version, base tag, target commit, and milestone or merged
    PR range. Read `go.mod`, `.go-version`, `.github/workflows/build.yml`,
-   `BUILD.md`, and open release-blocking Issues. Version is derived from git
+   `docs/development.md`, and open release-blocking Issues. Version is derived from git
    tags via `scripts/lib/version.sh`; do not treat generated `.version` as
    source. Complete when the exact release contents are bounded.
 2. Classify changes as `Added`, `Changed`, `Fixed`, `Security`, or `Migration`.
