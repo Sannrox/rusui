@@ -162,8 +162,16 @@ func PutIdempotencyTx(tx *sql.Tx, key string, sessionID int64) error {
 }
 
 func InsertRunSessionTx(tx *sql.Tx, project, repo, prompt string) (sessionID int64, item int, err error) {
+	return insertOperatorSessionTx(tx, SessionKindRun, "run", project, repo, prompt, 0)
+}
+
+func InsertScheduledSessionTx(tx *sql.Tx, project, repo, prompt string, scheduleID int64) (sessionID int64, item int, err error) {
+	return insertOperatorSessionTx(tx, SessionKindScheduled, "scheduled", project, repo, prompt, scheduleID)
+}
+
+func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt string, scheduleID int64) (sessionID int64, item int, err error) {
 	var minItem int
-	if err := tx.QueryRow(`SELECT COALESCE(MIN(item),0) FROM sessions WHERE kind=? AND repo=?`, SessionKindRun, repo).Scan(&minItem); err != nil {
+	if err := tx.QueryRow(`SELECT COALESCE(MIN(item),0) FROM sessions WHERE kind=? AND repo=?`, kind, repo).Scan(&minItem); err != nil {
 		return 0, 0, err
 	}
 	item = minItem - 1
@@ -171,7 +179,7 @@ func InsertRunSessionTx(tx *sql.Tx, project, repo, prompt string) (sessionID int
 		item = -1
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	name := fmt.Sprintf("run-%s-%d", strings.ReplaceAll(repo, "/", "-"), item)
+	name := fmt.Sprintf("%s-%s-%d", kind, strings.ReplaceAll(repo, "/", "-"), item)
 	envRes, err := tx.Exec(`INSERT INTO environments (name, driver, state, created_at) VALUES (?,?,?,?)`,
 		name, "process", EnvReady, now)
 	if err != nil {
@@ -181,8 +189,8 @@ func InsertRunSessionTx(tx *sql.Tx, project, repo, prompt string) (sessionID int
 	if err != nil {
 		return 0, 0, err
 	}
-	res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, prompt, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
-		envID, SessionKindRun, repo, item, "run", "open", project, prompt, now)
+	res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, prompt, schedule_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		envID, kind, repo, item, kind, "open", project, prompt, scheduleID, now)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -191,8 +199,40 @@ func InsertRunSessionTx(tx *sql.Tx, project, repo, prompt string) (sessionID int
 		return 0, 0, err
 	}
 	_, err = tx.Exec(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state) VALUES (?,?,?,?,?,?,?)`,
-		sessionID, "run", 1, 0, 0, 0, "queued")
+		sessionID, lane, 1, 0, 0, 0, "queued")
 	return sessionID, item, err
+}
+
+func InsertSchedule(s *Store, project, name string, everySeconds int, prompt string) (int64, error) {
+	res, err := s.DB.Exec(`INSERT INTO schedules(project, name, every_seconds, prompt, created_at) VALUES(?,?,?,?,?)`,
+		project, name, everySeconds, prompt, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func ListSchedules(s *Store) ([]Schedule, error) {
+	rows, err := s.DB.Query(`SELECT id, project, name, every_seconds, prompt FROM schedules`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Schedule
+	for rows.Next() {
+		var sc Schedule
+		if err := rows.Scan(&sc.ID, &sc.Project, &sc.Name, &sc.EverySeconds, &sc.Prompt); err != nil {
+			return nil, err
+		}
+		out = append(out, sc)
+	}
+	return out, rows.Err()
+}
+
+func ScheduleHasLiveSession(tx *sql.Tx, scheduleID int64) (bool, error) {
+	var n int
+	err := tx.QueryRow(`SELECT COUNT(*) FROM sessions se JOIN turns t ON t.session_id=se.id WHERE se.schedule_id=? AND t.state IN ('queued','leased')`, scheduleID).Scan(&n)
+	return n > 0, err
 }
 
 func SaveSnapshotTx(tx *sql.Tx, repo string, item, rev int, it snapshot.Item) error {

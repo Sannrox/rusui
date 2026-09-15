@@ -91,5 +91,14 @@ const (
 	LocalRunnerName      = "local"
 	SessionKindReview    = "review"
 	SessionKindRun       = "run"
+	SessionKindScheduled = "scheduled"
 	DefaultEnvironmentID = int64(1)
 )
+
+type Schedule struct {
+	ID           int64
+	Project      string
+	Name         string
+	EverySeconds int
+	Prompt       string
+}

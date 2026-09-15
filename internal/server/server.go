@@ -49,6 +49,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /turns/{id}/actions", s.turnActions)
 	mux.HandleFunc("POST /jobs/claim", s.claim)
 	mux.HandleFunc("POST /projects/{slug}/sessions", s.createSession)
+	mux.HandleFunc("POST /projects/{slug}/schedules", s.createSchedule)
 	mux.HandleFunc("POST /jobs/{id}/heartbeat", s.heartbeat)
 	mux.HandleFunc("POST /jobs/{id}/complete", s.complete)
 	mux.HandleFunc("POST /jobs/{id}/fail", s.fail)
