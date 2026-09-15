@@ -771,6 +771,42 @@ func scanEnvironment(row interface{ Scan(...any) error }) (*Environment, error) 
 	return &e, nil
 }
 
+func ListPendingApprovals(s *Store) ([]Action, error) {
+	rows, err := s.DB.Query(`SELECT a.action_id, a.session_id, a.turn_id, a.review_revision_id, a.repo, a.item, a.action_type, a.reason_code, a.evidence_class, a.limit_sentence, a.body
+FROM actions a LEFT JOIN approval_decisions d ON d.action_id=a.action_id
+WHERE a.action_type='acp.approval' AND d.action_id IS NULL
+ORDER BY a.action_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Action
+	for rows.Next() {
+		var a Action
+		var sid, tid, rid sql.NullInt64
+		if err := rows.Scan(&a.ID, &sid, &tid, &rid, &a.Repo, &a.Item, &a.Type, &a.ReasonCode, &a.EvidenceClass, &a.LimitSentence, &a.Body); err != nil {
+			return nil, err
+		}
+		if sid.Valid {
+			a.SessionID = &sid.Int64
+		}
+		if tid.Valid {
+			a.TurnID = &tid.Int64
+		}
+		if rid.Valid {
+			a.ReviewRevisionID = &rid.Int64
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+func PutApprovalDecision(s *Store, actionID, decision string) error {
+	_, err := s.DB.Exec(`INSERT INTO approval_decisions(action_id, decision, decided_at) VALUES(?,?,?)`,
+		actionID, decision, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
 func InsertAction(s *Store, a Action) error {
 	return s.Tx(func(tx *sql.Tx) error {
 		return InsertActionTx(tx, a)

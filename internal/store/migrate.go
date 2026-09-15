@@ -7,7 +7,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 6
+const CurrentSchema = 7
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -211,8 +211,28 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 6); err != nil {
 			return err
 		}
+		ver = 6
+	}
+	if ver < 7 {
+		if err := migrateV7(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 7); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func migrateV7(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS approval_decisions (
+  action_id TEXT PRIMARY KEY,
+  decision TEXT NOT NULL,
+  decided_at TEXT NOT NULL
+);
+`)
+	return err
 }
 
 func migrateV6(db *sql.DB) error {
