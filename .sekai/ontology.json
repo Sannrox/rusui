@@ -69,7 +69,7 @@
     },
     {
       "name": "RusuiEnvironment",
-      "description": "The machine a session runs on. One session, one environment. Created from a snapshot; idle 72h expire then re-materialize. P1 dogfood uses a container; the immortal local environment is not shared across review sessions.",
+      "description": "The machine a session runs on. One session, one environment. Created from a snapshot; idle 72h expire then re-materialize. P1 dogfood machine isolation is a container; the process driver and immortal local environment are not dogfood. Tool fence is the guest, not this class.",
       "superclasses": [],
       "properties": []
     },

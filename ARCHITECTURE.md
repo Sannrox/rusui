@@ -451,6 +451,13 @@ is recorded as an `actions` row. Permission requests with no matching
 rule are denied and stored as approvals. The process driver is still
 the review lane; the runner does not spawn this client yet.
 
+P1 isolation is two fences ([ADR 0008](docs/decisions/0008-p1-isolation-split.md)).
+**Machine isolation** is the container environment (process driver is
+test/dev only). **Tool fence** is Grok `--permission-mode default`
+plus those permission receipts. Rusui does not jail tools inside the
+guest; shikigami’s tool sandbox is out of P1. `--always-approve` is
+not the unattended spawn.
+
 Environments have a create / sleep / wake / expire lifecycle. Drivers
 implement the same interface: `process` (a workspace directory) and
 `container` (Docker/Podman-compatible runtime). **One session, one

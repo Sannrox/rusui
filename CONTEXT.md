@@ -35,3 +35,11 @@ _Avoid_: environment, GitHub item snapshot hash, image tag
 **Schedule**:
 A named trigger on a project with a UTC cadence and a prompt. Each fire may start one scheduled session.
 _Avoid_: review fan-out, cron in policy.yaml
+
+**Machine isolation**:
+Rusui’s OS boundary for a session: a container in P1 dogfood. The process driver is a test/dev stand-in.
+_Avoid_: tool fence, shikigami sandbox
+
+**Tool fence**:
+Grok `--permission-mode default` plus policy-mapped `session/request_permission`. Unmatched requests are denied and parked.
+_Avoid_: machine isolation, `--always-approve`, tool jail inside rusui
