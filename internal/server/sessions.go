@@ -116,6 +116,32 @@ func (s *Server) attachSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
+	if !s.workerOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "id", 400)
+		return
+	}
+	var req struct {
+		Prompt string `json:"prompt"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	turnID, pending, err := s.Eng.PromptFollowUp(id, req.Prompt)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"turn_id": turnID, "pending_revision": pending})
+}
+
 func writeSSE(w http.ResponseWriter, event string, v any) {
 	b, _ := json.Marshal(v)
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, b)
