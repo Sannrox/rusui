@@ -162,6 +162,42 @@ func TestHappyDryRun(t *testing.T) {
 	}
 }
 
+func TestHeartbeatRenewsTurnGrant(t *testing.T) {
+	h := setup(t)
+	h.putRefresh(issue(1))
+	c := h.claim()
+	hash := "aa"
+	now := h.clk.T
+	if err := store.PutTurnCredential(h.st, c.Job.ID, c.Job.LeaseGeneration, hash, now.Add(10*time.Minute).UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	h.clk.Advance(2 * time.Minute)
+	if err := h.e.Heartbeat(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision); err != nil {
+		t.Fatal(err)
+	}
+	h.clk.Advance(9 * time.Minute)
+	ok, err := store.TurnCredentialValid(h.st, c.Job.ID, hash, h.clk.T)
+	if err != nil || !ok {
+		t.Fatalf("grant should still be valid at T+11m: %v %v", ok, err)
+	}
+}
+
+func TestTurnGrantExpiresWithoutHeartbeat(t *testing.T) {
+	h := setup(t)
+	h.putRefresh(issue(1))
+	c := h.claim()
+	hash := "bb"
+	now := h.clk.T
+	if err := store.PutTurnCredential(h.st, c.Job.ID, c.Job.LeaseGeneration, hash, now.Add(10*time.Minute).UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	h.clk.Advance(11 * time.Minute)
+	ok, err := store.TurnCredentialValid(h.st, c.Job.ID, hash, h.clk.T)
+	if err != nil || ok {
+		t.Fatalf("grant should expire: %v %v", ok, err)
+	}
+}
+
 func TestExpiredHeartbeatAndComplete(t *testing.T) {
 	h := setup(t)
 	h.putRefresh(issue(1))
