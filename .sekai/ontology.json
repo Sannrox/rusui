@@ -51,13 +51,49 @@
     },
     {
       "name": "RusuiPolicyOverlay",
-      "description": "Durable SQLite overlay that may only narrow policy.yaml. Pause stops new claims and apply. Admit of a new snapshot during pause does not demote a live lease. In-flight complete/fail still succeed. Pause does not reset failed jobs.",
+      "description": "Durable SQLite overlay that may only narrow policy.yaml. Pause is global or per project and stops new claims and apply. Overlay cannot add a session kind, egress class, or permission allow-rule. In-flight complete/fail still succeed. Pause does not reset failed jobs.",
       "superclasses": [],
       "properties": []
     },
     {
       "name": "RusuiPolicyRevision",
       "description": "Immutable parsed snapshot of policy.yaml. Jobs bind to a revision; apply rechecks current policy immediately before action.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiProject",
+      "description": "Operator-named policy and budget domain. A session belongs to exactly one project; an environment belongs to exactly one; a GitHub repository binds to at most one. GitHub is optional; review requires a bound repository.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiEnvironment",
+      "description": "The machine a session runs on. One session, one environment. Created from a snapshot; idle 72h expire then re-materialize. P1 dogfood machine isolation is a container; the process driver and immortal local environment are not dogfood. Tool fence is the guest, not this class.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiSchedule",
+      "description": "Named project-owned trigger with a UTC cadence and a prompt. Each fire may start one scheduled session; skip if a session from this schedule is still running.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiSession",
+      "description": "Unit of work on one project and one environment. Review identity is (project, bound repo, item). run and scheduled identities are minted at create. A follow-up prompt is a new turn on the same session.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiSnapshot",
+      "description": "Prepared reusable tree identified by source_hash (base image digest, git pin, .agents/setup bytes). Cached on the runner. Two sessions may share a snapshot; they never share an environment.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiPerTurnGrant",
+      "description": "Only credential in a P1 guest. 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Redeems at plane git and model proxies. Not a GitHub installation token or xAI key.",
       "superclasses": [],
       "properties": []
     },
@@ -238,6 +274,62 @@
       "range": "RusuiStandingPlan",
       "cardinality": { "min": 0, "max": 1 },
       "transitive": false
+    },
+    {
+      "name": "rusui_policy_names_project",
+      "description": "Policy v2 baseline names projects; a missing slug is out of scope.",
+      "domain": "RusuiPolicyRevision",
+      "range": "RusuiProject",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_session_belongs_to_project",
+      "description": "A session belongs to exactly one project.",
+      "domain": "RusuiSession",
+      "range": "RusuiProject",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_session_uses_environment",
+      "description": "A session runs on exactly one environment.",
+      "domain": "RusuiSession",
+      "range": "RusuiEnvironment",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_schedule_belongs_to_project",
+      "description": "A named schedule is owned by one project.",
+      "domain": "RusuiSchedule",
+      "range": "RusuiProject",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_schedule_starts_session",
+      "description": "A schedule fire may start one scheduled session; overlapping live sessions skip.",
+      "domain": "RusuiSchedule",
+      "range": "RusuiSession",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_environment_from_snapshot",
+      "description": "An environment is created from a snapshot identified by source_hash. Two environments may share a snapshot.",
+      "domain": "RusuiEnvironment",
+      "range": "RusuiSnapshot",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_environment_holds_grant",
+      "description": "A P1 container environment holds only the current per-turn grant, never a GitHub or xAI secret.",
+      "domain": "RusuiEnvironment",
+      "range": "RusuiPerTurnGrant",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
     }
   ],
   "provenance": [
@@ -347,6 +439,42 @@
       "subject": "RusuiReconcileCheckpoint",
       "source": "ARCHITECTURE.md",
       "locator": "ARCHITECTURE.md#webhook-intake-and-recovery",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiProject",
+      "source": "docs/decisions/0005-policy-v2-project.md",
+      "locator": "docs/decisions/0005-policy-v2-project.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiSession",
+      "source": "docs/decisions/0006-session-start.md",
+      "locator": "docs/decisions/0006-session-start.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiEnvironment",
+      "source": "docs/decisions/0006-session-start.md",
+      "locator": "docs/decisions/0006-session-start.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiSchedule",
+      "source": "docs/decisions/0006-session-start.md",
+      "locator": "docs/decisions/0006-session-start.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiSnapshot",
+      "source": "docs/decisions/0007-environment-snapshot.md",
+      "locator": "docs/decisions/0007-environment-snapshot.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiPerTurnGrant",
+      "source": "docs/decisions/0009-credential-broker.md",
+      "locator": "docs/decisions/0009-credential-broker.md#decision",
       "confidence": 1.0
     }
   ]

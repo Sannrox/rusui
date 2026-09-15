@@ -71,42 +71,56 @@ the same object API. See [ADR 0003](docs/decisions/0003-operator-surface.md).
 
 Prose is not executable. `policy.yaml` is the only baseline that can
 authorize work. Optional `plan.md` notes are ignored by admit/apply.
+Policy v2 is keyed by **project** ([ADR 0005](docs/decisions/0005-policy-v2-project.md)).
+The shipped parser still reads version 1 until a delivery issue ports
+it; this section is the contract that issue implements.
 
 ```yaml
-version: 1
+version: 2
 defaults:
   never_release: true
   never_leak_private_to_public: true
-  review: true
-  comments: false
-  close: false
-  implement: false
-  land: false
-  max_reviews_per_repo_per_utc_day: 50
-repos:
-  Sannrox/rusui:
-    visibility: private
-    review: true
-    comments: false
-    close: false
-    implement: false
-    land: false
+  session_kinds: [review, run, scheduled]
+  egress: trusted
+projects:
+  rusui:
+    repos:
+      Sannrox/rusui:
+        visibility: private
+        review: true
+        comments: false
+        close: false
+        implement: false
+        land: false
+        max_reviews_per_repo_per_utc_day: 50
+    session_kinds: [review, run, scheduled]
+    egress: trusted
 ```
 
-Unknown fields fail closed. Missing repo keys mean the repo is out of
-scope. Boolean capabilities default to `false` except `review`, which
-defaults to `true` when the repo is listed.
+Unknown fields fail closed. Missing project slugs mean the project is
+out of scope. A GitHub repository not bound to a project in the current
+revision is out of scope. Boolean GitHub capabilities default to
+`false` except `review`, which defaults to `true` when the repository
+is listed under a project.
 
-In v1 those flags authorize **simulation**, not live GitHub writes.
-`comments: false` and `close: false` mean dry-run apply will not emit
-an intended comment or close either. Tests that need an eligible
-dry-run use `policy.fixture.yaml`. `policy.example.yaml` stays the
-operator default.
+Those GitHub flags authorize **simulation**, not live GitHub writes,
+under the current contract. `comments: false` and `close: false` mean
+dry-run apply will not emit an intended comment or close either. Tests
+that need an eligible dry-run use `policy.fixture.yaml`.
+`policy.example.yaml` stays the operator default until the parser ports.
 
 `max_reviews_per_repo_per_utc_day` caps **new review claims** for that
-UTC day (catch-up and webhook-driven). Exhaustion is a Slack/log
-exception; work stays queued. Operator `retry` counts against the
-budget. In-flight leases are not cancelled.
+bound repository that UTC day (catch-up and webhook-driven). Exhaustion
+is a Slack/log exception; work stays queued. Operator `retry` counts
+against the budget. In-flight leases are not cancelled.
+
+`session_kinds` is an allowlist: `review`, `run`, `scheduled`. `run` is
+operator-started. A `review` session requires at least one bound
+repository. Permission allow-rules on the project grant matching
+`session/request_permission` requests; unmatched requests are denied
+and parked on the approvals inbox. Overlay cannot add an allow-rule.
+Budget **limits** are per project per UTC day; meter sources are not
+in this contract yet.
 
 ### Precedence
 
@@ -117,9 +131,10 @@ off.
    token; never copy private context into a public job.
 2. **`policy.yaml` baseline** loaded into SQLite as an immutable
    `policy_revision`.
-3. **Durable overlay** in SQLite: `pause` per repo or globally. Overlay
-   may only **narrow**. It cannot enable comments, close, implement, or
-   land if the baseline has them off.
+3. **Durable overlay** in SQLite: `pause` per project or globally.
+   Overlay may only **narrow**. It cannot enable comments, close,
+   implement, land, a session kind, an egress class, or a permission
+   allow-rule if the baseline has them off.
 4. **Slack commands** write overlay or enqueue jobs through the same
    admit path. Slack cannot bypass (1)–(3).
 
@@ -223,6 +238,10 @@ new state; A completes → A discarded; pending stays B.
 
 Use a **repository webhook** (events: `issues`, `pull_request`,
 `issue_comment`). Inbound POST verifies `X-Hub-Signature-256`.
+A delivery that parses to `(repo, item)` wakes the **review** session
+for that bound item ([ADR 0006](docs/decisions/0006-session-start.md));
+duplicate `delivery_id` is a no-op. Payloads with no item do not start
+a session. Named schedules and `rusui run` are the other start paths.
 Reconcile uses an installation or PAT with `read:org`/`admin:repo_hook`
 as configured; the fake GitHub must implement the same two endpoints:
 
@@ -283,9 +302,11 @@ not make the worker finish behind pending.
 
 ## Lease state machine
 
-Identity: a **turn** (`turns.id`) on a **session**. A session is
-`(kind, repo, item)` for the review workflow — GitHub item numbers are
-source attributes, not the lease key. `lane` on the turn is
+Identity: a **turn** (`turns.id`) on a **session**. A session belongs
+to one project and one environment ([ADR 0006](docs/decisions/0006-session-start.md)).
+**review** identity is `(project, bound repo, item)` — GitHub item
+numbers are source attributes, not the lease key. **run** and
+**scheduled** identities are minted at create. `lane` on the turn is
 `review` / `apply` / `implement`. A lease belongs to one turn, so a live
 lease on session A cannot block claiming session B.
 
@@ -334,7 +355,8 @@ expire_lease  (shared; claim and reaper use the same txn)
 claim
   in one txn:
     if paused: reject
-    if repo missing from current policy OR review == false: reject
+    if session project missing from current policy
+        OR (review session AND bound repo missing or review == false): reject
         (job stays queued; in-flight leases may still complete/fail)
     if daily review budget exhausted: reject (job stays queued)
     if state = leased AND (expired or past deadline): expire_lease
@@ -409,9 +431,10 @@ What v1 does enforce:
 - GitHub **write** tokens, Slack secrets, and the database stay in the
   **server** process. They are never copied into the job workspace or
   the child environment.
-- The model child gets an env allowlist, ephemeral cwd, isolated CLI
-  home, and a short-lived **read-only** GitHub token minted for that
-  job.
+- The model child gets an env allowlist, ephemeral cwd, and isolated
+  CLI home. P1 containers do **not** receive a GitHub or xAI secret;
+  they receive only the per-turn grant
+  ([ADR 0009](docs/decisions/0009-credential-broker.md)).
 - Runner hello and claim require the bootstrap secret. Heartbeat,
   complete, and fail accept that secret or the per-turn token.
   The process driver environment contains only an allowlist and
@@ -429,12 +452,44 @@ is recorded as an `actions` row. Permission requests with no matching
 rule are denied and stored as approvals. The process driver is still
 the review lane; the runner does not spawn this client yet.
 
+P1 isolation is two fences ([ADR 0008](docs/decisions/0008-p1-isolation-split.md)).
+**Machine isolation** is the container environment (process driver is
+test/dev only). **Tool fence** is Grok `--permission-mode default`
+plus those permission receipts. Rusui does not jail tools inside the
+guest; shikigami’s tool sandbox is out of P1. `--always-approve` is
+not the unattended spawn.
+
+Credentials ([ADR 0009](docs/decisions/0009-credential-broker.md)):
+git smart-HTTP and model egress proxies run on the **plane**. The
+guest holds only the per-turn grant (`XAI_API_KEY` and git HTTP auth
+are that grant). Grok is pointed at `GROK_XAI_API_BASE_URL` on the
+plane; the runner **execs** Grok inside the container. Guest egress
+`trusted` is plane proxies only. GitHub REST stays on the plane.
+Missing App key or xAI key fails closed. A plane CA lives in the guest
+image. Snapshot prepare uses a read-only grant through the same git
+proxy.
+
 Environments have a create / sleep / wake / expire lifecycle. Drivers
 implement the same interface: `process` (a workspace directory) and
-`container` (Docker/Podman-compatible runtime). Create runs
-`.agents/setup` once per environment source hash; wake runs
-`.agents/resume` when present. The default `local` environment is not
-expired. Other environments expire after 72 hours.
+`container` (Docker/Podman-compatible runtime). **One session, one
+environment.** The default `local` environment is not a P1 dogfood
+environment and is not shared across review sessions.
+
+A **snapshot** is the prepared tree for a `source_hash`: digest of
+base image identity, git pin, and `.agents/setup` bytes if present
+([ADR 0007](docs/decisions/0007-environment-snapshot.md)). P1 requires
+a git pin (PR head for pulls; default-branch SHA at admit for issues;
+bound-repo default branch for `run` / `scheduled`). On miss, the
+runner clones, runs `.agents/setup` if present, and caches the
+snapshot locally under that hash. On hit, the session environment is
+created from the cache with no setup. Wake runs `.agents/resume` only.
+The plane stores the hash string, not the bytes.
+
+Idle 72 hours from last wake or last turn end expires the environment.
+The session row stays; the next turn re-materializes from the
+snapshot. A new git pin on a live session replaces the environment
+for that turn. Sleep/wake on a live environment keeps in-container
+dirt.
 
 ## Review artifacts
 
@@ -712,8 +767,10 @@ Inbound: verify `X-Slack-Signature` over the **raw** body, reject if
 authorize `user_id` against an allowlist. Fail closed if any check
 fails.
 
-Commands: `status`, `pause [repo]`, `resume [repo]`, `sweep [repo]`,
-`retry [repo[#item]]`, `reload`. `implement` is rejected until v3.
+Commands: `status`, `pause [project]`, `resume [project]`,
+`sweep [project]`, `retry [project[#item]]`, `reload`. `implement` is
+rejected until v3. `pause rusui` names the project slug, not
+`Sannrox/rusui`.
 
 `retry` is the only way to requeue `state = failed` on an **unchanged**
 revision after the attempt budget is exhausted. It writes an audit row
@@ -751,7 +808,9 @@ on the review revision plus same-repo public URLs.
 ## Non-goals
 
 - Kafka, RabbitMQ, or Redis as the job system
-- GitHub App fleet, dashboard, automerge product
+- A multi-tenant GitHub App marketplace or dashboard; automerge as a
+  product. One GitHub App for the operator’s dogfood repos is in
+  scope ([ADR 0009](docs/decisions/0009-credential-broker.md)).
 - Spawning CLIs or live GitHub fetches inside the webhook handler
 - Write tokens in the model environment
 - A second orchestrator beside this server

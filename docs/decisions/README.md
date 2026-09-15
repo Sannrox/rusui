@@ -8,6 +8,11 @@ Decisions that must outlive a single pull request.
 | [0002](0002-grok-acp-agent-set.md) | P1 agent set is Grok CLI over ACP | Accepted |
 | [0003](0003-operator-surface.md) | Operator surfaces are views of one object API | Accepted |
 | [0004](0004-rusui-services-yaml.md) | services.yaml is `.rusui/services.yaml` only | Accepted |
+| [0005](0005-policy-v2-project.md) | Policy v2 is keyed by project | Accepted |
+| [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted |
+| [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted |
+| [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
+| [0009](0009-credential-broker.md) | P1 credential broker | Accepted |
 
 ## When to write an ADR
 
