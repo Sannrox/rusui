@@ -128,8 +128,19 @@ func ensureReviewSessionTx(tx *sql.Tx, repo string, item int, kind string) (int6
 	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, err
 	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	name := fmt.Sprintf("review-%s-%d", strings.ReplaceAll(repo, "/", "-"), item)
+	envRes, err := tx.Exec(`INSERT INTO environments (name, driver, state, created_at) VALUES (?,?,?,?)`,
+		name, "process", EnvReady, now)
+	if err != nil {
+		return 0, err
+	}
+	envID, err := envRes.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
 	res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (?,?,?,?,?,?,?)`,
-		DefaultEnvironmentID, SessionKindReview, repo, item, kind, "open", time.Now().UTC().Format(time.RFC3339Nano))
+		envID, SessionKindReview, repo, item, kind, "open", now)
 	if err != nil {
 		return 0, err
 	}
