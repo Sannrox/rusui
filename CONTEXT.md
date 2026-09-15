@@ -43,3 +43,11 @@ _Avoid_: tool fence, shikigami sandbox
 **Tool fence**:
 Grok `--permission-mode default` plus policy-mapped `session/request_permission`. Unmatched requests are denied and parked.
 _Avoid_: machine isolation, `--always-approve`, tool jail inside rusui
+
+**Per-turn grant**:
+The only credential in a P1 guest: D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets.
+_Avoid_: PAT, installation token, `auth.json`, xAI API key (in the guest)
+
+**Plane proxy**:
+Git smart-HTTP and model egress on the plane, which redeem a grant for the real token. GitHub REST stays plane-internal. The guest may reach only these endpoints under egress `trusted`.
+_Avoid_: runner-side proxy, `api.github.com` from the guest

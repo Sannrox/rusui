@@ -92,6 +92,12 @@
       "properties": []
     },
     {
+      "name": "RusuiPerTurnGrant",
+      "description": "Only credential in a P1 guest. 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Redeems at plane git and model proxies. Not a GitHub installation token or xAI key.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiPublicContext",
       "description": "Only approved public GitHub fields for a public-repo job. Private plan notes, Slack, other repos, and Aldunis are excluded. Publishable review fields are the only public write inputs.",
       "superclasses": [],
@@ -316,6 +322,14 @@
       "range": "RusuiSnapshot",
       "cardinality": { "min": 1, "max": 1 },
       "transitive": false
+    },
+    {
+      "name": "rusui_environment_holds_grant",
+      "description": "A P1 container environment holds only the current per-turn grant, never a GitHub or xAI secret.",
+      "domain": "RusuiEnvironment",
+      "range": "RusuiPerTurnGrant",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
     }
   ],
   "provenance": [
@@ -455,6 +469,12 @@
       "subject": "RusuiSnapshot",
       "source": "docs/decisions/0007-environment-snapshot.md",
       "locator": "docs/decisions/0007-environment-snapshot.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiPerTurnGrant",
+      "source": "docs/decisions/0009-credential-broker.md",
+      "locator": "docs/decisions/0009-credential-broker.md#decision",
       "confidence": 1.0
     }
   ]

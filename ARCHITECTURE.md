@@ -431,9 +431,10 @@ What v1 does enforce:
 - GitHub **write** tokens, Slack secrets, and the database stay in the
   **server** process. They are never copied into the job workspace or
   the child environment.
-- The model child gets an env allowlist, ephemeral cwd, isolated CLI
-  home, and a short-lived **read-only** GitHub token minted for that
-  job.
+- The model child gets an env allowlist, ephemeral cwd, and isolated
+  CLI home. P1 containers do **not** receive a GitHub or xAI secret;
+  they receive only the per-turn grant
+  ([ADR 0009](docs/decisions/0009-credential-broker.md)).
 - Runner hello and claim require the bootstrap secret. Heartbeat,
   complete, and fail accept that secret or the per-turn token.
   The process driver environment contains only an allowlist and
@@ -457,6 +458,16 @@ test/dev only). **Tool fence** is Grok `--permission-mode default`
 plus those permission receipts. Rusui does not jail tools inside the
 guest; shikigami’s tool sandbox is out of P1. `--always-approve` is
 not the unattended spawn.
+
+Credentials ([ADR 0009](docs/decisions/0009-credential-broker.md)):
+git smart-HTTP and model egress proxies run on the **plane**. The
+guest holds only the per-turn grant (`XAI_API_KEY` and git HTTP auth
+are that grant). Grok is pointed at `GROK_XAI_API_BASE_URL` on the
+plane; the runner **execs** Grok inside the container. Guest egress
+`trusted` is plane proxies only. GitHub REST stays on the plane.
+Missing App key or xAI key fails closed. A plane CA lives in the guest
+image. Snapshot prepare uses a read-only grant through the same git
+proxy.
 
 Environments have a create / sleep / wake / expire lifecycle. Drivers
 implement the same interface: `process` (a workspace directory) and
@@ -797,7 +808,9 @@ on the review revision plus same-repo public URLs.
 ## Non-goals
 
 - Kafka, RabbitMQ, or Redis as the job system
-- GitHub App fleet, dashboard, automerge product
+- A multi-tenant GitHub App marketplace or dashboard; automerge as a
+  product. One GitHub App for the operator’s dogfood repos is in
+  scope ([ADR 0009](docs/decisions/0009-credential-broker.md)).
 - Spawning CLIs or live GitHub fetches inside the webhook handler
 - Write tokens in the model environment
 - A second orchestrator beside this server
