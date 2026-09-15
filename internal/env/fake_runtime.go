@@ -2,25 +2,27 @@ package env
 
 import (
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
+	"path/filepath"
 	"sync"
 )
 
 // FakeRuntime records Docker-shaped calls. No daemon is required.
 type FakeRuntime struct {
-	mu           sync.Mutex
-	next         int
+	mu              sync.Mutex
+	next            int
 	DefaultFiles    map[string]bool
 	DefaultContents map[string][]byte
 	Files           map[string]map[string]bool
 	Contents        map[string]map[string][]byte
 	Created         []Spec
-	Stopped      []string
-	Started      []string
-	Removed      []string
-	Execs        [][]string
-	alive        map[string]bool
+	Stopped         []string
+	Started         []string
+	Removed         []string
+	Execs           [][]string
+	alive           map[string]bool
 }
 
 func (f *FakeRuntime) CreateAndStart(spec Spec) (string, error) {
@@ -129,6 +131,30 @@ func (f *FakeRuntime) SetFile(id, path string) {
 		f.Files[id] = map[string]bool{}
 	}
 	f.Files[id][path] = true
+}
+
+func (f *FakeRuntime) PlaceTree(id, srcDir string) error {
+	return filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		if rel == ".rusui-snapshot" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		f.SetFileContent(id, rel, data)
+		return nil
+	})
 }
 
 func (f *FakeRuntime) SetFileContent(id, path string, data []byte) {

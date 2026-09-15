@@ -58,6 +58,13 @@ func (p Process) Destroy(handle string) error {
 	return os.RemoveAll(handle)
 }
 
+func (p Process) PlaceTree(handle, srcDir string) error {
+	if handle == "" || srcDir == "" {
+		return fmt.Errorf("env: place tree requires handle and src")
+	}
+	return copyDir(srcDir, handle)
+}
+
 func writeState(handle, state string) error {
 	if handle == "" {
 		return fmt.Errorf("env: empty handle")
