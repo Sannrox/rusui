@@ -38,7 +38,7 @@ force-pushing protected branches, or weakening repository protections.
 1. Resolve the exact repository and issue. If the user asks for the "next"
    issue, require an explicit selection or a recommendation produced by
    `advance-issue-frontier` before starting.
-2. Read `README.md`, `ARCHITECTURE.md`, `BUILD.md`, the issue, linked
+2. Read `README.md`, `ARCHITECTURE.md`, `docs/README.md`, the issue, linked
    decisions, and the live pull request and issue state. `ARCHITECTURE.md` is
    the product contract; do not implement v2/v3 behavior except as types or
    comments needed to keep state machines honest.

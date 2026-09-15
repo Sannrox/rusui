@@ -1,0 +1,63 @@
+name: Feature or change
+description: A focused outcome, refactor, or research question.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep one observable outcome per issue. Do not propose live GitHub
+        mutation or implement-to-PR here unless the work is types or comments
+        needed to keep state machines honest.
+        See [ARCHITECTURE.md](https://github.com/Sannrox/rusui/blob/main/ARCHITECTURE.md).
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - feature
+        - refactor
+        - research
+        - documentation
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is missing or expensive today?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Observable outcome
+      description: What can a reviewer see when this is done?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Acceptance evidence
+      description: Tests, commands, or docs that prove the outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: nongoals
+    attributes:
+      label: Non-goals
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Keep the H2 `## Dependencies` so automation can parse it.
+      value: |
+        ## Dependencies
+
+        None.
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Policy, admit/lease, GitHub, apply, Slack, store, docs, compatibility.
+    validations:
+      required: true

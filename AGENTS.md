@@ -9,6 +9,38 @@ machines honest. Direction beyond the current contract is proposed in
 `VISION.md` and `ROADMAP.md`; decisions live in `docs/decisions/`. A
 proposed ADR does not change the contract until it is accepted.
 
+Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
+[docs/README.md](docs/README.md).
+
+## Always
+
+- Treat `ARCHITECTURE.md` as the contract and `CONTEXT.md` as the noun glossary.
+- Run `make all && make test && make validate` before claiming a change is
+  done. Narrow with
+  `make test WHAT=./internal/engine TEST_ARGS='-run ^TestClaim'`.
+- Parse issue dependencies only from `## Dependencies`.
+- Bind examples to loopback. The GitHub client is read-only.
+- Use `verify-change` before delivery. Fix actionable review findings.
+- Preserve other delivery lanes; never switch, reset, or stash the primary
+  checkout.
+
+## Ask first
+
+- Enabling `comments` or `close` as live GitHub writes (they are dry-run).
+- Passing `-addr 0.0.0.0` or `-allow-insecure` in a runbook.
+- Rewriting `ARCHITECTURE.md`, or implementing VISION/ROADMAP as if shipped.
+- Opening, labeling, or merging GitHub issues and pull requests.
+- Adding a new ADR.
+
+## Never
+
+- Implement live GitHub mutation or implement-to-PR except as types or
+  comments needed to keep state machines honest.
+- Give a model process a GitHub write token, or commit secrets, webhook
+  secrets, worker secrets, Slack tokens, `*.db`, `.version`, or `_output/`.
+- Implement from `docs/v1-build-prompt.md` (historical `BUILD.md`).
+- Invent live apply from model `confidence = high`.
+
 GitHub Issues are the planning source of truth. Project-specific Skills
 under `.agents/skills/` define the expected workflows for shaping,
 delivering, verifying, assessing, and releasing work:
@@ -33,7 +65,7 @@ make all && make test && make validate
 
 - `make all` builds host-platform binaries into `_output/`.
 - `make test` runs unit tests. Narrow with
-  `make test WHAT=./internal/engine TEST_ARGS='-run ^TestClaim$'`.
+  `make test WHAT=./internal/engine TEST_ARGS='-run ^TestClaim'`.
 - `make validate` runs golangci-lint, govulncheck, go-fix, and shellcheck.
 - `make release-images` builds Linux binaries and runtime images when
   Docker is available.

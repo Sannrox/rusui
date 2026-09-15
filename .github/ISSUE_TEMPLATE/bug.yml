@@ -1,0 +1,57 @@
+name: Bug report
+description: Something the control plane does that it should not, or fails to do.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. Exploitable defects go to
+        [SECURITY.md](https://github.com/Sannrox/rusui/blob/main/SECURITY.md),
+        not this form.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What went wrong, including the command or HTTP path.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Observable outcome
+      description: What should a reviewer see when this is fixed?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Acceptance evidence
+      description: Tests, logs (redact secrets), or commands that prove the fix.
+    validations:
+      required: true
+  - type: textarea
+    id: nongoals
+    attributes:
+      label: Non-goals
+      description: What this issue must not expand into.
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Keep the H2 `## Dependencies` so automation can parse it.
+      value: |
+        ## Dependencies
+
+        None.
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Policy, admit/lease, GitHub intake, apply, Slack, store, or docs.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Exact commands. Do not paste tokens or rusui.db.

@@ -1,3 +1,6 @@
+# Operator default (policy v2, keyed by project). Copy to policy.yaml.
+# comments/close authorize v1 dry-run intended-actions, not live GitHub writes.
+# Unknown fields fail closed.
 version: 2
 defaults:
   never_release: true

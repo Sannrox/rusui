@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security advisory
+    url: https://github.com/Sannrox/rusui/security/advisories/new
+    about: Report a vulnerability privately. Do not file a public issue.
+  - name: Documentation map
+    url: https://github.com/Sannrox/rusui/blob/main/docs/README.md
+    about: Operator, configuration, and development docs.

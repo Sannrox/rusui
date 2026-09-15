@@ -1,6 +1,7 @@
 # v1 evaluation set
 
-Operator judgments for dry-run comparison. Run before Slack and live apply.
+Operator judgments for dry-run comparison. Slack is in-tree; live apply is
+still off.
 
 ```bash
 go test ./eval -v

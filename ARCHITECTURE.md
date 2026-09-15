@@ -1,5 +1,11 @@
 # Rusui architecture
 
+> Product contract. Operator how-to: [docs/operator.md](docs/operator.md).
+> Flags and env: [docs/configuration.md](docs/configuration.md).
+> Nouns: [CONTEXT.md](CONTEXT.md).
+> [VISION.md](VISION.md) and [ROADMAP.md](ROADMAP.md) are sequencing, not this
+> contract.
+
 Self-hosted environment plane (留守居: the steward who keeps house while
 you are away). You write structured policy. The server admits work onto
 typed records — environment, session, turn, runner, event, action —
@@ -59,9 +65,10 @@ cannot reach that port by themselves. The operator must run a separate
 tunnel or webhook relay (for example smee, cloudflared, or a GitHub App
 forwarder) that terminates TLS off-box and forwards to loopback.
 
-The tunnel is operator infrastructure, not part of this repo. Document the
-forward target in run docs. If the tunnel is down, refresh of locally
-tracked items and delivery reconcile still recover missed work.
+The tunnel is operator infrastructure, not part of this repo. Forward
+GitHub to `POST /hooks/github` and Slack to `POST /hooks/slack` as in
+[docs/operator.md](docs/operator.md). If the tunnel is down, refresh of
+locally tracked items and delivery reconcile still recover missed work.
 
 Later operator reachability (not this milestone) replaces loopback-as-security
 with a token plus identity-aware proxy or tailnet. Surfaces stay viewers of
@@ -789,7 +796,7 @@ String denylists are a backstop, not the control.
 
 A public-repo job receives only a `PublicContext` built from that
 repo's public GitHub fields. It must not include policy overlay notes,
-Slack text, private repo names, Aldunis, or other-repo URLs.
+Slack text, private repo names, or other-repo URLs.
 
 Public GitHub writes (v2+) are rendered only from `publishable` fields
 on the review revision plus same-repo public URLs.

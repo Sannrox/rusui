@@ -20,16 +20,15 @@ Promote the durable result, not the conversation that produced it.
    - Skill: a repeated project-specific AI procedure or high-risk checklist;
    - none: the outcome is local to the closed work item.
    Complete when every artifact has a future audience and owner.
-3. Preserve one source of truth. `ARCHITECTURE.md` remains the v1 product
+3. Preserve one source of truth. `ARCHITECTURE.md` remains the product
    contract; link to it rather than restating the whole system. Put rationale
    in the ADR and usage in docs. Complete when the same rule is not maintained
    in multiple prose locations.
-4. For the first ADR, create `docs/decisions/README.md` as the decision index and
-   `docs/decisions/0001-<slug>.md` with title, status, context, decision,
-   consequences, alternatives, and source links. For later ADRs, allocate the
-   next number from the index and follow the established structure. Supersede
-   by adding a new ADR and cross-linking both; retain historical text. Complete
-   when status and relationships are explicit.
+4. Allocate the next number from `docs/decisions/README.md` and follow
+   `docs/decisions/template.md`. Supersede by adding a new ADR and
+   cross-linking both; retain historical text. Complete when status and
+   relationships are explicit. An accepted ADR does not change
+   `ARCHITECTURE.md` until that file is rewritten.
 5. Check links, examples, Skill metadata, and affected indexes. Complete when a
    future contributor can discover the result without the original prompt.
 

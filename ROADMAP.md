@@ -1,5 +1,8 @@
 # Roadmap
 
+> **Not the runbook.** Sequencing estimates, not deadlines or the product
+> contract ([ARCHITECTURE.md](ARCHITECTURE.md)).
+
 Sequencing context for [ADR 0001](docs/decisions/0001-environment-plane.md),
 [ADR 0002](docs/decisions/0002-grok-acp-agent-set.md), and
 [VISION.md](VISION.md). Phases, effort, and quarters are estimates for one

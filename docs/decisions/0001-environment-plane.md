@@ -8,9 +8,10 @@
 - Discussion: none. GitHub Discussions are disabled on this repository; the
   pull request that added this file was the review venue. Merging with this
   status is the acceptance act.
+- Contract: [ARCHITECTURE.md](../../ARCHITECTURE.md) now uses these nouns;
+  this ADR is accepted direction that the contract already reflects in part.
 - Related: [VISION.md](../../VISION.md), [ROADMAP.md](../../ROADMAP.md),
-  [ARCHITECTURE.md](../../ARCHITECTURE.md) (the v1 contract this ADR
-  eventually supersedes in part),
+  [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0002](0002-grok-acp-agent-set.md) (amends D2's chosen agent set),
   [ADR 0003](0003-operator-surface.md) (amends D6 and D7)
 

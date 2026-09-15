@@ -1,5 +1,9 @@
 # Build and release images
 
+Contributor overview: [docs/development.md](../docs/development.md).
+Do not publish a container port until `-addr 0.0.0.0:8080` is passed **and**
+required secrets are set ([SECURITY.md](../SECURITY.md)).
+
 Two Docker layers, same shape as the Makefile flow.
 
 ## Build image
