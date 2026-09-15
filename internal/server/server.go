@@ -398,7 +398,7 @@ func (s *Server) slackHook(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) runSlack(cmd slack.Command) (string, int) {
 	if cmd.Command == "" {
-		return "empty command. status | pause [repo] | resume [repo] | sweep [repo] | retry [repo[#item]] | reload", 200
+		return "empty command. status | pause [project] | resume [project] | sweep [repo] | retry [repo[#item]] | reload", 200
 	}
 	switch cmd.Command {
 	case "pause":

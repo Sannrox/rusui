@@ -117,7 +117,7 @@ func TestSlackCommands(t *testing.T) {
 	_ = e.CatchUpItem(it.Repo, it.Item, it.ItemKind)
 	_, _ = e.StepRefresh()
 
-	code, text := readText(t, slackPost(t, hs, clk, "U1", "pause example/test-repo"))
+	code, text := readText(t, slackPost(t, hs, clk, "U1", "pause test"))
 	if code != 200 || !strings.Contains(text, "paused") {
 		t.Fatalf("%d %s", code, text)
 	}
@@ -125,7 +125,11 @@ func TestSlackCommands(t *testing.T) {
 	if err == nil && c != nil {
 		t.Fatal("claimed while paused")
 	}
-	_, text = readText(t, slackPost(t, hs, clk, "U1", "resume example/test-repo"))
+	_, text = readText(t, slackPost(t, hs, clk, "U1", "pause example/test-repo"))
+	if !strings.Contains(text, "unknown project") {
+		t.Fatalf("repo path: %s", text)
+	}
+	_, text = readText(t, slackPost(t, hs, clk, "U1", "resume test"))
 	if !strings.Contains(text, "resumed") {
 		t.Fatal(text)
 	}

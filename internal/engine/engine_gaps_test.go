@@ -53,7 +53,7 @@ func TestPauseDuringEvidenceFetch(t *testing.T) {
 	it.LastNonBotCommentAt = it.CreatedAt
 	h.putRefresh(it)
 	c := h.claim()
-	_ = h.e.SetPause("example/test-repo", true)
+	_ = h.e.SetPause("test", true)
 	a := art(c, "propose_close", "close", "stale_insufficient_info")
 	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a); err != nil {
 		t.Fatal(err)
@@ -61,12 +61,12 @@ func TestPauseDuringEvidenceFetch(t *testing.T) {
 	if n, _ := store.CountIntended(h.st, it.Repo, it.Item); n != 0 {
 		t.Fatalf("intended after paused complete %d", n)
 	}
-	_ = h.e.SetPause("example/test-repo", false)
+	_ = h.e.SetPause("test", false)
 	h.f.SetBlockFetch(make(chan struct{}))
 	done := make(chan error, 1)
 	go func() { done <- h.e.ApplyAttempt(it.Repo, it.Item) }()
 	waitFetch(t, h.f, 1)
-	if err := h.e.SetPause("example/test-repo", true); err != nil {
+	if err := h.e.SetPause("test", true); err != nil {
 		t.Fatal(err)
 	}
 	h.f.CloseBlockFetch()
@@ -214,7 +214,7 @@ func TestApplyInFlightRetry(t *testing.T) {
 	it.LastNonBotCommentAt = it.CreatedAt
 	h.putRefresh(it)
 	c := h.claim()
-	_ = h.e.SetPause("example/test-repo", true)
+	_ = h.e.SetPause("test", true)
 	a := art(c, "propose_close", "close", "stale_insufficient_info")
 	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a); err != nil {
 		t.Fatal(err)
@@ -229,7 +229,7 @@ func TestApplyInFlightRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = h.e.SetPause("example/test-repo", false)
+	_ = h.e.SetPause("test", false)
 	if err := h.e.ApplyAttempt(it.Repo, it.Item); err != nil {
 		t.Fatal(err)
 	}
@@ -246,11 +246,11 @@ func TestOlderApplyDoesNotDisturbReviewB(t *testing.T) {
 	it.LastNonBotCommentAt = it.CreatedAt
 	h.putRefresh(it)
 	c := h.claim()
-	_ = h.e.SetPause("example/test-repo", true)
+	_ = h.e.SetPause("test", true)
 	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, art(c, "propose_close", "close", "stale_insufficient_info")); err != nil {
 		t.Fatal(err)
 	}
-	_ = h.e.SetPause("example/test-repo", false)
+	_ = h.e.SetPause("test", false)
 	it.Body = "b-content"
 	h.putRefresh(it)
 	j, _ := store.JobState(h.st, it.Repo, it.Item)
@@ -279,11 +279,11 @@ func TestApplyPendingMismatchCancels(t *testing.T) {
 	it.LastNonBotCommentAt = it.CreatedAt
 	h.putRefresh(it)
 	c := h.claim()
-	_ = h.e.SetPause("example/test-repo", true)
+	_ = h.e.SetPause("test", true)
 	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, art(c, "propose_close", "close", "stale_insufficient_info")); err != nil {
 		t.Fatal(err)
 	}
-	_ = h.e.SetPause("example/test-repo", false)
+	_ = h.e.SetPause("test", false)
 	it.Body = "moved"
 	h.putRefresh(it)
 	if err := h.e.ApplyAttempt(it.Repo, it.Item); err != nil {

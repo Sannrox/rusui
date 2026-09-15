@@ -198,7 +198,7 @@ func OverlaySet(tx *sql.Tx, key, value string) error {
 	return err
 }
 
-func Paused(tx *sql.Tx, repo string) (bool, error) {
+func Paused(tx *sql.Tx, project string) (bool, error) {
 	g, err := OverlayGet(tx, "pause:global")
 	if err != nil {
 		return false, err
@@ -206,7 +206,10 @@ func Paused(tx *sql.Tx, repo string) (bool, error) {
 	if g == "1" {
 		return true, nil
 	}
-	r, err := OverlayGet(tx, "pause:"+repo)
+	if project == "" {
+		return false, nil
+	}
+	r, err := OverlayGet(tx, "pause:"+project)
 	return r == "1", err
 }
 

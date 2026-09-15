@@ -118,7 +118,7 @@ func TestRecoverRetriesInFlightApply(t *testing.T) {
 	it.LastNonBotCommentAt = it.CreatedAt
 	h.putRefresh(it)
 	c := h.claim()
-	if err := h.e.SetPause("example/test-repo", true); err != nil {
+	if err := h.e.SetPause("test", true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, art(c, "propose_close", "close", "stale_insufficient_info")); err != nil {
@@ -132,7 +132,7 @@ func TestRecoverRetriesInFlightApply(t *testing.T) {
 		"startup-uncertain", revID, it.Repo, it.Item); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.e.SetPause("example/test-repo", false); err != nil {
+	if err := h.e.SetPause("test", false); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.e.Recover(); err != nil {

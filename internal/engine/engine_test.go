@@ -206,7 +206,7 @@ func TestPauseCancelsApply(t *testing.T) {
 	it.LastNonBotCommentAt = it.CreatedAt
 	h.putRefresh(it)
 	c := h.claim()
-	_ = h.e.SetPause("example/test-repo", true)
+	_ = h.e.SetPause("test", true)
 	a := art(c, "propose_close", "close", "stale_insufficient_info")
 	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a); err != nil {
 		t.Fatal(err)
@@ -405,7 +405,7 @@ func TestPauseClaimComplete(t *testing.T) {
 	h := setup(t)
 	h.putRefresh(issue(1))
 	c := h.claim()
-	_ = h.e.SetPause("example/test-repo", true)
+	_ = h.e.SetPause("test", true)
 	if _, err := h.e.Claim("example/test-repo"); err == nil {
 		if err == nil {
 			// claim returns errPaused
@@ -425,7 +425,7 @@ func TestPauseKeepsLeaseOnAdmit(t *testing.T) {
 	it := issue(1)
 	h.putRefresh(it)
 	c := h.claim()
-	_ = h.e.SetPause("example/test-repo", true)
+	_ = h.e.SetPause("test", true)
 	it.Body = "new"
 	h.putRefresh(it)
 	j, _ := store.JobState(h.st, it.Repo, it.Item)
@@ -435,10 +435,20 @@ func TestPauseKeepsLeaseOnAdmit(t *testing.T) {
 	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, art(c, "keep", "", "")); err != nil {
 		t.Fatal(err)
 	}
-	_ = h.e.SetPause("example/test-repo", false)
+	_ = h.e.SetPause("test", false)
 	c2 := h.claim()
 	if c2.Job.ClaimedRevision == c.Job.ClaimedRevision {
 		t.Fatal("should claim new pending")
+	}
+}
+
+func TestPauseRejectsRepoPath(t *testing.T) {
+	h := setup(t)
+	if err := h.e.SetPause("example/test-repo", true); err == nil {
+		t.Fatal("accepted owner/name")
+	}
+	if err := h.e.SetPause("missing", true); err == nil {
+		t.Fatal("accepted unknown slug")
 	}
 }
 

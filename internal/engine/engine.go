@@ -476,7 +476,7 @@ func (e *Engine) expireDeadLeasesTx(tx *sql.Tx, repo, lane string) error {
 func (e *Engine) Claim(repo string) (*Claim, error) {
 	var c *Claim
 	err := e.Store.Tx(func(tx *sql.Tx) error {
-		paused, err := store.Paused(tx, repo)
+		paused, err := e.repoPaused(tx, repo)
 		if err != nil {
 			return err
 		}
@@ -727,7 +727,7 @@ func (e *Engine) finalizeFailureTx(tx *sql.Tx, j *store.Job, gen, claimed int) e
 }
 
 func (e *Engine) maybeEnqueueApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Item, revID int64, art Artifact) error {
-	paused, err := store.Paused(tx, j.Repo)
+	paused, err := e.repoPaused(tx, j.Repo)
 	if err != nil || paused {
 		return err
 	}
@@ -822,7 +822,7 @@ func (e *Engine) verifyEvidence(repo string, snap snapshot.Item, a ProposedActio
 }
 
 func (e *Engine) runApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Item, revID int64, art Artifact, a ProposedAction, actionID, class, sentence string) error {
-	paused, err := store.Paused(tx, j.Repo)
+	paused, err := e.repoPaused(tx, j.Repo)
 	if err != nil {
 		return err
 	}
@@ -905,7 +905,7 @@ func (e *Engine) ApplyAttempt(repo string, item int) error {
 		if err != nil {
 			return err
 		}
-		paused, err := store.Paused(tx, repo)
+		paused, err := e.repoPaused(tx, repo)
 		if err != nil {
 			return err
 		}
@@ -948,15 +948,26 @@ func (e *Engine) ApplyAttempt(repo string, item int) error {
 	})
 }
 
-func (e *Engine) SetPause(repo string, on bool) error {
+func (e *Engine) repoPaused(tx *sql.Tx, repo string) (bool, error) {
+	slug := ""
+	if r, ok := e.Policy.Repo(repo); ok {
+		slug = r.Project
+	}
+	return store.Paused(tx, slug)
+}
+
+func (e *Engine) SetPause(project string, on bool) error {
+	key := "pause:global"
+	if project != "" {
+		if _, ok := e.Policy.Project(project); !ok {
+			return fmt.Errorf("unknown project %q", project)
+		}
+		key = "pause:" + project
+	}
 	return e.Store.Tx(func(tx *sql.Tx) error {
 		v := "0"
 		if on {
 			v = "1"
-		}
-		key := "pause:global"
-		if repo != "" {
-			key = "pause:" + repo
 		}
 		return store.OverlaySet(tx, key, v)
 	})
@@ -1049,13 +1060,13 @@ func (e *Engine) Status(repo string) (string, error) {
 			return err
 		}
 		if repo != "" {
-			pausedR, err = store.Paused(tx, repo)
+			pausedR, err = e.repoPaused(tx, repo)
 		}
 		return err
 	})
 	fmt.Fprintf(&b, "pause global=%v", pausedG)
 	if repo != "" {
-		fmt.Fprintf(&b, " repo=%v", pausedR)
+		fmt.Fprintf(&b, " project=%v", pausedR)
 	}
 	b.WriteByte('\n')
 	q := `SELECT repo, item, state, pending_revision, retry_count FROM jobs WHERE lane='review'`
