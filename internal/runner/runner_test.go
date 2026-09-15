@@ -21,22 +21,26 @@ import (
 	"github.com/sannrox/rusui/internal/store"
 )
 
-const fixture = `version: 1
+const fixture = `version: 2
 defaults:
   never_release: true
   never_leak_private_to_public: true
+  session_kinds: [review, run, scheduled]
+  egress: trusted
   review: true
   comments: true
   close: true
   implement: false
   land: false
   max_reviews_per_repo_per_utc_day: 50
-repos:
-  example/test-repo:
-    visibility: public
-    review: true
-    comments: true
-    close: true
+projects:
+  test:
+    repos:
+      example/test-repo:
+        visibility: public
+        review: true
+        comments: true
+        close: true
 `
 
 func setup(t *testing.T) (*engine.Engine, *store.Store, *httptest.Server) {
