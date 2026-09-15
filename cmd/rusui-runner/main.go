@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/runner"
 )
 
@@ -36,6 +37,11 @@ func main() {
 		os.Exit(1)
 	}
 	c := &runner.Client{Base: *base, Bootstrap: *token, Repo: *repo, Name: *name}
+	if rt, err := env.LookRuntime(); err == nil {
+		if x, ok := rt.(env.StdioExecutor); ok {
+			c.Exec = x
+		}
+	}
 	cmd := strings.Fields(*driver)
 	for {
 		var err error

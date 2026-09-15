@@ -12,6 +12,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/clock"
 	"github.com/sannrox/rusui/internal/engine"
+	envpkg "github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/server"
@@ -71,6 +72,10 @@ func main() {
 	eng.HookIDs = api.HookIDs
 	eng.Tree = engine.GitFetcher{Token: token}
 	eng.SnapshotRoot = filepath.Join(filepath.Dir(*db), "snapshots")
+	if rt, err := envpkg.LookRuntime(); err == nil {
+		img := os.Getenv("RUSUI_GUEST_IMAGE")
+		eng.Container = envpkg.Container{RT: rt, Image: img}
+	}
 	eng.ReloadPolicy(p)
 	poster := &slackpkg.Poster{
 		Token:   os.Getenv("RUSUI_SLACK_BOT_TOKEN"),
