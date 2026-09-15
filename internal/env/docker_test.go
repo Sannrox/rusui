@@ -56,7 +56,7 @@ func TestDockerCLIRecordsCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := string(logb)
-	for _, want := range []string{"run -d", "--cpus 0.500", "--memory 67108864", "alpine:3", "stop fake-ctr-id", "start fake-ctr-id", "exec -i", "cp "} {
+	for _, want := range []string{"run -d", "--add-host rusui.plane:host-gateway", "--cpus 0.500", "--memory 67108864", "alpine:3", "stop fake-ctr-id", "start fake-ctr-id", "exec -i", "cp "} {
 		if !strings.Contains(log, want) {
 			t.Fatalf("missing %q in %s", want, log)
 		}

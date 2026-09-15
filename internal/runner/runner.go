@@ -47,6 +47,7 @@ type Assignment struct {
 	Driver            string          `json:"driver"`
 	Handle            string          `json:"handle"`
 	Workspace         string          `json:"workspace"`
+	ModelBaseURL      string          `json:"model_base_url"`
 	ExecutionDeadline *time.Time      `json:"execution_deadline"`
 	Input             json.RawMessage `json:"input"`
 }
@@ -159,13 +160,17 @@ func (c *Client) Fail(a *Assignment) error {
 
 // DriverEnv is the only environment the process driver may see.
 func DriverEnv(a *Assignment, home, path string) []string {
-	return []string{
+	env := []string{
 		"PATH=" + path,
 		"HOME=" + home,
 		"RUSUI_TURN_TOKEN=" + a.TurnToken,
 		"RUSUI_TURN_ID=" + fmt.Sprint(a.TurnID),
 		"XAI_API_KEY=" + a.TurnToken,
 	}
+	if a.ModelBaseURL != "" {
+		env = append(env, "GROK_XAI_API_BASE_URL="+a.ModelBaseURL)
+	}
+	return env
 }
 
 func RunProcess(ctx context.Context, command []string, env []string, dir string) ([]byte, error) {
