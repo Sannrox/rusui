@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -22,12 +23,14 @@ import (
 )
 
 type Server struct {
-	Eng        *engine.Engine
-	WebhookSec string
-	WorkerSec  string
-	SlackSec   string
-	SlackUsers map[string]bool
-	PolicyPath string
+	Eng         *engine.Engine
+	WebhookSec  string
+	WorkerSec   string
+	SlackSec    string
+	SlackUsers  map[string]bool
+	PolicyPath  string
+	ModelKey    string
+	ModelOrigin *url.URL
 }
 
 func (s *Server) Handler() http.Handler {
@@ -45,6 +48,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /jobs/{id}/heartbeat", s.heartbeat)
 	mux.HandleFunc("POST /jobs/{id}/complete", s.complete)
 	mux.HandleFunc("POST /jobs/{id}/fail", s.fail)
+	mux.Handle("/model-proxy/", http.HandlerFunc(s.modelProxy))
 	return mux
 }
 
@@ -313,8 +317,12 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 				if envRow.Handle != "" && envRow.Driver != "container" {
 					out["workspace"] = envRow.Handle
 				}
+				out["model_base_url"] = modelBaseURL(r, envRow.Driver)
 			}
 		}
+	}
+	if _, ok := out["model_base_url"]; !ok {
+		out["model_base_url"] = modelBaseURL(r, "")
 	}
 	_ = json.NewEncoder(w).Encode(out)
 }

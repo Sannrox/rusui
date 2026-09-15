@@ -88,6 +88,10 @@ func main() {
 			log.Printf("slack exception: %v", err)
 		}
 	}
+	modelKey := os.Getenv("XAI_API_KEY")
+	if modelKey == "" {
+		modelKey = os.Getenv("RUSUI_XAI_API_KEY")
+	}
 	srv := &server.Server{
 		Eng:        eng,
 		WebhookSec: os.Getenv("RUSUI_WEBHOOK_SECRET"),
@@ -95,6 +99,7 @@ func main() {
 		SlackSec:   os.Getenv("RUSUI_SLACK_SECRET"),
 		SlackUsers: slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
 		PolicyPath: *pol,
+		ModelKey:   modelKey,
 	}
 	if err := eng.Recover(); err != nil {
 		log.Printf("recover: %v", err)

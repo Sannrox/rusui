@@ -50,7 +50,7 @@ func (d DockerCLI) CreateAndStart(spec Spec) (string, error) {
 	if spec.Image == "" {
 		spec.Image = "rusui-guest:local"
 	}
-	args := []string{"run", "-d", "--entrypoint", "sleep"}
+	args := []string{"run", "-d", "--add-host", "rusui.plane:host-gateway", "--entrypoint", "sleep"}
 	if spec.Name != "" {
 		args = append(args, "--name", "rusui-"+spec.Name)
 	}
