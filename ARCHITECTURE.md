@@ -238,6 +238,10 @@ new state; A completes → A discarded; pending stays B.
 
 Use a **repository webhook** (events: `issues`, `pull_request`,
 `issue_comment`). Inbound POST verifies `X-Hub-Signature-256`.
+A delivery that parses to `(repo, item)` wakes the **review** session
+for that bound item ([ADR 0006](docs/decisions/0006-session-start.md));
+duplicate `delivery_id` is a no-op. Payloads with no item do not start
+a session. Named schedules and `rusui run` are the other start paths.
 Reconcile uses an installation or PAT with `read:org`/`admin:repo_hook`
 as configured; the fake GitHub must implement the same two endpoints:
 
@@ -298,9 +302,11 @@ not make the worker finish behind pending.
 
 ## Lease state machine
 
-Identity: a **turn** (`turns.id`) on a **session**. A session is
-`(kind, repo, item)` for the review workflow — GitHub item numbers are
-source attributes, not the lease key. `lane` on the turn is
+Identity: a **turn** (`turns.id`) on a **session**. A session belongs
+to one project and one environment ([ADR 0006](docs/decisions/0006-session-start.md)).
+**review** identity is `(project, bound repo, item)` — GitHub item
+numbers are source attributes, not the lease key. **run** and
+**scheduled** identities are minted at create. `lane` on the turn is
 `review` / `apply` / `implement`. A lease belongs to one turn, so a live
 lease on session A cannot block claiming session B.
 
@@ -349,7 +355,8 @@ expire_lease  (shared; claim and reaper use the same txn)
 claim
   in one txn:
     if paused: reject
-    if repo missing from current policy OR review == false: reject
+    if session project missing from current policy
+        OR (review session AND bound repo missing or review == false): reject
         (job stays queued; in-flight leases may still complete/fail)
     if daily review budget exhausted: reject (job stays queued)
     if state = leased AND (expired or past deadline): expire_lease
@@ -448,8 +455,9 @@ Environments have a create / sleep / wake / expire lifecycle. Drivers
 implement the same interface: `process` (a workspace directory) and
 `container` (Docker/Podman-compatible runtime). Create runs
 `.agents/setup` once per environment source hash; wake runs
-`.agents/resume` when present. The default `local` environment is not
-expired. Other environments expire after 72 hours.
+`.agents/resume` when present. **One session, one environment.** The
+default `local` environment is not a P1 dogfood environment and is not
+shared across review sessions. Other environments expire after 72 hours.
 
 ## Review artifacts
 

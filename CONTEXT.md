@@ -15,3 +15,19 @@ _Avoid_: Using the repository full name as the policy identity
 **Session kind**:
 One of `review`, `run`, or `scheduled`. `run` is operator-started (`rusui run`).
 _Avoid_: operator, interactive, chat, implement (as a session kind)
+
+**Session**:
+A unit of work on one project and one environment. A review session is identified by `(project, bound repo, item)`. A `run` or `scheduled` session is minted at create.
+_Avoid_: GitHub issue, turn, environment
+
+**Turn**:
+One leased attempt on a session.
+_Avoid_: session, job (as the product noun)
+
+**Environment**:
+The machine a session runs on. One session, one environment.
+_Avoid_: project, runner, snapshot
+
+**Schedule**:
+A named trigger on a project with a UTC cadence and a prompt. Each fire may start one scheduled session.
+_Avoid_: review fan-out, cron in policy.yaml

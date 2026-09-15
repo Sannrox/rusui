@@ -68,6 +68,24 @@
       "properties": []
     },
     {
+      "name": "RusuiEnvironment",
+      "description": "The machine a session runs on. One session, one environment. P1 dogfood uses a container; the immortal local environment is not shared across review sessions.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiSchedule",
+      "description": "Named project-owned trigger with a UTC cadence and a prompt. Each fire may start one scheduled session; skip if a session from this schedule is still running.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiSession",
+      "description": "Unit of work on one project and one environment. Review identity is (project, bound repo, item). run and scheduled identities are minted at create. A follow-up prompt is a new turn on the same session.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiPublicContext",
       "description": "Only approved public GitHub fields for a public-repo job. Private plan notes, Slack, other repos, and Aldunis are excluded. Publishable review fields are the only public write inputs.",
       "superclasses": [],
@@ -252,6 +270,38 @@
       "range": "RusuiProject",
       "cardinality": { "min": 0, "max": null },
       "transitive": false
+    },
+    {
+      "name": "rusui_session_belongs_to_project",
+      "description": "A session belongs to exactly one project.",
+      "domain": "RusuiSession",
+      "range": "RusuiProject",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_session_uses_environment",
+      "description": "A session runs on exactly one environment.",
+      "domain": "RusuiSession",
+      "range": "RusuiEnvironment",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_schedule_belongs_to_project",
+      "description": "A named schedule is owned by one project.",
+      "domain": "RusuiSchedule",
+      "range": "RusuiProject",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_schedule_starts_session",
+      "description": "A schedule fire may start one scheduled session; overlapping live sessions skip.",
+      "domain": "RusuiSchedule",
+      "range": "RusuiSession",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
     }
   ],
   "provenance": [
@@ -367,6 +417,24 @@
       "subject": "RusuiProject",
       "source": "docs/decisions/0005-policy-v2-project.md",
       "locator": "docs/decisions/0005-policy-v2-project.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiSession",
+      "source": "docs/decisions/0006-session-start.md",
+      "locator": "docs/decisions/0006-session-start.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiEnvironment",
+      "source": "docs/decisions/0006-session-start.md",
+      "locator": "docs/decisions/0006-session-start.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiSchedule",
+      "source": "docs/decisions/0006-session-start.md",
+      "locator": "docs/decisions/0006-session-start.md#decision",
       "confidence": 1.0
     }
   ]
