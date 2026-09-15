@@ -96,6 +96,16 @@ func GrokHost(c *Client) ACPHost {
 	}
 }
 
+func WorkspaceFor(a *Assignment) (dir string, tmp bool, err error) {
+	if a.Driver == "container" && a.Handle != "" && a.Workspace == "" {
+		return "", false, fmt.Errorf("container exec required")
+	}
+	if a.Workspace != "" {
+		return a.Workspace, false, nil
+	}
+	return "", true, nil
+}
+
 func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 	if host == nil {
 		return fmt.Errorf("acp host required")
@@ -110,11 +120,19 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 	if a == nil {
 		return nil
 	}
-	dir, err := os.MkdirTemp("", "rusui-acp-*")
+	dir, tmp, err := WorkspaceFor(a)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.RemoveAll(dir) }()
+	cleanup := func() {}
+	if tmp {
+		dir, err = os.MkdirTemp("", "rusui-acp-*")
+		if err != nil {
+			return err
+		}
+		cleanup = func() { _ = os.RemoveAll(dir) }
+	}
+	defer cleanup()
 	runCtx := ctx
 	cancel := func() {}
 	if a.ExecutionDeadline != nil {

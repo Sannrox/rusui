@@ -38,6 +38,9 @@ type Assignment struct {
 	ItemHash          string          `json:"item_hash"`
 	SessionID         int64           `json:"session_id"`
 	TurnToken         string          `json:"turn_token"`
+	Driver            string          `json:"driver"`
+	Handle            string          `json:"handle"`
+	Workspace         string          `json:"workspace"`
 	ExecutionDeadline *time.Time      `json:"execution_deadline"`
 	Input             json.RawMessage `json:"input"`
 }
@@ -155,6 +158,7 @@ func DriverEnv(a *Assignment, home, path string) []string {
 		"HOME=" + home,
 		"RUSUI_TURN_TOKEN=" + a.TurnToken,
 		"RUSUI_TURN_ID=" + fmt.Sprint(a.TurnID),
+		"XAI_API_KEY=" + a.TurnToken,
 	}
 }
 
