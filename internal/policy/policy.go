@@ -60,9 +60,9 @@ type RepoYAML struct {
 }
 
 type AllowRule struct {
-	Tool    string `yaml:"tool"`
-	Kind    string `yaml:"kind"`
-	Command string `yaml:"command"`
+	Tool    string `yaml:"tool" json:"tool"`
+	Kind    string `yaml:"kind" json:"kind"`
+	Command string `yaml:"command" json:"command"`
 }
 
 type Repo struct {
