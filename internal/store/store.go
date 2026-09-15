@@ -156,6 +156,11 @@ func LookupIdempotencyTx(tx *sql.Tx, key string) (int64, bool, error) {
 	return id, err == nil, err
 }
 
+func SetSessionPromptTx(tx *sql.Tx, sessionID int64, prompt string) error {
+	_, err := tx.Exec(`UPDATE sessions SET prompt=? WHERE id=?`, prompt, sessionID)
+	return err
+}
+
 func PutIdempotencyTx(tx *sql.Tx, key string, sessionID int64) error {
 	_, err := tx.Exec(`INSERT INTO session_idempotency(key, session_id) VALUES(?,?)`, key, sessionID)
 	return err
