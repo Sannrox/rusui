@@ -532,7 +532,13 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		c = &Claim{Job: j, Snapshot: snap, ItemHash: snapshot.ItemHash(snap)}
 		return nil
 	})
-	return c, err
+	if err != nil || c == nil {
+		return c, err
+	}
+	if err := e.EnsureSessionEnvironment(c.Job.ID, c.Snapshot); err != nil {
+		return c, err
+	}
+	return c, nil
 }
 
 type Claim struct {
