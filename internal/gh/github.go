@@ -124,6 +124,17 @@ func (f *Fake) CallCount() int {
 	return f.FetchCalls
 }
 
+func (f *Fake) DefaultSHA(repo string) (string, error) {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	for _, rec := range f.Items {
+		if rec.Repo == repo && rec.MainSHA != "" {
+			return rec.MainSHA, nil
+		}
+	}
+	return "aaa", nil
+}
+
 func (f *Fake) GetItem(repo string, item int, kind string) (snapshot.Item, error) {
 	f.Mu.Lock()
 	delay, hang := f.FetchDelay, f.FetchHang

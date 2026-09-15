@@ -147,6 +147,54 @@ func ensureReviewSessionTx(tx *sql.Tx, repo string, item int, kind string) (int6
 	return res.LastInsertId()
 }
 
+func LookupIdempotencyTx(tx *sql.Tx, key string) (int64, bool, error) {
+	var id int64
+	err := tx.QueryRow(`SELECT session_id FROM session_idempotency WHERE key=?`, key).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	return id, err == nil, err
+}
+
+func PutIdempotencyTx(tx *sql.Tx, key string, sessionID int64) error {
+	_, err := tx.Exec(`INSERT INTO session_idempotency(key, session_id) VALUES(?,?)`, key, sessionID)
+	return err
+}
+
+func InsertRunSessionTx(tx *sql.Tx, project, repo, prompt string) (sessionID int64, item int, err error) {
+	var minItem int
+	if err := tx.QueryRow(`SELECT COALESCE(MIN(item),0) FROM sessions WHERE kind=? AND repo=?`, SessionKindRun, repo).Scan(&minItem); err != nil {
+		return 0, 0, err
+	}
+	item = minItem - 1
+	if item >= 0 {
+		item = -1
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	name := fmt.Sprintf("run-%s-%d", strings.ReplaceAll(repo, "/", "-"), item)
+	envRes, err := tx.Exec(`INSERT INTO environments (name, driver, state, created_at) VALUES (?,?,?,?)`,
+		name, "process", EnvReady, now)
+	if err != nil {
+		return 0, 0, err
+	}
+	envID, err := envRes.LastInsertId()
+	if err != nil {
+		return 0, 0, err
+	}
+	res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, prompt, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
+		envID, SessionKindRun, repo, item, "run", "open", project, prompt, now)
+	if err != nil {
+		return 0, 0, err
+	}
+	sessionID, err = res.LastInsertId()
+	if err != nil {
+		return 0, 0, err
+	}
+	_, err = tx.Exec(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state) VALUES (?,?,?,?,?,?,?)`,
+		sessionID, "run", 1, 0, 0, 0, "queued")
+	return sessionID, item, err
+}
+
 func SaveSnapshotTx(tx *sql.Tx, repo string, item, rev int, it snapshot.Item) error {
 	b, err := json.Marshal(it)
 	if err != nil {
@@ -455,8 +503,8 @@ func GetTurn(s *Store, id int64) (*Turn, error) {
 func GetSession(s *Store, id int64) (*Session, error) {
 	var sess Session
 	var created string
-	err := s.DB.QueryRow(`SELECT id, environment_id, kind, repo, item, item_kind, state, created_at FROM sessions WHERE id=?`, id).Scan(
-		&sess.ID, &sess.EnvironmentID, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &created)
+	err := s.DB.QueryRow(`SELECT id, environment_id, kind, repo, item, item_kind, state, project, prompt, created_at FROM sessions WHERE id=?`, id).Scan(
+		&sess.ID, &sess.EnvironmentID, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &created)
 	if err != nil {
 		return nil, err
 	}
