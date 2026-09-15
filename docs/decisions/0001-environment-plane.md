@@ -100,7 +100,8 @@ external action. The engine's semantics are kept; its nouns change.
 - **D10 Conventions.** Adopt `.agents/setup`, `.agents/resume`, `AGENTS.md`,
   and the `services.yaml` schema (`.rusui/services.yaml`, falling back to
   `.amp/services.yaml`) so repositories prepared for other planes work without
-  changes.
+  changes. Amended by [ADR 0004](0004-rusui-services-yaml.md): the
+  supervisor reads `.rusui/services.yaml` only.
 
 The review bot survives as the first built-in workflow: issue and pull request
 events trigger a review session, which emits actions with evidence classes,

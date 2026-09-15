@@ -16,7 +16,6 @@ import (
 
 const (
 	ServicesRusuiPath = ".rusui/services.yaml"
-	ServicesAmpPath   = ".amp/services.yaml"
 	servicePIDDir     = ".rusui/svc"
 )
 
@@ -75,16 +74,10 @@ func ParseServices(data []byte) ([]Service, error) {
 func loadServices(read func(path string) ([]byte, error)) ([]Service, error) {
 	data, err := read(ServicesRusuiPath)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
+		if os.IsNotExist(err) {
+			return nil, nil
 		}
-		data, err = read(ServicesAmpPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil, nil
-			}
-			return nil, err
-		}
+		return nil, err
 	}
 	return ParseServices(data)
 }
