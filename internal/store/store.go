@@ -541,8 +541,8 @@ func UpdateEnvironment(s *Store, e Environment) error {
 	if e.SleptAt != nil {
 		slept = e.SleptAt.UTC().Format(time.RFC3339Nano)
 	}
-	_, err := s.DB.Exec(`UPDATE environments SET state=?, handle=?, source_hash=?, expires_at=?, slept_at=?, cpu_millis=?, memory_bytes=? WHERE id=?`,
-		e.State, e.Handle, e.SourceHash, exp, slept, e.CPUMillis, e.MemoryBytes, e.ID)
+	_, err := s.DB.Exec(`UPDATE environments SET driver=?, state=?, handle=?, source_hash=?, expires_at=?, slept_at=?, cpu_millis=?, memory_bytes=? WHERE id=?`,
+		e.Driver, e.State, e.Handle, e.SourceHash, exp, slept, e.CPUMillis, e.MemoryBytes, e.ID)
 	return err
 }
 

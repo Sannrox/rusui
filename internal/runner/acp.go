@@ -62,12 +62,24 @@ func (r HTTPRecorder) Record(rec acp.Receipt) error {
 // GrokHost spawns the ADR 0002 Grok command and records receipts on the plane.
 func GrokHost(c *Client) ACPHost {
 	return func(a *Assignment, dir string) (*acp.Client, func(), error) {
+		env := DriverEnv(a, dir, os.Getenv("PATH"))
+		rec := HTTPRecorder{Base: c.Base, Token: a.TurnToken, TurnID: a.TurnID, HTTP: c.HTTP}
+		if a.Driver == "container" && a.Handle != "" {
+			if c.Exec == nil {
+				return nil, nil, fmt.Errorf("container exec required")
+			}
+			stdin, stdout, stop, err := c.Exec.ExecStdio(a.Handle, acp.SpawnArgs(), env)
+			if err != nil {
+				return nil, nil, err
+			}
+			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: acp.DenyUnmatched{}}, stop, nil
+		}
 		cmd, err := acp.GrokCommand()
 		if err != nil {
 			return nil, nil, err
 		}
 		cmd.Dir = dir
-		cmd.Env = DriverEnv(a, dir, os.Getenv("PATH"))
+		cmd.Env = env
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			return nil, nil, err
@@ -79,12 +91,6 @@ func GrokHost(c *Client) ACPHost {
 		if err := cmd.Start(); err != nil {
 			return nil, nil, err
 		}
-		host := &acp.Client{
-			In:   stdout,
-			Out:  stdin,
-			Rec:  HTTPRecorder{Base: c.Base, Token: a.TurnToken, TurnID: a.TurnID, HTTP: c.HTTP},
-			Perm: acp.DenyUnmatched{},
-		}
 		stop := func() {
 			_ = stdin.Close()
 			if cmd.Process != nil {
@@ -92,13 +98,13 @@ func GrokHost(c *Client) ACPHost {
 			}
 			_ = cmd.Wait()
 		}
-		return host, stop, nil
+		return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: acp.DenyUnmatched{}}, stop, nil
 	}
 }
 
 func WorkspaceFor(a *Assignment) (dir string, tmp bool, err error) {
 	if a.Driver == "container" && a.Handle != "" && a.Workspace == "" {
-		return "", false, fmt.Errorf("container exec required")
+		return "", false, nil
 	}
 	if a.Workspace != "" {
 		return a.Workspace, false, nil

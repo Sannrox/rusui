@@ -1,6 +1,9 @@
 package env
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+)
 
 // Runtime is the Docker/Podman-shaped control plane. Tests use FakeRuntime.
 type Runtime interface {
@@ -11,6 +14,11 @@ type Runtime interface {
 	HasFile(id, path string) bool
 	ReadFile(id, path string) ([]byte, error)
 	Exec(id string, cmd []string) error
+}
+
+// StdioExecutor execs a command in a container with attached stdin/stdout.
+type StdioExecutor interface {
+	ExecStdio(handle string, argv, env []string) (stdin io.WriteCloser, stdout io.ReadCloser, stop func(), err error)
 }
 
 type Spec struct {
@@ -61,6 +69,14 @@ func (c Container) Destroy(handle string) error {
 		return nil
 	}
 	return c.RT.Remove(handle)
+}
+
+func (c Container) ExecStdio(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+	x, ok := c.RT.(StdioExecutor)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("env: runtime cannot exec stdio")
+	}
+	return x.ExecStdio(handle, argv, env)
 }
 
 func (c Container) PlaceTree(handle, srcDir string) error {

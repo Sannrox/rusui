@@ -25,6 +25,12 @@ type Client struct {
 	Repo      string
 	Name      string
 	HTTP      *http.Client
+	Exec      StdioExec
+}
+
+// StdioExec runs a command inside a container handle with ACP stdio.
+type StdioExec interface {
+	ExecStdio(handle string, argv, env []string) (stdin io.WriteCloser, stdout io.ReadCloser, stop func(), err error)
 }
 
 type Assignment struct {
