@@ -93,13 +93,14 @@ func main() {
 		modelKey = os.Getenv("RUSUI_XAI_API_KEY")
 	}
 	srv := &server.Server{
-		Eng:        eng,
-		WebhookSec: os.Getenv("RUSUI_WEBHOOK_SECRET"),
-		WorkerSec:  os.Getenv("RUSUI_WORKER_SECRET"),
-		SlackSec:   os.Getenv("RUSUI_SLACK_SECRET"),
-		SlackUsers: slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
-		PolicyPath: *pol,
-		ModelKey:   modelKey,
+		Eng:         eng,
+		WebhookSec:  os.Getenv("RUSUI_WEBHOOK_SECRET"),
+		WorkerSec:   os.Getenv("RUSUI_WORKER_SECRET"),
+		SlackSec:    os.Getenv("RUSUI_SLACK_SECRET"),
+		SlackUsers:  slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
+		PolicyPath:  *pol,
+		ModelKey:    modelKey,
+		GitHubToken: token,
 	}
 	if err := eng.Recover(); err != nil {
 		log.Printf("recover: %v", err)

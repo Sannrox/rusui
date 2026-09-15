@@ -140,6 +140,14 @@ func TestDriverEnvHasTurnTokenNotPlaneSecret(t *testing.T) {
 	if !strings.Contains(joined, "GROK_XAI_API_BASE_URL=http://rusui.plane:8080/model-proxy") {
 		t.Fatal(joined)
 	}
+	a.GitProxyURL = "http://rusui.plane:8080/git-proxy/github.com/"
+	joined = strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
+	if !strings.Contains(joined, "url.http://rusui.plane:8080/git-proxy/github.com/.insteadof") {
+		t.Fatal(joined)
+	}
+	if !strings.Contains(joined, "Authorization: Bearer tok") {
+		t.Fatal(joined)
+	}
 	if strings.Contains(joined, "wsec") || strings.Contains(joined, "WORKER") {
 		t.Fatal(joined)
 	}

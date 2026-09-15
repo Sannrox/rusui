@@ -31,6 +31,8 @@ type Server struct {
 	PolicyPath  string
 	ModelKey    string
 	ModelOrigin *url.URL
+	GitHubToken string
+	GitOrigin   *url.URL
 }
 
 func (s *Server) Handler() http.Handler {
@@ -49,6 +51,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /jobs/{id}/complete", s.complete)
 	mux.HandleFunc("POST /jobs/{id}/fail", s.fail)
 	mux.Handle("/model-proxy/", http.HandlerFunc(s.modelProxy))
+	mux.Handle("/git-proxy/", http.HandlerFunc(s.gitProxy))
 	return mux
 }
 
@@ -318,11 +321,15 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 					out["workspace"] = envRow.Handle
 				}
 				out["model_base_url"] = modelBaseURL(r, envRow.Driver)
+				out["git_proxy_url"] = gitProxyBaseURL(r, envRow.Driver)
 			}
 		}
 	}
 	if _, ok := out["model_base_url"]; !ok {
 		out["model_base_url"] = modelBaseURL(r, "")
+	}
+	if _, ok := out["git_proxy_url"]; !ok {
+		out["git_proxy_url"] = gitProxyBaseURL(r, "")
 	}
 	_ = json.NewEncoder(w).Encode(out)
 }

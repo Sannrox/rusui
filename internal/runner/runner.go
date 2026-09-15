@@ -48,6 +48,7 @@ type Assignment struct {
 	Handle            string          `json:"handle"`
 	Workspace         string          `json:"workspace"`
 	ModelBaseURL      string          `json:"model_base_url"`
+	GitProxyURL       string          `json:"git_proxy_url"`
 	ExecutionDeadline *time.Time      `json:"execution_deadline"`
 	Input             json.RawMessage `json:"input"`
 }
@@ -169,6 +170,15 @@ func DriverEnv(a *Assignment, home, path string) []string {
 	}
 	if a.ModelBaseURL != "" {
 		env = append(env, "GROK_XAI_API_BASE_URL="+a.ModelBaseURL)
+	}
+	if a.GitProxyURL != "" {
+		env = append(env,
+			"GIT_CONFIG_COUNT=2",
+			"GIT_CONFIG_KEY_0=url."+a.GitProxyURL+".insteadof",
+			"GIT_CONFIG_VALUE_0=https://github.com/",
+			"GIT_CONFIG_KEY_1=http.extraHeader",
+			"GIT_CONFIG_VALUE_1=Authorization: Bearer "+a.TurnToken,
+		)
 	}
 	return env
 }
