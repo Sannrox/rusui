@@ -51,13 +51,19 @@
     },
     {
       "name": "RusuiPolicyOverlay",
-      "description": "Durable SQLite overlay that may only narrow policy.yaml. Pause stops new claims and apply. Admit of a new snapshot during pause does not demote a live lease. In-flight complete/fail still succeed. Pause does not reset failed jobs.",
+      "description": "Durable SQLite overlay that may only narrow policy.yaml. Pause is global or per project and stops new claims and apply. Overlay cannot add a session kind, egress class, or permission allow-rule. In-flight complete/fail still succeed. Pause does not reset failed jobs.",
       "superclasses": [],
       "properties": []
     },
     {
       "name": "RusuiPolicyRevision",
       "description": "Immutable parsed snapshot of policy.yaml. Jobs bind to a revision; apply rechecks current policy immediately before action.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiProject",
+      "description": "Operator-named policy and budget domain. A session belongs to exactly one project; an environment belongs to exactly one; a GitHub repository binds to at most one. GitHub is optional; review requires a bound repository.",
       "superclasses": [],
       "properties": []
     },
@@ -238,6 +244,14 @@
       "range": "RusuiStandingPlan",
       "cardinality": { "min": 0, "max": 1 },
       "transitive": false
+    },
+    {
+      "name": "rusui_policy_names_project",
+      "description": "Policy v2 baseline names projects; a missing slug is out of scope.",
+      "domain": "RusuiPolicyRevision",
+      "range": "RusuiProject",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
     }
   ],
   "provenance": [
@@ -347,6 +361,12 @@
       "subject": "RusuiReconcileCheckpoint",
       "source": "ARCHITECTURE.md",
       "locator": "ARCHITECTURE.md#webhook-intake-and-recovery",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiProject",
+      "source": "docs/decisions/0005-policy-v2-project.md",
+      "locator": "docs/decisions/0005-policy-v2-project.md#decision",
       "confidence": 1.0
     }
   ]

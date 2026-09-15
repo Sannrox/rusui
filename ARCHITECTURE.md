@@ -71,42 +71,56 @@ the same object API. See [ADR 0003](docs/decisions/0003-operator-surface.md).
 
 Prose is not executable. `policy.yaml` is the only baseline that can
 authorize work. Optional `plan.md` notes are ignored by admit/apply.
+Policy v2 is keyed by **project** ([ADR 0005](docs/decisions/0005-policy-v2-project.md)).
+The shipped parser still reads version 1 until a delivery issue ports
+it; this section is the contract that issue implements.
 
 ```yaml
-version: 1
+version: 2
 defaults:
   never_release: true
   never_leak_private_to_public: true
-  review: true
-  comments: false
-  close: false
-  implement: false
-  land: false
-  max_reviews_per_repo_per_utc_day: 50
-repos:
-  Sannrox/rusui:
-    visibility: private
-    review: true
-    comments: false
-    close: false
-    implement: false
-    land: false
+  session_kinds: [review, run, scheduled]
+  egress: trusted
+projects:
+  rusui:
+    repos:
+      Sannrox/rusui:
+        visibility: private
+        review: true
+        comments: false
+        close: false
+        implement: false
+        land: false
+        max_reviews_per_repo_per_utc_day: 50
+    session_kinds: [review, run, scheduled]
+    egress: trusted
 ```
 
-Unknown fields fail closed. Missing repo keys mean the repo is out of
-scope. Boolean capabilities default to `false` except `review`, which
-defaults to `true` when the repo is listed.
+Unknown fields fail closed. Missing project slugs mean the project is
+out of scope. A GitHub repository not bound to a project in the current
+revision is out of scope. Boolean GitHub capabilities default to
+`false` except `review`, which defaults to `true` when the repository
+is listed under a project.
 
-In v1 those flags authorize **simulation**, not live GitHub writes.
-`comments: false` and `close: false` mean dry-run apply will not emit
-an intended comment or close either. Tests that need an eligible
-dry-run use `policy.fixture.yaml`. `policy.example.yaml` stays the
-operator default.
+Those GitHub flags authorize **simulation**, not live GitHub writes,
+under the current contract. `comments: false` and `close: false` mean
+dry-run apply will not emit an intended comment or close either. Tests
+that need an eligible dry-run use `policy.fixture.yaml`.
+`policy.example.yaml` stays the operator default until the parser ports.
 
 `max_reviews_per_repo_per_utc_day` caps **new review claims** for that
-UTC day (catch-up and webhook-driven). Exhaustion is a Slack/log
-exception; work stays queued. Operator `retry` counts against the
-budget. In-flight leases are not cancelled.
+bound repository that UTC day (catch-up and webhook-driven). Exhaustion
+is a Slack/log exception; work stays queued. Operator `retry` counts
+against the budget. In-flight leases are not cancelled.
+
+`session_kinds` is an allowlist: `review`, `run`, `scheduled`. `run` is
+operator-started. A `review` session requires at least one bound
+repository. Permission allow-rules on the project grant matching
+`session/request_permission` requests; unmatched requests are denied
+and parked on the approvals inbox. Overlay cannot add an allow-rule.
+Budget **limits** are per project per UTC day; meter sources are not
+in this contract yet.
 
 ### Precedence
 
@@ -117,9 +131,10 @@ off.
    token; never copy private context into a public job.
 2. **`policy.yaml` baseline** loaded into SQLite as an immutable
    `policy_revision`.
-3. **Durable overlay** in SQLite: `pause` per repo or globally. Overlay
-   may only **narrow**. It cannot enable comments, close, implement, or
-   land if the baseline has them off.
+3. **Durable overlay** in SQLite: `pause` per project or globally.
+   Overlay may only **narrow**. It cannot enable comments, close,
+   implement, land, a session kind, an egress class, or a permission
+   allow-rule if the baseline has them off.
 4. **Slack commands** write overlay or enqueue jobs through the same
    admit path. Slack cannot bypass (1)–(3).
 
@@ -712,8 +727,10 @@ Inbound: verify `X-Slack-Signature` over the **raw** body, reject if
 authorize `user_id` against an allowlist. Fail closed if any check
 fails.
 
-Commands: `status`, `pause [repo]`, `resume [repo]`, `sweep [repo]`,
-`retry [repo[#item]]`, `reload`. `implement` is rejected until v3.
+Commands: `status`, `pause [project]`, `resume [project]`,
+`sweep [project]`, `retry [project[#item]]`, `reload`. `implement` is
+rejected until v3. `pause rusui` names the project slug, not
+`Sannrox/rusui`.
 
 `retry` is the only way to requeue `state = failed` on an **unchanged**
 revision after the attempt budget is exhausted. It writes an audit row
