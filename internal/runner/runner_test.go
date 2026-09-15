@@ -13,6 +13,7 @@ import (
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/clock"
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/runner"
@@ -131,7 +132,7 @@ func TestDriverEnvHasTurnTokenNotPlaneSecret(t *testing.T) {
 	a := &runner.Assignment{TurnID: 9, TurnToken: "tok"}
 	env := runner.DriverEnv(a, "/tmp/home", "/bin")
 	joined := strings.Join(env, "\n")
-	if !strings.Contains(joined, "RUSUI_TURN_TOKEN=tok") {
+	if !strings.Contains(joined, "RUSUI_TURN_TOKEN=tok") || !strings.Contains(joined, "XAI_API_KEY=tok") {
 		t.Fatal(joined)
 	}
 	if strings.Contains(joined, "wsec") || strings.Contains(joined, "WORKER") {
@@ -142,6 +143,41 @@ func TestDriverEnvHasTurnTokenNotPlaneSecret(t *testing.T) {
 		if strings.Contains(e, "wsec") {
 			t.Fatal(e)
 		}
+	}
+}
+
+func TestACPTurnUsesProvisionedWorkspace(t *testing.T) {
+	e, _, hs := setup(t)
+	root := t.TempDir()
+	e.Env = env.Process{Root: root}
+	cli := &runner.Client{Base: hs.URL, Bootstrap: "wsec", Repo: "example/test-repo", Name: "local"}
+	var gotDir, gotWorkspace string
+	err := runner.OneACPTurn(context.Background(), cli, func(a *runner.Assignment, dir string) (*acp.Client, func(), error) {
+		gotDir = dir
+		gotWorkspace = a.Workspace
+		if a.Driver != env.KindProcess {
+			t.Fatalf("driver %q", a.Driver)
+		}
+		return startFakeACP(t, runner.HTTPRecorder{Base: hs.URL, Token: a.TurnToken, TurnID: a.TurnID})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotWorkspace == "" || !strings.HasPrefix(gotWorkspace, root) {
+		t.Fatalf("workspace %q", gotWorkspace)
+	}
+	if gotDir != gotWorkspace {
+		t.Fatalf("host dir %q workspace %q", gotDir, gotWorkspace)
+	}
+}
+
+func TestWorkspaceForRejectsContainerHandleAsCwd(t *testing.T) {
+	if _, _, err := runner.WorkspaceFor(&runner.Assignment{Driver: "container", Handle: "ctr-1"}); err == nil {
+		t.Fatal("expected error")
+	}
+	dir, tmp, err := runner.WorkspaceFor(&runner.Assignment{Workspace: "/ws"})
+	if err != nil || tmp || dir != "/ws" {
+		t.Fatalf("%q tmp=%v %v", dir, tmp, err)
 	}
 }
 
