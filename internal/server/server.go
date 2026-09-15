@@ -23,16 +23,17 @@ import (
 )
 
 type Server struct {
-	Eng         *engine.Engine
-	WebhookSec  string
-	WorkerSec   string
-	SlackSec    string
-	SlackUsers  map[string]bool
-	PolicyPath  string
-	ModelKey    string
-	ModelOrigin *url.URL
-	GitHubToken string
-	GitOrigin   *url.URL
+	Eng          *engine.Engine
+	WebhookSec   string
+	WorkerSec    string
+	SlackSec     string
+	SlackUsers   map[string]bool
+	PolicyPath   string
+	ModelKey     string
+	ModelOrigin  *url.URL
+	GitHubToken  string
+	GitHubTokens gh.TokenSource
+	GitOrigin    *url.URL
 }
 
 func (s *Server) Handler() http.Handler {

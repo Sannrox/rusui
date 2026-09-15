@@ -19,8 +19,18 @@ const githubAPI = "https://api.github.com"
 type API struct {
 	BaseURL string
 	Token   string
+	Tokens  TokenSource
 	HookIDs map[string]string // repo -> hook id
 	HTTP    *http.Client
+}
+
+func (a *API) bearer() string {
+	if a.Tokens != nil {
+		if t, err := a.Tokens.Token(); err == nil && t != "" {
+			return t
+		}
+	}
+	return a.Token
 }
 
 func NewAPI(token string, hookIDs map[string]string) *API {
@@ -72,8 +82,8 @@ func (a *API) get(path string, dst any) error {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("User-Agent", "rusui")
-	if a.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+a.Token)
+	if t := a.bearer(); t != "" {
+		req.Header.Set("Authorization", "Bearer "+t)
 	}
 	res, err := a.HTTP.Do(req)
 	if err != nil {

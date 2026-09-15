@@ -61,16 +61,26 @@ func main() {
 	if token == "" {
 		token = os.Getenv("GITHUB_TOKEN")
 	}
-	if token == "" {
-		log.Fatal("set RUSUI_GITHUB_TOKEN or GITHUB_TOKEN (read-only)")
+	var tokens gh.TokenSource
+	if os.Getenv("RUSUI_GITHUB_APP_ID") != "" {
+		app, err := gh.LoadAppFromEnv(os.Getenv)
+		if err != nil {
+			log.Fatal(err)
+		}
+		tokens = app
+	} else if token != "" {
+		tokens = gh.StaticToken(token)
+	} else {
+		log.Fatal("set RUSUI_GITHUB_TOKEN or GITHUB_TOKEN, or GitHub App credentials")
 	}
 	api := gh.NewAPI(token, gh.ParseHookIDs(os.Getenv("RUSUI_GITHUB_HOOK_IDS")))
+	api.Tokens = tokens
 	if u := os.Getenv("RUSUI_GITHUB_API"); u != "" {
 		api.BaseURL = u
 	}
 	eng := engine.New(st, p, api, clock.Real{})
 	eng.HookIDs = api.HookIDs
-	eng.Tree = engine.GitFetcher{Token: token}
+	eng.Tree = engine.GitFetcher{Token: token, TokenFn: tokens.Token}
 	eng.SnapshotRoot = filepath.Join(filepath.Dir(*db), "snapshots")
 	if rt, err := envpkg.LookRuntime(); err == nil {
 		img := os.Getenv("RUSUI_GUEST_IMAGE")
@@ -93,14 +103,15 @@ func main() {
 		modelKey = os.Getenv("RUSUI_XAI_API_KEY")
 	}
 	srv := &server.Server{
-		Eng:         eng,
-		WebhookSec:  os.Getenv("RUSUI_WEBHOOK_SECRET"),
-		WorkerSec:   os.Getenv("RUSUI_WORKER_SECRET"),
-		SlackSec:    os.Getenv("RUSUI_SLACK_SECRET"),
-		SlackUsers:  slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
-		PolicyPath:  *pol,
-		ModelKey:    modelKey,
-		GitHubToken: token,
+		Eng:          eng,
+		WebhookSec:   os.Getenv("RUSUI_WEBHOOK_SECRET"),
+		WorkerSec:    os.Getenv("RUSUI_WORKER_SECRET"),
+		SlackSec:     os.Getenv("RUSUI_SLACK_SECRET"),
+		SlackUsers:   slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
+		PolicyPath:   *pol,
+		ModelKey:     modelKey,
+		GitHubToken:  token,
+		GitHubTokens: tokens,
 	}
 	if err := eng.Recover(); err != nil {
 		log.Printf("recover: %v", err)

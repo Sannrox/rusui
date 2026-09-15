@@ -10,8 +10,18 @@ import (
 // GitFetcher clones a pin on the host. Token is used only as an HTTP header
 // for fetch; it is never written into dest.
 type GitFetcher struct {
-	Token string
-	Git   string
+	Token   string
+	TokenFn func() (string, error)
+	Git     string
+}
+
+func (g GitFetcher) token() string {
+	if g.TokenFn != nil {
+		if t, err := g.TokenFn(); err == nil && t != "" {
+			return t
+		}
+	}
+	return g.Token
 }
 
 func (g GitFetcher) Fetch(repo, pin, dest string) error {
@@ -37,9 +47,9 @@ func (g GitFetcher) Fetch(repo, pin, dest string) error {
 	}
 	fetch := []string{"fetch", "--depth", "1", "origin", pin}
 	var env []string
-	if g.Token != "" {
+	if tok := g.token(); tok != "" {
 		env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-		fetch = []string{"-c", "http.extraHeader=Authorization: Bearer " + g.Token, "fetch", "--depth", "1", "origin", pin}
+		fetch = []string{"-c", "http.extraHeader=Authorization: Bearer " + tok, "fetch", "--depth", "1", "origin", pin}
 	}
 	if err := gitDir(bin, dest, env, fetch...); err != nil {
 		return err
