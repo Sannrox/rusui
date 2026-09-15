@@ -504,8 +504,11 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		if err := e.expireDeadLeasesTx(tx, repo, "run"); err != nil {
 			return err
 		}
+		if err := e.expireDeadLeasesTx(tx, repo, "scheduled"); err != nil {
+			return err
+		}
 		var id int64
-		err = tx.QueryRow(`SELECT id FROM jobs WHERE repo=? AND state='queued' AND lane IN ('review','run') ORDER BY id LIMIT 1`, repo).Scan(&id)
+		err = tx.QueryRow(`SELECT id FROM jobs WHERE repo=? AND state='queued' AND lane IN ('review','run','scheduled') ORDER BY id LIMIT 1`, repo).Scan(&id)
 		if err == sql.ErrNoRows {
 			return nil
 		}

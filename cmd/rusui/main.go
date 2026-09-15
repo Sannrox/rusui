@@ -130,10 +130,12 @@ func runScheduler(eng *engine.Engine) {
 	reconcile := time.NewTicker(engine.ReconcileEvery)
 	catchup := time.NewTicker(engine.CatchUpEvery)
 	apply := time.NewTicker(engine.ApplyRetryEvery)
+	sched := time.NewTicker(time.Minute)
 	defer refresh.Stop()
 	defer reconcile.Stop()
 	defer catchup.Stop()
 	defer apply.Stop()
+	defer sched.Stop()
 	for {
 		select {
 		case <-refresh.C:
@@ -154,6 +156,10 @@ func runScheduler(eng *engine.Engine) {
 		case <-apply.C:
 			if err := eng.RetryApplyAttempts(); err != nil {
 				eng.Notify("apply retry: " + err.Error())
+			}
+		case <-sched.C:
+			if err := eng.StepSchedules(time.Now()); err != nil {
+				eng.Notify("schedules: " + err.Error())
 			}
 		}
 	}

@@ -7,7 +7,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 5
+const CurrentSchema = 6
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -202,8 +202,33 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 5); err != nil {
 			return err
 		}
+		ver = 5
+	}
+	if ver < 6 {
+		if err := migrateV6(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 6); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func migrateV6(db *sql.DB) error {
+	_, err := db.Exec(`
+ALTER TABLE sessions ADD COLUMN schedule_id INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS schedules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project TEXT NOT NULL,
+  name TEXT NOT NULL,
+  every_seconds INTEGER NOT NULL,
+  prompt TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(project, name)
+);
+`)
+	return err
 }
 
 func migrateV5(db *sql.DB) error {
