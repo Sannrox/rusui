@@ -58,7 +58,7 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-const turnTokenTTL = 10 * time.Minute
+const turnTokenTTL = engine.GrantTTL
 
 func (s *Server) runnerHello(w http.ResponseWriter, r *http.Request) {
 	if !s.workerOK(r) {

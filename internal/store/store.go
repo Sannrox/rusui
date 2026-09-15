@@ -525,6 +525,12 @@ func PutTurnCredential(s *Store, turnID int64, gen int, tokenHash, expiresAt str
 	return err
 }
 
+func RenewTurnCredentialTx(tx *sql.Tx, turnID int64, gen int, expiresAt string) error {
+	_, err := tx.Exec(`UPDATE turn_credentials SET expires_at=? WHERE turn_id=? AND lease_generation=?`,
+		expiresAt, turnID, gen)
+	return err
+}
+
 func TouchRunner(s *Store, name string, at time.Time) error {
 	_, err := s.DB.Exec(`UPDATE runners SET last_seen_at=?, state='ready' WHERE name=?`, at.UTC().Format(time.RFC3339Nano), name)
 	return err

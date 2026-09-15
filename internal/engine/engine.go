@@ -27,6 +27,7 @@ const (
 	HeartbeatEvery    = time.Minute
 	Liveness          = 3 * time.Minute
 	ExecDeadline      = 12 * time.Minute
+	GrantTTL          = 10 * time.Minute
 	OwnerTTL          = 2 * time.Minute
 	FetchTimeout      = 30 * time.Second
 	StaleAge          = 60 * 24 * time.Hour
@@ -579,7 +580,10 @@ func (e *Engine) Heartbeat(jobID int64, gen, claimed int) error {
 		}
 		exp := now.Add(Liveness)
 		j.LeaseExpiresAt = &exp
-		return store.UpdateJobTx(tx, j)
+		if err := store.UpdateJobTx(tx, j); err != nil {
+			return err
+		}
+		return store.RenewTurnCredentialTx(tx, jobID, gen, now.Add(GrantTTL).UTC().Format(time.RFC3339Nano))
 	})
 }
 
