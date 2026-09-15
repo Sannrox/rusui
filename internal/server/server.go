@@ -333,6 +333,13 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 				out["model_base_url"] = modelBaseURL(r, envRow.Driver)
 				out["git_proxy_url"] = gitProxyBaseURL(r, envRow.Driver)
 			}
+			if p, ok := s.Eng.Policy.Project(sess.Project); ok {
+				out["permissions"] = p.Permissions
+			} else if rr, ok := s.Eng.Policy.Repo(c.Job.Repo); ok {
+				if p, ok := s.Eng.Policy.Project(rr.Project); ok {
+					out["permissions"] = p.Permissions
+				}
+			}
 		}
 	}
 	if _, ok := out["model_base_url"]; !ok {

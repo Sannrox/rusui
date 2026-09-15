@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
 )
 
@@ -49,6 +50,7 @@ type Assignment struct {
 	Workspace         string          `json:"workspace"`
 	ModelBaseURL      string          `json:"model_base_url"`
 	GitProxyURL       string          `json:"git_proxy_url"`
+	Permissions       []acp.Rule      `json:"permissions"`
 	ExecutionDeadline *time.Time      `json:"execution_deadline"`
 	Input             json.RawMessage `json:"input"`
 }

@@ -72,7 +72,7 @@ func GrokHost(c *Client) ACPHost {
 			if err != nil {
 				return nil, nil, err
 			}
-			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: acp.DenyUnmatched{}}, stop, nil
+			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a)}, stop, nil
 		}
 		cmd, err := acp.GrokCommand()
 		if err != nil {
@@ -98,8 +98,15 @@ func GrokHost(c *Client) ACPHost {
 			}
 			_ = cmd.Wait()
 		}
-		return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: acp.DenyUnmatched{}}, stop, nil
+		return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a)}, stop, nil
 	}
+}
+
+func permissionGate(a *Assignment) acp.PermissionGate {
+	if a == nil || len(a.Permissions) == 0 {
+		return acp.DenyUnmatched{}
+	}
+	return acp.RulesGate{Rules: a.Permissions}
 }
 
 func WorkspaceFor(a *Assignment) (dir string, tmp bool, err error) {
