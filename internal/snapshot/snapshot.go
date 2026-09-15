@@ -31,6 +31,14 @@ type Item struct {
 	BaseRef             string   `json:"base_ref"`
 }
 
+// GitPin is the tree identity for an environment snapshot (ADR 0007).
+func (it Item) GitPin() string {
+	if it.ItemKind == "pull" && it.HeadSHA != "" {
+		return it.HeadSHA
+	}
+	return it.MainSHA
+}
+
 func ItemHash(it Item) string {
 	labels := append([]string(nil), it.Labels...)
 	sort.Strings(labels)

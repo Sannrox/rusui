@@ -62,7 +62,21 @@ func TestContainerDriverLifecycleAndScripts(t *testing.T) {
 		}
 	}
 	if setups != 1 {
-		t.Fatalf("setup ran %d times, want 1 per environment source hash", setups)
+		t.Fatalf("setup ran %d times before second env, got %d", 1, setups)
+	}
+	if _, err := h.e.ProvisionEnvironment(engine.EnvSpec{
+		Name: "box-2", Kind: env.KindContainer, SourceHash: "src-a",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	setups = 0
+	for _, ex := range rt.Execs {
+		if len(ex) > 2 && ex[2] == env.SetupPath {
+			setups++
+		}
+	}
+	if setups != 1 {
+		t.Fatalf("setup ran %d times, want once per source hash", setups)
 	}
 
 	got, err := store.GetEnvironment(h.st, created.ID)
@@ -92,6 +106,41 @@ func TestContainerWakeStartsServices(t *testing.T) {
 	}
 	if len(rt.Execs) != 2 || rt.Execs[1][len(rt.Execs[1])-1] != "pnpm dev" {
 		t.Fatalf("wake execs %#v", rt.Execs)
+	}
+}
+
+func TestClaimProvisionsSessionEnvironment(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{DefaultFiles: map[string]bool{env.SetupPath: true}}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	h.putRefresh(issue(1))
+	c := h.claim()
+	turn, err := store.GetTurn(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Handle == "" || got.SourceHash != engine.SourceHash("rusui-guest:test", "aaa", nil) {
+		t.Fatalf("env %+v", got)
+	}
+	it := issue(1)
+	it.MainSHA = "bbb"
+	if err := h.e.EnsureSessionEnvironment(c.Job.ID, it); err != nil {
+		t.Fatal(err)
+	}
+	sess2, err := store.GetSession(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess2.EnvironmentID == sess.EnvironmentID {
+		t.Fatal("pin change kept environment")
 	}
 }
 

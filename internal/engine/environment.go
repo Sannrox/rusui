@@ -1,12 +1,25 @@
 package engine
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
 	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
 )
+
+func SourceHash(image, pin string, setup []byte) string {
+	h := sha256.New()
+	h.Write([]byte(image))
+	h.Write([]byte{0})
+	h.Write([]byte(pin))
+	h.Write([]byte{0})
+	h.Write(setup)
+	return hex.EncodeToString(h.Sum(nil))
+}
 
 type EnvSpec struct {
 	Name        string
@@ -67,11 +80,9 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 	if err != nil {
 		return nil, err
 	}
-	if p, ok := d.(env.Preparer); ok {
-		if err := p.Setup(handle, spec.SourceHash); err != nil {
-			_ = d.Destroy(handle)
-			return nil, err
-		}
+	if err := e.maybeSetup(d, handle, spec.SourceHash); err != nil {
+		_ = d.Destroy(handle)
+		return nil, err
 	}
 	if err := startServices(d, handle); err != nil {
 		_ = d.Destroy(handle)
@@ -190,6 +201,121 @@ func (e *Engine) ReapEnvironments() error {
 		}
 	}
 	return nil
+}
+
+func (e *Engine) maybeSetup(d env.Driver, handle, hash string) error {
+	p, ok := d.(env.Preparer)
+	if !ok {
+		return nil
+	}
+	if hash != "" {
+		prepared, err := store.HasPreparedSourceHash(e.Store, hash)
+		if err != nil {
+			return err
+		}
+		if prepared {
+			return nil
+		}
+	}
+	return p.Setup(handle, hash)
+}
+
+func (e *Engine) canProvision() bool {
+	return e.Container != nil || e.Env != nil
+}
+
+func (e *Engine) imageIdentity() string {
+	if c, ok := e.Container.(env.Container); ok && c.Image != "" {
+		return c.Image
+	}
+	return env.KindProcess
+}
+
+func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) error {
+	if !e.canProvision() {
+		return nil
+	}
+	pin := item.GitPin()
+	if pin == "" {
+		return nil
+	}
+	turn, err := store.GetTurn(e.Store, turnID)
+	if err != nil {
+		return err
+	}
+	sess, err := store.GetSession(e.Store, turn.SessionID)
+	if err != nil {
+		return err
+	}
+	if sess.EnvironmentID == store.DefaultEnvironmentID {
+		return nil
+	}
+	envRow, err := store.GetEnvironment(e.Store, sess.EnvironmentID)
+	if err != nil {
+		return err
+	}
+	kind := env.KindProcess
+	if e.Container != nil {
+		kind = env.KindContainer
+	}
+	hash := SourceHash(e.imageIdentity(), pin, nil)
+	if envRow.Handle != "" && envRow.SourceHash == hash {
+		now := e.now()
+		exp := now.Add(e.envTTL())
+		envRow.ExpiresAt = &exp
+		return store.UpdateEnvironment(e.Store, *envRow)
+	}
+	if envRow.Handle != "" && envRow.SourceHash != hash {
+		d, err := e.driverFor(envRow.Driver)
+		if err != nil {
+			return err
+		}
+		_ = stopServices(d, envRow.Handle)
+		_ = d.Destroy(envRow.Handle)
+		envRow.State = store.EnvExpired
+		envRow.Handle = ""
+		if err := store.UpdateEnvironment(e.Store, *envRow); err != nil {
+			return err
+		}
+		suffix := pin
+		if len(suffix) > 12 {
+			suffix = suffix[:12]
+		}
+		created, err := e.ProvisionEnvironment(EnvSpec{Name: envRow.Name + "-" + suffix, Kind: kind, SourceHash: hash})
+		if err != nil {
+			return err
+		}
+		return store.SetSessionEnvironment(e.Store, sess.ID, created.ID)
+	}
+	d, err := e.driverFor(kind)
+	if err != nil {
+		return err
+	}
+	var handle string
+	if sc, ok := d.(env.SpecCreator); ok {
+		handle, err = sc.CreateSpec(env.Spec{Name: envRow.Name})
+	} else {
+		handle, err = d.Create(envRow.Name)
+	}
+	if err != nil {
+		return err
+	}
+	if err := e.maybeSetup(d, handle, hash); err != nil {
+		_ = d.Destroy(handle)
+		return err
+	}
+	if err := startServices(d, handle); err != nil {
+		_ = d.Destroy(handle)
+		return err
+	}
+	now := e.now()
+	exp := now.Add(e.envTTL())
+	envRow.Driver = d.Kind()
+	envRow.State = store.EnvReady
+	envRow.Handle = handle
+	envRow.SourceHash = hash
+	envRow.ExpiresAt = &exp
+	return store.UpdateEnvironment(e.Store, *envRow)
 }
 
 func startServices(d env.Driver, handle string) error {
