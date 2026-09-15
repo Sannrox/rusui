@@ -10,6 +10,7 @@ Decisions that must outlive a single pull request.
 | [0004](0004-rusui-services-yaml.md) | services.yaml is `.rusui/services.yaml` only | Accepted |
 | [0005](0005-policy-v2-project.md) | Policy v2 is keyed by project | Accepted |
 | [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted |
+| [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted |
 
 ## When to write an ADR
 

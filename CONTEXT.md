@@ -26,7 +26,11 @@ _Avoid_: session, job (as the product noun)
 
 **Environment**:
 The machine a session runs on. One session, one environment.
-_Avoid_: project, runner, snapshot
+_Avoid_: project, runner, snapshot (the prepared tree)
+
+**Snapshot**:
+The prepared, reusable tree identified by `source_hash` (base image digest, git pin, `.agents/setup` bytes). Two sessions may share a snapshot; they never share an environment.
+_Avoid_: environment, GitHub item snapshot hash, image tag
 
 **Schedule**:
 A named trigger on a project with a UTC cadence and a prompt. Each fire may start one scheduled session.

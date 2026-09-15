@@ -69,7 +69,7 @@
     },
     {
       "name": "RusuiEnvironment",
-      "description": "The machine a session runs on. One session, one environment. P1 dogfood uses a container; the immortal local environment is not shared across review sessions.",
+      "description": "The machine a session runs on. One session, one environment. Created from a snapshot; idle 72h expire then re-materialize. P1 dogfood uses a container; the immortal local environment is not shared across review sessions.",
       "superclasses": [],
       "properties": []
     },
@@ -82,6 +82,12 @@
     {
       "name": "RusuiSession",
       "description": "Unit of work on one project and one environment. Review identity is (project, bound repo, item). run and scheduled identities are minted at create. A follow-up prompt is a new turn on the same session.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiSnapshot",
+      "description": "Prepared reusable tree identified by source_hash (base image digest, git pin, .agents/setup bytes). Cached on the runner. Two sessions may share a snapshot; they never share an environment.",
       "superclasses": [],
       "properties": []
     },
@@ -302,6 +308,14 @@
       "range": "RusuiSession",
       "cardinality": { "min": 0, "max": null },
       "transitive": false
+    },
+    {
+      "name": "rusui_environment_from_snapshot",
+      "description": "An environment is created from a snapshot identified by source_hash. Two environments may share a snapshot.",
+      "domain": "RusuiEnvironment",
+      "range": "RusuiSnapshot",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
     }
   ],
   "provenance": [
@@ -435,6 +449,12 @@
       "subject": "RusuiSchedule",
       "source": "docs/decisions/0006-session-start.md",
       "locator": "docs/decisions/0006-session-start.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiSnapshot",
+      "source": "docs/decisions/0007-environment-snapshot.md",
+      "locator": "docs/decisions/0007-environment-snapshot.md#decision",
       "confidence": 1.0
     }
   ]

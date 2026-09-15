@@ -453,11 +453,25 @@ the review lane; the runner does not spawn this client yet.
 
 Environments have a create / sleep / wake / expire lifecycle. Drivers
 implement the same interface: `process` (a workspace directory) and
-`container` (Docker/Podman-compatible runtime). Create runs
-`.agents/setup` once per environment source hash; wake runs
-`.agents/resume` when present. **One session, one environment.** The
-default `local` environment is not a P1 dogfood environment and is not
-shared across review sessions. Other environments expire after 72 hours.
+`container` (Docker/Podman-compatible runtime). **One session, one
+environment.** The default `local` environment is not a P1 dogfood
+environment and is not shared across review sessions.
+
+A **snapshot** is the prepared tree for a `source_hash`: digest of
+base image identity, git pin, and `.agents/setup` bytes if present
+([ADR 0007](docs/decisions/0007-environment-snapshot.md)). P1 requires
+a git pin (PR head for pulls; default-branch SHA at admit for issues;
+bound-repo default branch for `run` / `scheduled`). On miss, the
+runner clones, runs `.agents/setup` if present, and caches the
+snapshot locally under that hash. On hit, the session environment is
+created from the cache with no setup. Wake runs `.agents/resume` only.
+The plane stores the hash string, not the bytes.
+
+Idle 72 hours from last wake or last turn end expires the environment.
+The session row stays; the next turn re-materializes from the
+snapshot. A new git pin on a live session replaces the environment
+for that turn. Sleep/wake on a live environment keeps in-container
+dirt.
 
 ## Review artifacts
 
