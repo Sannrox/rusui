@@ -7,7 +7,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 4
+const CurrentSchema = 5
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -193,8 +193,29 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 4); err != nil {
 			return err
 		}
+		ver = 4
+	}
+	if ver < 5 {
+		if err := migrateV5(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 5); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func migrateV5(db *sql.DB) error {
+	_, err := db.Exec(`
+ALTER TABLE sessions ADD COLUMN project TEXT NOT NULL DEFAULT '';
+ALTER TABLE sessions ADD COLUMN prompt TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS session_idempotency (
+  key TEXT PRIMARY KEY,
+  session_id INTEGER NOT NULL
+);
+`)
+	return err
 }
 
 func migrateV4(db *sql.DB) error {

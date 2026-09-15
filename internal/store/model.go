@@ -43,6 +43,8 @@ type Session struct {
 	Item          int
 	ItemKind      string
 	State         string
+	Project       string
+	Prompt        string
 	CreatedAt     time.Time
 }
 
@@ -88,5 +90,6 @@ const (
 	LocalEnvironmentName = "local"
 	LocalRunnerName      = "local"
 	SessionKindReview    = "review"
+	SessionKindRun       = "run"
 	DefaultEnvironmentID = int64(1)
 )

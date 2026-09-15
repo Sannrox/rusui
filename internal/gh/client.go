@@ -73,6 +73,29 @@ func splitRepo(repo string) (owner, name string, err error) {
 	return owner, name, nil
 }
 
+func (a *API) DefaultSHA(repo string) (string, error) {
+	owner, name, err := splitRepo(repo)
+	if err != nil {
+		return "", err
+	}
+	var repoInfo ghRepo
+	if err := a.get("/repos/"+owner+"/"+name, &repoInfo); err != nil {
+		return "", err
+	}
+	branch := repoInfo.DefaultBranch
+	if branch == "" {
+		branch = "main"
+	}
+	var ref ghRef
+	if err := a.get("/repos/"+owner+"/"+name+"/git/ref/heads/"+branch, &ref); err != nil {
+		return "", err
+	}
+	if ref.Object.SHA == "" {
+		return "", fmt.Errorf("github: empty sha")
+	}
+	return ref.Object.SHA, nil
+}
+
 func (a *API) get(path string, dst any) error {
 	u := strings.TrimRight(a.BaseURL, "/") + path
 	req, err := http.NewRequest(http.MethodGet, u, nil)
