@@ -63,6 +63,16 @@ func (c Container) Destroy(handle string) error {
 	return c.RT.Remove(handle)
 }
 
+func (c Container) PlaceTree(handle, srcDir string) error {
+	p, ok := c.RT.(interface {
+		PlaceTree(handle, srcDir string) error
+	})
+	if !ok {
+		return fmt.Errorf("env: runtime cannot place tree")
+	}
+	return p.PlaceTree(handle, srcDir)
+}
+
 // Setup runs `.agents/setup` when present. The engine calls this only
 // when the environment's source hash is new.
 func (c Container) Setup(handle, _ string) error {

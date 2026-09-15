@@ -25,6 +25,8 @@ type EnvSpec struct {
 	Name        string
 	Kind        string
 	SourceHash  string
+	Repo        string
+	Pin         string
 	CPUMillis   int
 	MemoryBytes int64
 }
@@ -78,6 +80,10 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 		handle, err = d.Create(spec.Name)
 	}
 	if err != nil {
+		return nil, err
+	}
+	if err := e.materialize(spec.Repo, spec.Pin, spec.SourceHash, d, handle); err != nil {
+		_ = d.Destroy(handle)
 		return nil, err
 	}
 	if err := e.maybeSetup(d, handle, spec.SourceHash); err != nil {
@@ -281,7 +287,7 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 		if len(suffix) > 12 {
 			suffix = suffix[:12]
 		}
-		created, err := e.ProvisionEnvironment(EnvSpec{Name: envRow.Name + "-" + suffix, Kind: kind, SourceHash: hash})
+		created, err := e.ProvisionEnvironment(EnvSpec{Name: envRow.Name + "-" + suffix, Kind: kind, SourceHash: hash, Repo: item.Repo, Pin: pin})
 		if err != nil {
 			return err
 		}
@@ -298,6 +304,10 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 		handle, err = d.Create(envRow.Name)
 	}
 	if err != nil {
+		return err
+	}
+	if err := e.materialize(item.Repo, pin, hash, d, handle); err != nil {
+		_ = d.Destroy(handle)
 		return err
 	}
 	if err := e.maybeSetup(d, handle, hash); err != nil {

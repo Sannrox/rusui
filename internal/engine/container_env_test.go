@@ -109,6 +109,42 @@ func TestContainerWakeStartsServices(t *testing.T) {
 	}
 }
 
+func TestClaimMaterializesGitPin(t *testing.T) {
+	h := setup(t)
+	root := t.TempDir()
+	rt := &env.FakeRuntime{}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	h.e.SnapshotRoot = root
+	tree := &engine.MemoryTree{Files: map[string][]byte{"README": []byte("from-pin\n"), env.SetupPath: []byte("#!/bin/sh\n")}}
+	h.e.Tree = tree
+	h.putRefresh(issue(1))
+	c := h.claim()
+	turn, err := store.GetTurn(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := rt.ReadFile(got.Handle, "README")
+	if err != nil || string(b) != "from-pin\n" {
+		t.Fatalf("tree %q %v", b, err)
+	}
+	if tree.Calls != 1 {
+		t.Fatalf("fetches %d", tree.Calls)
+	}
+	h.putRefresh(issue(2))
+	_ = h.claim()
+	if tree.Calls != 1 {
+		t.Fatalf("second env fetched again: %d", tree.Calls)
+	}
+}
+
 func TestClaimProvisionsSessionEnvironment(t *testing.T) {
 	h := setup(t)
 	rt := &env.FakeRuntime{DefaultFiles: map[string]bool{env.SetupPath: true}}

@@ -53,6 +53,8 @@ type Engine struct {
 	Env          env.Driver
 	Container    env.Driver
 	EnvTTL       time.Duration
+	Tree         TreeSource
+	SnapshotRoot string
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {

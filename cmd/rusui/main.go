@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -68,6 +69,8 @@ func main() {
 	}
 	eng := engine.New(st, p, api, clock.Real{})
 	eng.HookIDs = api.HookIDs
+	eng.Tree = engine.GitFetcher{Token: token}
+	eng.SnapshotRoot = filepath.Join(filepath.Dir(*db), "snapshots")
 	eng.ReloadPolicy(p)
 	poster := &slackpkg.Poster{
 		Token:   os.Getenv("RUSUI_SLACK_BOT_TOKEN"),
