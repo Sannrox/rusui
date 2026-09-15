@@ -46,6 +46,12 @@ func main() {
 		case "prompt":
 			promptCLI(os.Args[2:])
 			return
+		case "logs":
+			logsCLI(os.Args[2:])
+			return
+		case "approve":
+			approveCLI(os.Args[2:])
+			return
 		}
 	}
 	addr := flag.String("addr", "127.0.0.1:8080", "listen")
