@@ -171,14 +171,62 @@ func TestACPTurnUsesProvisionedWorkspace(t *testing.T) {
 	}
 }
 
-func TestWorkspaceForRejectsContainerHandleAsCwd(t *testing.T) {
-	if _, _, err := runner.WorkspaceFor(&runner.Assignment{Driver: "container", Handle: "ctr-1"}); err == nil {
-		t.Fatal("expected error")
+func TestWorkspaceForContainerHasNoHostCwd(t *testing.T) {
+	dir, tmp, err := runner.WorkspaceFor(&runner.Assignment{Driver: "container", Handle: "ctr-1"})
+	if err != nil || tmp || dir != "" {
+		t.Fatalf("%q tmp=%v %v", dir, tmp, err)
 	}
-	dir, tmp, err := runner.WorkspaceFor(&runner.Assignment{Workspace: "/ws"})
+	dir, tmp, err = runner.WorkspaceFor(&runner.Assignment{Workspace: "/ws"})
 	if err != nil || tmp || dir != "/ws" {
 		t.Fatalf("%q tmp=%v %v", dir, tmp, err)
 	}
+}
+
+func TestGrokHostExecsInContainer(t *testing.T) {
+	e, st, hs := setup(t)
+	rt := &env.FakeRuntime{}
+	rt.StdioHook = func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+		return startFakeACPStdio(t)
+	}
+	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	cli := &runner.Client{Base: hs.URL, Bootstrap: "wsec", Repo: "example/test-repo", Name: "local", Exec: rt}
+	if err := runner.OneACPTurn(context.Background(), cli, runner.GrokHost(cli)); err != nil {
+		t.Fatal(err)
+	}
+	if len(rt.Stdio) != 1 || rt.Stdio[0].Handle == "" {
+		t.Fatalf("stdio %#v", rt.Stdio)
+	}
+	joined := strings.Join(rt.Stdio[0].Argv, " ")
+	if !strings.Contains(joined, "agent stdio") || !strings.Contains(joined, "--permission-mode default") {
+		t.Fatalf("argv %q", joined)
+	}
+	envj := strings.Join(rt.Stdio[0].Env, "\n")
+	if !strings.Contains(envj, "XAI_API_KEY=") {
+		t.Fatal(envj)
+	}
+	var turnID int64
+	if err := st.DB.QueryRow(`SELECT id FROM turns WHERE state='completed'`).Scan(&turnID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func startFakeACPStdio(t *testing.T) (io.WriteCloser, io.ReadCloser, func(), error) {
+	t.Helper()
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = (&acp.FakeAgent{In: agentIn, Out: agentOut}).Run()
+	}()
+	stop := func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+		_ = agentOut.Close()
+		<-done
+	}
+	return clientOut, clientIn, stop, nil
 }
 
 func TestACPHostCompletesWithReceipts(t *testing.T) {

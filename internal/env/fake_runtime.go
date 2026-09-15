@@ -2,6 +2,7 @@ package env
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"os"
@@ -22,7 +23,15 @@ type FakeRuntime struct {
 	Started         []string
 	Removed         []string
 	Execs           [][]string
+	Stdio           []StdioCall
+	StdioHook       func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error)
 	alive           map[string]bool
+}
+
+type StdioCall struct {
+	Handle string
+	Argv   []string
+	Env    []string
 }
 
 func (f *FakeRuntime) CreateAndStart(spec Spec) (string, error) {
@@ -119,6 +128,17 @@ func (f *FakeRuntime) Exec(id string, cmd []string) error {
 	copied := append([]string{id}, cmd...)
 	f.Execs = append(f.Execs, copied)
 	return nil
+}
+
+func (f *FakeRuntime) ExecStdio(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+	f.mu.Lock()
+	f.Stdio = append(f.Stdio, StdioCall{Handle: handle, Argv: append([]string(nil), argv...), Env: append([]string(nil), env...)})
+	hook := f.StdioHook
+	f.mu.Unlock()
+	if hook == nil {
+		return nil, nil, nil, fmt.Errorf("env: stdio hook required")
+	}
+	return hook(handle, argv, env)
 }
 
 func (f *FakeRuntime) SetFile(id, path string) {
