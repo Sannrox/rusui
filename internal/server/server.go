@@ -27,6 +27,7 @@ type Server struct {
 	Eng                 *engine.Engine
 	WebhookSec          string
 	WorkerSec           string
+	OperatorTok         string
 	SlackSec            string
 	SlackUsers          map[string]bool
 	PolicyPath          string

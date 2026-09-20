@@ -75,9 +75,13 @@ GitHub to `POST /hooks/github` and Slack to `POST /hooks/slack` as in
 [docs/operator.md](docs/operator.md). If the tunnel is down, refresh of
 locally tracked items and delivery reconcile still recover missed work.
 
-Later operator reachability (not this milestone) replaces loopback-as-security
-with a token plus identity-aware proxy or tailnet. Surfaces stay viewers of
-the same object API. See [ADR 0003](docs/decisions/0003-operator-surface.md).
+Later operator reachability (M4) replaces loopback-as-security with an
+**operator** credential plus identity-aware proxy or tailnet. Worker and
+turn secrets are not browser sessions. Previews use a different origin.
+See [ADR 0003](docs/decisions/0003-operator-surface.md) and
+[ADR 0012](docs/decisions/0012-operator-access.md). This milestone still
+defaults to loopback; console HTML stays disabled until
+`RUSUI_OPERATOR_TOKEN` is implemented.
 
 ## Executable policy
 

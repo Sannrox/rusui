@@ -44,6 +44,7 @@ Need `-repo` and `-driver`, or `-repo` and `-acp`.
 | `RUSUI_GITHUB_TOKEN` or `GITHUB_TOKEN` | **Yes** | Server exits if both empty |
 | `RUSUI_WEBHOOK_SECRET` | **Yes** unless `-allow-insecure` | GitHub + generic event HMAC |
 | `RUSUI_WORKER_SECRET` | **Yes** unless `-allow-insecure` | Runner / job bearer |
+| `RUSUI_OPERATOR_TOKEN` | console HTML (M4) | Distinct from worker; unset keeps console HTML disabled ([ADR 0012](decisions/0012-operator-access.md)) |
 | `RUSUI_SLACK_SECRET` | **Yes** unless `-allow-insecure` | Slack HMAC |
 | `RUSUI_GITHUB_API` | no | Default `https://api.github.com` |
 | `RUSUI_GITHUB_HOOK_IDS` | for reconcile | `owner/repo=hookid`, comma-separated |
