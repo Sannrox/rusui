@@ -38,6 +38,9 @@ func main() {
 		case "run":
 			runCLI(os.Args[2:])
 			return
+		case "acp":
+			acpCLI(os.Args[2:])
+			return
 		case "sessions":
 			sessionsCLI(os.Args[2:])
 			return

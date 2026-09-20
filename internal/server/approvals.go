@@ -11,7 +11,7 @@ import (
 )
 
 func (s *Server) sessionLogs(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
@@ -37,7 +37,7 @@ func (s *Server) sessionLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listApprovals(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
@@ -55,7 +55,7 @@ func (s *Server) listApprovals(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getApproval(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if !s.workerOK(r) {
+	if !s.operatorOrWorkerOK(r) {
 		act, err := store.GetAction(s.Eng.Store, id)
 		if err != nil || act.TurnID == nil || !s.turnOK(r, *act.TurnID) {
 			http.Error(w, "auth", http.StatusUnauthorized)
@@ -115,7 +115,7 @@ func (s *Server) allowStillValid(actionID string) bool {
 }
 
 func (s *Server) decideApproval(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}

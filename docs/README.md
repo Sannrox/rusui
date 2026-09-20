@@ -34,6 +34,7 @@ the runbook.
 | [operator.md](operator.md) | how-to | run, webhook, Slack, troubleshoot |
 | [upgrade.md](upgrade.md) | how-to | drain, packaged upgrade, redacted diagnostics |
 | [proofs/d6-session-workflow.md](proofs/d6-session-workflow.md) | explanation | D6 twenty-run matrix and supported claim |
+| [acp-editor.md](acp-editor.md) | reference | ACP protocolVersion 1 editor shim (`rusui acp`) |
 | [configuration.md](configuration.md) | reference | flags, env, HTTP, policy, Slack verbs |
 | [development.md](development.md) | how-to | `make`, Docker images, CI |
 | [../build/README.md](../build/README.md) | reference | image internals |

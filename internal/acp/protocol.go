@@ -5,6 +5,12 @@ import "encoding/json"
 // GrokStdio is the only P1 guest spawn (ADR 0002).
 const GrokStdio = "agent --permission-mode default agent stdio"
 
+// ProtocolVersion is the ACP version the in-tree editor shim speaks.
+const ProtocolVersion = 1
+
+// EditorAgentName is the first supported editor-facing ACP agent.
+const EditorAgentName = "rusui-acp"
+
 const (
 	MethodInitialize          = "initialize"
 	MethodSessionNew          = "session/new"

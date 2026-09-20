@@ -48,6 +48,17 @@ func (s *Server) OperatorBrowserOK(r *http.Request) bool {
 	return ClassifyBearer(bearerToken(r), s.OperatorTok, s.WorkerSec) == CredOperator
 }
 
+// operatorOrWorkerOK is the session/approval observer path: operator
+// console/editor and the worker CLI share it. Claim/complete stay worker-only.
+func (s *Server) operatorOrWorkerOK(r *http.Request) bool {
+	c := ClassifyBearer(bearerToken(r), s.OperatorTok, s.WorkerSec)
+	if c == CredOperator || c == CredWorker {
+		return true
+	}
+	// WorkerOK also accepts X-Worker-Token; keep that for CLI.
+	return s.workerOK(r)
+}
+
 // PreviewOriginIsolated reports whether previewHost is a different origin
 // from the plane. Same host (including portless default) fails closed.
 func PreviewOriginIsolated(planeURL, previewURL string) bool {
