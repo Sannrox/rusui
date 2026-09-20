@@ -32,6 +32,7 @@ the runbook.
 | [../VISION.md](../VISION.md) | explanation | accepted direction; not the runbook |
 | [../ROADMAP.md](../ROADMAP.md) | explanation | published P0–P4 sequence until ADR 0010 is Accepted |
 | [operator.md](operator.md) | how-to | run, webhook, Slack, troubleshoot |
+| [upgrade.md](upgrade.md) | how-to | drain, packaged upgrade, redacted diagnostics |
 | [configuration.md](configuration.md) | reference | flags, env, HTTP, policy, Slack verbs |
 | [development.md](development.md) | how-to | `make`, Docker images, CI |
 | [../build/README.md](../build/README.md) | reference | image internals |

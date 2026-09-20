@@ -55,6 +55,12 @@ func main() {
 		case "diagnose":
 			diagnoseCLI(os.Args[2:])
 			return
+		case "drain":
+			drainCLI(os.Args[2:])
+			return
+		case "diagnostics":
+			diagnosticsCLI(os.Args[2:])
+			return
 		}
 	}
 	addr := flag.String("addr", "127.0.0.1:8080", "listen")
