@@ -46,7 +46,14 @@ nav a{margin-right:1rem}
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-<nav aria-label="Console"><a href="/console/sessions">Sessions</a>
+<nav aria-label="Console">
+<a href="/console/sessions">Sessions</a>
+<a href="/console/approvals">Approvals</a>
+<a href="/console/environments">Environments</a>
+<a href="/console/runners">Runners</a>
+<a href="/console/receipts">Receipts</a>
+<a href="/console/budgets">Budgets</a>
+<a href="/console/health">Health</a>
 {{if .Authed}}<form method="post" action="/console/logout" style="display:inline"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Log out</button></form>{{end}}
 </nav>
 <main id="main">
@@ -104,6 +111,31 @@ nav a{margin-right:1rem}
 <h1>{{.FileName}}</h1>
 <p><a href="/console/sessions/{{.Sess.ID}}">Back to session</a></p>
 {{if .FileState}}<p>{{.FileState}}</p>{{else}}<pre>{{.FileBody}}</pre>{{end}}
+{{else if eq .View "approvals"}}
+<h1>Approvals</h1>
+{{if .Notice}}<p role="status">{{.Notice}}</p>{{end}}
+{{if not .Approvals}}<p class="muted">No pending approvals.</p>{{end}}
+<ul>
+{{range .Approvals}}
+<li>
+<p><a href="/console/sessions/{{.SessionID}}">session {{.SessionID}}</a> · {{.Repo}}#{{.Item}} · {{.Reason}}</p>
+<pre>{{.Body}}</pre>
+<p class="muted">scope {{.Scope}} · expiry {{.Expiry}}</p>
+<form method="post" action="/console/approvals/{{.ID}}">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<button name="decision" value="allow" type="submit">Allow</button>
+<button name="decision" value="deny" type="submit">Deny</button>
+</form>
+</li>
+{{end}}
+</ul>
+{{else if eq .View "table"}}
+<h1>{{.Heading}}</h1>
+{{if .Notice}}<p class="muted">{{.Notice}}</p>{{end}}
+{{if not .Rows}}<p class="muted">None.</p>{{else}}
+<table><thead><tr>{{range .Head}}<th>{{.}}</th>{{end}}</tr></thead>
+<tbody>{{range .Rows}}<tr>{{range .}}<td>{{.}}</td>{{end}}</tr>{{end}}</tbody></table>
+{{end}}
 {{end}}
 </main>
 </body></html>`
@@ -126,6 +158,22 @@ type consolePage struct {
 	FileName           string
 	FileBody           string
 	FileState          string
+	Approvals          []consoleApproval
+	Notice             string
+	Heading            string
+	Head               []string
+	Rows               [][]string
+}
+
+type consoleApproval struct {
+	ID        string
+	SessionID int64
+	Repo      string
+	Item      int
+	Reason    string
+	Body      string
+	Scope     string
+	Expiry    string
 }
 
 type consoleSess struct {
