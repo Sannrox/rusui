@@ -78,6 +78,7 @@ nav a{margin-right:1rem}
 <h1>Session {{.Sess.ID}}</h1>
 <p>Project {{.Sess.Project}} · {{.Sess.Kind}} · {{.Sess.State}}{{if .TurnState}} · turn {{.TurnState}}{{end}}</p>
 <p>{{.Sess.Prompt}}</p>
+<p><a href="/console/sessions/{{.Sess.ID}}/terminal">Terminal</a></p>
 {{if .Reason}}<p>Blocked/failed: {{.Reason}}</p>{{end}}
 {{if .Artifact}}<p>Artifact {{.Artifact}}</p>{{end}}
 {{if .HistoryUnavailable}}<p role="status">Transcript history unavailable.</p>{{end}}
@@ -129,6 +130,41 @@ nav a{margin-right:1rem}
 </li>
 {{end}}
 </ul>
+{{else if eq .View "terminal"}}
+<h1>Terminal session {{.Sess.ID}}</h1>
+<p>Environment {{.TermHandle}} · {{.TermDriver}} · {{.TermState}}</p>
+{{if .Notice}}<p role="status">{{.Notice}}</p>{{end}}
+{{if .TermWrite}}<p>Write lease generation {{.TermGen}}</p>{{else}}<p class="muted">Observer (no write lease)</p>{{end}}
+<div id="terminal" data-xterm="1" data-output="/console/sessions/{{.Sess.ID}}/terminal/output" data-input="/console/sessions/{{.Sess.ID}}/terminal/input" data-gen="{{.TermGen}}" data-write="{{.TermWrite}}">
+<pre id="term-out" aria-live="polite"></pre>
+</div>
+{{if .TermWrite}}
+<form method="post" action="/console/sessions/{{.Sess.ID}}/terminal/input">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="generation" value="{{.TermGen}}">
+<label for="cmd">Input</label>
+<input id="cmd" name="data" type="text" autocomplete="off">
+<button type="submit">Send</button>
+</form>
+<form method="post" action="/console/sessions/{{.Sess.ID}}/terminal/revoke">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<button type="submit">Release write</button>
+</form>
+{{else}}
+<form method="post" action="/console/sessions/{{.Sess.ID}}/terminal/lease">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<button type="submit">Acquire write</button>
+</form>
+{{end}}
+<script>
+(function(){
+  var el=document.getElementById("terminal"); if(!el) return;
+  var out=document.getElementById("term-out");
+  var es=new EventSource(el.getAttribute("data-output"));
+  es.onmessage=function(ev){ out.textContent += ev.data; };
+  es.onerror=function(){ es.close(); setTimeout(function(){ location.reload(); }, 800); };
+})();
+</script>
 {{else if eq .View "table"}}
 <h1>{{.Heading}}</h1>
 {{if .Notice}}<p class="muted">{{.Notice}}</p>{{end}}
@@ -163,6 +199,11 @@ type consolePage struct {
 	Heading            string
 	Head               []string
 	Rows               [][]string
+	TermHandle         string
+	TermDriver         string
+	TermState          string
+	TermWrite          bool
+	TermGen            int
 }
 
 type consoleApproval struct {
