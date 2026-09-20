@@ -61,6 +61,7 @@ GitHub token: read-only. Do not give it to the runner or the model.
 | `POST` | `/jobs/{id}/fail` | same |
 | `POST` | `/sessions/{id}/turns` | worker secret |
 | `POST` | `/sessions/{id}/cancel` | worker secret |
+| `GET` | `/approvals/{id}` | worker secret or turn token |
 
 GitHub webhook events: `issues`, `pull_request`, `issue_comment`.
 Forward the tunnel to `http://127.0.0.1:8080/hooks/github`.

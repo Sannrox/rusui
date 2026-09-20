@@ -53,6 +53,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /sessions/{id}/attach", s.attachSession)
 	mux.HandleFunc("GET /sessions/{id}/logs", s.sessionLogs)
 	mux.HandleFunc("GET /approvals", s.listApprovals)
+	mux.HandleFunc("GET /approvals/{id}", s.getApproval)
 	mux.HandleFunc("POST /approvals/{id}", s.decideApproval)
 	mux.HandleFunc("POST /sessions/{id}/turns", s.followUpTurn)
 	mux.HandleFunc("POST /sessions/{id}/cancel", s.cancelSession)
@@ -263,11 +264,14 @@ func (s *Server) turnActions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := s.Eng.IngestTurnAction(tid, rec.Type, rec.Reason, rec.Body); err != nil {
+	id, err := s.Eng.IngestTurnAction(tid, rec.Type, rec.Reason, rec.Body)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]string{"id": id})
 }
 
 func issueTurnToken(st *store.Store, turnID int64, gen int, now time.Time) (string, time.Time, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -171,7 +172,7 @@ func TestACPTurnUsesProvisionedWorkspace(t *testing.T) {
 		if a.Driver != env.KindProcess {
 			t.Fatalf("driver %q", a.Driver)
 		}
-		return startFakeACP(t, runner.HTTPRecorder{Base: hs.URL, Token: a.TurnToken, TurnID: a.TurnID})
+		return startFakeACP(t, &runner.HTTPRecorder{Base: hs.URL, Token: a.TurnToken, TurnID: a.TurnID})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -203,9 +204,12 @@ func TestGrokHostExecsInContainer(t *testing.T) {
 	}
 	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
 	cli := &runner.Client{Base: hs.URL, Bootstrap: "wsec", Repo: "example/test-repo", Name: "local", Exec: rt}
+	done := make(chan struct{})
+	go allowPendingApprovals(t, hs.URL, done)
 	if err := runner.OneACPTurn(context.Background(), cli, runner.GrokHost(cli)); err != nil {
 		t.Fatal(err)
 	}
+	close(done)
 	if len(rt.Stdio) != 1 || rt.Stdio[0].Handle == "" {
 		t.Fatalf("stdio %#v", rt.Stdio)
 	}
@@ -246,7 +250,7 @@ func TestACPHostCompletesWithReceipts(t *testing.T) {
 	_, st, hs := setup(t)
 	cli := &runner.Client{Base: hs.URL, Bootstrap: "wsec", Repo: "example/test-repo", Name: "local"}
 	err := runner.OneACPTurn(context.Background(), cli, func(a *runner.Assignment, dir string) (*acp.Client, func(), error) {
-		return startFakeACP(t, runner.HTTPRecorder{Base: hs.URL, Token: a.TurnToken, TurnID: a.TurnID})
+		return startFakeACP(t, &runner.HTTPRecorder{Base: hs.URL, Token: a.TurnToken, TurnID: a.TurnID})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -282,4 +286,41 @@ func startFakeACP(t *testing.T, rec acp.Recorder) (*acp.Client, func(), error) {
 		<-done
 	}
 	return &acp.Client{In: clientIn, Out: clientOut, Rec: rec, Perm: acp.DenyUnmatched{}}, stop, nil
+}
+
+func allowPendingApprovals(t *testing.T, base string, stop <-chan struct{}) {
+	t.Helper()
+	for {
+		select {
+		case <-stop:
+			return
+		default:
+		}
+		req, err := http.NewRequest("GET", base+"/approvals", nil)
+		if err != nil {
+			return
+		}
+		req.Header.Set("Authorization", "Bearer wsec")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			time.Sleep(20 * time.Millisecond)
+			continue
+		}
+		var list []store.Action
+		_ = json.NewDecoder(res.Body).Decode(&list)
+		_ = res.Body.Close()
+		for _, a := range list {
+			if a.ID == "" {
+				continue
+			}
+			preq, _ := http.NewRequest("POST", base+"/approvals/"+a.ID, strings.NewReader(`{"decision":"allow"}`))
+			preq.Header.Set("Authorization", "Bearer wsec")
+			preq.Header.Set("Content-Type", "application/json")
+			pres, err := http.DefaultClient.Do(preq)
+			if err == nil {
+				_ = pres.Body.Close()
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }

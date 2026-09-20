@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/sannrox/rusui/internal/acp"
@@ -23,16 +24,19 @@ type HTTPRecorder struct {
 	Token  string
 	TurnID int64
 	HTTP   *http.Client
+
+	mu     sync.Mutex
+	lastID string
 }
 
-func (r HTTPRecorder) http() *http.Client {
+func (r *HTTPRecorder) http() *http.Client {
 	if r.HTTP != nil {
 		return r.HTTP
 	}
 	return http.DefaultClient
 }
 
-func (r HTTPRecorder) Record(rec acp.Receipt) error {
+func (r *HTTPRecorder) Record(rec acp.Receipt) error {
 	payload, err := json.Marshal(map[string]any{
 		"type":   rec.Type,
 		"reason": rec.Reason,
@@ -52,18 +56,96 @@ func (r HTTPRecorder) Record(rec acp.Receipt) error {
 		return err
 	}
 	defer func() { _ = res.Body.Close() }()
+	b, _ := io.ReadAll(res.Body)
 	if res.StatusCode != http.StatusAccepted {
-		b, _ := io.ReadAll(res.Body)
 		return fmt.Errorf("turn action: %s %s", res.Status, b)
 	}
+	var out struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(b, &out)
+	if rec.Type == acp.ActionApproval && out.ID != "" {
+		r.mu.Lock()
+		r.lastID = out.ID
+		r.mu.Unlock()
+	}
 	return nil
+}
+
+func (r *HTTPRecorder) lastApprovalID() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.lastID
+}
+
+func (r *HTTPRecorder) Wait(ctx context.Context, p acp.PermissionParams) acp.Decision {
+	tick := time.NewTicker(25 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		id := r.lastApprovalID()
+		if id != "" {
+			d := r.poll(id)
+			if d.Matched || d.Allow {
+				return d
+			}
+			if r.denied(id) {
+				return acp.Decision{}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return acp.Decision{}
+		case <-tick.C:
+		}
+	}
+}
+
+func (r *HTTPRecorder) denied(id string) bool {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/approvals/%s", r.Base, id), nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Authorization", "Bearer "+r.Token)
+	res, err := r.http().Do(req)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = res.Body.Close() }()
+	var out struct {
+		Decision string `json:"decision"`
+		Valid    bool   `json:"valid"`
+	}
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	return out.Decision == "deny" || (out.Decision == "allow" && !out.Valid)
+}
+
+func (r *HTTPRecorder) poll(id string) acp.Decision {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s/approvals/%s", r.Base, id), nil)
+	if err != nil {
+		return acp.Decision{}
+	}
+	req.Header.Set("Authorization", "Bearer "+r.Token)
+	res, err := r.http().Do(req)
+	if err != nil {
+		return acp.Decision{}
+	}
+	defer func() { _ = res.Body.Close() }()
+	var out struct {
+		Decision string `json:"decision"`
+		Valid    bool   `json:"valid"`
+	}
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	if out.Decision == "allow" && out.Valid {
+		return acp.Decision{Matched: true, Allow: true}
+	}
+	return acp.Decision{}
 }
 
 // GrokHost spawns the ADR 0002 Grok command and records receipts on the plane.
 func GrokHost(c *Client) ACPHost {
 	return func(a *Assignment, dir string) (*acp.Client, func(), error) {
 		env := DriverEnv(a, dir, os.Getenv("PATH"))
-		rec := HTTPRecorder{Base: c.Base, Token: a.TurnToken, TurnID: a.TurnID, HTTP: c.HTTP}
+		rec := &HTTPRecorder{Base: c.Base, Token: a.TurnToken, TurnID: a.TurnID, HTTP: c.HTTP}
 		if a.Driver == "container" && a.Handle != "" {
 			if c.Exec == nil {
 				return nil, nil, fmt.Errorf("container exec required")
@@ -72,7 +154,7 @@ func GrokHost(c *Client) ACPHost {
 			if err != nil {
 				return nil, nil, err
 			}
-			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a)}, stop, nil
+			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait}, stop, nil
 		}
 		cmd, err := acp.GrokCommand()
 		if err != nil {
@@ -98,7 +180,7 @@ func GrokHost(c *Client) ACPHost {
 			}
 			_ = cmd.Wait()
 		}
-		return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a)}, stop, nil
+		return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait}, stop, nil
 	}
 }
 
