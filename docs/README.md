@@ -1,6 +1,6 @@
 # Documentation
 
-rusui is a personal environment plane. You write `policy.yaml`. The server
+rusui is a self-hosted environment plane. You write `policy.yaml`. The server
 admits work onto sessions and turns, records immutable reviews, and dry-runs
 apply.
 

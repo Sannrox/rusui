@@ -19,8 +19,8 @@ It is agent-agnostic through the Agent Client Protocol. The P1 supported
 guest is Grok CLI ([ADR 0002](docs/decisions/0002-grok-acp-agent-set.md)).
 [shikigami](https://github.com/Sannrox/shikigami) is the first-party agent,
 [sekai-chisei](https://github.com/Sannrox/sekai-chisei) the optional
-governance plane, [tenkai](https://github.com/Sannrox/tenkai) the delivery
-path, and [onmyoji](https://github.com/Sannrox/onmyoji) a desktop client.
+governance plane, and [tenkai](https://github.com/Sannrox/tenkai) the
+delivery path. onmyoji is a desktop client outside this repository.
 
 ## Problem
 

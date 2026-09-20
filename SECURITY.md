@@ -10,7 +10,7 @@ webhook payloads with private data, or a copy of `rusui.db`.
 
 ## What this process is trusted to do
 
-rusui is a **personal operator tool**. The product contract is
+rusui is a **self-hosted operator tool**. The product contract is
 [ARCHITECTURE.md](ARCHITECTURE.md). In short:
 
 - GitHub is intake. The server is the source of truth. Slack is the human socket.

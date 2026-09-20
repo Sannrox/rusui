@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-`rusui` is a personal environment plane. You write `policy.yaml`. The
+`rusui` is a self-hosted environment plane. You write `policy.yaml`. The
 server admits work onto environments, sessions, turns, runners, events,
 and actions; records immutable reviews; and dry-runs apply.
 `ARCHITECTURE.md` is the product contract. Do not implement live apply

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking. rusui is a personal environment plane published as source.
+Thanks for looking. rusui is a self-hosted environment plane published as source.
 The product contract is [ARCHITECTURE.md](ARCHITECTURE.md). Agents should also
 read [AGENTS.md](AGENTS.md).
 
@@ -59,6 +59,9 @@ through [SECURITY.md](SECURITY.md). Durable boundary changes need an
 [ADR](docs/decisions/README.md).
 
 ## Pull requests
+
+`main` accepts changes through pull requests. Do not push commits to `main`
+directly.
 
 Delivery is one issue, one branch, one checkout, one PR. See
 [AGENTS.md](AGENTS.md) (parallel delivery lanes). Claim with

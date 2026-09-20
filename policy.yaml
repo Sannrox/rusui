@@ -14,7 +14,7 @@ projects:
   rusui:
     repos:
       Sannrox/rusui:
-        visibility: private
+        visibility: public
         review: true
         comments: false
         close: false

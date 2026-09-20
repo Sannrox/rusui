@@ -6,7 +6,7 @@ and **dry-runs** apply. It does not comment, close, or merge on GitHub.
 
 留守居 is the steward who keeps house while you are away.
 
-**Status:** personal operator tool, loopback by default, dry-run apply.
+**Status:** self-hosted source, loopback by default, dry-run apply.
 Not a hosted product.
 
 [Docs](docs/README.md) · [Architecture](ARCHITECTURE.md) ·
