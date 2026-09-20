@@ -15,7 +15,7 @@
   [ADR 0008](0008-p1-isolation-split.md), or
   [ADR 0009](0009-credential-broker.md).
 - Related: [ADR 0010](0010-hybrid-roadmap-sequence.md) (G0 / #87) is
-  Proposed on main. That sequencing file is not a dependency of this
+  Accepted. That sequencing file is not a dependency of this
   lifecycle contract. This remains 0011 so the numbers do not collide.
 - Discussion: none. GitHub Discussions are disabled. Accepted 2026-09-20.
   Objects: plane session, turn, guest ACP session, concurrent-lease

@@ -30,7 +30,7 @@ the runbook.
 | [../ARCHITECTURE.md](../ARCHITECTURE.md) | explanation | product contract |
 | [../CONTEXT.md](../CONTEXT.md) | explanation | product nouns |
 | [../VISION.md](../VISION.md) | explanation | accepted direction; not the runbook |
-| [../ROADMAP.md](../ROADMAP.md) | explanation | published P0–P4 sequence until ADR 0010 is Accepted |
+| [../ROADMAP.md](../ROADMAP.md) | explanation | published M1–M6 sequence ([ADR 0010](decisions/0010-hybrid-roadmap-sequence.md) Accepted) |
 | [operator.md](operator.md) | how-to | run, webhook, Slack, troubleshoot |
 | [upgrade.md](upgrade.md) | how-to | drain, packaged upgrade, redacted diagnostics |
 | [configuration.md](configuration.md) | reference | flags, env, HTTP, policy, Slack verbs |
