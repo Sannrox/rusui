@@ -159,6 +159,7 @@ func main() {
 		Eng:            eng,
 		WebhookSec:     os.Getenv("RUSUI_WEBHOOK_SECRET"),
 		WorkerSec:      os.Getenv("RUSUI_WORKER_SECRET"),
+		OperatorTok:    os.Getenv("RUSUI_OPERATOR_TOKEN"),
 		SlackSec:       os.Getenv("RUSUI_SLACK_SECRET"),
 		SlackUsers:     slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
 		PolicyPath:     *pol,
