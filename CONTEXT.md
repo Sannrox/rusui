@@ -41,8 +41,16 @@ Rusui’s OS boundary for a session: a container in P1 dogfood. The process driv
 _Avoid_: tool fence, shikigami sandbox
 
 **Tool fence**:
-Grok `--permission-mode default` plus policy-mapped `session/request_permission`. Unmatched requests are denied and parked.
+Grok `--permission-mode default` plus policy-mapped `session/request_permission`. A live unmatched request waits on the RPC with a current-policy recheck; inbox history is not a grant.
 _Avoid_: machine isolation, `--always-approve`, tool jail inside rusui
+
+**Cancel**:
+Operator action that stops a live guest and fails the claimed turn without automatic retry. Distinct from pause.
+_Avoid_: pause, expire environment
+
+**Concurrent-lease meter**:
+Project `budgets.max_concurrent_leases` (default 1). Unnamed budget keys fail closed at parse.
+_Avoid_: token or dollar limits (unavailable)
 
 **Per-turn grant**:
 The only credential in a P1 guest: D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets.

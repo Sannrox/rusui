@@ -20,6 +20,7 @@ const (
 	KindReview    = "review"
 	KindRun       = "run"
 	KindScheduled = "scheduled"
+	BudgetMaxConcurrentLeases = "max_concurrent_leases"
 )
 
 type File struct {
@@ -147,11 +148,15 @@ func Parse(raw []byte) (*Effective, error) {
 		if err := validEgress(slug, egress); err != nil {
 			return nil, err
 		}
+		budgets, err := validBudgets(slug, y.Budgets)
+		if err != nil {
+			return nil, err
+		}
 		p := Project{
 			Slug:         slug,
 			SessionKinds: kinds,
 			Egress:       egress,
-			Budgets:      y.Budgets,
+			Budgets:      budgets,
 			Permissions:  y.Permissions,
 		}
 		for name, ry := range y.Repos {
@@ -252,6 +257,20 @@ func validEgress(slug, egress string) error {
 	}
 }
 
+func validBudgets(slug string, in map[string]int) (map[string]int, error) {
+	out := map[string]int{BudgetMaxConcurrentLeases: 1}
+	for k, v := range in {
+		if k != BudgetMaxConcurrentLeases {
+			return nil, fmt.Errorf("policy: %s unsupported budget %q", slug, k)
+		}
+		if v < 1 {
+			return nil, fmt.Errorf("policy: %s %s must be >= 1", slug, k)
+		}
+		out[k] = v
+	}
+	return out, nil
+}
+
 func (e *Effective) Repo(name string) (Repo, bool) {
 	r, ok := e.Repos[name]
 	return r, ok
@@ -272,4 +291,15 @@ func (e *Effective) ProjectForRepo(name string) (Project, bool) {
 
 func (p Project) AllowsKind(kind string) bool {
 	return slices.Contains(p.SessionKinds, kind)
+}
+
+func (p Project) MaxConcurrentLeases() int {
+	if p.Budgets == nil {
+		return 1
+	}
+	n := p.Budgets[BudgetMaxConcurrentLeases]
+	if n < 1 {
+		return 1
+	}
+	return n
 }
