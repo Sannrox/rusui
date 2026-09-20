@@ -13,6 +13,7 @@ Decisions that must outlive a single pull request.
 | [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted |
+| [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Proposed |
 
 ## When to write an ADR
 
