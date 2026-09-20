@@ -33,6 +33,7 @@ the runbook.
 | [../ROADMAP.md](../ROADMAP.md) | explanation | published M1–M6 sequence ([ADR 0010](decisions/0010-hybrid-roadmap-sequence.md) Accepted) |
 | [operator.md](operator.md) | how-to | run, webhook, Slack, troubleshoot |
 | [upgrade.md](upgrade.md) | how-to | drain, packaged upgrade, redacted diagnostics |
+| [proofs/d6-session-workflow.md](proofs/d6-session-workflow.md) | explanation | D6 twenty-run matrix and supported claim |
 | [configuration.md](configuration.md) | reference | flags, env, HTTP, policy, Slack verbs |
 | [development.md](development.md) | how-to | `make`, Docker images, CI |
 | [../build/README.md](../build/README.md) | reference | image internals |
