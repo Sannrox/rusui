@@ -326,7 +326,7 @@ func artifactFromAssignment(a *Assignment, pr *acp.PromptResult) engine.Artifact
 	if pr != nil {
 		stop = pr.StopReason
 	}
-	return engine.Artifact{
+	art := engine.Artifact{
 		SchemaVersion:   1,
 		Repo:            a.Repo,
 		Item:            a.Item,
@@ -339,4 +339,11 @@ func artifactFromAssignment(a *Assignment, pr *acp.PromptResult) engine.Artifact
 		Confidence:      "low",
 		Publishable:     map[string]any{"stop_reason": stop},
 	}
+	if a.ItemKind == "run" {
+		// Stop reason is not a finding. Run turns fail closed without a result.
+		art.Verdict = "blocked"
+		art.Confidence = ""
+		art.Result = nil
+	}
+	return art
 }

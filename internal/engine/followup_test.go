@@ -54,7 +54,7 @@ func TestPromptFollowUpFIFO(t *testing.T) {
 	if c.Snapshot.Body != "alpha" {
 		t.Fatalf("first claim body %q", c.Snapshot.Body)
 	}
-	a := art(c, "keep", "", "")
+	a := runArt(c)
 	a.GuestSessionID = "sess-fake"
 	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a); err != nil {
 		t.Fatal(err)

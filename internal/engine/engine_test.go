@@ -124,6 +124,16 @@ func art(c *engine.Claim, verdict, typ, reason string) engine.Artifact {
 	return a
 }
 
+func runArt(c *engine.Claim) engine.Artifact {
+	a := art(c, "keep", "", "")
+	a.Result = &engine.TaskResult{
+		SchemaVersion: engine.ResultSchema,
+		SourceHash:    c.ItemHash,
+		Findings:      []engine.Finding{{Title: "ok", Body: "bounded"}},
+	}
+	return a
+}
+
 func TestWebhookNoFetch(t *testing.T) {
 	h := setup(t)
 	it := issue(1)
