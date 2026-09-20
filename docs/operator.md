@@ -76,7 +76,10 @@ catch-up every 15m, apply retry every 1m. Reconcile is skipped with a log when
 `RUSUI_GITHUB_HOOK_IDS` is unset.
 
 SQLite defaults to `rusui.db` in the current working directory (`*.db` is
-gitignored).
+gitignored). That file is the backup: stop the process, copy `rusui.db`
+(and `-wal`/`-shm` if present), and open the copy with `-db` to restore
+sessions, turns, receipts, and guest ACP ids. Container workspace dirt is
+not in the database; it rematerializes from the snapshot after idle expiry.
 
 ## 4. GitHub webhook
 
