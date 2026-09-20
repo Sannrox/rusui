@@ -1,7 +1,7 @@
 # Operator guide
 
-Run rusui as a single operator on your own machine. Apply is dry-run: nothing
-is commented, closed, or merged on GitHub.
+Run a self-hosted rusui installation on your own machine. Apply is dry-run:
+nothing is commented, closed, or merged on GitHub.
 
 Flags, env, HTTP, and policy: [configuration.md](configuration.md).
 Nouns: [CONTEXT.md](../CONTEXT.md).
@@ -12,7 +12,9 @@ Nouns: [CONTEXT.md](../CONTEXT.md).
   (currently 1.26.6).
 - A **read-only** GitHub token for repositories listed in policy.
 - A tunnel or webhook relay if GitHub or Slack must reach the process.
-- For review turns: a process driver command (`-driver`) or `-acp` (Grok ACP).
+- For review turns: `-acp` (Grok ACP, the P1 guest) or a process driver
+  command (`-driver`) that prints review JSON on stdout. There is no
+  in-tree `review-driver` binary.
 
 ## 1. Build and policy
 
@@ -59,7 +61,7 @@ BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
   -url http://127.0.0.1:8080 \
   -repo OWNER/REPO \
   -token "$RUSUI_WORKER_SECRET" \
-  -driver ./review-driver
+  -acp
 ```
 
 `GET http://127.0.0.1:8080/healthz` must return `ok`.
@@ -122,8 +124,9 @@ webhooks do not call Slack. If you want slash commands:
    An empty allowlist 403s everyone.
 4. Optional exceptions: `RUSUI_SLACK_BOT_TOKEN` and `RUSUI_SLACK_CHANNEL`.
 
-Commands: `status [repo]`, `pause [repo]`, `resume [repo]`, `sweep [repo]`,
+Commands: `status`, `pause [project]`, `resume [project]`, `sweep [repo]`,
 `retry repo` or `retry repo#item`, `reload`. `implement` is rejected.
+`pause rusui` is the project slug, not `Sannrox/rusui`.
 
 `retry` requeues `state=failed` on unchanged content. `sweep` only enqueues
 refreshes.

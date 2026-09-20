@@ -7,7 +7,7 @@
 
 ## Purpose
 
-`rusui` is a self-hosted **environment plane** for coding agents: the layer
+`rusui` is a public, self-hosted **environment plane** for coding agents: the layer
 that gives an agent a machine, keeps that machine alive across sleep and wake,
 brokers credentials so no secret enters it, wires events and schedules into
 sessions, and records every external action.

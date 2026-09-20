@@ -17,9 +17,9 @@
 - Related: [ADR 0010](0010-hybrid-roadmap-sequence.md) (G0 / #87) is
   Proposed on main. That sequencing file is not a dependency of this
   lifecycle contract. This remains 0011 so the numbers do not collide.
-- Discussion: none. GitHub Discussions are disabled; this pull request
-  is the review venue. Merging with status Proposed records the
-  investigation. Changing status to Accepted is the acceptance act.
+- Discussion: none. GitHub Discussions are disabled. Merging with status
+  Proposed recorded the investigation. Changing status to Accepted is the
+  acceptance act.
 
 ## Context
 

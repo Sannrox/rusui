@@ -3,11 +3,10 @@
 > **Not the runbook.** Sequencing estimates, not deadlines or the product
 > contract ([ARCHITECTURE.md](ARCHITECTURE.md)).
 >
-> A proposed sequencing amendment is under review as
-> [ADR 0010](docs/decisions/0010-hybrid-roadmap-sequence.md). Until that
-> ADR is Accepted, the P0–P4 sequence below remains the published
-> roadmap. The proposal does not rewrite this file or
-> [ARCHITECTURE.md](ARCHITECTURE.md).
+> [ADR 0010](docs/decisions/0010-hybrid-roadmap-sequence.md) is **Proposed**
+> on main (merged investigation; not Accepted). Until it is Accepted, the
+> P0–P4 sequence below remains the published roadmap. The proposal does
+> not rewrite this file or [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Sequencing context for [ADR 0001](docs/decisions/0001-environment-plane.md),
 [ADR 0002](docs/decisions/0002-grok-acp-agent-set.md), and

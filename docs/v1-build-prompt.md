@@ -5,6 +5,10 @@
 > ([development.md](development.md)), and not an operator runbook
 > ([operator.md](operator.md)). Keep for provenance; do not implement from it.
 
+The repository is public self-hosted source. The private-origin lines in
+the quoted prompt are historical (2026); do not treat them as current
+visibility or product framing.
+
 Paste this whole file to a coding agent in a fresh checkout of `rusui`.
 Read `ARCHITECTURE.md` first. It is the authority. Do not implement live
 apply or implement-to-PR except as types/comments needed to keep the
@@ -26,8 +30,8 @@ apply, pause/status/retry, daily review budget. No live GitHub
 mutations. No implement. No land.
 
 Context:
-- New private repo: rusui. Personal tool, not a product in
-  aldunis-platform, sekai-chisei, shikigami, or tenkai.
+- Historical origin: rusui started as a private personal tool, not a
+  product in the other family repositories.
 - Inspired by ClawSweeper's read → write → act split and Tatara's
   admit/claim split. Do not fork either. Do not import ai-task-queue.
 - ARCHITECTURE.md is the contract. Do not invent weaker ones.
@@ -151,7 +155,7 @@ Constraints:
 - Do not let apply write pending snapshots
 - Do not give the model process a GitHub write token
 - Do not put private facts in PublicContext
-- Do not couple this repo to aldunis-platform or sekai-chisei code
+- Do not couple this repo to other family-repository code
 - Do not treat model confidence as eligibility
 - Do not use filesystem JSON as canonical recovery
 - Modules: cmd/rusui, cmd/rusui-runner, internal/store, internal/github,

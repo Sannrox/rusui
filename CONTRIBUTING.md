@@ -63,10 +63,10 @@ through [SECURITY.md](SECURITY.md). Durable boundary changes need an
 `main` accepts changes through pull requests. Do not push commits to `main`
 directly.
 
-Delivery is one issue, one branch, one checkout, one PR. See
-[AGENTS.md](AGENTS.md) (parallel delivery lanes). Claim with
-`bash .agents/skills/deliver-ready-issue/scripts/issue-lane.sh claim <issue>`
-when you have Publish or Land authority.
+Fork the repository and open a pull request against `main`. Maintainer
+and agent delivery lanes (claim script, isolated worktrees, parallel
+limits) are documented in [AGENTS.md](AGENTS.md); external contributors
+do not need that protocol.
 
 1. Keep the change to one issue and one coherent outcome.
 2. Do not commit secrets, `*.db`, `.version`, or `_output/`.

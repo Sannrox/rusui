@@ -88,13 +88,16 @@ projects:
   rusui:
     repos:
       owner/name:
-        visibility: private
+        visibility: public
         review: true
         comments: false
         close: false
         implement: false
         land: false
 ```
+
+`visibility` is a policy attribute of the **bound GitHub repository**, not of
+this source repo. Use `private` when that bound repo is private.
 
 Overlay pause may only **narrow**. Slack `reload` or process restart re-reads
 the file.
@@ -105,10 +108,10 @@ Slash command `/rusui` → `POST /hooks/slack`.
 
 | Text | Effect |
 | --- | --- |
-| `status [repo]` | Queue / lease summary |
-| `pause [repo]` | Stop new claims and apply inserts |
-| `resume [repo]` | Clear overlay pause |
-| `sweep [repo]` | Enqueue refresh requests |
+| `status` | Queue / lease summary |
+| `pause [project]` | Stop new claims and apply inserts (project slug) |
+| `resume [project]` | Clear overlay pause |
+| `sweep [repo]` | Enqueue refresh requests (`owner/name`) |
 | `retry repo` or `retry repo#item` | Requeue `state=failed` |
 | `reload` | Re-read the policy file |
 | `implement` | Rejected |

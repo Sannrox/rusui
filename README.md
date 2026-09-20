@@ -53,10 +53,13 @@ In another terminal, export the same `RUSUI_WORKER_SECRET`:
 
 ```bash
 BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
-"$BIN/rusui-runner" -url http://127.0.0.1:8080 -repo OWNER/REPO -driver ./review-driver
+"$BIN/rusui-runner" -url http://127.0.0.1:8080 -repo OWNER/REPO -acp
 ```
 
-`GET http://127.0.0.1:8080/healthz` returns `ok`.
+`GET http://127.0.0.1:8080/healthz` returns `ok`. `-acp` hosts one Grok ACP
+turn (the P1 guest). A process driver is a command that prints review JSON
+on stdout; pass `-driver` instead of `-acp`. There is no in-tree
+`review-driver` binary.
 
 The process refuses to start if webhook, worker, or Slack secrets are unset.
 Pass `-allow-insecure` only for local experiments. GitHub and Slack cannot

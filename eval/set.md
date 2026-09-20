@@ -1,6 +1,7 @@
 # v1 evaluation set
 
-Operator judgments for dry-run comparison. Slack is in-tree; live apply is
+Operator judgments for dry-run comparison. These fixtures are public
+review-quality cases, not live GitHub items. Slack is in-tree; live apply is
 still off.
 
 ```bash

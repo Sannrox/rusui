@@ -1,5 +1,7 @@
 # eval results
 
+Archive snapshot. Current fixture list: [set.md](set.md).
+
 Ran 2026-09-10 against dry-run apply (policy.fixture-style close/comments on).
 
 | id | item | reason | operator | system | evidence | agree |

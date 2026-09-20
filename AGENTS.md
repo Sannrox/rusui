@@ -19,7 +19,9 @@ Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
   done. Narrow with
   `make test WHAT=./internal/engine TEST_ARGS='-run ^TestClaim'`.
 - Parse issue dependencies only from `## Dependencies`.
-- Bind examples to loopback. The GitHub client is read-only.
+- Bind examples to loopback. `-addr` may bind elsewhere; do not document
+  `0.0.0.0` unless the change is about listen addresses. The GitHub client
+  is read-only.
 - Use `verify-change` before delivery. Fix actionable review findings.
 - Preserve other delivery lanes; never switch, reset, or stash the primary
   checkout.
@@ -31,6 +33,7 @@ Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
 - Rewriting `ARCHITECTURE.md`, or implementing VISION/ROADMAP as if shipped.
 - Opening, labeling, or merging GitHub issues and pull requests.
 - Adding a new ADR.
+- Pushing commits to `main` (branch protection requires a pull request).
 
 ## Never
 
@@ -38,6 +41,8 @@ Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
   comments needed to keep state machines honest.
 - Give a model process a GitHub write token, or commit secrets, webhook
   secrets, worker secrets, Slack tokens, `*.db`, `.version`, or `_output/`.
+- Link private repositories or put private names in public issues, pull
+  requests, or documentation.
 - Implement from `docs/v1-build-prompt.md` (historical `BUILD.md`).
 - Invent live apply from model `confidence = high`.
 
@@ -54,6 +59,7 @@ delivering, verifying, assessing, and releasing work:
 | `verify-change` | collecting exact local evidence |
 | `capture-project-decision` | promoting an accepted choice into an ADR or doc |
 | `prepare-release` | assembling release readiness |
+| `sekai-ontology` | consulting the local Sekai ontology |
 
 ## Build, Test, and Development Commands
 
@@ -188,6 +194,8 @@ procedure is `.agents/skills/deliver-ready-issue/references/parallel-delivery.md
 ## Security
 
 Never commit secrets, GitHub or Slack tokens, webhook secrets, worker
-secrets, local SQLite databases, `.version`, or `_output/`. Bind the
-HTTP server to loopback. The GitHub client is read-only. Model CLIs
-never receive GitHub write tokens.
+secrets, local SQLite databases, `.version`, or `_output/`. Bind examples
+to loopback. The GitHub client is read-only. Model CLIs never receive
+GitHub write tokens. This repository is public; do not link private
+repos. Canonical agent policy is this file; `AGENT.md` and `CLAUDE.md`
+are pointers. Skills live in `.agents/skills/`.
