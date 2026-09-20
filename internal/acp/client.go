@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -18,6 +19,8 @@ type Client struct {
 	Out  io.Writer
 	Rec  Recorder
 	Perm PermissionGate
+	Wait UnmatchedWaiter
+	Ctx  context.Context
 
 	mu      sync.Mutex
 	pending map[string]chan rpcMessage
@@ -26,6 +29,9 @@ type Client struct {
 	writes  sync.Mutex
 	err     atomic.Value
 }
+
+// UnmatchedWaiter waits on a live unmatched permission RPC.
+type UnmatchedWaiter func(ctx context.Context, p PermissionParams) Decision
 
 func (c *Client) start() {
 	c.once.Do(func() {
@@ -115,12 +121,24 @@ func (c *Client) answerPermission(msg rpcMessage) {
 	d := gate.Decide(p)
 	if !d.Matched {
 		_ = c.record(Receipt{Type: ActionApproval, Reason: ReasonUnmatched, Body: p})
+		if c.Wait != nil {
+			ctx := c.Ctx
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			d = c.Wait(ctx, p)
+		}
 	} else if !d.Allow {
 		_ = c.record(Receipt{Type: ActionApproval, Reason: ReasonDenied, Body: p})
 	}
+	allow := d.Matched && d.Allow
+	option := pickOption(p.Options, allow)
+	if allow && strings.Contains(strings.ToLower(option), "always") {
+		option = "allow-once"
+	}
 	out := PermissionOutcome{Outcome: PermissionSelected{
 		Outcome:  "selected",
-		OptionID: pickOption(p.Options, d.Matched && d.Allow),
+		OptionID: option,
 	}}
 	raw, _ := json.Marshal(out)
 	_ = c.write(rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})

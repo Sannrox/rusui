@@ -801,6 +801,18 @@ ORDER BY a.action_id`)
 	return out, rows.Err()
 }
 
+func GetApprovalDecision(s *Store, actionID string) (string, bool, error) {
+	var d string
+	err := s.DB.QueryRow(`SELECT decision FROM approval_decisions WHERE action_id=?`, actionID).Scan(&d)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return d, true, nil
+}
+
 func PutApprovalDecision(s *Store, actionID, decision string) error {
 	_, err := s.DB.Exec(`INSERT INTO approval_decisions(action_id, decision, decided_at) VALUES(?,?,?)`,
 		actionID, decision, time.Now().UTC().Format(time.RFC3339Nano))
