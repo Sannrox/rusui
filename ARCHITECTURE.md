@@ -21,7 +21,9 @@ receive GitHub write tokens. Schema changes are versioned migrations
 
 **Current contract:** one repository profile, one model CLI, signed GitHub
 intake, claim/lease on a **turn**, immutable review artifacts in SQLite,
-deterministic **dry-run** apply, pause/status/retry, daily review budget.
+deterministic **dry-run** apply, pause/status/retry/cancel, daily review
+budget, and a per-project concurrent-lease meter
+([ADR 0011](docs/decisions/0011-unattended-session-contract.md)).
 No live GitHub mutation, no implement, no land. The domain nouns are the
 environment-plane set from [ADR 0001](docs/decisions/0001-environment-plane.md).
 
@@ -126,10 +128,16 @@ against the budget. In-flight leases are not cancelled.
 `session_kinds` is an allowlist: `review`, `run`, `scheduled`. `run` is
 operator-started. A `review` session requires at least one bound
 repository. Permission allow-rules on the project grant matching
-`session/request_permission` requests; unmatched requests are denied
-and parked on the approvals inbox. Overlay cannot add an allow-rule.
-Budget **limits** are per project per UTC day; meter sources are not
-in this contract yet.
+`session/request_permission` requests. A live unmatched request **waits**
+on the JSON-RPC until allow-once, reject-once, or the execution deadline;
+current policy is re-read immediately before allow-once. After the RPC
+ends, an inbox `allow` is a record, not a grant. Overlay cannot add an
+allow-rule.
+
+Project `budgets` may contain only `max_concurrent_leases` (default 1).
+Unknown keys, including token or dollar names, fail closed at parse.
+`max_reviews_per_repo_per_utc_day` remains the review-admit cap. Token
+and dollar collection sources are unavailable.
 
 ### Precedence
 
@@ -158,7 +166,29 @@ A review already `leased` may heartbeat, complete, or fail. Pause does
 not kill the CLI, does not reset `failed` jobs, and does not by itself
 enqueue work. `resume` clears the overlay pause.
 
-Pause is persistent across process restart until `resume`.
+Pause is persistent across process restart until `resume`. Pause is not
+cancellation.
+
+### Cancel
+
+**Cancel** is a session action ([ADR 0011](docs/decisions/0011-unattended-session-contract.md)).
+It sends `session/cancel` if a guest is live, kills the guest process
+tree, fails the claimed turn as `cancelled` without another automatic
+retry of that revision, and releases the concurrent-lease reserve.
+Receipts and the session row remain. The environment stays until idle
+expiry. HTTP/CLI shape lands with D2/D3.
+
+### Follow-up
+
+Each follow-up prompt is a durable FIFO turn on the same session. A
+second queued follow-up must not overwrite the first. A follow-up during
+a live lease does not steal that lease.
+
+### Guest ACP session
+
+The guest ACP `sessionId` is ephemeral. Persist the last id on the plane
+session. The next turn in the **same** environment tries `session/load`;
+if it fails, `session/new`. Restore-failed is a supported outcome.
 
 ### Bind and recheck
 

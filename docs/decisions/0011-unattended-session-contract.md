@@ -1,6 +1,6 @@
 # ADR 0011: Recoverable unattended-session contract
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-20
 - Resolves: [#88](https://github.com/Sannrox/rusui/issues/88)
 - Narrows: [#89](https://github.com/Sannrox/rusui/issues/89) (D2),
@@ -17,9 +17,14 @@
 - Related: [ADR 0010](0010-hybrid-roadmap-sequence.md) (G0 / #87) is
   Proposed on main. That sequencing file is not a dependency of this
   lifecycle contract. This remains 0011 so the numbers do not collide.
-- Discussion: none. GitHub Discussions are disabled. Merging with status
-  Proposed recorded the investigation. Changing status to Accepted is the
-  acceptance act.
+- Discussion: none. GitHub Discussions are disabled. Accepted 2026-09-20.
+  Objects: plane session, turn, guest ACP session, concurrent-lease
+  meter. Evidence: policy parse fail-closed for unnamed meters; D2–D5
+  package tests for FIFO, wait-on-permission, cancel, and claim
+  reservation. Permitted action: wait on a live permission RPC, enqueue
+  FIFO follow-ups, cancel a session, refuse unnamed budget keys. Policy:
+  pause is not cancel; inbox allow is not a grant; token/dollar meters
+  are unavailable.
 
 ## Context
 
@@ -186,10 +191,10 @@ and treats grant loss as turn failure, not silent continue. D5
 enforces concurrent leases and wall-clock, and refuses token/dollar
 keys.
 
-`ARCHITECTURE.md` stays the contract until this ADR is Accepted and
-that file is rewritten for wait-on-permission, cancel, and the new
-meters. Dry-run apply is unchanged. Implementation is not authorized
-by this proposal.
+`ARCHITECTURE.md` names the accepted objects and meters. FIFO
+follow-up, wait-on-permission, cancel, and claim-time reservation land
+in D2–D5. Dry-run apply is unchanged. Unnamed budget keys fail closed
+at parse.
 
 ## Rejected alternatives
 

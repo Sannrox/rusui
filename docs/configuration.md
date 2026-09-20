@@ -99,6 +99,9 @@ projects:
 `visibility` is a policy attribute of the **bound GitHub repository**, not of
 this source repo. Use `private` when that bound repo is private.
 
+Project `budgets` may set `max_concurrent_leases` (integer ≥ 1, default 1).
+Any other budget key fails closed at parse.
+
 Overlay pause may only **narrow**. Slack `reload` or process restart re-reads
 the file.
 
