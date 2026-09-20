@@ -59,6 +59,15 @@ func (a *FakeAgent) handle(msg rpcMessage) error {
 	case MethodSessionNew:
 		return a.reply(msg.ID, map[string]any{"sessionId": "sess-fake"})
 	case MethodSessionLoad:
+		var p SessionLoadParams
+		_ = json.Unmarshal(msg.Params, &p)
+		if p.SessionID != "sess-fake" {
+			return a.write(rpcMessage{
+				JSONRPC: "2.0",
+				ID:      msg.ID,
+				Error:   &rpcError{Code: -32000, Message: "session/load failed"},
+			})
+		}
 		return a.reply(msg.ID, map[string]any{})
 	case MethodSessionPrompt:
 		go a.promptTurn(msg.ID)

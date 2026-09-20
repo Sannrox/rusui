@@ -55,6 +55,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /approvals", s.listApprovals)
 	mux.HandleFunc("POST /approvals/{id}", s.decideApproval)
 	mux.HandleFunc("POST /sessions/{id}/turns", s.followUpTurn)
+	mux.HandleFunc("POST /sessions/{id}/cancel", s.cancelSession)
 	mux.HandleFunc("POST /projects/{slug}/sessions", s.createSession)
 	mux.HandleFunc("POST /projects/{slug}/schedules", s.createSchedule)
 	mux.HandleFunc("POST /jobs/{id}/heartbeat", s.heartbeat)
@@ -324,6 +325,7 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 	if turn, err := store.GetTurn(s.Eng.Store, c.Job.ID); err == nil {
 		out["session_id"] = turn.SessionID
 		if sess, err := store.GetSession(s.Eng.Store, turn.SessionID); err == nil {
+			out["guest_session_id"] = sess.GuestSessionID
 			if envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID); err == nil {
 				out["driver"] = envRow.Driver
 				out["handle"] = envRow.Handle

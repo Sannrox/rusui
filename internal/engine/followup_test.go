@@ -33,6 +33,45 @@ func TestPromptFollowUpQueued(t *testing.T) {
 	}
 }
 
+func TestPromptFollowUpFIFO(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, p1, err := h.e.PromptFollowUp(sid, "alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, p2, err := h.e.PromptFollowUp(sid, "beta")
+	if err != nil || p2 != p1 {
+		t.Fatalf("second follow-up must not overwrite pending: p1=%d p2=%d %v", p1, p2, err)
+	}
+	c, err := h.e.Claim("example/test-repo")
+	if err != nil || c == nil {
+		t.Fatal(err)
+	}
+	if c.Snapshot.Body != "alpha" {
+		t.Fatalf("first claim body %q", c.Snapshot.Body)
+	}
+	a := art(c, "keep", "", "")
+	a.GuestSessionID = "sess-fake"
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, sid)
+	if err != nil || sess.GuestSessionID != "sess-fake" {
+		t.Fatalf("guest id %+v %v", sess, err)
+	}
+	c2, err := h.e.Claim("example/test-repo")
+	if err != nil || c2 == nil {
+		t.Fatal(err)
+	}
+	if c2.Snapshot.Body != "beta" {
+		t.Fatalf("second claim body %q", c2.Snapshot.Body)
+	}
+}
+
 func TestPromptFollowUpLeasedKeepsLease(t *testing.T) {
 	h := setup(t)
 	sid, err := h.e.StartRun("test", "first", "")

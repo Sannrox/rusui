@@ -142,6 +142,24 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"turn_id": turnID, "pending_revision": pending})
 }
 
+func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
+	if !s.workerOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "id", 400)
+		return
+	}
+	if err := s.Eng.CancelSession(id); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
 func writeSSE(w http.ResponseWriter, event string, v any) {
 	b, _ := json.Marshal(v)
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, b)

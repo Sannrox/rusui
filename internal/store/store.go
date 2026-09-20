@@ -630,8 +630,8 @@ func ListActionsForSession(s *Store, sessionID int64) ([]Action, error) {
 func GetSession(s *Store, id int64) (*Session, error) {
 	var sess Session
 	var created string
-	err := s.DB.QueryRow(`SELECT id, environment_id, kind, repo, item, item_kind, state, project, prompt, created_at FROM sessions WHERE id=?`, id).Scan(
-		&sess.ID, &sess.EnvironmentID, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &created)
+	err := s.DB.QueryRow(`SELECT id, environment_id, kind, repo, item, item_kind, state, project, prompt, guest_session_id, created_at FROM sessions WHERE id=?`, id).Scan(
+		&sess.ID, &sess.EnvironmentID, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &created)
 	if err != nil {
 		return nil, err
 	}

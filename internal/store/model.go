@@ -36,16 +36,17 @@ type Runner struct {
 }
 
 type Session struct {
-	ID            int64
-	EnvironmentID int64
-	Kind          string
-	Repo          string
-	Item          int
-	ItemKind      string
-	State         string
-	Project       string
-	Prompt        string
-	CreatedAt     time.Time
+	ID             int64
+	EnvironmentID  int64
+	Kind           string
+	Repo           string
+	Item           int
+	ItemKind       string
+	State          string
+	Project        string
+	Prompt         string
+	GuestSessionID string
+	CreatedAt      time.Time
 }
 
 type Turn struct {

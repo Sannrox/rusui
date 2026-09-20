@@ -604,6 +604,7 @@ type Artifact struct {
 	Publishable     map[string]any   `json:"publishable"`
 	InputTokens     int              `json:"input_tokens"`
 	OutputTokens    int              `json:"output_tokens"`
+	GuestSessionID  string           `json:"guest_session_id,omitempty"`
 }
 
 type ProposedAction struct {
@@ -629,8 +630,10 @@ func (e *Engine) Complete(jobID int64, gen, claimed int, art Artifact) (map[stri
 			return err
 		}
 		if ok {
+			if kind != "complete" {
+				return errReject
+			}
 			json.Unmarshal([]byte(payload), &out)
-			_ = kind
 			return nil
 		}
 		j, err := store.GetJobByIDTx(tx, jobID)
@@ -666,7 +669,19 @@ func (e *Engine) Complete(jobID int64, gen, claimed int, art Artifact) (map[stri
 			return err
 		}
 		out = receipt
+		if turn, err := store.GetTurnTx(tx, j.ID); err == nil && art.GuestSessionID != "" {
+			if err := store.SetGuestSessionTx(tx, turn.SessionID, art.GuestSessionID); err != nil {
+				return err
+			}
+		}
 		if j.ClaimedRevision == j.PendingRevision {
+			if err := applyNextFollowUpTx(tx, j); err != nil {
+				return err
+			}
+			if j.ClaimedRevision < j.PendingRevision {
+				j.State = "queued"
+				return store.UpdateJobTx(tx, j)
+			}
 			j.State = "completed"
 			if err := store.UpdateJobTx(tx, j); err != nil {
 				return err

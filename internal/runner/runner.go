@@ -53,6 +53,7 @@ type Assignment struct {
 	Permissions       []acp.Rule      `json:"permissions"`
 	ExecutionDeadline *time.Time      `json:"execution_deadline"`
 	Input             json.RawMessage `json:"input"`
+	GuestSessionID    string          `json:"guest_session_id,omitempty"`
 }
 
 func (c *Client) http() *http.Client {
