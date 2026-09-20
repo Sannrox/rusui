@@ -65,6 +65,10 @@ with grant/lease expiry (runner loss without heartbeat).
 ## Remaining gaps (narrowed, not deferred-as-pass)
 
 - Grok ACP inside a guest image: out. No linux guest image in-tree.
+- `DockerCLI.CreateAndStart` treated `docker run -d` CombinedOutput as
+  the container id. An uncached image prepends pull logs, so the first
+  live CI run failed with `docker exec: page not found`. The shipped
+  parser now takes the last non-empty line. That repair is in this candidate.
 - Plane process restart of `cmd/rusui` as a live binary, as opposed to
   `store.Restore` of a consistent SQLite copy: not claimed.
 - Uninterrupted network delivery of SSE: not claimed; reconnect may

@@ -15,7 +15,7 @@ func TestDockerCLIRecordsCLI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if id != "fake-ctr-id" {
+	if id != "0123456789abcdef" {
 		t.Fatalf("id %q", id)
 	}
 	if err := d.Stop(id); err != nil {
@@ -56,13 +56,62 @@ func TestDockerCLIRecordsCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := string(logb)
-	for _, want := range []string{"network inspect rusui-trusted", "network create rusui-trusted", "run -d", "--network rusui-trusted", "--add-host rusui.plane:host-gateway", "--sysctl net.ipv6.conf.all.disable_ipv6=1", "--cpus 0.500", "--memory 67108864", "alpine:3", "stop fake-ctr-id", "start fake-ctr-id", "exec -i", "cp "} {
+	for _, want := range []string{"network inspect rusui-trusted", "network create rusui-trusted", "run -d", "--network rusui-trusted", "--add-host rusui.plane:host-gateway", "--sysctl net.ipv6.conf.all.disable_ipv6=1", "--cpus 0.500", "--memory 67108864", "alpine:3", "stop 0123456789abcdef", "start 0123456789abcdef", "exec -i", "cp "} {
 		if !strings.Contains(log, want) {
 			t.Fatalf("missing %q in %s", want, log)
 		}
 	}
 	if strings.Contains(log, "chdir") {
 		t.Fatal(log)
+	}
+}
+
+func TestContainerIDIgnoresPullProgress(t *testing.T) {
+	out := []byte("Unable to find image 'alpine:3.20' locally\n" +
+		"3.20: Pulling from library/alpine\n" +
+		"Status: Downloaded newer image for alpine:3.20\n" +
+		"d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc\n")
+	id, err := containerID(out)
+	if err != nil || id != "d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc" {
+		t.Fatalf("id %q err %v", id, err)
+	}
+	if _, err := containerID([]byte("Unable to find image\nStatus: Downloaded\n")); err == nil {
+		t.Fatal("non-id output succeeded")
+	}
+}
+
+func TestDockerCLIParsesIDAfterPullLogs(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "log")
+	bin := filepath.Join(dir, "docker")
+	script := "#!/bin/sh\n" +
+		"echo \"$*\" >> \"$STUB_LOG\"\n" +
+		"cmd=$1; shift\n" +
+		"if [ \"$cmd\" = network ]; then\n" +
+		"  if [ \"$1\" = inspect ]; then exit 1; fi\n" +
+		"  if [ \"$1\" = create ]; then exit 0; fi\n" +
+		"fi\n" +
+		"if [ \"$cmd\" = run ]; then\n" +
+		"  echo \"Unable to find image 'alpine:3' locally\"\n" +
+		"  echo \"Status: Downloaded newer image for alpine:3\"\n" +
+		"  echo 0123456789abcdef\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"if [ \"$cmd\" = exec ]; then\n" +
+		"  case \" $* \" in\n" +
+		"  *\" 0123456789abcdef \"*) exit 0 ;;\n" +
+		"  *) echo \"page not found\"; exit 1 ;;\n" +
+		"  esac\n" +
+		"fi\n" +
+		"exit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("STUB_LOG", logPath)
+	d := DockerCLI{Bin: bin}
+	id, err := d.CreateAndStart(Spec{Name: "box", Image: "alpine:3"})
+	if err != nil || id != "0123456789abcdef" {
+		t.Fatalf("id %q err %v", id, err)
 	}
 }
 
@@ -131,7 +180,7 @@ func TestDockerCLINetworkCreateRace(t *testing.T) {
 		"  fi\n" +
 		"  if [ \"$1\" = create ]; then echo already; exit 1; fi\n" +
 		"fi\n" +
-		"if [ \"$cmd\" = run ]; then echo fake-ctr-id; exit 0; fi\n" +
+		"if [ \"$cmd\" = run ]; then echo 0123456789abcdef; exit 0; fi\n" +
 		"if [ \"$cmd\" = exec ]; then exit 0; fi\n" +
 		"exit 0\n"
 	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
@@ -140,7 +189,7 @@ func TestDockerCLINetworkCreateRace(t *testing.T) {
 	t.Setenv("STUB_LOG", logPath)
 	d := DockerCLI{Bin: bin}
 	id, err := d.CreateAndStart(Spec{Name: "box", Image: "alpine:3"})
-	if err != nil || id != "fake-ctr-id" {
+	if err != nil || id != "0123456789abcdef" {
 		t.Fatalf("id %q err %v", id, err)
 	}
 }
@@ -158,7 +207,7 @@ func stubDocker(t *testing.T) (bin, logPath string) {
 		"  if [ \"$1\" = create ]; then echo net-id; exit 0; fi\n" +
 		"  exit 1\n" +
 		"fi\n" +
-		"if [ \"$cmd\" = run ]; then echo fake-ctr-id; exit 0; fi\n" +
+		"if [ \"$cmd\" = run ]; then echo 0123456789abcdef; exit 0; fi\n" +
 		"if [ \"$cmd\" = exec ]; then\n" +
 		"  if [ \"$1\" = -i ]; then cat >/dev/null; exit 0; fi\n" +
 		"  if [ \"$2\" = test ] || [ \"$3\" = test ]; then exit 0; fi\n" +

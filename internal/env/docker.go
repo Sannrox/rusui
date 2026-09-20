@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -93,15 +94,46 @@ func (d DockerCLI) CreateAndStart(spec Spec) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	id := strings.TrimSpace(string(out))
-	if id == "" {
-		return "", fmt.Errorf("docker run: empty id")
+	id, err := containerID(out)
+	if err != nil {
+		return "", err
 	}
 	if _, err := d.run("exec", id, "mkdir", "-p", workspaceDir); err != nil {
 		_ = d.Remove(id)
 		return "", err
 	}
 	return id, nil
+}
+
+// containerID takes the last 12–64 hex line of `docker run -d` output so
+// image-pull progress on CombinedOutput is not treated as the handle.
+func containerID(out []byte) (string, error) {
+	s := strings.TrimSpace(string(out))
+	if s == "" {
+		return "", fmt.Errorf("docker run: empty id")
+	}
+	lines := strings.Split(s, "\n")
+	for _, line := range slices.Backward(lines) {
+		id := strings.TrimSpace(line)
+		if isContainerID(id) {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("docker run: no container id")
+}
+
+func isContainerID(id string) bool {
+	if n := len(id); n < 12 || n > 64 {
+		return false
+	}
+	for _, c := range id {
+		switch {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'f', c >= 'A' && c <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (d DockerCLI) Stop(id string) error {
