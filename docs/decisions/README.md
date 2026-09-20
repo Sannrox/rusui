@@ -16,6 +16,7 @@ Decisions that must outlive a single pull request.
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted |
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
 | [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted |
+| [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Proposed |
 
 ## When to write an ADR
 
