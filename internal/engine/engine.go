@@ -596,7 +596,11 @@ func (e *Engine) Heartbeat(jobID int64, gen, claimed int) error {
 		if err := store.UpdateJobTx(tx, j); err != nil {
 			return err
 		}
-		return store.RenewTurnCredentialTx(tx, jobID, gen, now.Add(GrantTTL).UTC().Format(time.RFC3339Nano))
+		expAt := now.Add(GrantTTL).UTC().Format(time.RFC3339Nano)
+		if err := store.RenewTurnCredentialTx(tx, jobID, gen, expAt); err != nil {
+			return err
+		}
+		return store.RenewGrantTx(tx, jobID, expAt)
 	})
 }
 

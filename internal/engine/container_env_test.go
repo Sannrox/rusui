@@ -1,10 +1,13 @@
 package engine_test
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/runner"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -187,5 +190,62 @@ func TestContainerDriverSkippedWithoutRuntime(t *testing.T) {
 	h := setup(t)
 	if _, err := h.e.ProvisionEnvironment(engine.EnvSpec{Name: "box", Kind: env.KindContainer}); err == nil {
 		t.Fatal("expected error when container driver is unset")
+	}
+}
+
+func TestUnknownIsolationFailsClosed(t *testing.T) {
+	h := setup(t)
+	if _, err := h.e.ProvisionEnvironment(engine.EnvSpec{Name: "box", Kind: "microvm"}); err == nil {
+		t.Fatal("expected unknown driver to fail closed")
+	}
+}
+
+func TestFailedSetupDestroysContainer(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{
+		DefaultFiles: map[string]bool{env.SetupPath: true},
+		ExecHook: func(id string, cmd []string) error {
+			return fmt.Errorf("setup failed")
+		},
+	}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	if _, err := h.e.ProvisionEnvironment(engine.EnvSpec{Name: "box-fail", Kind: env.KindContainer, SourceHash: "src-fail"}); err == nil {
+		t.Fatal("expected setup failure")
+	}
+	if len(rt.Created) != 1 || len(rt.Removed) != 1 {
+		t.Fatalf("created %#v removed %#v", rt.Created, rt.Removed)
+	}
+}
+
+func TestGuestFilesystemOmitsProviderSecrets(t *testing.T) {
+	h := setup(t)
+	const planeXAI = "xai-plane-secret-value"
+	const planeGH = "github-plane-secret-value"
+	rt := &env.FakeRuntime{}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	h.e.SnapshotRoot = t.TempDir()
+	h.e.Tree = &engine.MemoryTree{Files: map[string][]byte{"README": []byte("ok\n")}}
+	created, err := h.e.ProvisionEnvironment(engine.EnvSpec{
+		Name: "box-sec", Kind: env.KindContainer, SourceHash: "src-sec", Repo: "example/test-repo", Pin: "aaa",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for path, data := range rt.Contents[created.Handle] {
+		s := string(data)
+		if strings.Contains(s, planeXAI) || strings.Contains(s, planeGH) {
+			t.Fatalf("provider secret in %s", path)
+		}
+	}
+	envv := runner.DriverEnv(&runner.Assignment{
+		TurnToken: "turn-grant-only", ModelBaseURL: "https://rusui.plane:8080/model-proxy",
+		GitProxyURL: "https://rusui.plane:8080/git-proxy/github.com/",
+	}, "/tmp/home", "/bin")
+	joined := strings.Join(envv, "\n")
+	if strings.Contains(joined, planeXAI) || strings.Contains(joined, planeGH) || strings.Contains(joined, "WORKER") {
+		t.Fatal(joined)
+	}
+	if !strings.Contains(joined, "XAI_API_KEY=turn-grant-only") {
+		t.Fatal(joined)
 	}
 }

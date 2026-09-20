@@ -23,17 +23,18 @@ import (
 )
 
 type Server struct {
-	Eng          *engine.Engine
-	WebhookSec   string
-	WorkerSec    string
-	SlackSec     string
-	SlackUsers   map[string]bool
-	PolicyPath   string
-	ModelKey     string
-	ModelOrigin  *url.URL
-	GitHubToken  string
-	GitHubTokens gh.TokenSource
-	GitOrigin    *url.URL
+	Eng            *engine.Engine
+	WebhookSec     string
+	WorkerSec      string
+	SlackSec       string
+	SlackUsers     map[string]bool
+	PolicyPath     string
+	ModelKey       string
+	ModelOrigin    *url.URL
+	GitHubToken    string
+	GitHubTokens   gh.TokenSource
+	GitOrigin      *url.URL
+	GuestHTTPSOnly bool
 }
 
 func (s *Server) Handler() http.Handler {
@@ -281,8 +282,31 @@ func issueTurnToken(st *store.Store, turnID int64, gen int, now time.Time) (stri
 	}
 	token := hex.EncodeToString(raw)
 	sum := sha256.Sum256([]byte(token))
+	hash := hex.EncodeToString(sum[:])
 	exp := now.Add(turnTokenTTL)
-	if err := store.PutTurnCredential(st, turnID, gen, hex.EncodeToString(sum[:]), exp.UTC().Format(time.RFC3339Nano)); err != nil {
+	if err := store.PutTurnCredential(st, turnID, gen, hash, exp.UTC().Format(time.RFC3339Nano)); err != nil {
+		return "", time.Time{}, err
+	}
+	turn, err := store.GetTurn(st, turnID)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	sess, err := store.GetSession(st, turn.SessionID)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	if err := store.DeleteGrantsForTurn(st, turnID); err != nil {
+		return "", time.Time{}, err
+	}
+	if err := store.PutGrant(st, store.Grant{
+		TokenHash: hash,
+		Kind:      store.GrantTurn,
+		SessionID: turn.SessionID,
+		TurnID:    turnID,
+		Repo:      sess.Repo,
+		CanPush:   true,
+		ExpiresAt: exp,
+	}); err != nil {
 		return "", time.Time{}, err
 	}
 	return token, exp, nil

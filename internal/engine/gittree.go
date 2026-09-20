@@ -7,12 +7,16 @@ import (
 	"strings"
 )
 
-// GitFetcher clones a pin on the host. Token is used only as an HTTP header
-// for fetch; it is never written into dest.
+// GitFetcher clones a pin on the host. A ProxyURL plus prepare grant is the
+// dogfood path: the GitHub token never enters dest. Token/TokenFn remain for
+// process-driver tests that talk to GitHub directly.
 type GitFetcher struct {
-	Token   string
-	TokenFn func() (string, error)
-	Git     string
+	Token    string
+	TokenFn  func() (string, error)
+	ProxyURL string
+	Grant    string
+	GrantFn  func(repo string) (string, error)
+	Git      string
 }
 
 func (g GitFetcher) token() string {
@@ -36,6 +40,23 @@ func (g GitFetcher) Fetch(repo, pin, dest string) error {
 		bin = "git"
 	}
 	origin := "https://github.com/" + repo + ".git"
+	auth := ""
+	if g.ProxyURL != "" {
+		origin = strings.TrimRight(g.ProxyURL, "/") + "/" + repo + ".git"
+		auth = g.Grant
+		if g.GrantFn != nil {
+			tok, err := g.GrantFn(repo)
+			if err != nil {
+				return err
+			}
+			auth = tok
+		}
+		if auth == "" {
+			return fmt.Errorf("git: prepare grant required")
+		}
+	} else {
+		auth = g.token()
+	}
 	if err := os.MkdirAll(dest, 0o700); err != nil {
 		return err
 	}
@@ -47,9 +68,9 @@ func (g GitFetcher) Fetch(repo, pin, dest string) error {
 	}
 	fetch := []string{"fetch", "--depth", "1", "origin", pin}
 	var env []string
-	if tok := g.token(); tok != "" {
+	if auth != "" {
 		env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-		fetch = []string{"-c", "http.extraHeader=Authorization: Bearer " + tok, "fetch", "--depth", "1", "origin", pin}
+		fetch = []string{"-c", "http.extraHeader=Authorization: Bearer " + auth, "fetch", "--depth", "1", "origin", pin}
 	}
 	if err := gitDir(bin, dest, env, fetch...); err != nil {
 		return err
@@ -57,7 +78,8 @@ func (g GitFetcher) Fetch(repo, pin, dest string) error {
 	if err := gitDir(bin, dest, nil, "checkout", "--force", "FETCH_HEAD"); err != nil {
 		return err
 	}
-	return gitDir(bin, dest, nil, "remote", "set-url", "origin", origin)
+	public := "https://github.com/" + repo + ".git"
+	return gitDir(bin, dest, nil, "remote", "set-url", "origin", public)
 }
 
 func gitDir(bin, dir string, env []string, args ...string) error {

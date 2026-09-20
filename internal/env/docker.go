@@ -13,7 +13,8 @@ const workspaceDir = "/workspace"
 
 // DockerCLI is a Docker or Podman CLI runtime. Bin defaults to docker.
 type DockerCLI struct {
-	Bin string
+	Bin    string
+	CAFile string
 }
 
 func LookRuntime() (Runtime, error) {
@@ -48,9 +49,17 @@ func (d DockerCLI) run(args ...string) ([]byte, error) {
 
 func (d DockerCLI) CreateAndStart(spec Spec) (string, error) {
 	if spec.Image == "" {
-		spec.Image = "rusui-guest:local"
+		return "", fmt.Errorf("env: guest image required")
 	}
-	args := []string{"run", "-d", "--add-host", "rusui.plane:host-gateway", "--entrypoint", "sleep"}
+	if d.CAFile != "" && spec.CAFile == "" {
+		spec.CAFile = d.CAFile
+	}
+	if spec.Network == "" {
+		ApplyTrustedNetwork(&spec)
+	}
+	args := []string{"run", "-d"}
+	args = append(args, TrustedRunArgs(spec)...)
+	args = append(args, "--entrypoint", "sleep")
 	if spec.Name != "" {
 		args = append(args, "--name", "rusui-"+spec.Name)
 	}

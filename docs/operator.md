@@ -67,7 +67,45 @@ BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
 
 `GET http://127.0.0.1:8080/healthz` must return `ok`.
 
-Do not pass `-addr 0.0.0.0:8080` unless secrets are set. There is no TLS.
+Do not pass `-addr 0.0.0.0:8080` unless secrets are set. Operator HTTP
+(`-addr`) has no TLS unless `RUSUI_TLS_CERT` and `RUSUI_TLS_KEY` are set.
+
+## Container guests (trusted egress)
+
+The first unattended topology is **one runner**, the **container** driver
+(Docker or Podman CLI), and Grok ACP over container stdio with plane
+proxies. Tests in this repository prove that path with `FakeRuntime` and a
+stubbed Docker CLI. They do **not** claim live Docker/Podman, IPv6, or
+cross-host combinations.
+
+Container guests may reach only `rusui.plane` (git and model HTTPS proxies).
+Direct addresses, IPv6, host loopback, and other proxy names are denied.
+The guest image must trust the plane CA at
+`/usr/local/share/ca-certificates/rusui-plane.crt`. Provision that file as
+part of the guest image identity (`source_hash`) or mount it with
+`RUSUI_PLANE_CA`. An untrusted endpoint never receives the grant: TLS
+handshake fails before the bearer is sent.
+
+Required for the container driver:
+
+```bash
+export RUSUI_TLS_CERT=/etc/rusui/plane.crt
+export RUSUI_TLS_KEY=/etc/rusui/plane.key
+export RUSUI_PLANE_CA=/etc/rusui/plane-ca.crt   # mounted into the guest
+export RUSUI_GUEST_IMAGE=rusui-guest:local
+```
+
+If Docker or Podman is installed but the TLS pair is unset, the container
+driver stays disabled and the process logs that fact. Process-driver review
+on loopback HTTP remains available.
+
+Snapshot prepare uses a **read-only prepare grant** through `/git-proxy/`,
+not a GitHub token on the runner disk. Turn grants may push only
+`refs/heads/rusui/<session>/*` on the bound repo. Grant loss (expiry, lease
+loss, other session) is a failed turn, not a silent continue.
+
+Permissive `docker run` without `--network rusui-trusted` is not the
+supported topology.
 
 At startup the server expires hung refresh owners, reconciles missed hook
 deliveries, catches up open and locally tracked items, and retries unpublished

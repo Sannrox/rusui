@@ -66,5 +66,11 @@ func sanitizeRestored(s *Store) (RestoreReport, error) {
 	}
 	n, _ = res.RowsAffected()
 	r.GrantsDropped = int(n)
+	res, err = s.DB.Exec(`DELETE FROM credential_grants`)
+	if err != nil {
+		return r, err
+	}
+	n, _ = res.RowsAffected()
+	r.GrantsDropped += int(n)
 	return r, nil
 }
