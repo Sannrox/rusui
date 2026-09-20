@@ -29,17 +29,17 @@ const (
 )
 
 type Source struct {
-	Repo         string
-	Item         int
-	SnapshotHash string
-	MainSHA      string
+	Repo         string `json:"repo"`
+	Item         int    `json:"item"`
+	SnapshotHash string `json:"snapshot_hash"`
+	MainSHA      string `json:"main_sha"`
 }
 
 type Candidate struct {
-	SessionID int64
-	CommitSHA string
-	TreeSHA   string
-	Ref       string
+	SessionID int64  `json:"session_id"`
+	CommitSHA string `json:"commit_sha"`
+	TreeSHA   string `json:"tree_sha"`
+	Ref       string `json:"ref"`
 }
 
 type Proof struct {
