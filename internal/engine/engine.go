@@ -520,6 +520,18 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		if err != nil {
 			return err
 		}
+		proj, ok := e.Policy.Project(pol.Project)
+		if !ok {
+			return errPolicy
+		}
+		leased, err := store.CountLeasedTurnsTx(tx, pol.Project, proj.Repos)
+		if err != nil {
+			return err
+		}
+		if leased >= proj.MaxConcurrentLeases() {
+			e.exception(fmt.Sprintf("concurrent lease cap exhausted for project %s", pol.Project))
+			return errBudget
+		}
 		now := e.now()
 		exp := now.Add(Liveness)
 		dead := now.Add(e.execDeadline())
@@ -560,6 +572,7 @@ var (
 	errPaused = fmt.Errorf("paused")
 	errPolicy = fmt.Errorf("policy")
 	errBudget = fmt.Errorf("budget")
+	ErrBudget = errBudget
 )
 
 func (e *Engine) Heartbeat(jobID int64, gen, claimed int) error {

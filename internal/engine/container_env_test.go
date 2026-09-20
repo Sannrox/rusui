@@ -139,6 +139,9 @@ func TestClaimMaterializesGitPin(t *testing.T) {
 		t.Fatalf("fetches %d", tree.Calls)
 	}
 	h.putRefresh(issue(2))
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, art(c, "keep", "", "")); err != nil {
+		t.Fatal(err)
+	}
 	_ = h.claim()
 	if tree.Calls != 1 {
 		t.Fatalf("second env fetched again: %d", tree.Calls)

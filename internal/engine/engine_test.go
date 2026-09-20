@@ -3,6 +3,7 @@ package engine_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -316,18 +317,21 @@ func TestClaimDoesNotBlockOtherQueuedItem(t *testing.T) {
 	if c1.Job.Item != 1 {
 		t.Fatalf("first claim item %d", c1.Job.Item)
 	}
+	if _, err := h.e.Complete(c1.Job.ID, c1.Job.LeaseGeneration, c1.Job.ClaimedRevision, art(c1, "keep", "", "")); err != nil {
+		t.Fatal(err)
+	}
 	c2, err := h.e.Claim("example/test-repo")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c2 == nil {
-		t.Fatal("live lease on #1 blocked #2")
+		t.Fatal("completed #1 blocked #2")
 	}
 	if c2.Job.Item != 2 {
 		t.Fatalf("second claim item %d", c2.Job.Item)
 	}
 	c3, err := h.e.Claim("example/test-repo")
-	if err != nil {
+	if err != nil && !errors.Is(err, engine.ErrBudget) {
 		t.Fatal(err)
 	}
 	if c3 != nil {
@@ -335,7 +339,7 @@ func TestClaimDoesNotBlockOtherQueuedItem(t *testing.T) {
 	}
 	j1, _ := store.JobState(h.st, "example/test-repo", 1)
 	j2, _ := store.JobState(h.st, "example/test-repo", 2)
-	if j1.State != "leased" || j2.State != "leased" {
+	if j1.State != "completed" || j2.State != "leased" {
 		t.Fatalf("states %s %s", j1.State, j2.State)
 	}
 	var n int
