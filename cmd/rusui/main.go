@@ -102,11 +102,28 @@ func main() {
 	}
 	eng := engine.New(st, p, api, clock.Real{})
 	eng.HookIDs = api.HookIDs
-	eng.Tree = engine.GitFetcher{Token: token, TokenFn: tokens.Token}
 	eng.SnapshotRoot = filepath.Join(filepath.Dir(*db), "snapshots")
+	tlsCert := os.Getenv("RUSUI_TLS_CERT")
+	tlsKey := os.Getenv("RUSUI_TLS_KEY")
+	planeCA := os.Getenv("RUSUI_PLANE_CA")
 	if rt, err := envpkg.LookRuntime(); err == nil {
-		img := os.Getenv("RUSUI_GUEST_IMAGE")
-		eng.Container = envpkg.Container{RT: rt, Image: img}
+		if tlsCert == "" || tlsKey == "" {
+			log.Printf("env: container runtime present but RUSUI_TLS_CERT and RUSUI_TLS_KEY unset; container driver disabled")
+		} else {
+			if d, ok := rt.(envpkg.DockerCLI); ok {
+				d.CAFile = planeCA
+				rt = d
+			}
+			eng.Container = envpkg.Container{RT: rt, Image: os.Getenv("RUSUI_GUEST_IMAGE"), CAFile: planeCA}
+		}
+	}
+	proxyURL := "http://" + *addr + "/git-proxy/github.com/"
+	eng.Tree = engine.GitFetcher{
+		ProxyURL: proxyURL,
+		GrantFn: func(repo string) (string, error) {
+			tok, _, err := eng.IssuePrepareGrant(repo)
+			return tok, err
+		},
 	}
 	eng.ReloadPolicy(p)
 	poster := &slackpkg.Poster{
@@ -125,21 +142,25 @@ func main() {
 		modelKey = os.Getenv("RUSUI_XAI_API_KEY")
 	}
 	srv := &server.Server{
-		Eng:          eng,
-		WebhookSec:   os.Getenv("RUSUI_WEBHOOK_SECRET"),
-		WorkerSec:    os.Getenv("RUSUI_WORKER_SECRET"),
-		SlackSec:     os.Getenv("RUSUI_SLACK_SECRET"),
-		SlackUsers:   slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
-		PolicyPath:   *pol,
-		ModelKey:     modelKey,
-		GitHubToken:  token,
-		GitHubTokens: tokens,
+		Eng:            eng,
+		WebhookSec:     os.Getenv("RUSUI_WEBHOOK_SECRET"),
+		WorkerSec:      os.Getenv("RUSUI_WORKER_SECRET"),
+		SlackSec:       os.Getenv("RUSUI_SLACK_SECRET"),
+		SlackUsers:     slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
+		PolicyPath:     *pol,
+		ModelKey:       modelKey,
+		GitHubToken:    token,
+		GitHubTokens:   tokens,
+		GuestHTTPSOnly: tlsCert != "" && tlsKey != "",
 	}
 	if err := eng.Recover(); err != nil {
 		log.Printf("recover: %v", err)
 	}
 	go runScheduler(eng)
 	log.Printf("rusui %s listen %s api=%s reconcile=%s catch-up=%s apply=%s", Version, *addr, api.BaseURL, engine.ReconcileEvery, engine.CatchUpEvery, engine.ApplyRetryEvery)
+	if srv.GuestHTTPSOnly {
+		log.Fatal(http.ListenAndServeTLS(*addr, tlsCert, tlsKey, srv.Handler()))
+	}
 	log.Fatal(http.ListenAndServe(*addr, srv.Handler()))
 }
 

@@ -41,8 +41,13 @@ Need `-repo` and `-driver`, or `-repo` and `-acp`.
 | `RUSUI_SLACK_USERS` | for inbound Slack | Empty allowlist → 403 |
 | `RUSUI_SLACK_BOT_TOKEN` | optional outbound | Exception `chat.postMessage` |
 | `RUSUI_SLACK_CHANNEL` | optional outbound | Exception channel |
+| `RUSUI_TLS_CERT` / `RUSUI_TLS_KEY` | container guests | Plane TLS identity. Unset disables the container driver. |
+| `RUSUI_PLANE_CA` | container guests | CA file mounted at `/usr/local/share/ca-certificates/rusui-plane.crt`. |
+| `RUSUI_GUEST_IMAGE` | container guests | Guest image identity. Empty fails closed. |
+| `XAI_API_KEY` or `RUSUI_XAI_API_KEY` | model proxy | Plane secret; never copied into the guest. |
 
 GitHub token: read-only. Do not give it to the runner or the model.
+Guest `XAI_API_KEY` and git HTTP auth are the per-turn grant.
 
 ## HTTP
 
@@ -62,6 +67,8 @@ GitHub token: read-only. Do not give it to the runner or the model.
 | `POST` | `/sessions/{id}/turns` | worker secret |
 | `POST` | `/sessions/{id}/cancel` | worker secret |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
+| `*` | `/model-proxy/` | per-turn grant (HTTPS for container guests) |
+| `*` | `/git-proxy/github.com/` | prepare or turn grant; push only with a turn grant on the session ref prefix |
 
 GitHub webhook events: `issues`, `pull_request`, `issue_comment`.
 Forward the tunnel to `http://127.0.0.1:8080/hooks/github`.

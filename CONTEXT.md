@@ -57,5 +57,5 @@ The only credential in a P1 guest: D3’s 32-byte token, ten-minute TTL, hashed 
 _Avoid_: PAT, installation token, `auth.json`, xAI API key (in the guest)
 
 **Plane proxy**:
-Git smart-HTTP and model egress on the plane, which redeem a grant for the real token. GitHub REST stays plane-internal. The guest may reach only these endpoints under egress `trusted`.
-_Avoid_: runner-side proxy, `api.github.com` from the guest
+Git smart-HTTP and model egress on the plane, which redeem a grant for the real token. GitHub REST stays plane-internal. The guest may reach only these endpoints under egress `trusted`. HTTPS to `rusui.plane`; plane CA at `/usr/local/share/ca-certificates/rusui-plane.crt`. Snapshot prepare uses a read-only grant on the same git proxy.
+_Avoid_: runner-side proxy, `api.github.com` from the guest, PAT on the runner disk, HTTP to the proxies from a container guest

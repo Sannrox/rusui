@@ -3,9 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,8 +11,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-
-	"github.com/sannrox/rusui/internal/store"
 )
 
 func (s *Server) githubAuthToken() string {
@@ -85,14 +81,15 @@ func splitReceivePack(r io.Reader) (refs []string, body io.Reader, err error) {
 }
 
 func (s *Server) gitProxy(w http.ResponseWriter, r *http.Request) {
-	tok := bearer(r)
-	if tok == "" {
-		http.Error(w, "auth", http.StatusUnauthorized)
+	if !s.requireGuestTLS(w, r) {
 		return
 	}
-	sum := sha256.Sum256([]byte(tok))
-	sid, _, ok, err := store.TurnTokenSession(s.Eng.Store, hex.EncodeToString(sum[:]), s.Eng.Clock.Now())
-	if err != nil || !ok {
+	if !strings.HasPrefix(r.URL.Path, "/git-proxy/github.com/") {
+		http.Error(w, "host not allowed", http.StatusForbidden)
+		return
+	}
+	g, ok := s.grantFromRequest(r)
+	if !ok {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
@@ -106,32 +103,33 @@ func (s *Server) gitProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	full := owner + "/" + name
-	sess, err := store.GetSession(s.Eng.Store, sid)
-	if err != nil {
-		http.Error(w, "session", http.StatusForbidden)
-		return
-	}
-	if !strings.EqualFold(sess.Repo, full) {
+	if !strings.EqualFold(g.Repo, full) {
 		http.Error(w, "repo not allowed", http.StatusForbidden)
 		return
 	}
 	svc := r.URL.Query().Get("service")
 	isReceive := strings.Contains(rest, "git-receive-pack") || svc == "git-receive-pack"
-	if isReceive && r.Method == http.MethodPost {
-		refs, body, err := splitReceivePack(r.Body)
-		if err != nil {
-			http.Error(w, "pkt-line", http.StatusBadRequest)
+	if isReceive {
+		if !g.CanPush {
+			http.Error(w, "ref not allowed", http.StatusForbidden)
 			return
 		}
-		for _, ref := range refs {
-			if !sessionRefAllowed(sid, ref) {
-				http.Error(w, "ref not allowed", http.StatusForbidden)
+		if r.Method == http.MethodPost {
+			refs, body, err := splitReceivePack(r.Body)
+			if err != nil {
+				http.Error(w, "pkt-line", http.StatusBadRequest)
 				return
 			}
+			for _, ref := range refs {
+				if !sessionRefAllowed(g.SessionID, ref) {
+					http.Error(w, "ref not allowed", http.StatusForbidden)
+					return
+				}
+			}
+			r.Body = io.NopCloser(body)
+			r.ContentLength = -1
+			r.Header.Del("Content-Length")
 		}
-		r.Body = io.NopCloser(body)
-		r.ContentLength = -1
-		r.Header.Del("Content-Length")
 	}
 	s.forwardGit(w, r, owner, name, rest)
 }

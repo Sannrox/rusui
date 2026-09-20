@@ -1,8 +1,6 @@
 package server
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -14,7 +12,7 @@ import (
 
 func modelBaseURL(r *http.Request, driver string) string {
 	scheme := "http"
-	if r.TLS != nil {
+	if r.TLS != nil || driver == "container" {
 		scheme = "https"
 	}
 	u := &url.URL{Scheme: scheme, Host: r.Host, Path: "/model-proxy"}
@@ -31,14 +29,11 @@ func modelBaseURL(r *http.Request, driver string) string {
 }
 
 func (s *Server) modelProxy(w http.ResponseWriter, r *http.Request) {
-	tok := bearer(r)
-	if tok == "" {
-		http.Error(w, "auth", http.StatusUnauthorized)
+	if !s.requireGuestTLS(w, r) {
 		return
 	}
-	sum := sha256.Sum256([]byte(tok))
-	_, _, ok, err := store.TurnTokenSession(s.Eng.Store, hex.EncodeToString(sum[:]), s.Eng.Clock.Now())
-	if err != nil || !ok {
+	g, ok := s.grantFromRequest(r)
+	if !ok || g.Kind != store.GrantTurn {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}

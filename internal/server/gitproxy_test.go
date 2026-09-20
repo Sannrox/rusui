@@ -9,6 +9,9 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/sannrox/rusui/internal/engine"
 )
 
 func pkt(payload string) string {
@@ -138,6 +141,107 @@ func TestGitProxyAllowsSessionRefPush(t *testing.T) {
 	}
 	if sawPath != "/example/test-repo.git/git-receive-pack" {
 		t.Fatalf("path %q", sawPath)
+	}
+}
+
+func TestGitProxyRejectsUnapprovedHostExpiredCrossSessionAndPreparePush(t *testing.T) {
+	e, clk, tok := leasedTurn(t)
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("upstream reached")
+	}))
+	t.Cleanup(up.Close)
+	origin, _ := url.Parse(up.URL)
+	hs := httptest.NewServer((&Server{Eng: e, GitHubToken: "plane-pat", GitOrigin: origin}).Handler())
+	t.Cleanup(hs.Close)
+
+	req, _ := http.NewRequest("POST", hs.URL+"/git-proxy/evil.example/x.git/git-upload-pack", strings.NewReader("0000"))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("unapproved host %d", resp.StatusCode)
+	}
+
+	clk.Advance(engine.GrantTTL + time.Second)
+	req, _ = http.NewRequest("POST", hs.URL+"/git-proxy/github.com/example/test-repo.git/git-upload-pack", strings.NewReader("0000"))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expired %d", resp.StatusCode)
+	}
+
+	now := clk.T.UTC().Format(time.RFC3339Nano)
+	res, err := e.Store.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'review','other/repo',1,'issue','open',?)`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sidB, _ := res.LastInsertId()
+	if _, err := e.Store.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'leased')`, sidB); err != nil {
+		t.Fatal(err)
+	}
+	var turnB int64
+	if err := e.Store.DB.QueryRow(`SELECT id FROM turns WHERE session_id=?`, sidB).Scan(&turnB); err != nil {
+		t.Fatal(err)
+	}
+	tokB, _, err := issueTurnToken(e.Store, turnB, 1, clk.T)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ = http.NewRequest("POST", hs.URL+"/git-proxy/github.com/example/test-repo.git/git-upload-pack", strings.NewReader("0000"))
+	req.Header.Set("Authorization", "Bearer "+tokB)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("cross-session %d", resp.StatusCode)
+	}
+
+	e3, _, _ := leasedTurn(t)
+	prep, _, err := e3.IssuePrepareGrant("example/test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hs3 := httptest.NewServer((&Server{Eng: e3, GitHubToken: "plane-pat", GitOrigin: origin}).Handler())
+	t.Cleanup(hs3.Close)
+	old := strings.Repeat("0", 40)
+	nw := strings.Repeat("a", 40)
+	body := pkt(old+" "+nw+" refs/heads/rusui/1/work\x00report-status") + "0000"
+	req, _ = http.NewRequest("POST", hs3.URL+"/git-proxy/github.com/example/test-repo.git/git-receive-pack", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+prep)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("prepare push %d", resp.StatusCode)
+	}
+
+	upOK := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(upOK.Close)
+	originOK, _ := url.Parse(upOK.URL)
+	hsOK := httptest.NewServer((&Server{Eng: e3, GitHubToken: "plane-pat", GitOrigin: originOK}).Handler())
+	t.Cleanup(hsOK.Close)
+	req, _ = http.NewRequest("POST", hsOK.URL+"/git-proxy/github.com/example/test-repo.git/git-upload-pack", strings.NewReader("0000"))
+	req.Header.Set("Authorization", "Bearer "+prep)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("prepare fetch %d", resp.StatusCode)
 	}
 }
 

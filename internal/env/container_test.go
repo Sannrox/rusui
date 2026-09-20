@@ -9,6 +9,9 @@ func TestContainerUsesRuntimeNotDaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(rt.Created) != 1 || rt.Created[0].Network != TrustedNetwork || !rt.Created[0].DisableIPv6 {
+		t.Fatalf("trusted network %#v", rt.Created)
+	}
 	if err := d.Setup(id, "hash"); err != nil {
 		t.Fatal(err)
 	}
@@ -26,5 +29,12 @@ func TestContainerUsesRuntimeNotDaemon(t *testing.T) {
 	}
 	if len(rt.Created) != 1 || len(rt.Stopped) != 1 || len(rt.Started) != 1 || len(rt.Removed) != 1 {
 		t.Fatalf("calls created=%d stop=%d start=%d rm=%d", len(rt.Created), len(rt.Stopped), len(rt.Started), len(rt.Removed))
+	}
+}
+
+func TestContainerCreateRequiresImage(t *testing.T) {
+	d := Container{RT: &FakeRuntime{}}
+	if _, err := d.Create("n"); err == nil {
+		t.Fatal("expected image required")
 	}
 }

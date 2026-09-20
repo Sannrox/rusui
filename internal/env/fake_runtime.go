@@ -25,6 +25,7 @@ type FakeRuntime struct {
 	Execs           [][]string
 	Stdio           []StdioCall
 	StdioHook       func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error)
+	ExecHook        func(id string, cmd []string) error
 	alive           map[string]bool
 }
 
@@ -124,9 +125,13 @@ func (f *FakeRuntime) ReadFile(id, path string) ([]byte, error) {
 
 func (f *FakeRuntime) Exec(id string, cmd []string) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	copied := append([]string{id}, cmd...)
 	f.Execs = append(f.Execs, copied)
+	hook := f.ExecHook
+	f.mu.Unlock()
+	if hook != nil {
+		return hook(id, cmd)
+	}
 	return nil
 }
 
