@@ -11,7 +11,7 @@ import (
 )
 
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
@@ -29,7 +29,7 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
@@ -51,12 +51,16 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	if turns == nil {
 		turns = []store.Turn{}
 	}
+	envState := ""
+	if envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID); err == nil {
+		envState = envRow.State
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"session": sess, "turns": turns})
+	_ = json.NewEncoder(w).Encode(map[string]any{"session": sess, "turns": turns, "environment_state": envState})
 }
 
 func (s *Server) attachSession(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
@@ -117,7 +121,7 @@ func (s *Server) attachSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
@@ -143,7 +147,7 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
