@@ -184,15 +184,26 @@ func HostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string) (
 	if _, err := host.Initialize(ctx); err != nil {
 		return engine.Artifact{}, err
 	}
-	sid, err := host.SessionNew(ctx, cwd)
-	if err != nil {
-		return engine.Artifact{}, err
+	sid := a.GuestSessionID
+	if sid != "" {
+		if err := host.SessionLoad(ctx, sid, cwd); err != nil {
+			sid = ""
+		}
+	}
+	if sid == "" {
+		var err error
+		sid, err = host.SessionNew(ctx, cwd)
+		if err != nil {
+			return engine.Artifact{}, err
+		}
 	}
 	pr, err := host.SessionPrompt(ctx, sid, promptFromInput(a.Input))
 	if err != nil {
 		return engine.Artifact{}, err
 	}
-	return artifactFromAssignment(a, pr), nil
+	art := artifactFromAssignment(a, pr)
+	art.GuestSessionID = sid
+	return art, nil
 }
 
 func promptFromInput(raw json.RawMessage) string {

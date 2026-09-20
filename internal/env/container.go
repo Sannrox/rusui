@@ -71,6 +71,13 @@ func (c Container) Destroy(handle string) error {
 	return c.RT.Remove(handle)
 }
 
+func (c Container) KillGuest(handle string) error {
+	if handle == "" || c.RT == nil {
+		return nil
+	}
+	return c.RT.Exec(handle, []string{"pkill", "-TERM", "-P", "1"})
+}
+
 func (c Container) ExecStdio(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
 	x, ok := c.RT.(StdioExecutor)
 	if !ok {

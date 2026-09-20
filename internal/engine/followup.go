@@ -37,24 +37,15 @@ func (e *Engine) PromptFollowUp(sessionID int64, prompt string) (int64, int, err
 		if err != nil {
 			return err
 		}
-		rev := j.PendingRevision + 1
-		it := snapshot.Item{
-			Repo: j.Repo, Item: j.Item, ItemKind: j.ItemKind, State: "open",
-			Title: "follow-up", Body: prompt, DefaultBranch: "main",
-		}
-		if pend, err := store.LoadSnapshotTx(tx, j.Repo, j.Item, j.PendingRevision); err == nil {
-			it.MainSHA = pend.MainSHA
-			it.HeadSHA = pend.HeadSHA
-			it.DefaultBranch = pend.DefaultBranch
-		}
-		if err := store.SaveSnapshotTx(tx, j.Repo, j.Item, rev, it); err != nil {
+		seq, err := store.EnqueueFollowUpTx(tx, sessionID, prompt)
+		if err != nil {
 			return err
 		}
-		if err := store.SetSessionPromptTx(tx, sessionID, prompt); err != nil {
-			return err
+		if !hasUnclaimedFollowUp(j) {
+			if err := applyFollowUpTx(tx, j, sessionID, seq, prompt); err != nil {
+				return err
+			}
 		}
-		j.PendingRevision = rev
-		j.RetryCount = 0
 		if j.State != "leased" {
 			j.State = "queued"
 		}
@@ -62,8 +53,52 @@ func (e *Engine) PromptFollowUp(sessionID int64, prompt string) (int64, int, err
 			return err
 		}
 		turnID = j.ID
-		pending = rev
+		pending = j.PendingRevision
 		return nil
 	})
 	return turnID, pending, err
+}
+
+func hasUnclaimedFollowUp(j *store.Job) bool {
+	if j.PendingRevision <= j.ClaimedRevision {
+		return false
+	}
+	return j.ClaimedRevision != 0 || j.PendingRevision != 1
+}
+
+func applyFollowUpTx(tx *sql.Tx, j *store.Job, sessionID int64, seq int, prompt string) error {
+	rev := j.PendingRevision + 1
+	it := snapshot.Item{
+		Repo: j.Repo, Item: j.Item, ItemKind: j.ItemKind, State: "open",
+		Title: "follow-up", Body: prompt, DefaultBranch: "main",
+	}
+	if pend, err := store.LoadSnapshotTx(tx, j.Repo, j.Item, j.PendingRevision); err == nil {
+		it.MainSHA = pend.MainSHA
+		it.HeadSHA = pend.HeadSHA
+		it.DefaultBranch = pend.DefaultBranch
+	}
+	if err := store.SaveSnapshotTx(tx, j.Repo, j.Item, rev, it); err != nil {
+		return err
+	}
+	if err := store.SetSessionPromptTx(tx, sessionID, prompt); err != nil {
+		return err
+	}
+	if err := store.ConsumeFollowUpTx(tx, sessionID, seq); err != nil {
+		return err
+	}
+	j.PendingRevision = rev
+	j.RetryCount = 0
+	return nil
+}
+
+func applyNextFollowUpTx(tx *sql.Tx, j *store.Job) error {
+	turn, err := store.GetTurnTx(tx, j.ID)
+	if err != nil {
+		return err
+	}
+	seq, prompt, ok, err := store.NextFollowUpTx(tx, turn.SessionID)
+	if err != nil || !ok {
+		return err
+	}
+	return applyFollowUpTx(tx, j, turn.SessionID, seq, prompt)
 }
