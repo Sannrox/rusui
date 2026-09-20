@@ -19,14 +19,19 @@ func diagnoseMain(args []string, out io.Writer) int {
 	fs.SetOutput(os.Stderr)
 	pol := fs.String("policy", "policy.yaml", "policy file")
 	addr := fs.String("addr", "127.0.0.1:8080", "listen address to check")
-	url := fs.String("url", "", "plane base URL (GET /healthz)")
+	url := fs.String("url", "", "plane base URL (GET /healthz); defaults to https when TLS env is set")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	planeURL := *url
+	if planeURL == "" && ops.TLSEnabled(os.Getenv) {
+		planeURL = ops.PlaneBaseURL(*addr, os.Getenv)
 	}
 	rep := ops.Diagnose(ops.Options{
 		PolicyPath: *pol,
 		Addr:       *addr,
-		PlaneURL:   *url,
+		PlaneURL:   planeURL,
+		CAFile:     os.Getenv("RUSUI_PLANE_CA"),
 	})
 	enc := json.NewEncoder(out)
 	enc.SetIndent("", "  ")

@@ -23,7 +23,8 @@ Stop new claims, then wait for live leases to complete. Drain does **not**
 cancel in-flight turns or delete receipts, approvals, or budgets.
 
 ```bash
-rusui drain -url http://127.0.0.1:8080 -token "$RUSUI_WORKER_SECRET"
+rusui drain -token "$RUSUI_WORKER_SECRET"
+# defaults to https://127.0.0.1:8080 when RUSUI_TLS_CERT and RUSUI_TLS_KEY are set
 ```
 
 The JSON `live` list is the blocked/running work. Resume with Slack

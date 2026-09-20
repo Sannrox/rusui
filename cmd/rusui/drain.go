@@ -20,7 +20,7 @@ func drainCLI(args []string) {
 func drainMain(args []string, out io.Writer) int {
 	fs := flag.NewFlagSet("drain", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
+	url := fs.String("url", ops.PlaneBaseURL("127.0.0.1:8080", os.Getenv), "plane URL")
 	token := fs.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "worker token")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -33,7 +33,20 @@ func drainMain(args []string, out io.Writer) int {
 	if *token != "" {
 		req.Header.Set("Authorization", "Bearer "+*token)
 	}
-	res, err := http.DefaultClient.Do(req)
+	client := http.DefaultClient
+	if strings.HasPrefix(*url, "https://") {
+		ca := os.Getenv("RUSUI_PLANE_CA")
+		if ca == "" {
+			fmt.Fprintln(os.Stderr, "set RUSUI_PLANE_CA for https drain")
+			return 1
+		}
+		client, err = ops.TLSClient(ca)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+	}
+	res, err := client.Do(req)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

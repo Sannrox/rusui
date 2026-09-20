@@ -14,6 +14,7 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	envpkg "github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/ops"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/server"
 	slackpkg "github.com/sannrox/rusui/internal/slack"
@@ -126,9 +127,13 @@ func main() {
 			eng.Container = envpkg.Container{RT: rt, Image: os.Getenv("RUSUI_GUEST_IMAGE"), CAFile: planeCA}
 		}
 	}
-	proxyURL := "http://" + *addr + "/git-proxy/github.com/"
+	if tlsCert != "" && tlsKey != "" && planeCA == "" {
+		log.Fatal("set RUSUI_PLANE_CA with RUSUI_TLS_CERT and RUSUI_TLS_KEY")
+	}
+	getenv := os.Getenv
 	eng.Tree = engine.GitFetcher{
-		ProxyURL: proxyURL,
+		ProxyURL: ops.GitProxyURL(*addr, getenv),
+		CAFile:   planeCA,
 		GrantFn: func(repo string) (string, error) {
 			tok, _, err := eng.IssuePrepareGrant(repo)
 			return tok, err
