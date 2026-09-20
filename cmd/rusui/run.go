@@ -17,13 +17,28 @@ func runCLI(args []string) {
 	project := fs.String("project", "", "project slug")
 	token := fs.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "operator/worker token")
 	idem := fs.String("idempotency-key", "", "idempotency key")
+	effort := fs.String("effort", "", "stable effort key for a pinned implementation task")
+	repo := fs.String("repo", "", "source repository")
+	ref := fs.String("ref", "", "source ref")
+	base := fs.String("base-sha", "", "pinned base commit")
+	paths := fs.String("paths", "", "comma-separated allowed paths")
 	_ = fs.Parse(args)
 	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if *project == "" || prompt == "" {
-		fmt.Fprintln(os.Stderr, "usage: rusui run -project SLUG [-url URL] [-token TOKEN] [-idempotency-key KEY] PROMPT")
+		fmt.Fprintln(os.Stderr, "usage: rusui run -project SLUG [-url URL] [-token TOKEN] [-idempotency-key KEY] [-effort KEY -repo REPO -ref REF -base-sha SHA -paths PATHS] PROMPT")
 		os.Exit(2)
 	}
-	body, _ := json.Marshal(map[string]string{"kind": "run", "prompt": prompt})
+	payload := map[string]any{"kind": "run", "prompt": prompt}
+	if *effort != "" || *repo != "" || *ref != "" || *base != "" || *paths != "" {
+		payload["effort_key"] = *effort
+		payload["repo"] = *repo
+		payload["ref"] = *ref
+		payload["base_sha"] = *base
+		if *paths != "" {
+			payload["allowed_paths"] = strings.Split(*paths, ",")
+		}
+	}
+	body, _ := json.Marshal(payload)
 	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(*url, "/")+"/projects/"+*project+"/sessions", bytes.NewReader(body))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
