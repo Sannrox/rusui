@@ -1,6 +1,6 @@
 # ADR 0010: Hybrid core-1.0 sequence and earlier gate mapping
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-20
 - Resolves: [#87](https://github.com/Sannrox/rusui/issues/87)
 - Amends: sequencing and phase-end measurements in
@@ -11,8 +11,13 @@
   [ADR 0004](0004-rusui-services-yaml.md)–[0009](0009-credential-broker.md),
   or the current [ARCHITECTURE.md](../../ARCHITECTURE.md) contract.
 - Discussion: none. GitHub Discussions are disabled. Merging with status
-  Proposed recorded the investigation. Changing status to Accepted is the
-  acceptance act.
+  Proposed recorded the investigation. Accepted 2026-09-20.
+  Objects: M1–M6 sequence, core 1.0 freeze, retained earlier gates.
+  Evidence: investigation in this file; M1 session/credential work already
+  on main. Permitted action: rewrite ROADMAP.md to this sequence; do not
+  rewrite ARCHITECTURE.md; do not enable live GitHub writes.
+  Policy: fail closed on unnamed optional tracks; publication still needs
+  a later accepted contract.
 
 ## Context
 
