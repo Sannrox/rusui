@@ -181,6 +181,7 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 }
 
 func HostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string) (engine.Artifact, error) {
+	host.Ctx = ctx
 	if _, err := host.Initialize(ctx); err != nil {
 		return engine.Artifact{}, err
 	}

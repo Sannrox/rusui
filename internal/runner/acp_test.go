@@ -21,7 +21,9 @@ func TestHostACPLoadsOrCreatesGuestSession(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut}).Run() }()
-	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}}
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+		return acp.Decision{}
+	}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	in, _ := json.Marshal(map[string]string{"title": "ping", "body": "pong"})
@@ -45,7 +47,9 @@ func TestHostACPReusesGuestSession(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut}).Run() }()
-	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}}
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+		return acp.Decision{}
+	}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	in, _ := json.Marshal(map[string]string{"body": "ping"})
