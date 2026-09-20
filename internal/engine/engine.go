@@ -622,6 +622,7 @@ type Artifact struct {
 	InputTokens     int              `json:"input_tokens"`
 	OutputTokens    int              `json:"output_tokens"`
 	GuestSessionID  string           `json:"guest_session_id,omitempty"`
+	Result          *TaskResult      `json:"result,omitempty"`
 }
 
 type ProposedAction struct {
@@ -669,6 +670,9 @@ func (e *Engine) Complete(jobID int64, gen, claimed int, art Artifact) (map[stri
 			return e.finalizeFailureTx(tx, j, gen, claimed)
 		}
 		if j.ItemKind == "pull" && (art.HeadSHA != snap.HeadSHA) {
+			return e.finalizeFailureTx(tx, j, gen, claimed)
+		}
+		if err := ValidateResult(art); err != nil {
 			return e.finalizeFailureTx(tx, j, gen, claimed)
 		}
 		art.MainSHA = snap.MainSHA

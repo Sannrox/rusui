@@ -79,7 +79,7 @@ func TestD6SessionWorkflowMatrix(t *testing.T) {
 			if c.Snapshot.Body != want {
 				t.Fatalf("order %d got %q", i, c.Snapshot.Body)
 			}
-			if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, art(c, "keep", "", "")); err != nil {
+			if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c)); err != nil {
 				t.Fatal(err)
 			}
 		}
