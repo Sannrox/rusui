@@ -5,6 +5,7 @@ nothing is commented, closed, or merged on GitHub.
 
 First loopback session: [tutorial.md](tutorial.md).
 Flags, env, HTTP, and policy: [configuration.md](configuration.md).
+Upgrade, drain, diagnostics: [upgrade.md](upgrade.md).
 Nouns: [CONTEXT.md](../CONTEXT.md).
 
 ## Supported topology

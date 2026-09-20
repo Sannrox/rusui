@@ -49,6 +49,7 @@ func (s *Server) Handler() http.Handler {
 		w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("GET /readyz", s.readyz)
+	mux.HandleFunc("POST /drain", s.drain)
 	mux.HandleFunc("POST /hooks/github", s.githubHook)
 	mux.HandleFunc("POST /hooks/events", s.eventsHook)
 	mux.HandleFunc("POST /hooks/slack", s.slackHook)

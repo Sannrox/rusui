@@ -17,6 +17,11 @@ Subcommand `rusui diagnose [-policy PATH] [-addr ADDR] [-url URL]` prints a
 JSON topology report (`ready` / `misconfigured` / `unavailable`) and exits
 0 only when every blocking check is ready. It does not print secret values.
 
+`rusui drain -url URL -token TOKEN` POSTs `/drain` (worker auth), pauses new
+claims, and lists leased turns. Do not open `rusui.db` while the plane holds it.
+`rusui diagnostics` writes a redacted bundle (`diagnostics.json`).
+Upgrade procedure: [upgrade.md](upgrade.md).
+
 ## `rusui-runner` flags
 
 | Flag | Default | Meaning |
@@ -59,6 +64,7 @@ Guest `XAI_API_KEY` and git HTTP auth are the per-turn grant.
 | --- | --- | --- |
 | `GET` | `/healthz` | none; body `ok` |
 | `GET` | `/readyz` | none; JSON topology report; 200 ready / 503 not ready |
+| `POST` | `/drain` | worker secret; pause claims and list live turns |
 | `POST` | `/hooks/github` | `X-Hub-Signature-256` |
 | `POST` | `/hooks/events` | `X-Rusui-Signature-256` (same webhook secret); 202 |
 | `POST` | `/hooks/slack` | Slack HMAC + user allowlist |

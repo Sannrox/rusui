@@ -6,6 +6,34 @@ import (
 	"strings"
 )
 
+type LiveTurn struct {
+	TurnID    int64  `json:"turn_id"`
+	SessionID int64  `json:"session_id"`
+	Repo      string `json:"repo"`
+	Project   string `json:"project"`
+	Lane      string `json:"lane"`
+	State     string `json:"state"`
+}
+
+func ListLeasedTurns(s *Store) ([]LiveTurn, error) {
+	rows, err := s.DB.Query(`SELECT t.id, t.session_id, s.repo, s.project, t.lane, t.state
+FROM turns t JOIN sessions s ON s.id=t.session_id
+WHERE t.state='leased' ORDER BY t.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []LiveTurn
+	for rows.Next() {
+		var t LiveTurn
+		if err := rows.Scan(&t.TurnID, &t.SessionID, &t.Repo, &t.Project, &t.Lane, &t.State); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 func CountLeasedTurnsTx(tx *sql.Tx, project string, repos []string) (int, error) {
 	args := []any{project}
 	var b strings.Builder

@@ -75,6 +75,7 @@ Contributor gate before a PR: `make all && make test && make validate`.
 | --- | --- |
 | Walk through a first loopback session | [docs/tutorial.md](docs/tutorial.md) |
 | Run it against a real repository | [docs/operator.md](docs/operator.md) |
+| Drain, upgrade, diagnostics | [docs/upgrade.md](docs/upgrade.md) |
 | Look up flags, env, HTTP, policy | [docs/configuration.md](docs/configuration.md) |
 | Learn the nouns | [CONTEXT.md](CONTEXT.md) |
 | Build, test, images | [docs/development.md](docs/development.md) |
