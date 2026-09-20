@@ -14,6 +14,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sannrox/rusui/internal/engine"
@@ -42,6 +43,9 @@ type Server struct {
 	DiagnoseLookRuntime func() (env.Runtime, error)
 	DiagnoseEnv         func(string) string
 	DiagnoseHTTP        *http.Client
+
+	termMu sync.Mutex
+	terms  map[int64]*termSess
 }
 
 func (s *Server) Handler() http.Handler {
@@ -80,6 +84,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /console/receipts", s.consoleReceipts)
 	mux.HandleFunc("GET /console/budgets", s.consoleBudgets)
 	mux.HandleFunc("GET /console/health", s.consoleHealth)
+	mux.HandleFunc("GET /console/sessions/{id}/terminal", s.consoleTerminal)
+	mux.HandleFunc("POST /console/sessions/{id}/terminal/lease", s.consoleTermLease)
+	mux.HandleFunc("POST /console/sessions/{id}/terminal/revoke", s.consoleTermRevoke)
+	mux.HandleFunc("POST /console/sessions/{id}/terminal/input", s.consoleTermInput)
+	mux.HandleFunc("GET /console/sessions/{id}/terminal/output", s.consoleTermOutput)
 	mux.HandleFunc("POST /approvals/{id}", s.decideApproval)
 	mux.HandleFunc("POST /sessions/{id}/turns", s.followUpTurn)
 	mux.HandleFunc("POST /sessions/{id}/cancel", s.cancelSession)
