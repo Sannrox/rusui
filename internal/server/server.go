@@ -17,24 +17,30 @@ import (
 	"time"
 
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/slack"
 	"github.com/sannrox/rusui/internal/store"
 )
 
 type Server struct {
-	Eng            *engine.Engine
-	WebhookSec     string
-	WorkerSec      string
-	SlackSec       string
-	SlackUsers     map[string]bool
-	PolicyPath     string
-	ModelKey       string
-	ModelOrigin    *url.URL
-	GitHubToken    string
-	GitHubTokens   gh.TokenSource
-	GitOrigin      *url.URL
-	GuestHTTPSOnly bool
+	Eng                 *engine.Engine
+	WebhookSec          string
+	WorkerSec           string
+	SlackSec            string
+	SlackUsers          map[string]bool
+	PolicyPath          string
+	ModelKey            string
+	ModelOrigin         *url.URL
+	GitHubToken         string
+	GitHubTokens        gh.TokenSource
+	GitOrigin           *url.URL
+	GuestHTTPSOnly      bool
+	Addr                string
+	DiagnosePlaneURL    string
+	DiagnoseLookRuntime func() (env.Runtime, error)
+	DiagnoseEnv         func(string) string
+	DiagnoseHTTP        *http.Client
 }
 
 func (s *Server) Handler() http.Handler {
@@ -42,6 +48,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})
+	mux.HandleFunc("GET /readyz", s.readyz)
 	mux.HandleFunc("POST /hooks/github", s.githubHook)
 	mux.HandleFunc("POST /hooks/events", s.eventsHook)
 	mux.HandleFunc("POST /hooks/slack", s.slackHook)

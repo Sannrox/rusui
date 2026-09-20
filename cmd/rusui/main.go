@@ -52,6 +52,9 @@ func main() {
 		case "approve":
 			approveCLI(os.Args[2:])
 			return
+		case "diagnose":
+			diagnoseCLI(os.Args[2:])
+			return
 		}
 	}
 	addr := flag.String("addr", "127.0.0.1:8080", "listen")
@@ -148,6 +151,7 @@ func main() {
 		SlackSec:       os.Getenv("RUSUI_SLACK_SECRET"),
 		SlackUsers:     slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
 		PolicyPath:     *pol,
+		Addr:           *addr,
 		ModelKey:       modelKey,
 		GitHubToken:    token,
 		GitHubTokens:   tokens,
