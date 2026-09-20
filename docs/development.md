@@ -87,5 +87,5 @@ Do not treat it as the contract.
 
 On push to `main` and on pull requests, GitHub Actions runs `make all`,
 `make test`, `make validate`, and `make release-images`. Branch protection
-requires a pull request to `main`; CI is not currently a required merge
-check. Do not push commits to `main` directly.
+requires a pull request to `main` and the `build` and `images` checks.
+Do not push commits to `main` directly.

@@ -14,6 +14,7 @@ the runbook.
 | Role | Start |
 | --- | --- |
 | First look | [README](../README.md) |
+| First session | [tutorial.md](tutorial.md) |
 | Operator | [operator.md](operator.md) |
 | Flags, env, HTTP, policy | [configuration.md](configuration.md) |
 | Contributor | [CONTRIBUTING.md](../CONTRIBUTING.md), [development.md](development.md) |
@@ -25,6 +26,7 @@ the runbook.
 | File | Type | Authority |
 | --- | --- | --- |
 | [../README.md](../README.md) | tutorial | what it is, quick start, next steps |
+| [tutorial.md](tutorial.md) | tutorial | first loopback session |
 | [../ARCHITECTURE.md](../ARCHITECTURE.md) | explanation | product contract |
 | [../CONTEXT.md](../CONTEXT.md) | explanation | product nouns |
 | [../VISION.md](../VISION.md) | explanation | accepted direction; not the runbook |
@@ -37,7 +39,7 @@ the runbook.
 | [decisions/](decisions/) | explanation | ADRs |
 | [v1-build-prompt.md](v1-build-prompt.md) | archive | historical agent prompt; not the contract |
 | [../eval/set.md](../eval/set.md) | reference | review-quality fixtures |
-| [../eval/results.md](../eval/results.md) | archive | dated eval snapshot |
+| [../eval/results.md](../eval/results.md) | reference | last TestEvalSet snapshot |
 | [../SECURITY.md](../SECURITY.md) | how-to | vulnerability reports |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | how-to | issues and pull requests |
 | [../AGENTS.md](../AGENTS.md) | how-to | agent instructions |

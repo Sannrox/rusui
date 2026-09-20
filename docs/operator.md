@@ -3,6 +3,7 @@
 Run a self-hosted rusui installation on your own machine. Apply is dry-run:
 nothing is commented, closed, or merged on GitHub.
 
+First loopback session: [tutorial.md](tutorial.md).
 Flags, env, HTTP, and policy: [configuration.md](configuration.md).
 Nouns: [CONTEXT.md](../CONTEXT.md).
 
