@@ -56,7 +56,7 @@ func TestDockerCLIRecordsCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := string(logb)
-	for _, want := range []string{"run -d", "--network rusui-trusted", "--add-host rusui.plane:host-gateway", "--sysctl net.ipv6.conf.all.disable_ipv6=1", "--cpus 0.500", "--memory 67108864", "alpine:3", "stop fake-ctr-id", "start fake-ctr-id", "exec -i", "cp "} {
+	for _, want := range []string{"network inspect rusui-trusted", "network create rusui-trusted", "run -d", "--network rusui-trusted", "--add-host rusui.plane:host-gateway", "--sysctl net.ipv6.conf.all.disable_ipv6=1", "--cpus 0.500", "--memory 67108864", "alpine:3", "stop fake-ctr-id", "start fake-ctr-id", "exec -i", "cp "} {
 		if !strings.Contains(log, want) {
 			t.Fatalf("missing %q in %s", want, log)
 		}
@@ -82,6 +82,69 @@ func TestLookRuntimeFindsDockerOrPodman(t *testing.T) {
 	}
 }
 
+func TestDockerCLIFailsClosedWhenNetworkCreateFails(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "log")
+	bin := filepath.Join(dir, "docker")
+	script := "#!/bin/sh\n" +
+		"echo \"$*\" >> \"$STUB_LOG\"\n" +
+		"cmd=$1; shift\n" +
+		"if [ \"$cmd\" = network ]; then\n" +
+		"  if [ \"$1\" = inspect ]; then exit 1; fi\n" +
+		"  if [ \"$1\" = create ]; then echo cannot-create; exit 1; fi\n" +
+		"fi\n" +
+		"if [ \"$cmd\" = run ]; then echo should-not-run; exit 0; fi\n" +
+		"exit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("STUB_LOG", logPath)
+	d := DockerCLI{Bin: bin}
+	if _, err := d.CreateAndStart(Spec{Name: "box", Image: "alpine:3"}); err == nil {
+		t.Fatal("expected network create failure")
+	}
+	logb, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(logb)
+	if !strings.Contains(log, "network create rusui-trusted") {
+		t.Fatalf("missing create in %s", log)
+	}
+	if strings.Contains(log, "run -d") {
+		t.Fatalf("ran container without network: %s", log)
+	}
+}
+
+func TestDockerCLINetworkCreateRace(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "log")
+	bin := filepath.Join(dir, "docker")
+	script := "#!/bin/sh\n" +
+		"echo \"$*\" >> \"$STUB_LOG\"\n" +
+		"cmd=$1; shift\n" +
+		"if [ \"$cmd\" = network ]; then\n" +
+		"  if [ \"$1\" = inspect ]; then\n" +
+		"    n=$(grep -c \"network inspect\" \"$STUB_LOG\")\n" +
+		"    if [ \"$n\" -ge 2 ]; then exit 0; fi\n" +
+		"    exit 1\n" +
+		"  fi\n" +
+		"  if [ \"$1\" = create ]; then echo already; exit 1; fi\n" +
+		"fi\n" +
+		"if [ \"$cmd\" = run ]; then echo fake-ctr-id; exit 0; fi\n" +
+		"if [ \"$cmd\" = exec ]; then exit 0; fi\n" +
+		"exit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("STUB_LOG", logPath)
+	d := DockerCLI{Bin: bin}
+	id, err := d.CreateAndStart(Spec{Name: "box", Image: "alpine:3"})
+	if err != nil || id != "fake-ctr-id" {
+		t.Fatalf("id %q err %v", id, err)
+	}
+}
+
 func stubDocker(t *testing.T) (bin, logPath string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -90,6 +153,11 @@ func stubDocker(t *testing.T) (bin, logPath string) {
 	script := "#!/bin/sh\n" +
 		"echo \"$*\" >> \"$STUB_LOG\"\n" +
 		"cmd=$1; shift\n" +
+		"if [ \"$cmd\" = network ]; then\n" +
+		"  if [ \"$1\" = inspect ]; then echo missing; exit 1; fi\n" +
+		"  if [ \"$1\" = create ]; then echo net-id; exit 0; fi\n" +
+		"  exit 1\n" +
+		"fi\n" +
 		"if [ \"$cmd\" = run ]; then echo fake-ctr-id; exit 0; fi\n" +
 		"if [ \"$cmd\" = exec ]; then\n" +
 		"  if [ \"$1\" = -i ]; then cat >/dev/null; exit 0; fi\n" +

@@ -1,6 +1,8 @@
 package ops
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -39,6 +41,7 @@ type Options struct {
 	PolicyPath  string
 	Addr        string
 	PlaneURL    string
+	CAFile      string
 	LookRuntime func() (env.Runtime, error)
 	Env         func(string) string
 	HTTP        *http.Client
@@ -61,7 +64,7 @@ func Diagnose(opt Options) Report {
 	r.add(checkGuestImage(getenv, rtErr == nil))
 	r.add(checkPlaneTLS(getenv, rtErr == nil))
 	r.add(checkPlaneCA(getenv, rtErr == nil))
-	r.add(checkPlane(opt.PlaneURL, opt.HTTP))
+	r.add(checkPlane(opt.PlaneURL, opt.HTTP, opt.CAFile))
 	for _, c := range r.Checks {
 		if c.Blocker && c.Status != StatusReady {
 			r.Ready = false
@@ -200,7 +203,25 @@ func checkPlaneCA(getenv func(string) string, runtimeOK bool) Check {
 	return c
 }
 
-func checkPlane(url string, client *http.Client) Check {
+func TLSClient(caFile string) (*http.Client, error) {
+	if caFile == "" {
+		return &http.Client{Timeout: 3 * time.Second}, nil
+	}
+	pem, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, err
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("env: invalid plane CA")
+	}
+	return &http.Client{
+		Timeout:   3 * time.Second,
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}},
+	}, nil
+}
+
+func checkPlane(url string, client *http.Client, caFile string) Check {
 	c := Check{Name: "plane", Blocker: url != ""}
 	if url == "" {
 		c.Status = StatusReady
@@ -209,7 +230,13 @@ func checkPlane(url string, client *http.Client) Check {
 		return c
 	}
 	if client == nil {
-		client = &http.Client{Timeout: 3 * time.Second}
+		var err error
+		client, err = TLSClient(caFile)
+		if err != nil {
+			c.Status = StatusMisconfigured
+			c.Detail = "plane CA unreadable"
+			return c
+		}
 	}
 	res, err := client.Get(strings.TrimRight(url, "/") + "/healthz")
 	if err != nil {

@@ -34,6 +34,22 @@ func (d DockerCLI) bin() string {
 	return "docker"
 }
 
+func (d DockerCLI) ensureNetwork(name string) error {
+	if name == "" {
+		return fmt.Errorf("env: trusted network required")
+	}
+	if _, err := d.run("network", "inspect", name); err == nil {
+		return nil
+	}
+	if _, err := d.run("network", "create", name); err != nil {
+		if _, err2 := d.run("network", "inspect", name); err2 == nil {
+			return nil
+		}
+		return fmt.Errorf("env: create network %s: %w", name, err)
+	}
+	return nil
+}
+
 func (d DockerCLI) run(args ...string) ([]byte, error) {
 	cmd := exec.Command(d.bin(), args...)
 	out, err := cmd.CombinedOutput()
@@ -56,6 +72,9 @@ func (d DockerCLI) CreateAndStart(spec Spec) (string, error) {
 	}
 	if spec.Network == "" {
 		ApplyTrustedNetwork(&spec)
+	}
+	if err := d.ensureNetwork(spec.Network); err != nil {
+		return "", err
 	}
 	args := []string{"run", "-d"}
 	args = append(args, TrustedRunArgs(spec)...)

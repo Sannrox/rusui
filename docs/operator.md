@@ -26,7 +26,7 @@ Check it before dispatch:
 
 ```bash
 BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
-"$BIN/rusui" diagnose -policy policy.yaml -addr 127.0.0.1:8080 -url http://127.0.0.1:8080
+"$BIN/rusui" diagnose -policy policy.yaml -addr 127.0.0.1:8080
 ```
 
 `diagnose` (and `GET /readyz`) report each check as `ready`,
@@ -97,7 +97,7 @@ BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
 `GET http://127.0.0.1:8080/healthz` must return `ok`. Then:
 
 ```bash
-"$BIN/rusui" diagnose -policy policy.yaml -addr 127.0.0.1:8080 -url http://127.0.0.1:8080
+"$BIN/rusui" diagnose -policy policy.yaml -addr 127.0.0.1:8080
 curl -fsS http://127.0.0.1:8080/readyz
 "$BIN/rusui" run -project rusui -token "$RUSUI_WORKER_SECRET" "bounded session"
 ```
@@ -132,6 +132,11 @@ export RUSUI_TLS_KEY=/etc/rusui/plane.key
 export RUSUI_PLANE_CA=/etc/rusui/plane-ca.crt   # mounted into the guest
 export RUSUI_GUEST_IMAGE=rusui-guest:local
 ```
+
+The plane certificate must include Subject Alternative Names `rusui.plane`
+(guest) and the listen address (host prepare, typically `127.0.0.1`). Host
+git fetch and `rusui drain` use `https://127.0.0.1:<port>` with
+`RUSUI_PLANE_CA`. Guests use `https://rusui.plane:<port>`.
 
 If Docker or Podman is installed but the TLS pair is unset, the container
 driver stays disabled and the process logs that fact. Process-driver review

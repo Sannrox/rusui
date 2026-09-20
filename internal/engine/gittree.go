@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -16,6 +17,7 @@ type GitFetcher struct {
 	ProxyURL string
 	Grant    string
 	GrantFn  func(repo string) (string, error)
+	CAFile   string
 	Git      string
 }
 
@@ -43,6 +45,9 @@ func (g GitFetcher) Fetch(repo, pin, dest string) error {
 	auth := ""
 	if g.ProxyURL != "" {
 		origin = strings.TrimRight(g.ProxyURL, "/") + "/" + repo + ".git"
+		if strings.HasPrefix(origin, "https://") && g.CAFile == "" {
+			return fmt.Errorf("git: plane CA required for https proxy")
+		}
 		auth = g.Grant
 		if g.GrantFn != nil {
 			tok, err := g.GrantFn(repo)
@@ -69,8 +74,23 @@ func (g GitFetcher) Fetch(repo, pin, dest string) error {
 	fetch := []string{"fetch", "--depth", "1", "origin", pin}
 	var env []string
 	if auth != "" {
-		env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-		fetch = []string{"-c", "http.extraHeader=Authorization: Bearer " + auth, "fetch", "--depth", "1", "origin", pin}
+		for _, e := range os.Environ() {
+			if strings.HasPrefix(e, "GIT_SSL_NO_VERIFY=") || strings.HasPrefix(e, "GIT_SSL_CAINFO=") {
+				continue
+			}
+			env = append(env, e)
+		}
+		env = append(env, "GIT_TERMINAL_PROMPT=0")
+		fetch = []string{"-c", "http.extraHeader=Authorization: Bearer " + auth}
+		if g.CAFile != "" {
+			ca := g.CAFile
+			if abs, err := filepath.Abs(ca); err == nil {
+				ca = abs
+			}
+			env = append(env, "GIT_SSL_CAINFO="+ca)
+			fetch = append(fetch, "-c", "http.sslCAInfo="+ca, "-c", "http.sslVerify=true")
+		}
+		fetch = append(fetch, "fetch", "--depth", "1", "origin", pin)
 	}
 	if err := gitDir(bin, dest, env, fetch...); err != nil {
 		return err
