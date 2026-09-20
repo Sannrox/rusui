@@ -7,6 +7,34 @@ First loopback session: [tutorial.md](tutorial.md).
 Flags, env, HTTP, and policy: [configuration.md](configuration.md).
 Nouns: [CONTEXT.md](../CONTEXT.md).
 
+## Supported topology
+
+The unattended proof is one tuple (D1/D4). Other OS/runtime/image
+combinations are not claimed:
+
+| Piece | Supported value |
+| --- | --- |
+| Host OS | Linux or macOS |
+| Runner | one `rusui-runner` on the same host as the plane |
+| Runtime | Docker or Podman CLI (`docker`/`podman` on `PATH`) |
+| Guest | `$RUSUI_GUEST_IMAGE` (Grok ACP over container stdio) |
+| Egress | `trusted`: HTTPS to `rusui.plane` only |
+| Listen | loopback `127.0.0.1` |
+
+Check it before dispatch:
+
+```bash
+BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
+"$BIN/rusui" diagnose -policy policy.yaml -addr 127.0.0.1:8080 -url http://127.0.0.1:8080
+```
+
+`diagnose` (and `GET /readyz`) report each check as `ready`,
+`misconfigured`, or `unavailable`. They do not print secret values.
+Exit status 0 means the topology is ready; do not start unattended work
+otherwise. `GET /healthz` only proves the process is listening.
+
+Process-driver review (`-driver`) is test/dev. It is not this topology.
+
 ## Prerequisites
 
 - Go 1.26 on `PATH`. `make` uses `GOTOOLCHAIN=go$(cat .go-version)`
@@ -65,7 +93,16 @@ BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
   -acp
 ```
 
-`GET http://127.0.0.1:8080/healthz` must return `ok`.
+`GET http://127.0.0.1:8080/healthz` must return `ok`. Then:
+
+```bash
+"$BIN/rusui" diagnose -policy policy.yaml -addr 127.0.0.1:8080 -url http://127.0.0.1:8080
+curl -fsS http://127.0.0.1:8080/readyz
+"$BIN/rusui" run -project rusui -token "$RUSUI_WORKER_SECRET" "bounded session"
+```
+
+`run` creates a `run` session through the public API. Container turns still
+need the guest image, plane TLS, and a runner.
 
 Do not pass `-addr 0.0.0.0:8080` unless secrets are set. Operator HTTP
 (`-addr`) has no TLS unless `RUSUI_TLS_CERT` and `RUSUI_TLS_KEY` are set.
@@ -183,12 +220,33 @@ Runtime images still bind loopback **inside the container**. Publish a host
 port only after `-addr 0.0.0.0:8080` and with secrets set.
 See [development.md](development.md).
 
+## Restart, uninstall, data retention
+
+Restart is the same command line. On start the process runs `Recover`
+(expire refresh owners, strip nothing from a live DB except hung owners).
+SQLite is the session truth; container dirt is not in the file.
+
+Stop the process (SIGINT). Data that remains until you delete it:
+
+- `rusui.db` plus `-wal`/`-shm` if present
+- snapshot cache (`snapshots/` next to the database by default)
+
+Secrets live in the operator environment, not in those files. Do not
+embed token values in examples. Restore a copied database with
+`store.Restore` (inventory, clear live leases, drop grants). Guest
+containers named `rusui-*` are not in the backup; destroy them with the
+container CLI if any are left.
+
+Uninstall: stop the process, delete the database and snapshot directory,
+unset the env vars listed in [configuration.md](configuration.md).
+
 ## Troubleshooting
 
 | Symptom | Check |
 | --- | --- |
 | Server exits immediately | Missing GitHub token or webhook/worker/Slack secret; or use `-allow-insecure` locally |
 | `GET /healthz` fails | Process not listening; wrong `-addr` |
+| `GET /readyz` 503 / `diagnose` exit 1 | Read the JSON checks: missing runtime is `unavailable`; bad policy/TLS/CA is `misconfigured` |
 | GitHub webhook 401 | Secret mismatch, or tunnel not hitting `/hooks/github` |
 | Runner `auth` / 401 | Secret mismatch between processes |
 | Slack 403 `user` | `RUSUI_SLACK_USERS` missing that user id, or empty |

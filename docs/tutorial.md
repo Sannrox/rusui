@@ -70,6 +70,12 @@ curl -fsS http://127.0.0.1:8080/healthz
 You should see `ok`. If the process exited immediately, a required secret
 or the GitHub token was missing.
 
+Optional: `"$BIN/rusui" diagnose -policy policy.yaml -addr 127.0.0.1:8080 -url http://127.0.0.1:8080`
+reports the supported topology. A loopback tutorial without Docker is
+allowed to print `runtime: unavailable`; that is not a failure of this
+walkthrough. Unattended container work needs the checks in
+[operator.md](operator.md).
+
 ## 6. Optional: start a runner
 
 The P1 guest is Grok ACP. Only do this if `grok` is on your `PATH` and you

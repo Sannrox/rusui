@@ -13,6 +13,10 @@ and `internal/server`. Intent: [ARCHITECTURE.md](../ARCHITECTURE.md).
 | `-allow-insecure` | false | Start without webhook, worker, and Slack secrets (warns). |
 | `-version` | false | Print version and exit. |
 
+Subcommand `rusui diagnose [-policy PATH] [-addr ADDR] [-url URL]` prints a
+JSON topology report (`ready` / `misconfigured` / `unavailable`) and exits
+0 only when every blocking check is ready. It does not print secret values.
+
 ## `rusui-runner` flags
 
 | Flag | Default | Meaning |
@@ -54,6 +58,7 @@ Guest `XAI_API_KEY` and git HTTP auth are the per-turn grant.
 | Method | Path | Auth |
 | --- | --- | --- |
 | `GET` | `/healthz` | none; body `ok` |
+| `GET` | `/readyz` | none; JSON topology report; 200 ready / 503 not ready |
 | `POST` | `/hooks/github` | `X-Hub-Signature-256` |
 | `POST` | `/hooks/events` | `X-Rusui-Signature-256` (same webhook secret); 202 |
 | `POST` | `/hooks/slack` | Slack HMAC + user allowlist |
