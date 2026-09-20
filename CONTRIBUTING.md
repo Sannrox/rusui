@@ -71,6 +71,8 @@ do not need that protocol.
 1. Keep the change to one issue and one coherent outcome.
 2. Do not commit secrets, `*.db`, `.version`, or `_output/`.
 3. Run `make all && make test && make validate` before you ask for review.
+   Pull requests to `main` must pass the `build` and `images` GitHub
+   Actions checks.
 4. Summarize behavior, not file operations. Link the issue.
 5. Call out impact on policy, the GitHub client, apply, Slack, persistence,
    configuration, compatibility, or security.

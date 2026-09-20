@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 
 	"gopkg.in/yaml.v3"
@@ -270,10 +271,5 @@ func (e *Effective) ProjectForRepo(name string) (Project, bool) {
 }
 
 func (p Project) AllowsKind(kind string) bool {
-	for _, k := range p.SessionKinds {
-		if k == kind {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.SessionKinds, kind)
 }
