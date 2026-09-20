@@ -168,6 +168,7 @@ func main() {
 		GitHubToken:    token,
 		GitHubTokens:   tokens,
 		GuestHTTPSOnly: tlsCert != "" && tlsKey != "",
+		PreviewBase:    os.Getenv("RUSUI_PREVIEW_BASE"),
 	}
 	if err := eng.Recover(); err != nil {
 		log.Printf("recover: %v", err)
