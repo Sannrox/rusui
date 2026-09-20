@@ -43,6 +43,7 @@ type Server struct {
 	DiagnoseLookRuntime func() (env.Runtime, error)
 	DiagnoseEnv         func(string) string
 	DiagnoseHTTP        *http.Client
+	PreviewBase         string // different origin from the plane, e.g. http://127.0.0.1:9xxx
 
 	termMu sync.Mutex
 	terms  map[int64]*termSess
@@ -89,6 +90,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /console/sessions/{id}/terminal/revoke", s.consoleTermRevoke)
 	mux.HandleFunc("POST /console/sessions/{id}/terminal/input", s.consoleTermInput)
 	mux.HandleFunc("GET /console/sessions/{id}/terminal/output", s.consoleTermOutput)
+	mux.HandleFunc("POST /console/sessions/{id}/preview", s.consoleMintPreview)
 	mux.HandleFunc("POST /approvals/{id}", s.decideApproval)
 	mux.HandleFunc("POST /sessions/{id}/turns", s.followUpTurn)
 	mux.HandleFunc("POST /sessions/{id}/cancel", s.cancelSession)

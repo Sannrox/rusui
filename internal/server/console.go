@@ -79,6 +79,12 @@ nav a{margin-right:1rem}
 <p>Project {{.Sess.Project}} · {{.Sess.Kind}} · {{.Sess.State}}{{if .TurnState}} · turn {{.TurnState}}{{end}}</p>
 <p>{{.Sess.Prompt}}</p>
 <p><a href="/console/sessions/{{.Sess.ID}}/terminal">Terminal</a></p>
+<form method="post" action="/console/sessions/{{.Sess.ID}}/preview">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<label for="port">Preview port</label>
+<input id="port" name="port" type="number" min="1024" max="65535" required>
+<button type="submit">Mint preview grant</button>
+</form>
 {{if .Reason}}<p>Blocked/failed: {{.Reason}}</p>{{end}}
 {{if .Artifact}}<p>Artifact {{.Artifact}}</p>{{end}}
 {{if .HistoryUnavailable}}<p role="status">Transcript history unavailable.</p>{{end}}
