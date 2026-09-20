@@ -124,24 +124,24 @@ func (e *Engine) IngestEvent(deliveryID, source, repo string, item int, kind str
 	})
 }
 
-func (e *Engine) IngestTurnAction(turnID int64, typ, reason string, body any) error {
+func (e *Engine) IngestTurnAction(turnID int64, typ, reason string, body any) (string, error) {
 	if typ == "" {
-		return fmt.Errorf("action: type required")
+		return "", fmt.Errorf("action: type required")
 	}
 	turn, err := store.GetTurn(e.Store, turnID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	sess, err := store.GetSession(e.Store, turn.SessionID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	payload := []byte("{}")
 	if body != nil {
 		var err error
 		payload, err = json.Marshal(body)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 	if reason == "" {
@@ -150,9 +150,9 @@ func (e *Engine) IngestTurnAction(turnID int64, typ, reason string, body any) er
 	sid, tid := turn.SessionID, turn.ID
 	id, err := newActionID()
 	if err != nil {
-		return err
+		return "", err
 	}
-	return store.InsertAction(e.Store, store.Action{
+	return id, store.InsertAction(e.Store, store.Action{
 		ID:            id,
 		SessionID:     &sid,
 		TurnID:        &tid,

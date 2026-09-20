@@ -801,6 +801,26 @@ ORDER BY a.action_id`)
 	return out, rows.Err()
 }
 
+func GetAction(s *Store, id string) (*Action, error) {
+	var a Action
+	var sid, tid, rid sql.NullInt64
+	err := s.DB.QueryRow(`SELECT action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body FROM actions WHERE action_id=?`, id).Scan(
+		&a.ID, &sid, &tid, &rid, &a.Repo, &a.Item, &a.Type, &a.ReasonCode, &a.EvidenceClass, &a.LimitSentence, &a.Body)
+	if err != nil {
+		return nil, err
+	}
+	if sid.Valid {
+		a.SessionID = &sid.Int64
+	}
+	if tid.Valid {
+		a.TurnID = &tid.Int64
+	}
+	if rid.Valid {
+		a.ReviewRevisionID = &rid.Int64
+	}
+	return &a, nil
+}
+
 func GetApprovalDecision(s *Store, actionID string) (string, bool, error) {
 	var d string
 	err := s.DB.QueryRow(`SELECT decision FROM approval_decisions WHERE action_id=?`, actionID).Scan(&d)
