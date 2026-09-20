@@ -10,9 +10,9 @@
   [ADR 0002](0002-grok-acp-agent-set.md),
   [ADR 0004](0004-rusui-services-yaml.md)–[0009](0009-credential-broker.md),
   or the current [ARCHITECTURE.md](../../ARCHITECTURE.md) contract.
-- Discussion: none. GitHub Discussions are disabled; this pull request is
-  the review venue. Merging with status Proposed records the investigation.
-  Changing status to Accepted in the merged revision is the acceptance act.
+- Discussion: none. GitHub Discussions are disabled. Merging with status
+  Proposed recorded the investigation. Changing status to Accepted is the
+  acceptance act.
 
 ## Context
 
@@ -62,8 +62,8 @@ enable live GitHub writes, implement-to-PR, or merging.
 
 | Horizon | Operator outcome | Release shape |
 | --- | --- | --- |
-| **M1 Dependable sessions** | Leave one real session, return, steer it, recover interruptions | Private alpha |
-| **M2 Verified delivery** | One bounded issue becomes a verified PR; humans merge | Personal delivery beta |
+| **M1 Dependable sessions** | Leave one real session, return, steer it, recover interruptions | Maintainer alpha |
+| **M2 Verified delivery** | One bounded issue becomes a verified PR; humans merge | Maintainer delivery beta |
 | **M3 Continuous maintenance** | Two repositories stay reviewed; eligible repairs run under policy | Maintenance beta |
 | **M4 Daily remote workspace** | CLI, editor, and console on the same API; independent install/restore | Self-hosting beta |
 | **M5 Agent and infrastructure choice** | Independent optional tracks chosen from measured need | Selected capability releases |
@@ -169,8 +169,8 @@ is accepted.
   environments, admission, credentials, evidence, and permitted external
   actions. P1 guest remains Grok CLI ([ADR 0002](0002-grok-acp-agent-set.md)).
   A second guest is optional M5.
-- **Self-hosting proof.** M4 prefers one independent operator. If the
-  product remains strictly personal, a clean-machine install and restore
+- **Self-hosting proof.** M4 prefers one independent operator. If no
+  independent operator is available, a clean-machine install and restore
   may substitute; external-user readiness then stays unclaimed.
 
 Explicitly deferred: native mobile clients, a new model-training effort,

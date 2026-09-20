@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- Behavior change, not a file list. Link the issue. -->
+<!-- Behavior change, not a file list. Link the issue. Do not name private repositories. -->
 
 Closes #
 

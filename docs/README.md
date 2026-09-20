@@ -24,10 +24,22 @@ the runbook.
 
 | File | Type | Authority |
 | --- | --- | --- |
+| [../README.md](../README.md) | tutorial | what it is, quick start, next steps |
+| [../ARCHITECTURE.md](../ARCHITECTURE.md) | explanation | product contract |
 | [../CONTEXT.md](../CONTEXT.md) | explanation | product nouns |
+| [../VISION.md](../VISION.md) | explanation | accepted direction; not the runbook |
+| [../ROADMAP.md](../ROADMAP.md) | explanation | published P0–P4 sequence until ADR 0010 is Accepted |
 | [operator.md](operator.md) | how-to | run, webhook, Slack, troubleshoot |
 | [configuration.md](configuration.md) | reference | flags, env, HTTP, policy, Slack verbs |
 | [development.md](development.md) | how-to | `make`, Docker images, CI |
+| [../build/README.md](../build/README.md) | reference | image internals |
+| [../BUILD.md](../BUILD.md) | archive | pointer to development.md |
 | [decisions/](decisions/) | explanation | ADRs |
 | [v1-build-prompt.md](v1-build-prompt.md) | archive | historical agent prompt; not the contract |
 | [../eval/set.md](../eval/set.md) | reference | review-quality fixtures |
+| [../eval/results.md](../eval/results.md) | archive | dated eval snapshot |
+| [../SECURITY.md](../SECURITY.md) | how-to | vulnerability reports |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | how-to | issues and pull requests |
+| [../AGENTS.md](../AGENTS.md) | how-to | agent instructions |
+| [../CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | explanation | community standards |
+| [../LICENSE](../LICENSE) | reference | MIT |

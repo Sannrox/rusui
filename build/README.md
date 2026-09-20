@@ -1,6 +1,7 @@
 # Build and release images
 
 Contributor overview: [docs/development.md](../docs/development.md).
+This file is image internals, not the operator runbook.
 Do not publish a container port until `-addr 0.0.0.0:8080` is passed **and**
 required secrets are set ([SECURITY.md](../SECURITY.md)).
 

@@ -9,7 +9,7 @@ An operator-named policy and budget domain. A session belongs to exactly one pro
 _Avoid_: Repository, environment, session, GitHub Project, workspace, tenant
 
 **Bound repository**:
-A GitHub `owner/name` listed under a project. Review requires at least one. GitHub is optional on the project itself.
+A GitHub `owner/name` listed under a project. Review requires at least one. GitHub is optional on the project itself. `visibility` (`public` or `private`) is a policy attribute of that bound repository, not of this source repo.
 _Avoid_: Using the repository full name as the policy identity
 
 **Session kind**:

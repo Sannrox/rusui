@@ -60,10 +60,13 @@ flowchart LR
 
 ## Reachability
 
-The HTTP server binds **loopback only** (`127.0.0.1`). GitHub and Slack
-cannot reach that port by themselves. The operator must run a separate
-tunnel or webhook relay (for example smee, cloudflared, or a GitHub App
-forwarder) that terminates TLS off-box and forwards to loopback.
+The HTTP server **defaults** to loopback (`127.0.0.1:8080`). That default
+is not a network jail: `-addr` may bind any address, and
+`-addr 0.0.0.0:8080` listens on every interface with no TLS. GitHub and
+Slack cannot reach loopback by themselves. The operator must run a
+separate tunnel or webhook relay (for example smee, cloudflared, or a
+GitHub App forwarder) that terminates TLS off-box and forwards to the
+listen address.
 
 The tunnel is operator infrastructure, not part of this repo. Forward
 GitHub to `POST /hooks/github` and Slack to `POST /hooks/slack` as in
@@ -79,8 +82,7 @@ the same object API. See [ADR 0003](docs/decisions/0003-operator-surface.md).
 Prose is not executable. `policy.yaml` is the only baseline that can
 authorize work. Optional `plan.md` notes are ignored by admit/apply.
 Policy v2 is keyed by **project** ([ADR 0005](docs/decisions/0005-policy-v2-project.md)).
-The shipped parser still reads version 1 until a delivery issue ports
-it; this section is the contract that issue implements.
+The shipped parser accepts version 2 only; version 1 files fail closed.
 
 ```yaml
 version: 2
@@ -93,7 +95,7 @@ projects:
   rusui:
     repos:
       Sannrox/rusui:
-        visibility: private
+        visibility: public
         review: true
         comments: false
         close: false
@@ -181,7 +183,7 @@ sequenceDiagram
   participant S as Server
   participant DB as SQLite
   participant R as Refresh
-  participant W as Worker
+  participant Rn as Runner
   participant CLI as Model CLI
 
   GH->>S: webhook
@@ -193,10 +195,10 @@ sequenceDiagram
   R->>DB: claim next refresh_request per item
   R->>GH: fetch live item
   R->>DB: admit(live_snapshot) if fetch still current
-  W->>S: POST /jobs/claim
-  W->>CLI: spawn sandboxed CLI
-  CLI-->>W: JSON artifact
-  W->>S: complete or fail
+  Rn->>S: POST /jobs/claim
+  Rn->>CLI: spawn sandboxed CLI
+  CLI-->>Rn: JSON artifact
+  Rn->>S: complete or fail
 ```
 
 **Intake transaction:** persist unique `delivery_id` and a coalesced
@@ -305,7 +307,7 @@ Admission compares the freshly fetched **item** snapshot hash to the
 
 Retries of unchanged content are new **attempts** of the same
 `pending_revision`. Catch-up during a review of an unchanged item must
-not make the worker finish behind pending.
+not make the runner finish behind pending.
 
 ## Lease state machine
 
@@ -320,7 +322,7 @@ lease on session A cannot block claiming session B.
 | Field | Meaning |
 |---|---|
 | `pending_revision` | monotonic; latest admitted snapshot |
-| `claimed_revision` | snapshot the live worker is executing |
+| `claimed_revision` | snapshot the live runner is executing |
 | `lease_generation` | monotonic; increments on every claim, expire, or steal-deny |
 | `lease_expires_at` | liveness timeout; heartbeat may extend only while leased and unexpired |
 | `execution_deadline_at` | hard cap from claim; heartbeats do not extend it |
@@ -408,7 +410,7 @@ jobs on an **unchanged** revision. After fixing credentials or the
 CLI, the operator must `retry`. New content via `admit` already
 resets `retry_count` and requeues if the job was failed.
 
-The worker kills the CLI process group when `execution_deadline_at`
+The runner kills the CLI process group when `execution_deadline_at`
 hits, even if heartbeats still succeed.
 
 **Concurrency**
@@ -540,11 +542,11 @@ GitHub in tests serves only the pinned snapshot.
 `main_sha` on the stored review row is copied from the claimed
 snapshot (admission), not from a claim-time fetch.
 
-The worker sends the model JSON. The server **validates and overlays
+The runner sends the model JSON. The server **validates and overlays
 server-owned claim data** before finalize:
 
 Must equal the lease/snapshot row (else `/complete` is rejected as
-fail-without-publish, or the worker should `/fail`):
+fail-without-publish, or the runner should `/fail`):
 
 - `repo`, `item`, `item_kind`
 - `claimed_revision`, `snapshot_hash`
@@ -631,7 +633,7 @@ at commit time, reject: no review row, no receipt.
    for the same pending snapshot.
 4. No review JSON. No apply. Retrying `/fail` returns the same receipt.
 
-Crash before the transaction commits: no row, no receipt; worker
+Crash before the transaction commits: no row, no receipt; the runner
 retries `/complete` or `/fail` with the same generation.
 
 ## Snapshot hash
@@ -775,7 +777,7 @@ authorize `user_id` against an allowlist. Fail closed if any check
 fails.
 
 Commands: `status`, `pause [project]`, `resume [project]`,
-`sweep [project]`, `retry [project[#item]]`, `reload`. `implement` is
+`sweep [repo]`, `retry [repo[#item]]`, `reload`. `implement` is
 rejected until v3. `pause rusui` names the project slug, not
 `Sannrox/rusui`.
 

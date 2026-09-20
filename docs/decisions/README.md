@@ -30,8 +30,8 @@ tests, and the pull request description instead.
 
 ## Lifecycle
 
-- **Proposed**: under review in a pull request. `ARCHITECTURE.md` remains the
-  product contract until acceptance.
+- **Proposed**: investigation recorded (open or merged pull request).
+  `ARCHITECTURE.md` remains the product contract until acceptance.
 - **Accepted**: merged with status updated; follow-up Issues may reference the
   ADR as a delivered dependency.
 - **Superseded**: a newer ADR links here and this file links forward. Historical

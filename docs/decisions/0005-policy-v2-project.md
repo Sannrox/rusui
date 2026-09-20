@@ -56,8 +56,8 @@ A **project** is an operator-named policy and budget domain.
 Dogfood instance (not the definition): two projects `rusui` and
 `shikigami`, each binding one repository.
 
-The shipped parser still reads version 1 until a delivery issue ports
-it. This ADR is the contract that issue implements.
+The shipped parser accepts policy version 2 keyed by project. Version 1
+files fail closed.
 
 ## Consequences
 
@@ -94,5 +94,5 @@ a GitHub repository must bind to two projects.
 - [#41](https://github.com/Sannrox/rusui/issues/41)
 - [Find the way to P1 dogfood](https://github.com/Sannrox/rusui/issues/37)
 - [ADR 0001](0001-environment-plane.md) D9
-- `policy.yaml` / `internal/policy` version 1 on `origin/main`
+- `policy.yaml` / `internal/policy` version 2 on `origin/main`
 - `internal/acp.DenyUnmatched`

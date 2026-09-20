@@ -4,7 +4,7 @@
 - Date: YYYY-MM-DD
 - Resolves: issue or pull request links
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md) (product contract unless this
-  ADR explicitly rewrites it)
+  ADR explicitly rewrites it). Do not link private repositories.
 
 ## Context
 
