@@ -36,6 +36,7 @@ type Publisher interface {
 	OpenDraftPR(repo, title, body, headRef, base string) (*PullRequest, error)
 	GetPR(repo string, number int) (*PullRequest, error)
 	DefaultBranch(repo string) (string, error)
+	DeleteRef(repo, ref string) error
 }
 
 func branchName(ref string) string {
@@ -151,6 +152,45 @@ func (a *API) DefaultBranch(repo string) (string, error) {
 	return repoInfo.DefaultBranch, nil
 }
 
+func ownedSessionRef(ref string) bool {
+	return strings.HasPrefix(strings.TrimPrefix(ref, "refs/heads/"), "rusui/")
+}
+
+func (a *API) DeleteRef(repo, ref string) error {
+	if !ownedSessionRef(ref) {
+		return fmt.Errorf("github: ref not owned")
+	}
+	owner, name, err := splitRepo(repo)
+	if err != nil {
+		return err
+	}
+	ref = strings.TrimPrefix(branchName(ref), "heads/")
+	u := strings.TrimRight(a.BaseURL, "/") + "/repos/" + owner + "/" + name + "/git/refs/heads/" + ref
+	req, err := http.NewRequest(http.MethodDelete, u, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("User-Agent", "rusui")
+	if t := a.bearer(); t != "" {
+		req.Header.Set("Authorization", "Bearer "+t)
+	}
+	res, err := a.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusNoContent {
+		return nil
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("github delete ref: %s %s", res.Status, truncate(body, 200))
+	}
+	return nil
+}
+
 func (a *API) GetPR(repo string, number int) (*PullRequest, error) {
 	owner, name, err := splitRepo(repo)
 	if err != nil {
@@ -173,6 +213,7 @@ type FakePublisher struct {
 	Default     string
 	AfterOpen   func(*PullRequest) error
 	Calls       []string
+	Deleted     []string
 }
 
 func NewFakePublisher() *FakePublisher {
@@ -236,6 +277,17 @@ func (f *FakePublisher) GetPR(repo string, number int) (*PullRequest, error) {
 		}
 	}
 	return nil, fmt.Errorf("github: not found")
+}
+
+func (f *FakePublisher) DeleteRef(repo, ref string) error {
+	if !ownedSessionRef(ref) {
+		return fmt.Errorf("github: ref not owned")
+	}
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	f.Calls = append(f.Calls, "delete-ref")
+	f.Deleted = append(f.Deleted, repo+"#"+ref)
+	return nil
 }
 
 func (f *FakePublisher) DefaultBranch(string) (string, error) {
