@@ -1,13 +1,17 @@
 # ADR 0013: Exact-artifact verification and plane-owned publication
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-20
+- Accepted: 2026-09-21
 - Resolves: [#96](https://github.com/Sannrox/rusui/issues/96)
-- Related: [ARCHITECTURE.md](../../ARCHITECTURE.md) (product contract;
-  this ADR does not rewrite it and does not enable live GitHub writes),
-  [ADR 0009](0009-credential-broker.md) (guest never holds GitHub REST),
-  [ADR 0010](0010-hybrid-roadmap-sequence.md) (M2 verified delivery).
-- Discussion: none. GitHub Discussions are disabled.
+- Amends: [ARCHITECTURE.md](../../ARCHITECTURE.md) current contract
+  (names plane-owned `open_pr` / `update_pr` of a `proven` candidate;
+  comment, close, merge, and land stay unauthorized).
+- Related: [ADR 0009](0009-credential-broker.md) (guest never holds
+  GitHub REST), [ADR 0010](0010-hybrid-roadmap-sequence.md) (M2 verified
+  delivery).
+- Discussion: none. GitHub Discussions are disabled. Merging with this
+  status is the acceptance act.
   Objects: source, task, candidate, proof, publication.
   Evidence: isolated verifier output over an exact candidate SHA;
   independent review of that SHA; never an agent self-declaration.
@@ -98,15 +102,18 @@ proof.
 `denied`, `cancelled`, `source_drift`, `checks_unavailable`,
 `ambiguous`, `proven`. `published` is a later implementation issue that
 may consume only `proven`. Live close, merge, and arbitrary writes stay
-outside this decision. `ARCHITECTURE.md` remains the product contract
-until a later accepted rewrite names the live publish path.
+outside this decision. [ARCHITECTURE.md](../../ARCHITECTURE.md) names
+`open_pr` and `update_pr` of a `proven` candidate as the current
+publication path. That rewrite does not ship the publisher.
 
 ## Consequences
 
 - Implementation issues (P2–P6) can bind to these objects without
   inventing a wider GitHub write set.
-- Accepting this ADR does not by itself authorize live mutation.
-- Schema for proof rows can wait for the publisher issue.
+- The product contract now names the publication path. Shipping live
+  `open_pr` / `update_pr` remains a later implementation issue.
+- Schema for action receipts can wait for the publisher issue. Proof
+  rows already exist for the verifier.
 
 ## Rejected alternatives
 
@@ -120,12 +127,11 @@ until a later accepted rewrite names the live publish path.
 ## Validation and reversal
 
 `internal/publish.Evaluate` encodes the fail-closed gate. Reverse by
-superseding this ADR before any publisher implementation. Proposed
-status means dependents that require an **accepted** design stay
-blocked until a later merge updates this header.
+superseding this ADR and rewriting [ARCHITECTURE.md](../../ARCHITECTURE.md)
+before widening permitted GitHub writes.
 
 ## Sources
 
 - [#96](https://github.com/Sannrox/rusui/issues/96)
-- [ARCHITECTURE.md](../../ARCHITECTURE.md) Implement (v3 only)
+- [ARCHITECTURE.md](../../ARCHITECTURE.md) Publication (ADR 0013)
 - [ADR 0009](0009-credential-broker.md)

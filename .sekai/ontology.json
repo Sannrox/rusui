@@ -27,7 +27,7 @@
     },
     {
       "name": "RusuiImplementLane",
-      "description": "v3 only. Model and trusted proofs run without publish credentials. Publish consumes the exact verified artifact (head_sha and proof digests) then uses the server write token. A profile command name is not a security boundary.",
+      "description": "ADR 0013 publication path. Model and trusted proofs run without publish credentials. Publish consumes a proven outcome for an exact candidate SHA then uses the installation token for open_pr or update_pr only. A profile command name is not a security boundary. Comment, close, merge, and land stay unauthorized.",
       "superclasses": [],
       "properties": []
     },
@@ -142,6 +142,30 @@
     {
       "name": "RusuiWorkerSandbox",
       "description": "v1 trusted local execution as the same OS user. Env and cwd isolation are defense in depth, not a filesystem jail. Write tokens stay in the server. Filesystem and network jails are v2.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiSource",
+      "description": "Pinned intake identity (repo, item, snapshot_hash, main_sha) a candidate is proven against. Source drift invalidates proof.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiCandidate",
+      "description": "Git object (commit_sha, tree_sha, ref) on refs/heads/rusui/<session>/*. Not a working tree or default-branch tip.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiProof",
+      "description": "Isolated verifier output (command, exit_code, log_digest, head_sha, base_sha) for one candidate SHA. Independent review is a different session. Agent self-declaration is not proof.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiPublication",
+      "description": "Plane-owned GitHub pull request whose head is the proven commit_sha. Permitted actions: open_pr, update_pr. Human merge is required. Unnamed GitHub writes are denied.",
       "superclasses": [],
       "properties": []
     }
@@ -330,6 +354,30 @@
       "range": "RusuiPerTurnGrant",
       "cardinality": { "min": 0, "max": 1 },
       "transitive": false
+    },
+    {
+      "name": "rusui_proof_judges_candidate",
+      "description": "An isolated proof is valid only for the candidate SHA and source snapshot it names.",
+      "domain": "RusuiProof",
+      "range": "RusuiCandidate",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_publication_consumes_proof",
+      "description": "Publication may consume only a proven outcome. Guests and the verifier never hold the write token.",
+      "domain": "RusuiPublication",
+      "range": "RusuiProof",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_dispatches_publication",
+      "description": "Control plane may open_pr or update_pr a proven candidate. Unnamed GitHub writes are denied.",
+      "domain": "RusuiControlPlane",
+      "range": "RusuiPublication",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
     }
   ],
   "provenance": [
@@ -402,7 +450,7 @@
     {
       "subject": "RusuiImplementLane",
       "source": "ARCHITECTURE.md",
-      "locator": "ARCHITECTURE.md#implement-v3-only",
+      "locator": "ARCHITECTURE.md#publication-adr-0013",
       "confidence": 1.0
     },
     {
@@ -475,6 +523,30 @@
       "subject": "RusuiPerTurnGrant",
       "source": "docs/decisions/0009-credential-broker.md",
       "locator": "docs/decisions/0009-credential-broker.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiSource",
+      "source": "docs/decisions/0013-publication-authority.md",
+      "locator": "docs/decisions/0013-publication-authority.md#d1-named-identities",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiCandidate",
+      "source": "docs/decisions/0013-publication-authority.md",
+      "locator": "docs/decisions/0013-publication-authority.md#d1-named-identities",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiProof",
+      "source": "docs/decisions/0013-publication-authority.md",
+      "locator": "docs/decisions/0013-publication-authority.md#d2-trusted-verifier",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiPublication",
+      "source": "docs/decisions/0013-publication-authority.md",
+      "locator": "docs/decisions/0013-publication-authority.md#d3-permitted-publication-actions",
       "confidence": 1.0
     }
   ]

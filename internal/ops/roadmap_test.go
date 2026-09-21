@@ -33,4 +33,7 @@ func TestPublishedRoadmapFollowsAcceptedSequence(t *testing.T) {
 	if strings.Contains(text, "live GitHub writes") && !strings.Contains(text, "does not enable live GitHub writes") {
 		t.Fatal("ROADMAP must not authorize live GitHub writes")
 	}
+	if !strings.Contains(text, "ADR 0013") || !strings.Contains(text, "open_pr") {
+		t.Fatal("ROADMAP M2 must name the accepted publication contract")
+	}
 }

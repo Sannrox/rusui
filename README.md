@@ -2,12 +2,15 @@
 
 Self-hosted environment plane for coding agents. You write `policy.yaml`.
 The server admits work onto sessions and turns, records immutable reviews,
-and **dry-runs** apply. It does not comment, close, or merge on GitHub.
+and **dry-runs** apply for comment and close. It does not comment, close,
+or merge on GitHub. Plane-owned `open_pr` / `update_pr` of a proven
+candidate is the named publication path
+([ADR 0013](docs/decisions/0013-publication-authority.md)).
 
 留守居 is the steward who keeps house while you are away.
 
-**Status:** self-hosted source, loopback by default, dry-run apply.
-Not a hosted product.
+**Status:** self-hosted source, loopback by default, dry-run apply for
+comment and close. Not a hosted product.
 
 [Docs](docs/README.md) · [Architecture](ARCHITECTURE.md) ·
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) ·
@@ -24,9 +27,9 @@ The v1 contract: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## What it is not
 
-Live GitHub mutation, implement-to-PR, land, a dashboard, or a multi-tenant
-SaaS. Later milestones and competitive sequencing live in
-[VISION.md](VISION.md) and [ROADMAP.md](ROADMAP.md); they are not the
+Live comment, close, merge, or land; unnamed GitHub writes; a dashboard;
+or a multi-tenant SaaS. Later milestones and competitive sequencing live
+in [VISION.md](VISION.md) and [ROADMAP.md](ROADMAP.md); they are not the
 runbook.
 
 ## Quick start

@@ -40,7 +40,8 @@ Process-driver review (`-driver`) is test/dev. It is not this topology.
 
 - Go 1.26 on `PATH`. `make` uses `GOTOOLCHAIN=go$(cat .go-version)`
   (currently 1.26.6).
-- A **read-only** GitHub token for repositories listed in policy.
+- A **read-only** GitHub token for intake of repositories listed in policy.
+  Publication uses the installation token only after a proven candidate.
 - A tunnel or webhook relay if GitHub or Slack must reach the process.
 - For review turns: `-acp` (Grok ACP, the P1 guest) or a process driver
   command (`-driver`) that prints review JSON on stdout. There is no

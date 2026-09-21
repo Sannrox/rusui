@@ -2,12 +2,14 @@
 
 `rusui` is a self-hosted environment plane. You write `policy.yaml`. The
 server admits work onto environments, sessions, turns, runners, events,
-and actions; records immutable reviews; and dry-runs apply.
-`ARCHITECTURE.md` is the product contract. Do not implement live apply
-or implement-to-PR except as types or comments needed to keep state
-machines honest. Direction beyond the current contract is proposed in
-`VISION.md` and `ROADMAP.md`; decisions live in `docs/decisions/`. A
-proposed ADR does not change the contract until it is accepted.
+and actions; records immutable reviews; and dry-runs apply for comment
+and close. Plane-owned `open_pr` / `update_pr` of a proven candidate is
+the named publication path ([ADR 0013](docs/decisions/0013-publication-authority.md)).
+`ARCHITECTURE.md` is the product contract. Do not implement live comment,
+close, merge, land, or unnamed GitHub writes. Direction beyond the current
+contract is proposed in `VISION.md` and `ROADMAP.md`; decisions live in
+`docs/decisions/`. A proposed ADR does not change the contract until it
+is accepted.
 
 Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
 [docs/README.md](docs/README.md).
@@ -20,8 +22,9 @@ Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
   `make test WHAT=./internal/engine TEST_ARGS='-run ^TestClaim'`.
 - Parse issue dependencies only from `## Dependencies`.
 - Bind examples to loopback. `-addr` may bind elsewhere; do not document
-  `0.0.0.0` unless the change is about listen addresses. The GitHub client
-  is read-only.
+  `0.0.0.0` unless the change is about listen addresses. The intake GitHub
+  client is read-only. Publication uses the installation token only after
+  a `proven` outcome; model CLIs never receive it.
 - Use `verify-change` before delivery. Fix actionable review findings.
 - Preserve other delivery lanes; never switch, reset, or stash the primary
   checkout.
@@ -37,8 +40,7 @@ Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
 
 ## Never
 
-- Implement live GitHub mutation or implement-to-PR except as types or
-  comments needed to keep state machines honest.
+- Implement live comment, close, merge, land, or unnamed GitHub writes.
 - Give a model process a GitHub write token, or commit secrets, webhook
   secrets, worker secrets, Slack tokens, `*.db`, `.version`, or `_output/`.
 - Link private repositories or put private names in public issues, pull
@@ -195,7 +197,7 @@ procedure is `.agents/skills/deliver-ready-issue/references/parallel-delivery.md
 
 Never commit secrets, GitHub or Slack tokens, webhook secrets, worker
 secrets, local SQLite databases, `.version`, or `_output/`. Bind examples
-to loopback. The GitHub client is read-only. Model CLIs never receive
-GitHub write tokens. This repository is public; do not link private
+to loopback. The intake GitHub client is read-only. Model CLIs never
+receive GitHub write tokens. This repository is public; do not link private
 repos. Canonical agent policy is this file; `AGENT.md` and `CLAUDE.md`
 are pointers. Skills live in `.agents/skills/`.
