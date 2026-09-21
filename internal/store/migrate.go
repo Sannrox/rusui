@@ -7,7 +7,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 15
+const CurrentSchema = 16
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -292,8 +292,35 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 15); err != nil {
 			return err
 		}
+		ver = 15
+	}
+	if ver < 16 {
+		if err := migrateV16(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 16); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func migrateV16(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS effort_feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  effort_key TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  task_id INTEGER NOT NULL,
+  candidate_sha TEXT NOT NULL,
+  prompt_hash TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(effort_key, seq)
+);
+CREATE INDEX IF NOT EXISTS effort_feedback_effort ON effort_feedback(effort_key);
+`)
+	return err
 }
 
 func migrateV15(db *sql.DB) error {
