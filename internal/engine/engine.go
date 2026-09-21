@@ -39,14 +39,15 @@ const (
 )
 
 type Engine struct {
-	Store   *store.Store
-	Policy  *policy.Effective
-	GitHub  gh.Client
-	Clock   clock.Clock
-	Log     *log.Logger
-	HookID  string
-	HookIDs map[string]string
-	Notify  func(string)
+	Store     *store.Store
+	Policy    *policy.Effective
+	GitHub    gh.Client
+	Publisher gh.Publisher
+	Clock     clock.Clock
+	Log       *log.Logger
+	HookID    string
+	HookIDs   map[string]string
+	Notify    func(string)
 
 	FetchTimeout time.Duration
 	OwnerTTL     time.Duration

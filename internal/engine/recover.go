@@ -9,7 +9,8 @@ import (
 
 // Recover runs the startup recovery paths ARCHITECTURE.md requires:
 // expire in-flight refresh owners, reconcile hook deliveries, catch up
-// open and locally tracked items, and retry unpublished apply attempts.
+// open and locally tracked items, retry unpublished apply attempts, and
+// retry in-flight or uncertain publications.
 // Periodic callers use the same ReconcileConfigured, CatchUpConfigured,
 // and RetryApplyAttempts methods. Errors besides owner expiry are
 // reported through Notify and do not prevent the remaining paths.
@@ -23,6 +24,7 @@ func (e *Engine) Recover() error {
 		e.exception("catch-up: " + err.Error())
 	}
 	_ = e.RetryApplyAttempts()
+	_ = e.RetryPublications()
 	if err := e.ReapEnvironments(); err != nil {
 		e.exception("reap environments: " + err.Error())
 	}

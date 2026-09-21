@@ -171,6 +171,7 @@ type ghPR struct {
 	Number         int       `json:"number"`
 	Title          string    `json:"title"`
 	Body           string    `json:"body"`
+	HTMLURL        string    `json:"html_url"`
 	State          string    `json:"state"`
 	Draft          bool      `json:"draft"`
 	Merged         bool      `json:"merged"`
@@ -183,6 +184,7 @@ type ghPR struct {
 		SHA string `json:"sha"`
 	} `json:"base"`
 	Head struct {
+		Ref string `json:"ref"`
 		SHA string `json:"sha"`
 	} `json:"head"`
 }
