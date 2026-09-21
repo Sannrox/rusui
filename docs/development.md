@@ -76,7 +76,8 @@ and with secrets set.
 | `internal/server` | HTTP + Slack routing |
 | `internal/policy` | YAML parse, fail-closed unknown fields |
 | `internal/store` | SQLite |
-| `internal/gh` | read-only GitHub client + webhook verify |
+| `internal/gh` | intake GitHub client (read-only) + webhook verify |
+| `internal/publish` | fail-closed publication gate ([ADR 0013](decisions/0013-publication-authority.md)) |
 | `internal/slack` | HMAC, allowlist, outbound exceptions |
 | `eval/` | review-quality fixtures |
 

@@ -7,8 +7,8 @@
 > This file is the published M1–M6 sequence. The earlier P0–P4 calendar
 > remains at
 > [94aabd7/ROADMAP.md](https://github.com/Sannrox/rusui/blob/94aabd7d292faa052ec8faba0f028f8e07bc9ade/ROADMAP.md).
-> [ARCHITECTURE.md](ARCHITECTURE.md) is unchanged until a later accepted
-> contract rewrite (M2 publication is the first candidate).
+> [ARCHITECTURE.md](ARCHITECTURE.md) names plane-owned `open_pr` /
+> `update_pr` of a proven candidate ([ADR 0013](docs/decisions/0013-publication-authority.md)).
 
 GitHub Issues remain the planning source of truth; this file links to them
 and never overrides their `## Dependencies` sections. 24–36 months after
@@ -16,7 +16,9 @@ acceptance is a planning envelope, not a delivery commitment. Month zero
 is acceptance of ADR 0010. Re-estimate after M1 and M2. Reduce scope
 before moving a safety or correctness gate.
 
-This ADR does not enable live GitHub writes, implement-to-PR, or merging.
+ADR 0010 does not enable live GitHub writes, implement-to-PR, or merging.
+ADR 0013 names `open_pr` / `update_pr` of a proven candidate. Human merge
+remains required.
 
 ## Shape
 
@@ -48,8 +50,10 @@ Closed component issues are not this exit gate.
 
 May start after M1's bounded session proof **and** an accepted publication
 contract. It does **not** wait for thirty unattended days. Humans merge.
-This file is not that publication-contract amendment; dry-run apply and
-the read-only GitHub client remain until a later accepted ADR.
+[ADR 0013](docs/decisions/0013-publication-authority.md) is **Accepted**.
+The product contract names `open_pr` / `update_pr` of a `proven` candidate.
+Comment, close, merge, and land stay unauthorized. The publisher that
+performs those writes is a later implementation issue.
 
 Planning issues: [#96](https://github.com/Sannrox/rusui/issues/96)–[#103](https://github.com/Sannrox/rusui/issues/103).
 

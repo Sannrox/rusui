@@ -11,8 +11,7 @@ Report security issues through [SECURITY.md](SECURITY.md), not a public issue.
 
 GitHub Issues are the planning source of truth. Prefer issues labeled
 `status:ready` whose `## Dependencies` are satisfied. Do not implement live
-GitHub mutation or implement-to-PR except as types or comments needed to keep
-state machines honest.
+comment, close, merge, land, or unnamed GitHub writes.
 
 Direction beyond the current contract lives in [VISION.md](VISION.md),
 [ROADMAP.md](ROADMAP.md), and [docs/decisions/](docs/decisions/). An accepted
@@ -78,7 +77,7 @@ do not need that protocol.
    configuration, compatibility, or security.
 6. Fix actionable review findings before merge.
 
-The GitHub client is read-only. Model CLIs never receive GitHub write tokens.
+The intake GitHub client is read-only. Model CLIs never receive GitHub write tokens.
 Bind the HTTP server to loopback in examples unless the change is explicitly
 about listen addresses.
 

@@ -14,8 +14,10 @@ rusui is a **self-hosted environment plane**. The product contract is
 [ARCHITECTURE.md](ARCHITECTURE.md). In short:
 
 - GitHub is intake. The server is the source of truth. Slack is the human socket.
-- Apply is **dry-run**: the GitHub client is read-only. The process never comments,
-  closes, or merges.
+- Apply for comment and close is **dry-run**. The intake GitHub client is
+  read-only. Plane-owned publication may `open_pr` or `update_pr` a proven
+  candidate; guests and verifier processes never receive that token. The
+  process never comments, closes, or merges.
 - Model CLIs never receive GitHub write tokens.
 - The HTTP server **defaults** to loopback (`127.0.0.1:8080`). That default is
   not a network jail. `-addr 0.0.0.0:8080` listens on every interface with no

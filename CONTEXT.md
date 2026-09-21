@@ -59,3 +59,23 @@ _Avoid_: PAT, installation token, `auth.json`, xAI API key (in the guest)
 **Plane proxy**:
 Git smart-HTTP and model egress on the plane, which redeem a grant for the real token. GitHub REST stays plane-internal. The guest may reach only these endpoints under egress `trusted`. HTTPS to `rusui.plane`; plane CA at `/usr/local/share/ca-certificates/rusui-plane.crt`. Snapshot prepare uses a read-only grant on the same git proxy.
 _Avoid_: runner-side proxy, `api.github.com` from the guest, PAT on the runner disk, HTTP to the proxies from a container guest
+
+**Source**:
+The pinned intake identity `(repo, item, snapshot_hash, main_sha)` a candidate is proven against. Source drift invalidates proof.
+_Avoid_: live GitHub fetch at publish time as the identity
+
+**Task**:
+A `run` session plus prompt hash that produced the candidate.
+_Avoid_: review session, GitHub issue as the implementation identity
+
+**Candidate**:
+The git object `(commit_sha, tree_sha, ref)` on `refs/heads/rusui/<session>/*`.
+_Avoid_: working tree, unverified branch tip, default branch
+
+**Proof**:
+Isolated verifier output `(command, exit_code, log_digest, head_sha, base_sha)` for one candidate SHA. Independent review is a different session judging that SHA. Agent self-declaration is not proof.
+_Avoid_: CI green, author-session review, expired or drifted proof
+
+**Publication**:
+Plane-owned GitHub pull request whose head is the proven `commit_sha`. Permitted actions: `open_pr`, `update_pr`. Human merge is required.
+_Avoid_: guest-opened PR, merge, close, unnamed GitHub write

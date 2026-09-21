@@ -9,8 +9,10 @@
 Self-hosted environment plane (留守居: the steward who keeps house while
 you are away). You write structured policy. The server admits work onto
 typed records — environment, session, turn, runner, event, action —
-records immutable review revisions, and dry-runs apply. GitHub review is
-the first session kind, not the identity of the system.
+records immutable review revisions, and dry-runs apply for comment and
+close. Plane-owned publication of a proven candidate is the named
+GitHub write ([ADR 0013](docs/decisions/0013-publication-authority.md)).
+GitHub review is the first session kind, not the identity of the system.
 
 This is not ClawSweeper, Tatara, or a Kafka fleet. GitHub is intake. The
 server is the source of truth. Slack is the human socket. Model CLIs never
@@ -21,19 +23,27 @@ receive GitHub write tokens. Schema changes are versioned migrations
 
 **Current contract:** one repository profile, one model CLI, signed GitHub
 intake, claim/lease on a **turn**, immutable review artifacts in SQLite,
-deterministic **dry-run** apply, pause/status/retry/cancel, daily review
-budget, and a per-project concurrent-lease meter
-([ADR 0011](docs/decisions/0011-unattended-session-contract.md)).
-No live GitHub mutation, no implement, no land. The domain nouns are the
-environment-plane set from [ADR 0001](docs/decisions/0001-environment-plane.md).
+deterministic **dry-run** apply for comment and close, pause/status/retry/cancel,
+daily review budget, a per-project concurrent-lease meter
+([ADR 0011](docs/decisions/0011-unattended-session-contract.md)), and
+plane-owned publication of a **proven** candidate
+([ADR 0013](docs/decisions/0013-publication-authority.md)). After isolated
+proof and independent review of an exact candidate SHA, the plane may
+`open_pr` or `update_pr` that SHA onto `refs/heads/rusui/<session>/*` of
+one bound repository. Guests and verifier processes never receive GitHub
+write credentials. Unnamed GitHub writes are denied. Human merge is
+required. Comment, close, and land stay unauthorized. The domain nouns
+are the environment-plane set from
+[ADR 0001](docs/decisions/0001-environment-plane.md) plus the publication
+objects in ADR 0013.
 
 **Live apply (later):** comment, then close, enabled one at a time only
 after recovery tests **and** a recorded review-quality evaluation against
 operator judgments. Model `confidence = high` is not the promotion
 criterion.
 
-**Implement-to-PR (later):** proofs without publish credentials; publish
-consumes the exact verified artifact and lands with a `sha` precondition.
+**Land (later):** a review of the published PR `head_sha` with a
+land-eligible verdict plus policy `land: true`. Never CI green alone.
 
 ## System
 
@@ -55,8 +65,10 @@ flowchart LR
   Runner -->|process driver + per-turn token| Driver[process driver]
   Driver -->|JSON artifact on stdout| Runner
 
-  Apply[apply executor] -->|dry-run in v1; live later| GitHub
+  Apply[apply executor] -->|dry-run comment/close| GitHub
+  Publisher[publication] -->|open_pr / update_pr after proven| GitHub
   Server --> Apply
+  Server --> Publisher
   Server -->|exceptions only| Slack
 ```
 
@@ -118,10 +130,11 @@ revision is out of scope. Boolean GitHub capabilities default to
 `false` except `review`, which defaults to `true` when the repository
 is listed under a project.
 
-Those GitHub flags authorize **simulation**, not live GitHub writes,
-under the current contract. `comments: false` and `close: false` mean
-dry-run apply will not emit an intended comment or close either. Tests
-that need an eligible dry-run use `policy.fixture.yaml`.
+`comments` and `close` authorize **simulation**, not live GitHub writes.
+`land` remains unauthorized. `implement` names the ADR 0013 publication
+path (`open_pr` / `update_pr` of a `proven` candidate); it does not
+authorize comment, close, merge, or unnamed writes. Tests that need an
+eligible dry-run use `policy.fixture.yaml`.
 `policy.example.yaml` stays the operator default until the parser ports.
 
 `max_reviews_per_repo_per_utc_day` caps **new review claims** for that
@@ -485,8 +498,9 @@ What v1 does enforce:
   TTL). `complete`/`fail` include `lease_generation` and
   `claimed_revision`. The runner opens no inbound port.
 
-v3 push/PR uses the server-side write token only in the publish step
-after proofs succeeded without that token.
+Publication uses the installation token only in the publish step after
+proofs succeeded without that token
+([ADR 0013](docs/decisions/0013-publication-authority.md)).
 
 `internal/acp` is the host-side Agent Client Protocol client. The P1
 guest spawn is `agent --permission-mode default agent stdio` (Grok).
@@ -779,9 +793,11 @@ spend measurement.
 
 Do not promote because `confidence = high`.
 
-## Implement (v3 only)
+## Publication (ADR 0013)
 
-Out of v1. Specified so v3 cannot invent a weaker path.
+Named objects: source, task, candidate, proof, publication. A proof is
+valid only for the source snapshot hash and candidate `commit_sha` it
+names. Independent review is a different session judging that SHA.
 
 - Model runs in a worktree with no push, write, or publish credentials.
 - **Trusted proofs** run after the model exits, still **without**
@@ -790,13 +806,14 @@ Out of v1. Specified so v3 cannot invent a weaker path.
   (tests, scripts). Isolate that process from write tokens, Slack,
   SQLite, and policy.
 - The proof artifact is `{command, exit_code, log_digest, head_sha,
-  base_sha}`. Non-zero fails the job.
-- The **publish** step consumes that exact artifact (same `head_sha`
-  and digests). It must not re-run proofs with a write token. It
-  pushes and opens the PR with the server write token only after
-  those bytes are recorded.
-- Apply lands only after a **review** of that PR `head_sha` with a
-  land-eligible verdict.
+  base_sha}`. Non-zero is `denied`. Missing required checks are
+  `checks_unavailable`, not proven.
+- The **publish** step consumes a `proven` outcome only. Permitted
+  actions: `open_pr`, `update_pr`. It must not re-run proofs with a
+  write token. Persist intent before mutation; reconcile a lost
+  response by reading remote state. Human merge is required.
+- Comment, close, merge, label, protection, release, and unnamed
+  writes are denied in this profile.
 
 Existing PRs: land is triggered by a review verdict plus policy
 `land: true`, never by CI green alone.
@@ -812,8 +829,8 @@ fails.
 
 Commands: `status`, `pause [project]`, `resume [project]`,
 `sweep [repo]`, `retry [repo[#item]]`, `reload`. `implement` is
-rejected until v3. `pause rusui` names the project slug, not
-`Sannrox/rusui`.
+rejected until the publisher is implemented. `pause rusui` names the
+project slug, not `Sannrox/rusui`.
 
 `retry` is the only way to requeue `state = failed` on an **unchanged**
 revision after the attempt budget is exhausted. It writes an audit row
@@ -857,5 +874,5 @@ on the review revision plus same-repo public URLs.
 - Spawning CLIs or live GitHub fetches inside the webhook handler
 - Write tokens in the model environment
 - A second orchestrator beside this server
-- v1 live mutations, implement, or land
+- live comment, close, merge, or land; unnamed GitHub writes
 - Promoting live apply from model confidence alone
