@@ -114,6 +114,7 @@ func main() {
 		api.BaseURL = u
 	}
 	eng := engine.New(st, p, api, clock.Real{})
+	eng.Publisher = api
 	eng.HookIDs = api.HookIDs
 	eng.SnapshotRoot = filepath.Join(filepath.Dir(*db), "snapshots")
 	tlsCert := os.Getenv("RUSUI_TLS_CERT")

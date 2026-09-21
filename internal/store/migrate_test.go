@@ -54,6 +54,10 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if ver != CurrentSchema {
 		t.Fatalf("schema version %d, want %d", ver, CurrentSchema)
 	}
+	var pubs int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='publication_attempts'`).Scan(&pubs); err != nil || pubs != 1 {
+		t.Fatalf("publication_attempts missing after upgrade: %d %v", pubs, err)
+	}
 
 	j, err := JobState(s, "Sannrox/rusui", 42)
 	if err != nil {
