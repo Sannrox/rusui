@@ -77,7 +77,7 @@ and with secrets set.
 | `internal/policy` | YAML parse, fail-closed unknown fields |
 | `internal/store` | SQLite |
 | `internal/gh` | intake GitHub client (read-only) + webhook verify |
-| `internal/publish` | fail-closed publication gate ([ADR 0013](decisions/0013-publication-authority.md)) |
+| `internal/publish` | proof and independent-review outcome evaluation; optional evidence since [ADR 0015](decisions/0015-agent-publication.md), never a publication gate |
 | `internal/slack` | HMAC, allowlist, outbound exceptions |
 | `eval/` | review-quality fixtures |
 
