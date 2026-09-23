@@ -3,9 +3,9 @@
 Self-hosted environment plane for coding agents. You write `policy.yaml`.
 The server admits work onto sessions and turns, records immutable reviews,
 and **dry-runs** apply for comment and close. It does not comment, close,
-or merge on GitHub. Plane-owned `open_pr` / `update_pr` of a proven
-candidate is the named publication path
-([ADR 0013](docs/decisions/0013-publication-authority.md)).
+or merge on GitHub. In `implement` sessions the agent pushes and opens
+its own pull requests with the operator's credential
+([ADR 0015](docs/decisions/0015-agent-publication.md)).
 
 留守居 is the steward who keeps house while you are away.
 
@@ -20,7 +20,8 @@ comment and close. Not a hosted product.
 
 GitHub is intake. The rusui server is the source of truth. Slack is the
 optional human socket. A runner claims turns and hosts a guest CLI (process
-driver or ACP). Model processes never receive GitHub write tokens.
+driver or ACP). Model processes receive a GitHub write credential only in `implement`
+sessions.
 
 Nouns (project, session, turn, environment, runner): [CONTEXT.md](CONTEXT.md).
 The v1 contract: [ARCHITECTURE.md](ARCHITECTURE.md).

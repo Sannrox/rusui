@@ -2,8 +2,8 @@
 
 rusui is a self-hosted environment plane. You write `policy.yaml`. The server
 admits work onto sessions and turns, records immutable reviews, and dry-runs
-apply for comment and close. Plane-owned publication of a proven candidate
-is named in [ADR 0013](decisions/0013-publication-authority.md).
+apply for comment and close. Agent-driven publication in `implement`
+sessions is named in [ADR 0015](decisions/0015-agent-publication.md).
 
 [ARCHITECTURE.md](../ARCHITECTURE.md) is the product contract.
 [CONTEXT.md](../CONTEXT.md) is the noun glossary.

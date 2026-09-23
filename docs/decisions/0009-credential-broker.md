@@ -1,6 +1,8 @@
 # ADR 0009: P1 credential broker
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0015](0015-agent-publication.md)
+  (`implement` sessions receive the operator GitHub credential and
+  push directly; the model proxy and read-only grants stand)
 - Date: 2026-09-15
 - Amends: [ADR 0001](0001-environment-plane.md) D5 (how the plane
   redeems secrets). D3’s per-turn credential (32 bytes, ten-minute

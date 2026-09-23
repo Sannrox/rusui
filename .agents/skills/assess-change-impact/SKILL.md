@@ -20,8 +20,8 @@ Build an evidence-backed impact map before implementation or review.
    - GitHub as intake versus the server as source of truth versus Slack as
      the human socket;
    - read-only GitHub client versus apply (dry-run in v1; live later);
-   - model CLI review artifacts versus credentials (the model never receives
-     a GitHub write token);
+   - model CLI review artifacts versus credentials (only `implement`
+     sessions receive a GitHub write credential, ADR 0015);
    - `review` / `apply` / `implement` lanes and lease generations;
    - loopback bind versus operator tunnel;
    - SQLite recovery truth versus optional JSON/MD exports;

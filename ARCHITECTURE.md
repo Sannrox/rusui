@@ -10,13 +10,14 @@ Self-hosted environment plane (留守居: the steward who keeps house while
 you are away). You write structured policy. The server admits work onto
 typed records — environment, session, turn, runner, event, action —
 records immutable review revisions, and dry-runs apply for comment and
-close. Plane-owned publication of a proven candidate is the named
-GitHub write ([ADR 0013](docs/decisions/0013-publication-authority.md)).
+close. In `implement` sessions the agent pushes and opens its own pull
+requests with the operator's GitHub credential
+([ADR 0015](docs/decisions/0015-agent-publication.md)).
 GitHub review is the first session kind, not the identity of the system.
 
 This is not ClawSweeper, Tatara, or a Kafka fleet. GitHub is intake. The
-server is the source of truth. Slack is the human socket. Model CLIs never
-receive GitHub write tokens. Schema changes are versioned migrations
+server is the source of truth. Slack is the human socket. Model CLIs receive a
+GitHub write credential only in `implement` sessions (ADR 0015). Schema changes are versioned migrations
 (`schema_migrations`), not `CREATE IF NOT EXISTS` drift.
 
 ## Milestones
@@ -26,16 +27,17 @@ intake, claim/lease on a **turn**, immutable review artifacts in SQLite,
 deterministic **dry-run** apply for comment and close, pause/status/retry/cancel,
 daily review budget, a per-project concurrent-lease meter
 ([ADR 0011](docs/decisions/0011-unattended-session-contract.md)), and
-plane-owned publication of a **proven** candidate
-([ADR 0013](docs/decisions/0013-publication-authority.md)). After isolated
-proof and independent review of an exact candidate SHA, the plane may
-`open_pr` or `update_pr` that SHA onto `refs/heads/rusui/<session>/*` of
-one bound repository. Guests and verifier processes never receive GitHub
-write credentials. Unnamed GitHub writes are denied. Human merge is
-required. Comment, close, and land stay unauthorized. The domain nouns
+agent-driven publication
+([ADR 0015](docs/decisions/0015-agent-publication.md)). An `implement`
+session of a bound repository receives the operator's GitHub credential;
+the agent pushes a branch and opens or updates its pull request with
+`git` and `gh`. No proof or independent review gates publication. Commits
+carry `Co-authored-by: rusui` and `Rusui-Session` trailers. Human merge is
+required. Merge, comment, close, and land stay unauthorized by contract;
+token scope and branch protection enforce that line. The domain nouns
 are the environment-plane set from
-[ADR 0001](docs/decisions/0001-environment-plane.md) plus the publication
-objects in ADR 0013.
+[ADR 0001](docs/decisions/0001-environment-plane.md). Until ADR 0015 is
+implemented, the code still carries the ADR 0013 plane publisher.
 
 **Live apply (later):** comment, then close, enabled one at a time only
 after recovery tests **and** a recorded review-quality evaluation against
@@ -66,9 +68,8 @@ flowchart LR
   Driver -->|JSON artifact on stdout| Runner
 
   Apply[apply executor] -->|dry-run comment/close| GitHub
-  Publisher[publication] -->|open_pr / update_pr after proven| GitHub
+  Runner -->|implement session: git push / gh pr| GitHub
   Server --> Apply
-  Server --> Publisher
   Server -->|exceptions only| Slack
 ```
 
@@ -131,9 +132,9 @@ revision is out of scope. Boolean GitHub capabilities default to
 is listed under a project.
 
 `comments` and `close` authorize **simulation**, not live GitHub writes.
-`land` remains unauthorized. `implement` names the ADR 0013 publication
-path (`open_pr` / `update_pr` of a `proven` candidate); it does not
-authorize comment, close, merge, or unnamed writes. Tests that need an
+`land` remains unauthorized. `implement` gives the session the operator's
+GitHub credential so the agent can push and open or update its own pull
+request (ADR 0015); it does not authorize comment, close, or merge. Tests that need an
 eligible dry-run use `policy.fixture.yaml`.
 `policy.example.yaml` stays the operator default until the parser ports.
 
@@ -498,9 +499,9 @@ What v1 does enforce:
   TTL). `complete`/`fail` include `lease_generation` and
   `claimed_revision`. The runner opens no inbound port.
 
-Publication uses the installation token only in the publish step after
-proofs succeeded without that token
-([ADR 0013](docs/decisions/0013-publication-authority.md)).
+Only `implement` sessions receive a GitHub write credential, the
+operator's own, scoped where it is issued
+([ADR 0015](docs/decisions/0015-agent-publication.md)).
 
 `internal/acp` is the host-side Agent Client Protocol client. The P1
 guest spawn is `agent --permission-mode default agent stdio` (Grok).
@@ -793,27 +794,22 @@ spend measurement.
 
 Do not promote because `confidence = high`.
 
-## Publication (ADR 0013)
+## Publication (ADR 0015)
 
-Named objects: source, task, candidate, proof, publication. A proof is
-valid only for the source snapshot hash and candidate `commit_sha` it
-names. Independent review is a different session judging that SHA.
+The agent publishes. In an `implement` session the guest holds the
+operator's GitHub credential and runs `git push` and `gh pr create` /
+`gh pr edit` itself. The plane only decides which sessions receive the
+credential.
 
-- Model runs in a worktree with no push, write, or publish credentials.
-- **Trusted proofs** run after the model exits, still **without**
-  publish credentials. A command name in the profile is not a
-  security boundary: the command may execute untrusted repo code
-  (tests, scripts). Isolate that process from write tokens, Slack,
-  SQLite, and policy.
-- The proof artifact is `{command, exit_code, log_digest, head_sha,
-  base_sha}`. Non-zero is `denied`. Missing required checks are
-  `checks_unavailable`, not proven.
-- The **publish** step consumes a `proven` outcome only. Permitted
-  actions: `open_pr`, `update_pr`. It must not re-run proofs with a
-  write token. Persist intent before mutation; reconcile a lost
-  response by reading remote state. Human merge is required.
-- Comment, close, merge, label, protection, release, and unnamed
-  writes are denied in this profile.
+- No `proven` outcome, verifier run, or independent review gates
+  publication. Those remain optional evidence.
+- Commits carry `Co-authored-by: rusui <noreply@rusui.invalid>` and
+  `Rusui-Session: <session>`; operators may disable either with
+  `RUSUI_DISABLE_COAUTHOR_TRAILER=1` or `RUSUI_DISABLE_SESSION_TRAILER=1`.
+  Trailers are attribution, not authorization.
+- The pull request author is the operator. Human merge is required.
+  Merge, close, label, protection, and release are unauthorized by
+  contract; token scope and branch protection enforce it.
 
 Existing PRs: land is triggered by a review verdict plus policy
 `land: true`, never by CI green alone.
