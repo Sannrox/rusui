@@ -55,7 +55,7 @@ Need `-repo` and `-driver`, or `-repo` and `-acp`.
 | `RUSUI_PLANE_CA` | container guests | CA file mounted at `/usr/local/share/ca-certificates/rusui-plane.crt`. |
 | `RUSUI_GUEST_IMAGE` | container guests | Guest image identity. Empty fails closed. |
 | `XAI_API_KEY` or `RUSUI_XAI_API_KEY` | model proxy | Plane secret; never copied into the guest. |
-| `RUSUI_AGENT_GITHUB_TOKEN` | `implement` sessions | Your GitHub credential for agent publication ([ADR 0015](decisions/0015-agent-publication.md)). Given only to `run`/`scheduled` sessions of repositories with `implement: true`, as `GH_TOKEN` and git's credential for `https://github.com`. Unset: no session can push. |
+| `RUSUI_AGENT_GITHUB_TOKEN` | `implement` sessions | Your GitHub credential for agent publication ([ADR 0015](decisions/0015-agent-publication.md)). Given only to implement sessions — `run` sessions started for an open pinned task (`rusui run -effort …`) on repositories with `implement: true` — as `GH_TOKEN` and git's credential for `https://github.com`. Unset: no session can push. |
 | `RUSUI_DISABLE_COAUTHOR_TRAILER` | no | `1` drops `Co-authored-by: rusui <noreply@rusui.invalid>` from agent commits. |
 | `RUSUI_DISABLE_SESSION_TRAILER` | no | `1` drops `Rusui-Session: <session id>` from agent commits. |
 

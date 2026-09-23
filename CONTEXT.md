@@ -76,6 +76,10 @@ _Avoid_: working tree, unverified branch tip, default branch
 Isolated verifier output `(command, exit_code, log_digest, head_sha, base_sha)` for one candidate SHA. Independent review is a different session judging that SHA. Agent self-declaration is not proof.
 _Avoid_: CI green, author-session review, expired or drifted proof
 
+**Implement session**:
+A `run` session started for an open pinned implementation task on a bound repository with `implement: true`. The only session that holds the operator's GitHub credential (ADR 0015).
+_Avoid_: ordinary run session, scheduled session, review session as a publisher
+
 **Publication**:
 A pull request the agent opens or updates itself from an `implement` session, with the operator's GitHub credential via `git` and `gh` (ADR 0015). Commits carry `Co-authored-by: rusui` and `Rusui-Session` trailers. No proof gates it. Human merge is required.
 _Avoid_: plane-owned publish step, agent merge or close, trailer as authorization

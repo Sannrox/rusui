@@ -20,6 +20,7 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/slack"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -426,16 +427,23 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// agentGitHubToken is the operator credential an operator session receives
-// when its repository enables implement. Review sessions never receive it.
+// agentGitHubToken is the operator credential an implement session
+// receives: a run session started for an open implementation task on a
+// bound repository with implement enabled. Review, scheduled, and ordinary
+// run sessions never receive it.
 func (s *Server) agentGitHubToken(sess *store.Session) string {
-	if s.AgentGitHubToken == "" || sess == nil {
+	if s.AgentGitHubToken == "" || sess == nil || sess.Kind != store.SessionKindRun {
 		return ""
 	}
-	if sess.Kind != store.SessionKindRun && sess.Kind != store.SessionKindScheduled {
+	rr, ok := s.Eng.Policy.Repo(sess.Repo)
+	if !ok || !rr.Implement {
 		return ""
 	}
-	if rr, ok := s.Eng.Policy.Repo(sess.Repo); !ok || !rr.Implement {
+	if p, ok := s.Eng.Policy.Project(sess.Project); !ok || !p.AllowsKind(policy.KindRun) {
+		return ""
+	}
+	task, err := store.OpenTaskForSession(s.Eng.Store, sess.ID)
+	if err != nil || task == nil || task.Repo != sess.Repo {
 		return ""
 	}
 	return s.AgentGitHubToken

@@ -40,8 +40,9 @@ An operator starts a session from the CLI, an editor, a webhook, or a
 schedule. rusui creates or wakes an environment prepared from a project
 snapshot, drives any ACP agent inside it, streams the transcript, diff, and
 terminal, brokers scoped short-lived credentials through its own proxies, runs
-the project's proofs after the agent stops, and publishes only proven work
-through actions that carry a policy revision, an evidence class, and a receipt.
+the project's proofs after the agent stops, and lets the agent publish its
+own pull request as the operator, attributed to the session
+([ADR 0015](docs/decisions/0015-agent-publication.md)).
 Idle environments cost nothing; waking one is fast. Nothing leaves the
 operator's perimeter and there is no per-minute meter.
 

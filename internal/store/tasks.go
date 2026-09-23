@@ -64,6 +64,16 @@ func GetTask(s *Store, id int64) (*Task, error) {
 	return scanTask(s.DB.QueryRow(`SELECT id, effort_key, revision, spec_hash, session_id, repo, ref, base_sha, policy_hash, allowed_paths, context_refs, prompt, budget_repairs, state FROM tasks WHERE id=?`, id))
 }
 
+// OpenTaskForSession is the open implementation task a session was started
+// for, or nil when the session has none.
+func OpenTaskForSession(s *Store, sessionID int64) (*Task, error) {
+	t, err := scanTask(s.DB.QueryRow(`SELECT id, effort_key, revision, spec_hash, session_id, repo, ref, base_sha, policy_hash, allowed_paths, context_refs, prompt, budget_repairs, state FROM tasks WHERE session_id=? AND state='open' ORDER BY revision DESC LIMIT 1`, sessionID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return t, err
+}
+
 func scanTask(row interface{ Scan(...any) error }) (*Task, error) {
 	var t Task
 	err := row.Scan(&t.ID, &t.EffortKey, &t.Revision, &t.SpecHash, &t.SessionID, &t.Repo, &t.Ref, &t.BaseSHA, &t.PolicyHash, &t.AllowedPaths, &t.ContextRefs, &t.Prompt, &t.BudgetRepairs, &t.State)
