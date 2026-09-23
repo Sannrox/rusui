@@ -35,22 +35,26 @@ type StdioExec interface {
 }
 
 type Assignment struct {
-	TurnID            int64           `json:"turn_id"`
-	JobID             int64           `json:"job_id"`
-	LeaseGeneration   int             `json:"lease_generation"`
-	ClaimedRevision   int             `json:"claimed_revision"`
-	Repo              string          `json:"repo"`
-	Item              int             `json:"item"`
-	ItemKind          string          `json:"item_kind"`
-	ItemHash          string          `json:"item_hash"`
-	SessionID         int64           `json:"session_id"`
-	TurnToken         string          `json:"turn_token"`
-	Driver            string          `json:"driver"`
-	Handle            string          `json:"handle"`
-	Workspace         string          `json:"workspace"`
-	ModelBaseURL      string          `json:"model_base_url"`
-	GitProxyURL       string          `json:"git_proxy_url"`
-	GitHubToken       string          `json:"github_token,omitempty"`
+	TurnID          int64    `json:"turn_id"`
+	JobID           int64    `json:"job_id"`
+	LeaseGeneration int      `json:"lease_generation"`
+	ClaimedRevision int      `json:"claimed_revision"`
+	Repo            string   `json:"repo"`
+	Item            int      `json:"item"`
+	ItemKind        string   `json:"item_kind"`
+	ItemHash        string   `json:"item_hash"`
+	SessionID       int64    `json:"session_id"`
+	TurnToken       string   `json:"turn_token"`
+	Driver          string   `json:"driver"`
+	Handle          string   `json:"handle"`
+	Workspace       string   `json:"workspace"`
+	ModelBaseURL    string   `json:"model_base_url"`
+	GitProxyURL     string   `json:"git_proxy_url"`
+	GitHubToken     string   `json:"github_token,omitempty"`
+	CommitTrailers  []string `json:"commit_trailers,omitempty"`
+	// CommitHooksDir is where PrepareCommitHooks placed the attribution
+	// hooks for this turn; set on the runner, never by the plane.
+	CommitHooksDir    string          `json:"-"`
 	Permissions       []acp.Rule      `json:"permissions"`
 	ExecutionDeadline *time.Time      `json:"execution_deadline"`
 	Input             json.RawMessage `json:"input"`
@@ -175,24 +179,28 @@ func DriverEnv(a *Assignment, home, path string) []string {
 	if a.ModelBaseURL != "" {
 		env = append(env, "GROK_XAI_API_BASE_URL="+a.ModelBaseURL)
 	}
+	var git [][2]string
 	if a.GitHubToken != "" {
 		// Implement session (ADR 0015): the agent talks to GitHub directly as
 		// the operator, so git bypasses the proxy grant.
-		return append(env,
-			"GH_TOKEN="+a.GitHubToken,
-			"GIT_CONFIG_COUNT=1",
-			"GIT_CONFIG_KEY_0=credential.https://github.com.helper",
-			`GIT_CONFIG_VALUE_0=!f() { test "$1" = get && echo username=x-access-token && echo "password=$GH_TOKEN"; }; f`,
+		env = append(env, "GH_TOKEN="+a.GitHubToken)
+		git = append(git, [2]string{"credential.https://github.com.helper",
+			`!f() { test "$1" = get && echo username=x-access-token && echo "password=$GH_TOKEN"; }; f`})
+	} else if a.GitProxyURL != "" {
+		git = append(git,
+			[2]string{"url." + a.GitProxyURL + ".insteadof", "https://github.com/"},
+			[2]string{"http.extraHeader", "Authorization: Bearer " + a.TurnToken},
 		)
 	}
-	if a.GitProxyURL != "" {
-		env = append(env,
-			"GIT_CONFIG_COUNT=2",
-			"GIT_CONFIG_KEY_0=url."+a.GitProxyURL+".insteadof",
-			"GIT_CONFIG_VALUE_0=https://github.com/",
-			"GIT_CONFIG_KEY_1=http.extraHeader",
-			"GIT_CONFIG_VALUE_1=Authorization: Bearer "+a.TurnToken,
-		)
+	if a.CommitHooksDir != "" {
+		env = append(env, "RUSUI_COMMIT_TRAILERS="+strings.Join(a.CommitTrailers, "\n"))
+		git = append(git, [2]string{"core.hooksPath", a.CommitHooksDir})
+	}
+	if len(git) > 0 {
+		env = append(env, fmt.Sprintf("GIT_CONFIG_COUNT=%d", len(git)))
+		for i, kv := range git {
+			env = append(env, fmt.Sprintf("GIT_CONFIG_KEY_%d=%s", i, kv[0]), fmt.Sprintf("GIT_CONFIG_VALUE_%d=%s", i, kv[1]))
+		}
 	}
 	return env
 }
@@ -244,6 +252,12 @@ func OneTurn(ctx context.Context, c *Client, command []string) error {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
+	unhook, err := PrepareCommitHooks(c.Exec, a)
+	if err != nil {
+		_ = c.Fail(a)
+		return err
+	}
+	defer unhook()
 	env := DriverEnv(a, dir, os.Getenv("PATH"))
 	for _, e := range env {
 		if strings.HasPrefix(e, "RUSUI_WORKER_SECRET=") || strings.HasPrefix(e, "RUSUI_SLACK_SECRET=") || strings.HasPrefix(e, "RUSUI_WEBHOOK_SECRET=") {

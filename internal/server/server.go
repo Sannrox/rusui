@@ -37,6 +37,8 @@ type Server struct {
 	GitHubToken         string
 	GitHubTokens        gh.TokenSource
 	AgentGitHubToken    string // operator credential for implement sessions (ADR 0015)
+	NoCoauthorTrailer   bool   // RUSUI_DISABLE_COAUTHOR_TRAILER
+	NoSessionTrailer    bool   // RUSUI_DISABLE_SESSION_TRAILER
 	GitOrigin           *url.URL
 	GuestHTTPSOnly      bool
 	Addr                string
@@ -403,6 +405,9 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 			if tok := s.agentGitHubToken(sess); tok != "" {
 				out["github_token"] = tok
 			}
+			if t := s.commitTrailers(sess); len(t) > 0 {
+				out["commit_trailers"] = t
+			}
 			if p, ok := s.Eng.Policy.Project(sess.Project); ok {
 				out["permissions"] = p.Permissions
 			} else if rr, ok := s.Eng.Policy.Repo(c.Job.Repo); ok {
@@ -434,6 +439,26 @@ func (s *Server) agentGitHubToken(sess *store.Session) string {
 		return ""
 	}
 	return s.AgentGitHubToken
+}
+
+// CoauthorTrailer marks agent commits (ADR 0015 D3). The .invalid domain
+// never resolves to a GitHub account.
+const CoauthorTrailer = "Co-authored-by: rusui <noreply@rusui.invalid>"
+
+// commitTrailers are stamped on every commit an operator session's agent
+// makes. They are attribution, not authorization.
+func (s *Server) commitTrailers(sess *store.Session) []string {
+	if sess == nil || (sess.Kind != store.SessionKindRun && sess.Kind != store.SessionKindScheduled) {
+		return nil
+	}
+	var out []string
+	if !s.NoCoauthorTrailer {
+		out = append(out, CoauthorTrailer)
+	}
+	if !s.NoSessionTrailer {
+		out = append(out, fmt.Sprintf("Rusui-Session: %d", sess.ID))
+	}
+	return out
 }
 
 func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
