@@ -13,6 +13,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/env"
 )
 
 // ACPHost starts the ACP client for one claimed turn.
@@ -271,7 +272,11 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 		return err
 	}
 	defer stop()
-	art, err := HostACP(runCtx, a, ac, dir)
+	cwd := dir
+	if cwd == "" && a.Driver == "container" && a.Handle != "" {
+		cwd = env.WorkspaceDir // the guest runs in the container, not on the host
+	}
+	art, err := HostACP(runCtx, a, ac, cwd)
 	if err != nil {
 		_ = c.Fail(a)
 		return err

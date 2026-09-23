@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -20,6 +21,8 @@ type FakeAgent struct {
 	ToolCall json.RawMessage
 	// PermissionOption receives the option the client selected.
 	PermissionOption func(string)
+	// SessionCwd receives the cwd of session/new.
+	SessionCwd func(string)
 
 	mu      sync.Mutex
 	pending map[string]chan rpcMessage
@@ -61,6 +64,15 @@ func (a *FakeAgent) handle(msg rpcMessage) error {
 			"agentCapabilities": map[string]any{"loadSession": true},
 		})
 	case MethodSessionNew:
+		var p SessionNewParams
+		_ = json.Unmarshal(msg.Params, &p)
+		if a.SessionCwd != nil {
+			a.SessionCwd(p.Cwd)
+		}
+		if !strings.HasPrefix(p.Cwd, "/") {
+			// Real guests (the Claude Code adapter) reject a relative or empty cwd.
+			return a.write(rpcMessage{JSONRPC: "2.0", ID: msg.ID, Error: &rpcError{Code: -32602, Message: "Invalid params: `cwd` must be an absolute path"}})
+		}
 		return a.reply(msg.ID, map[string]any{"sessionId": "sess-fake"})
 	case MethodSessionLoad:
 		var p SessionLoadParams

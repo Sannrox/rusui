@@ -11,7 +11,10 @@ import (
 	"strings"
 )
 
-const workspaceDir = "/workspace"
+// WorkspaceDir is the session workspace inside a container guest.
+const WorkspaceDir = "/workspace"
+
+const workspaceDir = WorkspaceDir
 
 // DockerCLI is a Docker or Podman CLI runtime. Bin defaults to docker.
 type DockerCLI struct {
