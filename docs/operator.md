@@ -192,10 +192,17 @@ enable `implement`, set up:
 - a fine-grained token limited to the bound repositories, with only
   **Contents** and **Pull requests** read and write; no administration,
   workflows, secrets, or environments;
-- a ruleset on the default branch that requires a pull request with at
-  least one approving review, dismisses stale approvals, requires approval
-  from someone other than the last pusher, and blocks force pushes and
-  deletion.
+- protection on the default branch that requires pull requests and status
+  checks and blocks force pushes and deletion. With more than one
+  maintainer, also require an approving review from someone other than the
+  last pusher.
+
+On a solo repository GitHub cannot tell the agent from you: merging needs
+the same permission as pushing, and you cannot require your own approval.
+rusui rejects `gh pr merge`, `gh pr close`, `gh release`, default-branch
+and force pushes, and similar commands in implement sessions
+([ADR 0017](decisions/0017-claude-guest-and-model-upstream.md) D3). Those
+rules are workflow control, not a security boundary.
 
 Merging stays yours. Commits carry `Co-authored-by: rusui` and
 `Rusui-Session` trailers ([configuration](configuration.md)).
