@@ -1,6 +1,7 @@
 package env
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -39,6 +40,23 @@ func (d DockerCLI) bin() string {
 func (d DockerCLI) NetworkExists(name string) bool {
 	_, err := d.run("network", "inspect", name)
 	return err == nil
+}
+
+// ImageExists reports whether a local image with this tag exists.
+func (d DockerCLI) ImageExists(tag string) bool {
+	_, err := d.run("image", "inspect", tag)
+	return err == nil
+}
+
+// BuildImage builds tag from a Dockerfile given on stdin (no build context).
+func (d DockerCLI) BuildImage(tag string, dockerfile []byte) error {
+	cmd := exec.Command(d.bin(), "build", "-t", tag, "-")
+	cmd.Stdin = bytes.NewReader(dockerfile)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		return fmt.Errorf("docker build %s: %w: %s", tag, err, lines[len(lines)-1])
+	}
+	return nil
 }
 
 // EnsureNetwork creates the named network when it is missing.
