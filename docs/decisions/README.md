@@ -19,6 +19,7 @@ Decisions that must outlive a single pull request.
 | [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
 | [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Proposed |
 | [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted |
+| [0016](0016-local-interactive-runtime.md) | Local interactive runtime boundary with Sumika | Proposed |
 
 ## When to write an ADR
 

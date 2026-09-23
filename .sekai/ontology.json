@@ -21,13 +21,13 @@
     },
     {
       "name": "RusuiControlPlane",
-      "description": "Personal GitHub maintenance server: admits work, leases jobs, stores policy revisions, and coordinates unattended lanes.",
+      "description": "Self-hosted environment plane for coding agents: admits work onto sessions and turns, owns policy, leases, environments, credentials, and receipts, and is the only durable store.",
       "superclasses": [],
       "properties": []
     },
     {
       "name": "RusuiImplementLane",
-      "description": "ADR 0013 publication path. Model and trusted proofs run without publish credentials. Publish consumes a proven outcome for an exact candidate SHA then uses the installation token for open_pr or update_pr only. A profile command name is not a security boundary. Comment, close, merge, and land stay unauthorized.",
+      "description": "ADR 0015 publication path. An implement session (a run session for an open pinned task on a repository with implement: true) holds the operator GitHub credential; the agent pushes and opens or updates its own pull request with git and gh. No plane proof gate. Merge, close, and land stay unauthorized; token scope and branch protection enforce that.",
       "superclasses": [],
       "properties": []
     },
@@ -93,7 +93,7 @@
     },
     {
       "name": "RusuiPerTurnGrant",
-      "description": "Only credential in a P1 guest. 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Redeems at plane git and model proxies. Not a GitHub installation token or xAI key.",
+      "description": "Only plane-brokered credential in a P1 guest outside implement sessions. 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Redeems at plane git and model proxies. Not a GitHub token or xAI key.",
       "superclasses": [],
       "properties": []
     },
@@ -165,7 +165,13 @@
     },
     {
       "name": "RusuiPublication",
-      "description": "Plane-owned GitHub pull request whose head is the proven commit_sha. Permitted actions: open_pr, update_pr. Human merge is required. Unnamed GitHub writes are denied.",
+      "description": "Pull request the agent opens or updates itself from an implement session as the operator (ADR 0015). Commits carry Co-authored-by: rusui and Rusui-Session trailers. Human merge is required.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "SumikaProcess",
+      "description": "Proposed (ADR 0016, not current contract). Live local PTY child owned by the Sumika daemon, named rusui-<project>-<session id>. Sumika calls it a Session. Sumika is authoritative for the process and attach; rusui records only its name and reported status events.",
       "superclasses": [],
       "properties": []
     }
@@ -364,19 +370,19 @@
       "transitive": false
     },
     {
-      "name": "rusui_publication_consumes_proof",
-      "description": "Publication may consume only a proven outcome. Guests and the verifier never hold the write token.",
-      "domain": "RusuiPublication",
-      "range": "RusuiProof",
-      "cardinality": { "min": 1, "max": 1 },
+      "name": "rusui_implement_session_publishes",
+      "description": "The agent in an implement session opens or updates its own pull request with the operator credential. Proofs are optional evidence, not a gate.",
+      "domain": "RusuiImplementLane",
+      "range": "RusuiPublication",
+      "cardinality": { "min": 0, "max": null },
       "transitive": false
     },
     {
-      "name": "rusui_dispatches_publication",
-      "description": "Control plane may open_pr or update_pr a proven candidate. Unnamed GitHub writes are denied.",
-      "domain": "RusuiControlPlane",
-      "range": "RusuiPublication",
-      "cardinality": { "min": 0, "max": null },
+      "name": "rusui_local_session_drives_process",
+      "description": "Proposed (ADR 0016). A local session drives at most one Sumika process; rusui never stores its PTY bytes.",
+      "domain": "RusuiSession",
+      "range": "SumikaProcess",
+      "cardinality": { "min": 0, "max": 1 },
       "transitive": false
     }
   ],
@@ -449,8 +455,8 @@
     },
     {
       "subject": "RusuiImplementLane",
-      "source": "ARCHITECTURE.md",
-      "locator": "ARCHITECTURE.md#publication-adr-0013",
+      "source": "docs/decisions/0015-agent-publication.md",
+      "locator": "docs/decisions/0015-agent-publication.md#decision",
       "confidence": 1.0
     },
     {
@@ -545,9 +551,15 @@
     },
     {
       "subject": "RusuiPublication",
-      "source": "docs/decisions/0013-publication-authority.md",
-      "locator": "docs/decisions/0013-publication-authority.md#d3-permitted-publication-actions",
+      "source": "docs/decisions/0015-agent-publication.md",
+      "locator": "docs/decisions/0015-agent-publication.md#decision",
       "confidence": 1.0
+    },
+    {
+      "subject": "SumikaProcess",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d1-authority",
+      "confidence": 0.5
     }
   ]
 }
