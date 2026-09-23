@@ -50,6 +50,7 @@ type Assignment struct {
 	Workspace         string          `json:"workspace"`
 	ModelBaseURL      string          `json:"model_base_url"`
 	GitProxyURL       string          `json:"git_proxy_url"`
+	GitHubToken       string          `json:"github_token,omitempty"`
 	Permissions       []acp.Rule      `json:"permissions"`
 	ExecutionDeadline *time.Time      `json:"execution_deadline"`
 	Input             json.RawMessage `json:"input"`
@@ -173,6 +174,16 @@ func DriverEnv(a *Assignment, home, path string) []string {
 	}
 	if a.ModelBaseURL != "" {
 		env = append(env, "GROK_XAI_API_BASE_URL="+a.ModelBaseURL)
+	}
+	if a.GitHubToken != "" {
+		// Implement session (ADR 0015): the agent talks to GitHub directly as
+		// the operator, so git bypasses the proxy grant.
+		return append(env,
+			"GH_TOKEN="+a.GitHubToken,
+			"GIT_CONFIG_COUNT=1",
+			"GIT_CONFIG_KEY_0=credential.https://github.com.helper",
+			`GIT_CONFIG_VALUE_0=!f() { test "$1" = get && echo username=x-access-token && echo "password=$GH_TOKEN"; }; f`,
+		)
 	}
 	if a.GitProxyURL != "" {
 		env = append(env,

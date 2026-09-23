@@ -36,6 +36,7 @@ type Server struct {
 	ModelOrigin         *url.URL
 	GitHubToken         string
 	GitHubTokens        gh.TokenSource
+	AgentGitHubToken    string // operator credential for implement sessions (ADR 0015)
 	GitOrigin           *url.URL
 	GuestHTTPSOnly      bool
 	Addr                string
@@ -399,6 +400,9 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 				out["model_base_url"] = modelBaseURL(r, envRow.Driver)
 				out["git_proxy_url"] = gitProxyBaseURL(r, envRow.Driver)
 			}
+			if tok := s.agentGitHubToken(sess); tok != "" {
+				out["github_token"] = tok
+			}
 			if p, ok := s.Eng.Policy.Project(sess.Project); ok {
 				out["permissions"] = p.Permissions
 			} else if rr, ok := s.Eng.Policy.Repo(c.Job.Repo); ok {
@@ -415,6 +419,21 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		out["git_proxy_url"] = gitProxyBaseURL(r, "")
 	}
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+// agentGitHubToken is the operator credential an operator session receives
+// when its repository enables implement. Review sessions never receive it.
+func (s *Server) agentGitHubToken(sess *store.Session) string {
+	if s.AgentGitHubToken == "" || sess == nil {
+		return ""
+	}
+	if sess.Kind != store.SessionKindRun && sess.Kind != store.SessionKindScheduled {
+		return ""
+	}
+	if rr, ok := s.Eng.Policy.Repo(sess.Repo); !ok || !rr.Implement {
+		return ""
+	}
+	return s.AgentGitHubToken
 }
 
 func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {

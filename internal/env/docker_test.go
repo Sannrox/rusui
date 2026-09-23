@@ -66,6 +66,38 @@ func TestDockerCLIRecordsCLI(t *testing.T) {
 	}
 }
 
+func TestDockerCLIExecStdioKeepsValuesOffArgv(t *testing.T) {
+	bin, logPath := stubDocker(t)
+	envLog := filepath.Join(t.TempDir(), "env")
+	t.Setenv("STUB_ENV_LOG", envLog)
+	t.Setenv("GH_TOKEN", "host-value")
+	d := DockerCLI{Bin: bin}
+	in, out, stop, err := d.ExecStdio("box", []string{"agent", "stdio"}, []string{"GH_TOKEN=ghp-secret", "XAI_API_KEY=grant"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = in.Close()
+	_, _ = out.Read(make([]byte, 1))
+	stop()
+	argv, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(argv), "ghp-secret") || strings.Contains(string(argv), "grant") {
+		t.Fatalf("value on argv: %s", argv)
+	}
+	if !strings.Contains(string(argv), "-e GH_TOKEN -e XAI_API_KEY box agent stdio") {
+		t.Fatalf("argv %s", argv)
+	}
+	envb, err := os.ReadFile(envLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(envb), "GH_TOKEN=ghp-secret") || strings.Contains(string(envb), "host-value") {
+		t.Fatalf("cli env %s", envb)
+	}
+}
+
 func TestContainerIDIgnoresPullProgress(t *testing.T) {
 	out := []byte("Unable to find image 'alpine:3.20' locally\n" +
 		"3.20: Pulling from library/alpine\n" +
@@ -209,7 +241,7 @@ func stubDocker(t *testing.T) (bin, logPath string) {
 		"fi\n" +
 		"if [ \"$cmd\" = run ]; then echo 0123456789abcdef; exit 0; fi\n" +
 		"if [ \"$cmd\" = exec ]; then\n" +
-		"  if [ \"$1\" = -i ]; then cat >/dev/null; exit 0; fi\n" +
+		"  if [ \"$1\" = -i ]; then [ -n \"$STUB_ENV_LOG\" ] && env >> \"$STUB_ENV_LOG\"; cat >/dev/null; exit 0; fi\n" +
 		"  if [ \"$2\" = test ] || [ \"$3\" = test ]; then exit 0; fi\n" +
 		"  if [ \"$2\" = cat ] || [ \"$3\" = cat ]; then echo hi; exit 0; fi\n" +
 		"  exit 0\n" +

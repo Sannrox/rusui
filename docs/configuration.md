@@ -55,9 +55,14 @@ Need `-repo` and `-driver`, or `-repo` and `-acp`.
 | `RUSUI_PLANE_CA` | container guests | CA file mounted at `/usr/local/share/ca-certificates/rusui-plane.crt`. |
 | `RUSUI_GUEST_IMAGE` | container guests | Guest image identity. Empty fails closed. |
 | `XAI_API_KEY` or `RUSUI_XAI_API_KEY` | model proxy | Plane secret; never copied into the guest. |
+| `RUSUI_AGENT_GITHUB_TOKEN` | `implement` sessions | Your GitHub credential for agent publication ([ADR 0015](decisions/0015-agent-publication.md)). Given only to `run`/`scheduled` sessions of repositories with `implement: true`, as `GH_TOKEN` and git's credential for `https://github.com`. Unset: no session can push. |
 
 GitHub token: read-only. Do not give it to the runner or the model.
-Guest `XAI_API_KEY` and git HTTP auth are the per-turn grant.
+Guest `XAI_API_KEY` and git HTTP auth are the per-turn grant, except in
+`implement` sessions, where git and `gh` use `RUSUI_AGENT_GITHUB_TOKEN`.
+Issue that as a fine-grained token limited to the bound repositories
+(contents and pull requests write; no administration, workflow, or secrets)
+and protect default branches. The guest image must provide `gh`.
 
 ## HTTP
 

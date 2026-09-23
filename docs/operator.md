@@ -41,8 +41,10 @@ Process-driver review (`-driver`) is test/dev. It is not this topology.
 - Go 1.26 on `PATH`. `make` uses `GOTOOLCHAIN=go$(cat .go-version)`
   (currently 1.26.6).
 - A **read-only** GitHub token for intake of repositories listed in policy.
-  `implement` sessions additionally need your GitHub credential with
-  contents and pull-request write on the bound repositories (ADR 0015).
+  `implement` sessions additionally need your GitHub credential in
+  `RUSUI_AGENT_GITHUB_TOKEN`: a fine-grained token with contents and
+  pull-request write on the bound repositories only (ADR 0015). The guest
+  image must provide `gh`.
 - A tunnel or webhook relay if GitHub or Slack must reach the process.
 - For review turns: `-acp` (Grok ACP, the P1 guest) or a process driver
   command (`-driver`) that prints review JSON on stdout. There is no
