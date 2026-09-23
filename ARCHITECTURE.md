@@ -816,12 +816,15 @@ receive the credential.
   Trailers are attribution, not authorization.
 - The pull request author is the operator. Human merge is required.
   Merge, close, label, protection, and release are unauthorized by
-  contract; token scope and branch protection enforce it. The supported
-  profile is a fine-grained token limited to the bound repositories with
-  only contents and pull requests write, and a default-branch ruleset that
-  requires a pull request with an approving review from someone other than
-  the last pusher and blocks force pushes and deletion. rusui does not
-  verify that profile; the operator owns it.
+  contract. Use a fine-grained token limited to the bound repositories
+  with only contents and pull requests write, and protect the default
+  branch: pull requests and status checks required, no force pushes or
+  deletion. With more than one maintainer, also require an approving
+  review from someone other than the last pusher. A solo maintainer cannot,
+  so nothing on GitHub stops the agent from merging with that token; the
+  implement-session reject rules ([ADR 0017](docs/decisions/0017-claude-guest-and-model-upstream.md)
+  D3) guard against it and are not a security boundary. rusui does not
+  verify the profile; the operator owns it.
 
 Existing PRs: land is triggered by a review verdict plus policy
 `land: true`, never by CI green alone.
