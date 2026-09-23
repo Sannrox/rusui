@@ -68,18 +68,3 @@ func InvalidateProofs(s *Store, sha string) error {
 	_, err := s.DB.Exec(`UPDATE proofs SET outcome='source_drift' WHERE candidate_sha=?`, sha)
 	return err
 }
-
-func LatestSucceededPublication(s *Store, repo string, item int) (*PublicationAttempt, error) {
-	var p PublicationAttempt
-	err := s.DB.QueryRow(`SELECT action_id, repo, item, candidate_sha, source_hash, ref, action, proof_id, state, pr_number, pr_head_sha, error, intent, policy_hash
-		FROM publication_attempts WHERE repo=? AND item=? AND state='succeeded' ORDER BY updated_at DESC LIMIT 1`, repo, item).Scan(
-		&p.ActionID, &p.Repo, &p.Item, &p.CandidateSHA, &p.SourceHash, &p.Ref, &p.Action, &p.ProofID,
-		&p.State, &p.PRNumber, &p.PRHeadSHA, &p.Error, &p.Intent, &p.PolicyHash)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &p, nil
-}

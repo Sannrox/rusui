@@ -36,8 +36,7 @@ carry `Co-authored-by: rusui` and `Rusui-Session` trailers. Human merge is
 required. Merge, comment, close, and land stay unauthorized by contract;
 token scope and branch protection enforce that line. The domain nouns
 are the environment-plane set from
-[ADR 0001](docs/decisions/0001-environment-plane.md). Until ADR 0015 is
-implemented, the code still carries the ADR 0013 plane publisher.
+[ADR 0001](docs/decisions/0001-environment-plane.md).
 
 **Live apply (later):** comment, then close, enabled one at a time only
 after recovery tests **and** a recorded review-quality evaluation against
