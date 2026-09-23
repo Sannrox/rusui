@@ -131,8 +131,9 @@ revision is out of scope. Boolean GitHub capabilities default to
 is listed under a project.
 
 `comments` and `close` authorize **simulation**, not live GitHub writes.
-`land` remains unauthorized. `implement` gives the session the operator's
-GitHub credential so the agent can push and open or update its own pull
+`land` remains unauthorized. `implement` lets pinned implementation tasks
+on the repository run as implement sessions that hold the operator's
+GitHub credential, so the agent can push and open or update its own pull
 request (ADR 0015); it does not authorize comment, close, or merge. Tests that need an
 eligible dry-run use `policy.fixture.yaml`.
 `policy.example.yaml` stays the operator default until the parser ports.
@@ -800,6 +801,13 @@ operator's GitHub credential and runs `git push` and `gh pr create` /
 `gh pr edit` itself. The plane only decides which sessions receive the
 credential.
 
+An **implement session** is a `run` session started for an open pinned
+implementation task (`rusui run -effort … -repo … -ref … -base-sha …
+-paths …`) on a bound repository whose policy sets `implement: true`, in a
+project that admits `run`. Review, scheduled, and ordinary run sessions,
+and sessions whose task was superseded, abandoned, or cancelled, never
+receive the credential.
+
 - No `proven` outcome, verifier run, or independent review gates
   publication. Those remain optional evidence.
 - Commits carry `Co-authored-by: rusui <noreply@rusui.invalid>` and
@@ -808,7 +816,12 @@ credential.
   Trailers are attribution, not authorization.
 - The pull request author is the operator. Human merge is required.
   Merge, close, label, protection, and release are unauthorized by
-  contract; token scope and branch protection enforce it.
+  contract; token scope and branch protection enforce it. The supported
+  profile is a fine-grained token limited to the bound repositories with
+  only contents and pull requests write, and a default-branch ruleset that
+  requires a pull request with an approving review from someone other than
+  the last pusher and blocks force pushes and deletion. rusui does not
+  verify that profile; the operator owns it.
 
 Existing PRs: land is triggered by a review verdict plus policy
 `land: true`, never by CI green alone.
@@ -824,7 +837,8 @@ fails.
 
 Commands: `status`, `pause [project]`, `resume [project]`,
 `sweep [repo]`, `retry [repo[#item]]`, `reload`. `implement` is
-rejected until the publisher is implemented. `pause rusui` names the
+rejected in Slack; implement sessions start from the CLI or API as pinned
+tasks. `pause rusui` names the
 project slug, not `Sannrox/rusui`.
 
 `retry` is the only way to requeue `state = failed` on an **unchanged**

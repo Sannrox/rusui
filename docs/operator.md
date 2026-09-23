@@ -170,6 +170,36 @@ Container workspace dirt is not in the database; it rematerializes from
 the snapshot after idle expiry. Credentials in env files are not in the
 backup.
 
+## Implement sessions (agent publication)
+
+In an implement session the agent pushes a branch and opens or updates its
+own pull request as you ([ADR 0015](decisions/0015-agent-publication.md)).
+It needs all of:
+
+- `implement: true` on the repository in `policy.yaml`, and `run` in the
+  project's `session_kinds`;
+- `RUSUI_AGENT_GITHUB_TOKEN` on the plane;
+- a pinned task: `rusui run -project SLUG -effort KEY -repo OWNER/NAME
+  -ref main -base-sha SHA -paths docs,internal/x "the change"`;
+- `gh` in the guest image (container guests) or on the runner `PATH`.
+
+Ordinary `rusui run PROMPT` sessions, scheduled sessions, and review
+sessions never receive the token.
+
+rusui cannot stop a token from doing what its scope allows. Before you
+enable `implement`, set up:
+
+- a fine-grained token limited to the bound repositories, with only
+  **Contents** and **Pull requests** read and write; no administration,
+  workflows, secrets, or environments;
+- a ruleset on the default branch that requires a pull request with at
+  least one approving review, dismisses stale approvals, requires approval
+  from someone other than the last pusher, and blocks force pushes and
+  deletion.
+
+Merging stays yours. Commits carry `Co-authored-by: rusui` and
+`Rusui-Session` trailers ([configuration](configuration.md)).
+
 ## 4. GitHub webhook
 
 Create a **repository** webhook:

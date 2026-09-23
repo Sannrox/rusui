@@ -7,8 +7,9 @@
 > This file is the published M1–M6 sequence. The earlier P0–P4 calendar
 > remains at
 > [94aabd7/ROADMAP.md](https://github.com/Sannrox/rusui/blob/94aabd7d292faa052ec8faba0f028f8e07bc9ade/ROADMAP.md).
-> [ARCHITECTURE.md](ARCHITECTURE.md) names plane-owned `open_pr` /
-> `update_pr` of a proven candidate ([ADR 0013](docs/decisions/0013-publication-authority.md)).
+> [ARCHITECTURE.md](ARCHITECTURE.md) names agent-owned publication from
+> implement sessions ([ADR 0015](docs/decisions/0015-agent-publication.md),
+> superseding ADR 0013).
 
 GitHub Issues remain the planning source of truth; this file links to them
 and never overrides their `## Dependencies` sections. 24–36 months after
@@ -17,8 +18,8 @@ is acceptance of ADR 0010. Re-estimate after M1 and M2. Reduce scope
 before moving a safety or correctness gate.
 
 ADR 0010 does not enable live GitHub writes, implement-to-PR, or merging.
-ADR 0013 names `open_pr` / `update_pr` of a proven candidate. Human merge
-remains required.
+ADR 0015 lets the agent in an implement session push and open its own pull
+request with the operator's credential. Human merge remains required.
 
 ## Shape
 
@@ -50,10 +51,12 @@ Closed component issues are not this exit gate.
 
 May start after M1's bounded session proof **and** an accepted publication
 contract. It does **not** wait for thirty unattended days. Humans merge.
-[ADR 0013](docs/decisions/0013-publication-authority.md) is **Accepted**.
-The product contract names `open_pr` / `update_pr` of a `proven` candidate.
-Comment, close, merge, and land stay unauthorized. The publisher that
-performs those writes is a later implementation issue.
+[ADR 0015](docs/decisions/0015-agent-publication.md) is **Accepted** and
+supersedes ADR 0013: the agent in an implement session publishes its own
+pull request as the operator, with `Co-authored-by: rusui` and
+`Rusui-Session` trailers and no plane proof gate. Comment, close, merge,
+and land stay unauthorized; token scope and branch protection enforce
+that.
 
 Planning issues: [#96](https://github.com/Sannrox/rusui/issues/96)–[#103](https://github.com/Sannrox/rusui/issues/103).
 

@@ -41,9 +41,22 @@ func agentCredentialEnv(t *testing.T, implement bool, token string) (*httptest.S
 	return hs, e
 }
 
-func claimRun(t *testing.T, hs *httptest.Server, e *engine.Engine) *runner.Assignment {
+func implementTask() engine.TaskSpec {
+	return engine.TaskSpec{
+		EffortKey: "effort-1", Prompt: "open a pull request", Repo: "example/test-repo",
+		Ref: "main", BaseSHA: "aaa", AllowedPaths: []string{"docs"},
+	}
+}
+
+// claim starts a session (an implementation task when task is true, else an
+// ordinary run) and claims its turn through the real runner client.
+func claim(t *testing.T, hs *httptest.Server, e *engine.Engine, task bool) *runner.Assignment {
 	t.Helper()
-	if _, err := e.StartRun("test", "open a pull request", ""); err != nil {
+	if task {
+		if _, err := e.StartTask("test", implementTask()); err != nil {
+			t.Fatal(err)
+		}
+	} else if _, err := e.StartRun("test", "open a pull request", ""); err != nil {
 		t.Fatal(err)
 	}
 	c := &runner.Client{Base: hs.URL, Bootstrap: "wsec", Repo: "example/test-repo"}
@@ -52,7 +65,7 @@ func claimRun(t *testing.T, hs *httptest.Server, e *engine.Engine) *runner.Assig
 		t.Fatal(err)
 	}
 	if a == nil {
-		t.Fatal("no run turn to claim")
+		t.Fatal("no turn to claim")
 	}
 	return a
 }
@@ -70,9 +83,9 @@ func gitCredential(t *testing.T, guestEnv []string) string {
 	return string(out)
 }
 
-func TestImplementRunSessionPushesAsOperator(t *testing.T) {
+func TestImplementSessionPushesAsOperator(t *testing.T) {
 	hs, e := agentCredentialEnv(t, true, agentToken)
-	a := claimRun(t, hs, e)
+	a := claim(t, hs, e, true)
 	if a.GitHubToken != agentToken {
 		t.Fatalf("github token %q", a.GitHubToken)
 	}
@@ -95,13 +108,15 @@ func TestSessionsWithoutImplementKeepTheProxyGrant(t *testing.T) {
 	for name, tc := range map[string]struct {
 		implement bool
 		token     string
+		task      bool
 	}{
-		"repo without implement": {false, agentToken},
-		"no credential on plane": {true, ""},
+		"repo without implement":            {false, agentToken, true},
+		"no credential on plane":            {true, "", true},
+		"ordinary run on an implement repo": {true, agentToken, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			hs, e := agentCredentialEnv(t, tc.implement, tc.token)
-			a := claimRun(t, hs, e)
+			a := claim(t, hs, e, tc.task)
 			if a.GitHubToken != "" {
 				t.Fatalf("github token %q", a.GitHubToken)
 			}
@@ -117,18 +132,51 @@ func TestSessionsWithoutImplementKeepTheProxyGrant(t *testing.T) {
 	}
 }
 
-func TestReviewSessionsNeverReceiveTheAgentCredential(t *testing.T) {
+func TestOnlyOpenImplementTasksReceiveTheAgentCredential(t *testing.T) {
 	_, e := agentCredentialEnv(t, true, agentToken)
 	s := &Server{Eng: e, AgentGitHubToken: agentToken}
-	for _, kind := range []string{store.SessionKindRun, store.SessionKindScheduled} {
-		if got := s.agentGitHubToken(&store.Session{Kind: kind, Repo: "example/test-repo"}); got != agentToken {
-			t.Fatalf("%s session: %q", kind, got)
+	task, err := e.StartTask("test", implementTask())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(e.Store, task.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.agentGitHubToken(sess); got != agentToken {
+		t.Fatalf("implement session: %q", got)
+	}
+	for _, kind := range []string{store.SessionKindReview, store.SessionKindScheduled} {
+		other := *sess
+		other.Kind = kind
+		if got := s.agentGitHubToken(&other); got != "" {
+			t.Fatalf("%s session received %q", kind, got)
 		}
 	}
-	if got := s.agentGitHubToken(&store.Session{Kind: store.SessionKindReview, Repo: "example/test-repo"}); got != "" {
-		t.Fatalf("review session received %q", got)
-	}
-	if got := s.agentGitHubToken(&store.Session{Kind: store.SessionKindRun, Repo: "other/unbound"}); got != "" {
+	unbound := *sess
+	unbound.Repo = "other/unbound"
+	if got := s.agentGitHubToken(&unbound); got != "" {
 		t.Fatalf("unbound repo received %q", got)
+	}
+
+	denied := strings.Replace(strings.Replace(slackPol, "implement: false", "implement: true", 1), "session_kinds: [review, run, scheduled]", "session_kinds: [review]", 1)
+	p, err := policy.Parse([]byte(denied))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.ReloadPolicy(p)
+	if got := s.agentGitHubToken(sess); got != "" {
+		t.Fatalf("project no longer admitting run received %q", got)
+	}
+	allowed := strings.Replace(slackPol, "implement: false", "implement: true", 1)
+	if p, err = policy.Parse([]byte(allowed)); err != nil {
+		t.Fatal(err)
+	}
+	e.ReloadPolicy(p)
+	if err := e.AbandonEffort(task.EffortKey); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.agentGitHubToken(sess); got != "" {
+		t.Fatalf("abandoned task received %q", got)
 	}
 }
