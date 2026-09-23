@@ -7,7 +7,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 16
+const CurrentSchema = 17
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -301,8 +301,54 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 16); err != nil {
 			return err
 		}
+		ver = 16
+	}
+	if ver < 17 {
+		if err := migrateV17(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 17); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func migrateV17(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS session_processes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  generation INTEGER NOT NULL CHECK (generation > 0),
+  runtime TEXT NOT NULL CHECK (runtime = 'sumika'),
+  name TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('starting', 'running', 'idle', 'blocked', 'dead', 'lost', 'unknown')),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  created_at TEXT NOT NULL,
+  observed_at TEXT,
+  UNIQUE(session_id, generation)
+);
+CREATE INDEX IF NOT EXISTS session_processes_session ON session_processes(session_id, generation);
+CREATE UNIQUE INDEX IF NOT EXISTS session_processes_one_active
+  ON session_processes(session_id)
+  WHERE state IN ('starting', 'running', 'idle', 'blocked', 'unknown');
+CREATE TABLE IF NOT EXISTS process_attaches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  process_id INTEGER NOT NULL,
+  process_generation INTEGER NOT NULL CHECK (process_generation > 0),
+  generation INTEGER NOT NULL CHECK (generation > 0),
+  revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+  state TEXT NOT NULL CHECK (state IN ('attached', 'detached', 'stolen', 'process_exited', 'unknown')),
+  created_at TEXT NOT NULL,
+  observed_at TEXT,
+  UNIQUE(process_id, generation)
+);
+CREATE INDEX IF NOT EXISTS process_attaches_process ON process_attaches(process_id, generation);
+CREATE UNIQUE INDEX IF NOT EXISTS process_attaches_one_active
+  ON process_attaches(process_id)
+  WHERE state = 'attached';
+`)
+	return err
 }
 
 func migrateV16(db *sql.DB) error {

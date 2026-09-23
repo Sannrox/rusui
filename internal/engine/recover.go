@@ -8,13 +8,18 @@ import (
 )
 
 // Recover runs the startup recovery paths ARCHITECTURE.md requires:
-// expire in-flight refresh owners, reconcile hook deliveries, catch up
+// mark local runtime observations unknown, expire in-flight refresh owners,
+// reconcile hook deliveries, catch up
 // open and locally tracked items, retry unpublished apply attempts, and
 // retry in-flight or uncertain publications.
 // Periodic callers use the same ReconcileConfigured, CatchUpConfigured,
 // and RetryApplyAttempts methods. Errors besides owner expiry are
 // reported through Notify and do not prevent the remaining paths.
 func (e *Engine) Recover() error {
+	if err := store.MarkRuntimeObservationsUnknown(e.Store, e.now()); err != nil {
+		e.exception("startup invalidate runtime observations: " + err.Error())
+		return err
+	}
 	if err := e.StartupExpireOwners(); err != nil {
 		e.exception("startup expire owners: " + err.Error())
 		return err

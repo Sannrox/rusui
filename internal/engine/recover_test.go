@@ -41,6 +41,61 @@ func TestRecoverExpiresOwnerBeforeStepRefresh(t *testing.T) {
 	}
 }
 
+func TestRecoverInvalidatesRuntimeObservationsWithoutReleasingTurn(t *testing.T) {
+	h := setup(t)
+	runSessionID, err := h.e.StartRun("test", "keep the turn", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var turnID int64
+	if err := h.st.DB.QueryRow(`SELECT id FROM turns WHERE session_id=?`, runSessionID).Scan(&turnID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.st.DB.Exec(`UPDATE turns SET state='leased', lease_generation=7 WHERE id=?`, turnID); err != nil {
+		t.Fatal(err)
+	}
+	res, err := h.st.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
+		VALUES (?, ?, '', -1, 'local', 'open', ?)`, store.DefaultEnvironmentID, store.SessionKindLocal, h.clk.T.Format(time.RFC3339Nano))
+	if err != nil {
+		t.Fatal(err)
+	}
+	localSessionID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	process, err := store.StartSumikaProcess(h.st, localSessionID, h.clk.T)
+	if err != nil {
+		t.Fatal(err)
+	}
+	process, err = store.ObserveSumikaProcess(h.st, process.ID, process.Generation, process.Revision, store.ProcessRunning, h.clk.T.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	attach, err := store.BeginSumikaAttach(h.st, process.ID, process.Generation, h.clk.T.Add(2*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.e.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	process, err = store.GetSumikaProcess(h.st, process.ID)
+	if err != nil || process.State != store.ProcessUnknown {
+		t.Fatalf("process after recovery %+v %v", process, err)
+	}
+	if len(process.Attaches) != 1 || process.Attaches[0].ID != attach.ID || process.Attaches[0].State != store.AttachUnknown {
+		t.Fatalf("attach after recovery %+v", process.Attaches)
+	}
+	var turnState string
+	var generation int
+	if err := h.st.DB.QueryRow(`SELECT state, lease_generation FROM turns WHERE id=?`, turnID).Scan(&turnState, &generation); err != nil {
+		t.Fatal(err)
+	}
+	if turnState != "leased" || generation != 7 {
+		t.Fatalf("runtime recovery changed turn: state=%s generation=%d", turnState, generation)
+	}
+}
+
 func TestRecoverReconcilesMissingDelivery(t *testing.T) {
 	h := setup(t)
 	h.e.HookIDs = map[string]string{"example/test-repo": "1"}
