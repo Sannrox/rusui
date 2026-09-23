@@ -13,19 +13,26 @@ A GitHub `owner/name` listed under a project. Review requires at least one. GitH
 _Avoid_: Using the repository full name as the policy identity
 
 **Session kind**:
-One of `review`, `run`, or `scheduled`. `run` is operator-started (`rusui run`).
+The current runtime accepts `review`, `run`, and `scheduled`; `local` is an
+accepted experimental kind from [ADR 0016](docs/decisions/0016-local-interactive-runtime.md)
+and is not implemented or enabled by the current policy parser.
 _Avoid_: operator, interactive, chat, implement (as a session kind)
 
 **Session**:
-A unit of work on one project and one environment. A review session is identified by `(project, bound repo, item)`. A `run` or `scheduled` session is minted at create.
+A unit of work on one project and one environment. A review session is
+identified by `(project, bound repo, item)`. A `run` or `scheduled` session
+is minted at create. An experimental `local` session is human-driven and has
+no Turn.
 _Avoid_: GitHub issue, turn, environment
 
 **Turn**:
-One leased attempt on a session.
+One leased attempt on an unattended session. A local session has no Turn.
 _Avoid_: session, job (as the product noun)
 
 **Environment**:
-The machine a session runs on. One session, one environment.
+The machine a session runs on. One session, one Rusui Environment record. For
+the experimental local profile, this identifies the operator's host and does
+not imply isolation; multiple local sessions may share that physical host.
 _Avoid_: project, runner, snapshot (the prepared tree)
 
 **Snapshot**:
@@ -44,13 +51,23 @@ _Avoid_: tool fence, shikigami sandbox
 The guest's default permission mode plus policy-mapped `session/request_permission`. A live unmatched request waits on the RPC with a current-policy recheck; inbox history is not a grant.
 _Avoid_: machine isolation, `--always-approve`, tool jail inside rusui
 
-**Process** (proposed, [ADR 0016](docs/decisions/0016-local-interactive-runtime.md)):
-A live local PTY child owned by Sumika, named `rusui-<project>-<session id>`. Sumika calls it a Session; rusui does not.
+**Process** ([ADR 0016](docs/decisions/0016-local-interactive-runtime.md)):
+A live local PTY child owned by Sumika, named `rusui-<session id>`. Sumika calls
+it a Session; Rusui does not. Rusui records the name and observed lifecycle
+events, never local PTY bytes.
 _Avoid_: session (for the PTY child), turn, environment
 
-**Local session** (proposed, ADR 0016):
-A session of kind `local`: a human drives one Process on their own machine. No turns, leases, grants, or GitHub credential.
+**Local session** (experimental, ADR 0016):
+A human-driven session of kind `local` associated with one Sumika Process on the
+operator's host. It has no Turns, leases, managed grants, model proxy
+credentials, or GitHub credential, and it is not an OS isolation boundary.
 _Avoid_: run session, implement session, attach
+
+**Attach**:
+A live client connection to a Process or managed terminal. Sumika owns local
+Attach and enforces one writer by stealing the previous Attach; detach leaves
+the Process running. Rusui's managed terminal keeps its own write lease.
+_Avoid_: session, turn, process ownership
 
 **Cancel**:
 Operator action that stops a live guest and fails the claimed turn without automatic retry. Distinct from pause.
