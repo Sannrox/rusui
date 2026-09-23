@@ -35,6 +35,17 @@ func (d DockerCLI) bin() string {
 	return "docker"
 }
 
+// NetworkExists reports whether the named container network exists.
+func (d DockerCLI) NetworkExists(name string) bool {
+	_, err := d.run("network", "inspect", name)
+	return err == nil
+}
+
+// EnsureNetwork creates the named network when it is missing.
+func (d DockerCLI) EnsureNetwork(name string) error {
+	return d.ensureNetwork(name)
+}
+
 func (d DockerCLI) ensureNetwork(name string) error {
 	if name == "" {
 		return fmt.Errorf("env: trusted network required")
