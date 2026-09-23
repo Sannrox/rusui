@@ -52,6 +52,30 @@ Process-driver review (`-driver`) is test/dev. It is not this topology.
   command (`-driver`) that prints review JSON on stdout. There is no
   in-tree `review-driver` binary.
 
+## Set up with `rusui setup`
+
+`rusui setup` prepares this machine ([ADR 0018](decisions/0018-rusui-setup.md)).
+Build rusui first (step 1), then:
+
+```bash
+rusui setup plan    # what would change; writes nothing
+rusui setup apply   # idempotent; ends with rusui diagnose
+```
+
+`apply` creates the state directory (`0700`; `-state DIR` overrides the
+platform default), plane TLS (a local CA and a certificate for
+`127.0.0.1`, `localhost`, and `rusui.plane`), `rusui.env` (`0600`) with
+generated worker, webhook, Slack, and operator secrets, a policy skeleton
+when none exists, and the `rusui-trusted` container network when Docker or
+Podman is installed. It never overwrites a policy or existing TLS
+(`-rotate-tls` replaces TLS only) and never prints secret values.
+
+Lines marked `needs-you` are inputs only you can supply: the GitHub token,
+model access (a key, or `RUSUI_MODEL_UPSTREAM` for a CLI proxy you logged
+in to), and the guest image. Put them in `rusui.env`, then start the plane
+with the command `apply` prints. The sections below describe the same
+steps by hand.
+
 ## 1. Build and policy
 
 ```bash

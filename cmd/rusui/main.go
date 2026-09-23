@@ -59,6 +59,9 @@ func main() {
 		case "diagnose":
 			diagnoseCLI(os.Args[2:])
 			return
+		case "setup":
+			setupCLI(os.Args[2:])
+			return
 		case "drain":
 			drainCLI(os.Args[2:])
 			return
