@@ -189,11 +189,19 @@ allows ([ADR 0017](decisions/0017-claude-guest-and-model-upstream.md) D3):
 `gh release|repo|workflow|secret|variable|ruleset`, `gh api` with `-X`,
 `--method`, `-f`, `--field`, `--raw-field`, or `--input`, and `git push`
 naming `main`/`master`, forcing (`-f`, `--force*`, `+ref`), deleting
-(`--delete`, `-d`, `:ref`), `--mirror`, `--all`, or `--prune`. These rules
-see only the permission requests the guest makes and match command text.
-A bare `git push` while the current branch is `main` is not caught, and a
-script can hide a command; they are workflow control, not a security
-boundary.
+(`--delete`, `-d`, `:ref`), `--mirror`, `--all`, or `--prune`. Creating
+`gh` aliases or extensions and git aliases (`git config alias.*`,
+`git -c alias.*`) is rejected too. The command line is lexed like a shell:
+quotes and escapes are removed, `;`, `&&`, `|`, subshells, and command
+substitutions (also inside double quotes) are checked separately, and
+`sh|bash|zsh|dash|ksh -c` and `eval` payloads are checked recursively.
+Approvals in implement sessions are re-checked against the fence.
+
+These rules see only the permission requests the guest makes. A bare
+`git push` while the current branch is `main`, a command inside a script
+file, a subcommand built from shell variables (`X=merge; gh pr $X 1`),
+and an alias defined before the session are not caught; they are
+workflow control, not a security boundary.
 
 Overlay pause may only **narrow**. Slack `reload` or process restart re-reads
 the file.
