@@ -49,14 +49,34 @@ func (d DockerCLI) ImageExists(tag string) bool {
 }
 
 // BuildImage builds tag from a Dockerfile given on stdin (no build context).
-func (d DockerCLI) BuildImage(tag string, dockerfile []byte) error {
-	cmd := exec.Command(d.bin(), "build", "-t", tag, "-")
+// fresh pulls the base and ignores the build cache.
+func (d DockerCLI) BuildImage(tag string, dockerfile []byte, fresh bool) error {
+	args := []string{"build", "-t", tag}
+	if fresh {
+		args = append(args, "--pull", "--no-cache")
+	}
+	cmd := exec.Command(d.bin(), append(args, "-")...)
 	cmd.Stdin = bytes.NewReader(dockerfile)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 		return fmt.Errorf("docker build %s: %w: %s", tag, err, lines[len(lines)-1])
 	}
 	return nil
+}
+
+// ImageID is the local image ID (sha256:…) of tag.
+func (d DockerCLI) ImageID(tag string) (string, error) {
+	out, err := d.run("image", "inspect", "--format", "{{.Id}}", tag)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// TagImage adds dst as another tag of src.
+func (d DockerCLI) TagImage(src, dst string) error {
+	_, err := d.run("tag", src, dst)
+	return err
 }
 
 // EnsureNetwork creates the named network when it is missing.

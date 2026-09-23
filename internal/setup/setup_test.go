@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,7 +18,7 @@ import (
 
 type fakeNet struct {
 	exists, created bool
-	images          map[string]bool
+	images          map[string]string // tag -> image ID
 	builds          int
 }
 
@@ -26,16 +27,27 @@ func (f *fakeNet) EnsureNetwork(string) error {
 	f.created, f.exists = true, true
 	return nil
 }
-func (f *fakeNet) ImageExists(tag string) bool { return f.images[tag] }
-func (f *fakeNet) BuildImage(tag string, dockerfile []byte) error {
+func (f *fakeNet) ImageExists(tag string) bool { return f.images[tag] != "" }
+func (f *fakeNet) BuildImage(tag string, dockerfile []byte, fresh bool) error {
 	if len(dockerfile) == 0 {
 		return os.ErrInvalid
 	}
 	if f.images == nil {
-		f.images = map[string]bool{}
+		f.images = map[string]string{}
 	}
-	f.images[tag] = true
 	f.builds++
+	// Each build yields new bits, as a fresh build after upstream changes would.
+	f.images[tag] = fmt.Sprintf("sha256:%016x%048x", f.builds, 0)
+	return nil
+}
+func (f *fakeNet) ImageID(tag string) (string, error) {
+	if f.images[tag] == "" {
+		return "", os.ErrNotExist
+	}
+	return f.images[tag], nil
+}
+func (f *fakeNet) TagImage(src, dst string) error {
+	f.images[dst] = f.images[src]
 	return nil
 }
 
@@ -329,7 +341,8 @@ func TestApplyBuildsAndRecordsTheGuestImageOnce(t *testing.T) {
 		t.Fatalf("builds %d", rt.builds)
 	}
 	vals := ReadEnv(PathsFor(dir).Env)
-	if vals["RUSUI_GUEST_IMAGE"] != guestimage.Tag() || vals["RUSUI_GUEST"] != "claude" {
+	id, _ := rt.ImageID(guestimage.CacheTag())
+	if vals["RUSUI_GUEST_IMAGE"] != guestimage.ContentTag(id) || vals["RUSUI_GUEST"] != "claude" || !rt.ImageExists(vals["RUSUI_GUEST_IMAGE"]) {
 		t.Fatalf("env %v", vals)
 	}
 	if _, ok := actions(steps)["RUSUI_GUEST_IMAGE"]; ok {
@@ -383,5 +396,56 @@ func TestPlanStillNeedsAGuestImageWithoutARuntime(t *testing.T) {
 	}
 	if actions(plan)["RUSUI_GUEST_IMAGE"] != NeedsYou {
 		t.Fatalf("plan %v", actions(plan))
+	}
+}
+
+func TestRebuildRecordsANewImageTag(t *testing.T) {
+	dir := t.TempDir()
+	rt := &fakeNet{}
+	if _, err := Apply(Options{StateDir: dir, Network: rt}); err != nil {
+		t.Fatal(err)
+	}
+	first := ReadEnv(PathsFor(dir).Env)["RUSUI_GUEST_IMAGE"]
+	plan, err := Plan(Options{StateDir: dir, Network: rt, RebuildImage: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actions(plan)["guest image"] != Rotate || rt.builds != 1 {
+		t.Fatalf("plan %v builds %d", actions(plan), rt.builds)
+	}
+	if _, err := Apply(Options{StateDir: dir, Network: rt, RebuildImage: true}); err != nil {
+		t.Fatal(err)
+	}
+	second := ReadEnv(PathsFor(dir).Env)["RUSUI_GUEST_IMAGE"]
+	if rt.builds != 2 || second == first || !strings.HasPrefix(second, guestimage.Repository+":") {
+		t.Fatalf("rebuild recorded %q (was %q), builds %d", second, first, rt.builds)
+	}
+}
+
+func TestApplyMigratesADockerfileHashTag(t *testing.T) {
+	dir := t.TempDir()
+	rt := &fakeNet{}
+	if _, err := Apply(Options{StateDir: dir, Network: rt}); err != nil {
+		t.Fatal(err)
+	}
+	p := PathsFor(dir)
+	if err := setEnvValues(p.Env, map[string]string{"RUSUI_GUEST_IMAGE": "rusui-guest:357ec5bcff52f96b"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(Options{StateDir: dir, Network: rt}); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := rt.ImageID(guestimage.CacheTag())
+	if got := ReadEnv(p.Env)["RUSUI_GUEST_IMAGE"]; got != guestimage.ContentTag(id) || rt.builds != 1 {
+		t.Fatalf("env %q builds %d", got, rt.builds)
+	}
+}
+
+func TestContentTagFollowsTheImageID(t *testing.T) {
+	if got := guestimage.ContentTag("sha256:0123456789abcdef0123"); got != "rusui-guest:0123456789abcdef" {
+		t.Fatal(got)
+	}
+	if guestimage.CacheTag() == guestimage.ContentTag("sha256:"+strings.Repeat("0", 64)) || !strings.Contains(guestimage.CacheTag(), ":build-") {
+		t.Fatal(guestimage.CacheTag())
 	}
 }

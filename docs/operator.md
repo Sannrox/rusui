@@ -69,7 +69,9 @@ generated worker, webhook, Slack, and operator secrets, a policy skeleton
 when none exists, and, when Docker or Podman is installed, the
 `rusui-trusted` network and the reference guest image. The image
 (`build/guest-image`: git, `gh`, Node.js 22, `claude-agent-acp` 0.81.1) is
-tagged by its Dockerfile digest; setup records it as `RUSUI_GUEST_IMAGE`
+tagged by its image ID, so the tag names the bits the guest runs (the
+Dockerfile hash is only the build cache key); `-rebuild-image` rebuilds it
+with `--pull --no-cache`. Setup records the tag as `RUSUI_GUEST_IMAGE`
 and sets `RUSUI_GUEST=claude` unless you chose another image or guest.
 `make guest-image` builds the same tag from a checkout. It never overwrites a policy or existing TLS
 (`-rotate-tls` replaces TLS only) and never prints secret values.

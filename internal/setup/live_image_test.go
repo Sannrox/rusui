@@ -23,23 +23,32 @@ func TestLiveReferenceGuestImage(t *testing.T) {
 		t.Skip(err.Error())
 	}
 	d := rt.(env.DockerCLI)
-	tag := guestimage.Tag()
-	if !d.ImageExists(tag) {
-		if err := d.BuildImage(tag, guestimage.Dockerfile); err != nil {
+	cache := guestimage.CacheTag()
+	if !d.ImageExists(cache) {
+		if err := d.BuildImage(cache, guestimage.Dockerfile, false); err != nil {
 			t.Fatal(err)
 		}
 	}
-	id, err := d.CreateAndStart(env.Spec{Name: "live-image-" + time.Now().Format("150405"), Image: tag})
+	id, err := d.ImageID(cache)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = d.Remove(id) })
+	tag := guestimage.ContentTag(id)
+	if err := d.TagImage(cache, tag); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("image %s", tag)
+	cid, err := d.CreateAndStart(env.Spec{Name: "live-image-" + time.Now().Format("150405"), Image: tag})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Remove(cid) })
 	for _, tool := range [][]string{{"gh", "--version"}, {"git", "--version"}, {"node", "--version"}} {
-		if err := d.Exec(id, tool); err != nil {
+		if err := d.Exec(cid, tool); err != nil {
 			t.Fatalf("%v: %v", tool, err)
 		}
 	}
-	in, out, stop, err := d.ExecStdio(id, []string{acp.ClaudeStdio}, nil)
+	in, out, stop, err := d.ExecStdio(cid, []string{acp.ClaudeStdio}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
