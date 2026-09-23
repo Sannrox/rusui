@@ -164,6 +164,34 @@ this source repo. Use `private` when that bound repo is private.
 Project `budgets` may set `max_concurrent_leases` (integer ≥ 1, default 1).
 Any other budget key fails closed at parse.
 
+Project `permissions` answer the guest's `session/request_permission`
+(the tool fence). A rule matches on `tool`, `kind`, and a `command`
+substring; empty fields are wildcards. `action` is `allow` (the default) or
+`reject`. Any matching reject rule wins over allow rules; a reject rule
+must name at least one field. Unmatched requests wait for an operator
+approval.
+
+```yaml
+projects:
+  rusui:
+    permissions:
+      - command: npm
+      - command: npm publish
+        action: reject
+```
+
+Implement sessions also apply a built-in reject set, whatever policy
+allows ([ADR 0017](decisions/0017-claude-guest-and-model-upstream.md) D3):
+`gh pr merge|close|review`, `gh pr ready --undo`,
+`gh release|repo|workflow|secret|variable|ruleset`, `gh api` with `-X`,
+`--method`, `-f`, `--field`, `--raw-field`, or `--input`, and `git push`
+naming `main`/`master`, forcing (`-f`, `--force*`, `+ref`), deleting
+(`--delete`, `-d`, `:ref`), `--mirror`, `--all`, or `--prune`. These rules
+see only the permission requests the guest makes and match command text.
+A bare `git push` while the current branch is `main` is not caught, and a
+script can hide a command; they are workflow control, not a security
+boundary.
+
 Overlay pause may only **narrow**. Slack `reload` or process restart re-reads
 the file.
 

@@ -190,10 +190,16 @@ func GuestHost(c *Client) ACPHost {
 }
 
 func permissionGate(a *Assignment) acp.PermissionGate {
-	if a == nil || len(a.Permissions) == 0 {
-		return acp.DenyUnmatched{}
+	var gate acp.PermissionGate = acp.DenyUnmatched{}
+	if a != nil && len(a.Permissions) > 0 {
+		gate = acp.RulesGate{Rules: a.Permissions}
 	}
-	return acp.RulesGate{Rules: a.Permissions}
+	if a != nil && a.GitHubToken != "" {
+		// Implement sessions hold a write credential (ADR 0015); the
+		// built-in fence applies whatever policy allows (ADR 0017 D3).
+		gate = acp.FenceGate{Next: gate}
+	}
+	return gate
 }
 
 func WorkspaceFor(a *Assignment) (dir string, tmp bool, err error) {
