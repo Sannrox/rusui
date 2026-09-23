@@ -316,6 +316,11 @@ func TestApplyBuildsAndRecordsTheGuestImageOnce(t *testing.T) {
 	if actions(plan)["guest image"] != Create || rt.builds != 0 {
 		t.Fatalf("plan %v builds %d", actions(plan), rt.builds)
 	}
+	for _, st := range plan {
+		if st.Action == NeedsYou && st.Item == "RUSUI_GUEST_IMAGE" {
+			t.Fatal("plan asks for a guest image it will build itself")
+		}
+	}
 	steps, err := Apply(Options{StateDir: dir, Network: rt})
 	if err != nil {
 		t.Fatal(err)
@@ -368,5 +373,15 @@ func TestSetEnvValuesRewritesExportedKeysInPlace(t *testing.T) {
 	}
 	if v := ReadEnv(path); v["RUSUI_GUEST_IMAGE"] != "rusui-guest:new" || v["RUSUI_GUEST"] != "claude" {
 		t.Fatalf("values %v", v)
+	}
+}
+
+func TestPlanStillNeedsAGuestImageWithoutARuntime(t *testing.T) {
+	plan, err := Plan(Options{StateDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actions(plan)["RUSUI_GUEST_IMAGE"] != NeedsYou {
+		t.Fatalf("plan %v", actions(plan))
 	}
 }
