@@ -99,9 +99,15 @@ func (s *Server) allowStillValid(actionID string) bool {
 	if paused {
 		return false
 	}
+	var params acp.PermissionParams
+	_ = json.Unmarshal([]byte(act.Body), &params)
+	if s.agentGitHubToken(sess) != "" {
+		// Implement sessions: the built-in fence overrides any approval.
+		if d := (acp.FenceGate{Next: acp.RulesGate{}}).Decide(params); d.Matched && !d.Allow {
+			return false
+		}
+	}
 	if p, ok := s.Eng.Policy.Project(sess.Project); ok {
-		var params acp.PermissionParams
-		_ = json.Unmarshal([]byte(act.Body), &params)
 		rules := make([]acp.Rule, 0, len(p.Permissions))
 		for _, r := range p.Permissions {
 			rules = append(rules, acp.Rule{Tool: r.Tool, Kind: r.Kind, Command: r.Command, Action: r.Action})

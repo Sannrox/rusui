@@ -102,3 +102,55 @@ func TestRejectRulesWinOverAllowRules(t *testing.T) {
 		t.Fatalf("empty reject rule rejected everything: %+v", d)
 	}
 }
+
+func TestFenceSeesThroughQuotesWrappersAndAliases(t *testing.T) {
+	for _, cmd := range []string{
+		`bash -c 'gh pr merge 1'`,
+		`sh -c "gh pr merge 1 --squash"`,
+		`/bin/zsh -lc 'cd x && gh pr close 3'`,
+		`bash -c "bash -c 'gh release create v1'"`,
+		`git push origin 'main'`,
+		`git push origin HEAD:'main'`,
+		`git push origin '+main'`,
+		`git push origin "HEAD:refs/heads/main"`,
+		`"/usr/bin/gh" pr merge 1`,
+		`\gh pr merge 1`,
+		`eval "gh pr merge 1"`,
+		`g''h pr merge 1`,
+		`echo "$(gh pr merge 1)"`,
+		`gh pr create --body "$(gh pr merge 1)"`,
+		`gh alias set m 'pr merge'`,
+		`gh alias import aliases.yml`,
+		`gh extension install someone/gh-merge`,
+		`git -c alias.p=push p origin main`,
+		`git -C /repo -c alias.p=push p origin main`,
+		`git --git-dir .git -c alias.p=push p origin main`,
+		`git --config-env=alias.p=ENV p origin main`,
+		`git --namespace ns -c alias.p=push p origin main`,
+		`git config alias.p push`,
+		`FOO=1 gh pr merge 1`,
+		`nohup gh pr merge 1 &`,
+		`(gh pr merge 1)`,
+		`{ gh pr merge 1; }`,
+	} {
+		if !FencedCommand(cmd) {
+			t.Errorf("not fenced: %s", cmd)
+		}
+	}
+	for _, cmd := range []string{
+		`bash -c 'go test ./...'`,
+		`sh -c "gh pr create --fill"`,
+		`git push origin 'feature/main-fix'`,
+		`git commit -m 'gh pr merge is fenced'`,
+		`echo "git push origin main"`,
+		`gh alias list`,
+		`git config user.name rusui`,
+		`git -c core.pager=less push origin feature`,
+		`gh pr create --body "never run \$(gh pr merge 1) here"`,
+		`gh pr create --body "use \$(make) and \` + "`" + `ls\` + "`" + ` literally"`,
+	} {
+		if FencedCommand(cmd) {
+			t.Errorf("fenced but allowed: %s", cmd)
+		}
+	}
+}
