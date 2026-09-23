@@ -44,6 +44,7 @@ var defaultModelOrigins = map[string]string{
 // ModelConfig is the plane side of the model proxy: which provider the
 // guest speaks, the upstream to forward to, and the key sent upstream.
 type ModelConfig struct {
+	Guest    string
 	Provider string
 	Key      string
 	Origin   *url.URL // operator upstream (gateway or CLI proxy); nil uses the provider default
@@ -55,10 +56,10 @@ func ModelConfigFromEnv(getenv func(string) string) (ModelConfig, error) {
 	var c ModelConfig
 	switch g := getenv("RUSUI_GUEST"); g {
 	case "", "grok":
-		c.Provider = ProviderXAI
+		c.Guest, c.Provider = "grok", ProviderXAI
 		c.Key = firstNonEmpty(getenv("XAI_API_KEY"), getenv("RUSUI_XAI_API_KEY"))
 	case "claude":
-		c.Provider = ProviderAnthropic
+		c.Guest, c.Provider = "claude", ProviderAnthropic
 		c.Key = firstNonEmpty(getenv("RUSUI_ANTHROPIC_API_KEY"), getenv("ANTHROPIC_API_KEY"))
 	default:
 		return c, fmt.Errorf("RUSUI_GUEST %q: want grok or claude", g)

@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
@@ -33,6 +34,7 @@ type Server struct {
 	SlackSec            string
 	SlackUsers          map[string]bool
 	PolicyPath          string
+	Guest               string // acp.GuestGrok (default) or acp.GuestClaude
 	ModelProvider       string // ProviderXAI (default) or ProviderAnthropic
 	ModelKey            string
 	ModelOrigin         *url.URL // operator model upstream; keyless forwarding allowed
@@ -390,6 +392,7 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		"turn_token":         tok,
 		"turn_token_expires": exp.UTC().Format(time.RFC3339Nano),
 		"input":              s.Eng.BuildInput(c),
+		"guest":              s.guest(),
 	}
 	if turn, err := store.GetTurn(s.Eng.Store, c.Job.ID); err == nil {
 		out["session_id"] = turn.SessionID
@@ -448,6 +451,13 @@ func (s *Server) agentGitHubToken(sess *store.Session) string {
 		return ""
 	}
 	return s.AgentGitHubToken
+}
+
+func (s *Server) guest() string {
+	if s.Guest == "" {
+		return acp.GuestGrok
+	}
+	return s.Guest
 }
 
 // CoauthorTrailer marks agent commits (ADR 0015 D3). The .invalid domain

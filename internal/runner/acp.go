@@ -141,8 +141,9 @@ func (r *HTTPRecorder) poll(id string) acp.Decision {
 	return acp.Decision{}
 }
 
-// GrokHost spawns the ADR 0002 Grok command and records receipts on the plane.
-func GrokHost(c *Client) ACPHost {
+// GuestHost spawns the guest the plane named for the turn (Grok by default,
+// ADR 0017 D1) and records receipts on the plane.
+func GuestHost(c *Client) ACPHost {
 	return func(a *Assignment, dir string) (*acp.Client, func(), error) {
 		env := DriverEnv(a, dir, os.Getenv("PATH"))
 		rec := &HTTPRecorder{Base: c.Base, Token: a.TurnToken, TurnID: a.TurnID, HTTP: c.HTTP}
@@ -150,13 +151,17 @@ func GrokHost(c *Client) ACPHost {
 			if c.Exec == nil {
 				return nil, nil, fmt.Errorf("container exec required")
 			}
-			stdin, stdout, stop, err := c.Exec.ExecStdio(a.Handle, acp.SpawnArgs(), env)
+			argv, err := acp.SpawnArgsFor(a.Guest)
+			if err != nil {
+				return nil, nil, err
+			}
+			stdin, stdout, stop, err := c.Exec.ExecStdio(a.Handle, argv, env)
 			if err != nil {
 				return nil, nil, err
 			}
 			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait}, stop, nil
 		}
-		cmd, err := acp.GrokCommand()
+		cmd, err := acp.GuestCommand(a.Guest)
 		if err != nil {
 			return nil, nil, err
 		}

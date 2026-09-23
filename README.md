@@ -62,8 +62,9 @@ BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
 
 `GET http://127.0.0.1:8080/healthz` returns `ok`. `rusui diagnose` and
 `GET /readyz` report whether the supported unattended topology is ready.
-`-acp` hosts one Grok ACP
-turn (the P1 guest). A process driver is a command that prints review JSON
+`-acp` hosts one ACP
+turn with the guest the plane names (`RUSUI_GUEST`: Grok by default, or
+Claude Code). A process driver is a command that prints review JSON
 on stdout; pass `-driver` instead of `-acp`. There is no in-tree
 `review-driver` binary.
 

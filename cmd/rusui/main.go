@@ -167,6 +167,7 @@ func main() {
 		SlackUsers:        slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
 		PolicyPath:        *pol,
 		Addr:              *addr,
+		Guest:             model.Guest,
 		ModelProvider:     model.Provider,
 		ModelKey:          model.Key,
 		ModelOrigin:       model.Origin,

@@ -18,7 +18,7 @@ combinations are not claimed:
 | Host OS | Linux or macOS |
 | Runner | one `rusui-runner` on the same host as the plane |
 | Runtime | Docker or Podman CLI (`docker`/`podman` on `PATH`) |
-| Guest | `$RUSUI_GUEST_IMAGE` (Grok ACP over container stdio) |
+| Guest | `$RUSUI_GUEST_IMAGE` (Grok, or Claude Code via `claude-agent-acp`, over container stdio) |
 | Egress | `trusted`: HTTPS to `rusui.plane` only |
 | Listen | loopback `127.0.0.1` |
 
@@ -46,7 +46,9 @@ Process-driver review (`-driver`) is test/dev. It is not this topology.
   pull-request write on the bound repositories only (ADR 0015). The guest
   image must provide `gh`.
 - A tunnel or webhook relay if GitHub or Slack must reach the process.
-- For review turns: `-acp` (Grok ACP, the P1 guest) or a process driver
+- For review turns: `-acp` (the plane's guest: Grok by default; for
+  `RUSUI_GUEST=claude` the image or `PATH` needs
+  `@agentclientprotocol/claude-agent-acp@0.81.1`, which requires Node.js) or a process driver
   command (`-driver`) that prints review JSON on stdout. There is no
   in-tree `review-driver` binary.
 

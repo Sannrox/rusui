@@ -31,7 +31,7 @@ Upgrade procedure: [upgrade.md](upgrade.md).
 | `-token` | `$RUSUI_WORKER_SECRET` | Bootstrap bearer token. |
 | `-name` | `local` | Runner name. |
 | `-driver` | (required unless `-acp`) | Process driver command (space-separated). |
-| `-acp` | false | Host one ACP turn with Grok instead of the process driver. |
+| `-acp` | false | Host one ACP turn with the plane's guest (Grok or Claude Code) instead of the process driver. |
 | `-once` | false | Claim at most one turn and exit. |
 | `-version` | false | Print version and exit. |
 

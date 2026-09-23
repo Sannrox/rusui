@@ -51,6 +51,7 @@ type Assignment struct {
 	ModelBaseURL    string   `json:"model_base_url"`
 	GitProxyURL     string   `json:"git_proxy_url"`
 	GitHubToken     string   `json:"github_token,omitempty"`
+	Guest           string   `json:"guest,omitempty"`
 	CommitTrailers  []string `json:"commit_trailers,omitempty"`
 	// CommitHooksDir is where PrepareCommitHooks placed the attribution
 	// hooks for this turn; set on the runner, never by the plane.
@@ -174,10 +175,28 @@ func DriverEnv(a *Assignment, home, path string) []string {
 		"HOME=" + home,
 		"RUSUI_TURN_TOKEN=" + a.TurnToken,
 		"RUSUI_TURN_ID=" + fmt.Sprint(a.TurnID),
-		"XAI_API_KEY=" + a.TurnToken,
 	}
-	if a.ModelBaseURL != "" {
-		env = append(env, "GROK_XAI_API_BASE_URL="+a.ModelBaseURL)
+	if a.Guest == acp.GuestClaude {
+		// Claude Code talks to the plane model proxy with the grant; its
+		// config dir is fresh, so no operator login is found (ADR 0017 D1).
+		configDir := "/tmp/rusui-claude"
+		if home != "" {
+			configDir = home + "/.rusui-claude"
+		}
+		env = append(env,
+			"ANTHROPIC_AUTH_TOKEN="+a.TurnToken,
+			"CLAUDE_CONFIG_DIR="+configDir,
+			"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
+			"DISABLE_TELEMETRY=1",
+		)
+		if a.ModelBaseURL != "" {
+			env = append(env, "ANTHROPIC_BASE_URL="+a.ModelBaseURL)
+		}
+	} else {
+		env = append(env, "XAI_API_KEY="+a.TurnToken)
+		if a.ModelBaseURL != "" {
+			env = append(env, "GROK_XAI_API_BASE_URL="+a.ModelBaseURL)
+		}
 	}
 	var git [][2]string
 	if a.GitHubToken != "" {

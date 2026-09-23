@@ -503,8 +503,11 @@ Only `implement` sessions receive a GitHub write credential, the
 operator's own, scoped where it is issued
 ([ADR 0015](docs/decisions/0015-agent-publication.md)).
 
-`internal/acp` is the host-side Agent Client Protocol client. The P1
-guest spawn is `agent --permission-mode default agent stdio` (Grok).
+`internal/acp` is the host-side Agent Client Protocol client. The plane
+names the guest per turn (`RUSUI_GUEST`,
+[ADR 0017](docs/decisions/0017-claude-guest-and-model-upstream.md)): Grok
+(default) spawns `agent --permission-mode default agent stdio`; Claude
+Code spawns the `claude-agent-acp` adapter (pinned 0.81.1).
 Every inbound `fs/*`, `terminal/*`, and `session/request_permission`
 is recorded as an `actions` row. Permission requests with no matching
 rule are denied and stored as approvals. The process driver is still
@@ -512,16 +515,19 @@ the review lane; the runner does not spawn this client yet.
 
 P1 isolation is two fences ([ADR 0008](docs/decisions/0008-p1-isolation-split.md)).
 **Machine isolation** is the container environment (process driver is
-test/dev only). **Tool fence** is Grok `--permission-mode default`
+test/dev only). **Tool fence** is the guest's default permission mode
 plus those permission receipts. Rusui does not jail tools inside the
 guest; shikigami’s tool sandbox is out of P1. `--always-approve` is
 not the unattended spawn.
 
 Credentials ([ADR 0009](docs/decisions/0009-credential-broker.md)):
 git smart-HTTP and model egress proxies run on the **plane**. The
-guest holds only the per-turn grant (`XAI_API_KEY` and git HTTP auth
-are that grant). Grok is pointed at `GROK_XAI_API_BASE_URL` on the
-plane; the runner **execs** Grok inside the container. Guest egress
+guest holds only the per-turn grant (Grok's `XAI_API_KEY`, Claude Code's
+`ANTHROPIC_AUTH_TOKEN`, and git HTTP auth are that grant). The guest is
+pointed at the plane model proxy (`GROK_XAI_API_BASE_URL` or
+`ANTHROPIC_BASE_URL`); the runner **execs** it inside the container.
+Claude Code runs with a fresh `CLAUDE_CONFIG_DIR`, never the operator's
+login. Guest egress
 `trusted` is plane proxies only. GitHub REST stays on the plane.
 Missing App key or xAI key fails closed. A plane CA lives in the guest
 image. Snapshot prepare uses a read-only grant through the same git
