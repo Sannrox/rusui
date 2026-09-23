@@ -476,6 +476,18 @@ func (e *Engine) expireDeadLeasesTx(tx *sql.Tx, repo, lane string) error {
 	return nil
 }
 
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
+}
+
+func anySlice(xs []string) []any {
+	out := make([]any, len(xs))
+	for i, x := range xs {
+		out[i] = x
+	}
+	return out
+}
+
 func (e *Engine) Claim(repo string) (*Claim, error) {
 	var c *Claim
 	err := e.Store.Tx(func(tx *sql.Tx) error {
@@ -487,17 +499,41 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 			return errPaused
 		}
 		pol, ok := e.Policy.Repo(repo)
-		if !ok || !pol.Review {
+		if !ok {
 			return errPolicy
 		}
-		day := e.now().Format("2006-01-02")
-		n, err := store.CountReviewsToday(tx, repo, day)
-		if err != nil {
-			return err
+		proj, ok := e.Policy.Project(pol.Project)
+		if !ok {
+			return errPolicy
 		}
-		if n >= pol.MaxReviewsPerRepoPerUTCDay {
-			e.exception(fmt.Sprintf("daily review budget exhausted for %s", repo))
-			return errBudget
+		// Each lane has its own gate: review needs review policy and budget;
+		// run and scheduled need the project to admit that session kind.
+		var lanes []string
+		budgetOut := false
+		if pol.Review {
+			day := e.now().Format("2006-01-02")
+			n, err := store.CountReviewsToday(tx, repo, day)
+			if err != nil {
+				return err
+			}
+			if n >= pol.MaxReviewsPerRepoPerUTCDay {
+				// Reviews stop; run and scheduled work may still be claimed.
+				budgetOut = true
+				e.exception(fmt.Sprintf("daily review budget exhausted for %s", repo))
+			} else {
+				lanes = append(lanes, "review")
+			}
+		}
+		for _, k := range []string{policy.KindRun, policy.KindScheduled} {
+			if proj.AllowsKind(k) {
+				lanes = append(lanes, k)
+			}
+		}
+		if len(lanes) == 0 {
+			if budgetOut {
+				return errBudget
+			}
+			return errPolicy
 		}
 		if err := e.expireDeadLeasesTx(tx, repo, "review"); err != nil {
 			return err
@@ -509,8 +545,12 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 			return err
 		}
 		var id int64
-		err = tx.QueryRow(`SELECT id FROM jobs WHERE repo=? AND state='queued' AND lane IN ('review','run','scheduled') ORDER BY id LIMIT 1`, repo).Scan(&id)
+		err = tx.QueryRow(`SELECT id FROM jobs WHERE repo=? AND state='queued' AND lane IN (`+placeholders(len(lanes))+`) ORDER BY id LIMIT 1`,
+			append([]any{repo}, anySlice(lanes)...)...).Scan(&id)
 		if err == sql.ErrNoRows {
+			if budgetOut {
+				return errBudget
+			}
 			return nil
 		}
 		if err != nil {
@@ -519,10 +559,6 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		j, err := store.GetJobByIDTx(tx, id)
 		if err != nil {
 			return err
-		}
-		proj, ok := e.Policy.Project(pol.Project)
-		if !ok {
-			return errPolicy
 		}
 		leased, err := store.CountLeasedTurnsTx(tx, pol.Project, proj.Repos)
 		if err != nil {
@@ -543,8 +579,10 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		if err := store.UpdateJobTx(tx, j); err != nil {
 			return err
 		}
-		if err := store.IncrReviewsToday(tx, repo, day); err != nil {
-			return err
+		if j.Lane == "review" {
+			if err := store.IncrReviewsToday(tx, repo, e.now().Format("2006-01-02")); err != nil {
+				return err
+			}
 		}
 		snap, err := store.LoadSnapshotTx(tx, j.Repo, j.Item, j.ClaimedRevision)
 		if err != nil {
