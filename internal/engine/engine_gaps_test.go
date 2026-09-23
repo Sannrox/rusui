@@ -3,11 +3,14 @@ package engine_test
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -423,6 +426,79 @@ func TestWebhookMissCatchUpAdmits(t *testing.T) {
 	j, _ := store.JobState(h.st, it.Repo, it.Item)
 	if j == nil {
 		t.Fatal("catch-up did not admit")
+	}
+}
+
+func TestDisabledReviewPolicySkipsAdmissionAcrossIntakeSources(t *testing.T) {
+	for _, source := range []string{"catch-up", "webhook", "reconcile"} {
+		t.Run(source, func(t *testing.T) {
+			h := setup(t)
+			raw := strings.ReplaceAll(fixture, "review: true", "review: false")
+			pol, err := policy.Parse([]byte(raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			h.e.ReloadPolicy(pol)
+
+			it := issue(1)
+			h.f.Put(it)
+			switch source {
+			case "catch-up":
+				err = h.e.CatchUpOpenAndLocal([]snapshot.Item{it})
+			case "webhook":
+				body := []byte(`{"repository":{"full_name":"example/test-repo"},"issue":{"number":1}}`)
+				req, err := http.NewRequest(http.MethodPost, h.http.URL+"/hooks/github", bytes.NewReader(body))
+				if err != nil {
+					t.Fatal(err)
+				}
+				req.Header.Set("X-GitHub-Delivery", "review-disabled-webhook")
+				req.Header.Set("X-Hub-Signature-256", gh.Sign("whsec", body))
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_ = resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					t.Fatalf("webhook returned %d", resp.StatusCode)
+				}
+			case "reconcile":
+				payload := []byte(`{"repository":{"full_name":"example/test-repo"},"issue":{"number":1}}`)
+				h.f.Deliveries = []gh.DeliveryDetail{{
+					ID: "review-disabled-reconcile", DeliveredAt: "2026-09-10T12:00:00Z", Event: "issues", Payload: payload,
+				}}
+				h.e.HookIDs = map[string]string{it.Repo: "1"}
+				err = h.e.ReconcileConfigured()
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ok, err := h.e.StepRefresh()
+			if err != nil || !ok {
+				t.Fatalf("refresh result %v: %v", ok, err)
+			}
+			assertNoReviewAdmission(t, h.st, it.Repo, it.Item)
+		})
+	}
+}
+
+func assertNoReviewAdmission(t *testing.T, st *store.Store, repo string, item int) {
+	t.Helper()
+	var sessions, turns, jobs, snapshots int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM sessions WHERE kind=? AND repo=? AND item=?`, store.SessionKindReview, repo, item).Scan(&sessions); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.kind=? AND s.repo=? AND s.item=?`, store.SessionKindReview, repo, item).Scan(&turns); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM jobs WHERE lane='review' AND repo=? AND item=?`, repo, item).Scan(&jobs); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM snapshots WHERE repo=? AND item=?`, repo, item).Scan(&snapshots); err != nil {
+		t.Fatal(err)
+	}
+	if sessions != 0 || turns != 0 || jobs != 0 || snapshots != 0 {
+		t.Fatalf("review disabled but state was admitted: sessions=%d turns=%d jobs=%d snapshots=%d", sessions, turns, jobs, snapshots)
 	}
 }
 

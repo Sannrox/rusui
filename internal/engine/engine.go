@@ -358,6 +358,9 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int) erro
 	if err == nil && curGen != gen {
 		return nil
 	}
+	if repoPolicy, ok := e.Policy.Repo(it.Repo); !ok || !repoPolicy.Review {
+		return nil
+	}
 	if force {
 		var n int
 		err := tx.QueryRow(`SELECT COUNT(*) FROM evidence_invalidations ei JOIN review_revisions r ON r.id=ei.review_revision_id JOIN jobs j ON j.id=r.job_id WHERE j.repo=? AND j.item=? AND ei.consumed=0`, it.Repo, it.Item).Scan(&n)
