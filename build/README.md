@@ -50,6 +50,7 @@ passing `-addr 0.0.0.0:8080`.
 
 `build/guest-image/Dockerfile` is the reference rusui guest (ADR 0018 D4):
 pinned Node.js 22 base, git, `gh` (checksum-verified), and
-`@agentclientprotocol/claude-agent-acp`. `make guest-image` builds it as
-`rusui-guest:<first 16 hex of the Dockerfile sha256>`, the same tag
-`rusui setup apply` uses. The plane CA is mounted at run time.
+`@agentclientprotocol/claude-agent-acp`. `make guest-image` builds it with the cache tag
+`rusui-guest:build-<first 16 hex of the Dockerfile sha256>`, then tags the
+result `rusui-guest:<first 16 hex of the image ID>` and prints that tag, the
+same one `rusui setup apply` records. The plane CA is mounted at run time.

@@ -67,8 +67,10 @@ the exact command to run. Setup does not perform OAuth logins itself.
 `build/guest-image` is the supported guest: a pinned Debian slim base with
 `git`, `gh`, Node.js, and `@agentclientprotocol/claude-agent-acp` at the
 ADR 0017 version. The plane CA is mounted at run time, not baked in, so
-one image serves every installation. Its tag carries a content digest, and
-the image is the environment snapshot's base identity (ADR 0007).
+one image serves every installation. The recorded tag is derived from the
+built image's ID, so it names the image's bits; the Dockerfile hash is
+only a build cache key. The image is the environment snapshot's base
+identity (ADR 0007).
 
 ### D5. Other machines and other tools
 

@@ -47,15 +47,20 @@ type Network interface {
 	NetworkExists(name string) bool
 	EnsureNetwork(name string) error
 	ImageExists(tag string) bool
-	BuildImage(tag string, dockerfile []byte) error
+	BuildImage(tag string, dockerfile []byte, fresh bool) error
+	ImageID(tag string) (string, error)
+	TagImage(src, dst string) error
 }
 
 type Options struct {
 	StateDir  string
 	RotateTLS bool
-	Network   Network // nil when no container runtime is installed
-	Now       func() time.Time
-	Getenv    func(string) string // process environment consulted for needs-you
+	// RebuildImage rebuilds the reference guest with --pull --no-cache; a
+	// changed image gets a new recorded tag.
+	RebuildImage bool
+	Network      Network // nil when no container runtime is installed
+	Now          func() time.Time
+	Getenv       func(string) string // process environment consulted for needs-you
 }
 
 // DefaultStateDir is $XDG_DATA_HOME/rusui, or the platform default.
@@ -191,7 +196,7 @@ func run(o Options, apply bool) ([]Step, error) {
 	}
 
 	if o.Network != nil {
-		st, err := ensureGuestImage(p, o.Network, apply)
+		st, err := ensureGuestImage(p, o.Network, apply, o.RebuildImage)
 		if err != nil {
 			return steps, err
 		}
@@ -212,7 +217,7 @@ func run(o Options, apply bool) ([]Step, error) {
 	if o.Network != nil && vals["RUSUI_GUEST_IMAGE"] == "" {
 		// The guest image step above builds and records it; plan and apply
 		// must agree that the operator need not supply one.
-		vals["RUSUI_GUEST_IMAGE"] = guestimage.Tag()
+		vals["RUSUI_GUEST_IMAGE"] = guestimage.CacheTag()
 	}
 	for _, n := range needsYou(vals) {
 		add(NeedsYou, n[0], n[1])
@@ -288,27 +293,50 @@ func ensureEnv(p Paths, apply bool) (Step, error) {
 }
 
 // ensureGuestImage builds the reference guest (ADR 0018 D4) and records it
-// in the env file unless the operator chose another image.
-func ensureGuestImage(p Paths, rt Network, apply bool) ([]Step, error) {
-	tag := guestimage.Tag()
+// in the env file, tagged by its image ID, unless the operator chose
+// another image. The Dockerfile hash is only the build cache key.
+func ensureGuestImage(p Paths, rt Network, apply, rebuild bool) ([]Step, error) {
+	cache := guestimage.CacheTag()
+	built := rt.ImageExists(cache)
 	var steps []Step
-	if rt.ImageExists(tag) {
-		steps = append(steps, Step{Keep, "guest image", tag})
-	} else {
-		steps = append(steps, Step{Create, "guest image", "build " + tag + " (git, gh, Node.js, claude-agent-acp)"})
-		if apply {
-			if err := rt.BuildImage(tag, guestimage.Dockerfile); err != nil {
-				return steps, err
+	switch {
+	case built && !rebuild:
+		steps = append(steps, Step{Keep, "guest image", cache})
+	case built:
+		steps = append(steps, Step{Rotate, "guest image", "rebuild " + cache + " with --pull --no-cache"})
+	default:
+		steps = append(steps, Step{Create, "guest image", "build " + cache + " (git, gh, Node.js, claude-agent-acp)"})
+	}
+	if apply && (!built || rebuild) {
+		if err := rt.BuildImage(cache, guestimage.Dockerfile, rebuild); err != nil {
+			return steps, err
+		}
+		built = true
+	}
+	tag := "" // unknown until built
+	if built && (apply || !rebuild) {
+		id, err := rt.ImageID(cache)
+		if err != nil {
+			return steps, err
+		}
+		tag = guestimage.ContentTag(id)
+		if !rt.ImageExists(tag) {
+			steps = append(steps, Step{Update, "guest image tag", tag})
+			if apply {
+				if err := rt.TagImage(cache, tag); err != nil {
+					return steps, err
+				}
 			}
 		}
 	}
+
 	vals := readEnv(p.Env)
 	cur := vals["RUSUI_GUEST_IMAGE"]
 	if cur != "" && !strings.HasPrefix(cur, guestimage.Repository+":") {
 		return append(steps, Step{Keep, "guest image env", "operator image " + cur}), nil
 	}
 	set := map[string]string{}
-	if cur != tag {
+	if tag == "" || cur != tag {
 		set["RUSUI_GUEST_IMAGE"] = tag
 	}
 	if vals["RUSUI_GUEST"] == "" {
@@ -322,7 +350,11 @@ func ensureGuestImage(p Paths, rt Network, apply bool) ([]Step, error) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	steps = append(steps, Step{Update, "guest image env", "set " + strings.Join(keys, ", ")})
+	detail := "set " + strings.Join(keys, ", ")
+	if tag == "" {
+		detail += " (image tag after build)"
+	}
+	steps = append(steps, Step{Update, "guest image env", detail})
 	if apply {
 		if err := setEnvValues(p.Env, set); err != nil {
 			return steps, err

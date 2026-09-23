@@ -19,7 +19,7 @@ func setupCLI(args []string) {
 // setupMain runs `rusui setup plan|apply` (ADR 0018).
 func setupMain(args []string, out io.Writer, getenv func(string) string, look func() (envpkg.Runtime, error)) int {
 	if len(args) == 0 || (args[0] != "plan" && args[0] != "apply") {
-		fmt.Fprintln(os.Stderr, "usage: rusui setup plan|apply [-state DIR] [-rotate-tls] [-json]")
+		fmt.Fprintln(os.Stderr, "usage: rusui setup plan|apply [-state DIR] [-rotate-tls] [-rebuild-image] [-json]")
 		return 2
 	}
 	mode := args[0]
@@ -27,11 +27,12 @@ func setupMain(args []string, out io.Writer, getenv func(string) string, look fu
 	fs.SetOutput(os.Stderr)
 	state := fs.String("state", setup.DefaultStateDir(getenv), "state directory")
 	rotate := fs.Bool("rotate-tls", false, "replace existing plane TLS material")
+	rebuild := fs.Bool("rebuild-image", false, "rebuild the reference guest image with --pull --no-cache")
 	asJSON := fs.Bool("json", false, "print steps as JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
-	opt := setup.Options{StateDir: *state, RotateTLS: *rotate, Getenv: getenv}
+	opt := setup.Options{StateDir: *state, RotateTLS: *rotate, RebuildImage: *rebuild, Getenv: getenv}
 	if rt, err := look(); err == nil {
 		if n, ok := rt.(setup.Network); ok {
 			opt.Network = n
