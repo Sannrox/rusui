@@ -104,7 +104,7 @@ func (s *Server) allowStillValid(actionID string) bool {
 		_ = json.Unmarshal([]byte(act.Body), &params)
 		rules := make([]acp.Rule, 0, len(p.Permissions))
 		for _, r := range p.Permissions {
-			rules = append(rules, acp.Rule{Tool: r.Tool, Kind: r.Kind, Command: r.Command})
+			rules = append(rules, acp.Rule{Tool: r.Tool, Kind: r.Kind, Command: r.Command, Action: r.Action})
 		}
 		d := acp.RulesGate{Rules: rules}.Decide(params)
 		if d.Matched && !d.Allow {

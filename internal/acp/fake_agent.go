@@ -16,6 +16,10 @@ import (
 type FakeAgent struct {
 	In  io.Reader
 	Out io.Writer
+	// ToolCall is the permission request's tool call; empty sends a bare id.
+	ToolCall json.RawMessage
+	// PermissionOption receives the option the client selected.
+	PermissionOption func(string)
 
 	mu      sync.Mutex
 	pending map[string]chan rpcMessage
@@ -107,9 +111,13 @@ func (a *FakeAgent) promptTurn(id json.RawMessage) {
 	_ = a.roundTrip(MethodTerminalWaitForExit, TerminalRef{TerminalID: "term-recorded"})
 	_ = a.roundTrip(MethodTerminalKill, TerminalRef{TerminalID: "term-recorded"})
 	_ = a.roundTrip(MethodTerminalRelease, TerminalRef{TerminalID: "term-recorded"})
+	toolCall := a.ToolCall
+	if len(toolCall) == 0 {
+		toolCall = json.RawMessage(`{"toolCallId":"tc-1"}`)
+	}
 	_ = a.roundTrip(MethodRequestPermission, PermissionParams{
 		SessionID: "sess-fake",
-		ToolCall:  json.RawMessage(`{"toolCallId":"tc-1"}`),
+		ToolCall:  toolCall,
 		Options: []PermOption{
 			{OptionID: "allow-once", Name: "Allow", Kind: "allow_once"},
 			{OptionID: "reject-once", Name: "Reject", Kind: "reject_once"},
@@ -141,6 +149,12 @@ func (a *FakeAgent) roundTrip(method string, params any) error {
 	msg := <-ch
 	if string(msg.ID) != string(id) {
 		return fmt.Errorf("fake agent: expected id %s got %s", id, msg.ID)
+	}
+	if method == MethodRequestPermission && a.PermissionOption != nil {
+		var out PermissionOutcome
+		if json.Unmarshal(msg.Result, &out) == nil {
+			a.PermissionOption(out.Outcome.OptionID)
+		}
 	}
 	return nil
 }

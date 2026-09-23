@@ -65,6 +65,7 @@ type AllowRule struct {
 	Tool    string `yaml:"tool" json:"tool"`
 	Kind    string `yaml:"kind" json:"kind"`
 	Command string `yaml:"command" json:"command"`
+	Action  string `yaml:"action" json:"action,omitempty"` // "" or "allow", or "reject" (ADR 0017 D3)
 }
 
 type Repo struct {
@@ -139,6 +140,9 @@ func Parse(raw []byte) (*Effective, error) {
 			kinds = append([]string(nil), defKinds...)
 		}
 		if err := validKinds(slug, kinds); err != nil {
+			return nil, err
+		}
+		if err := validRules(slug, y.Permissions); err != nil {
 			return nil, err
 		}
 		egress := y.Egress
@@ -228,6 +232,21 @@ func validSlug(slug string) error {
 	}
 	if slug[0] < 'a' || slug[0] > 'z' {
 		return fmt.Errorf("policy: invalid project slug %q", slug)
+	}
+	return nil
+}
+
+func validRules(slug string, rules []AllowRule) error {
+	for i, r := range rules {
+		switch r.Action {
+		case "", "allow":
+		case "reject":
+			if r.Tool == "" && r.Kind == "" && r.Command == "" {
+				return fmt.Errorf("policy: %s permission %d: reject rule needs tool, kind, or command", slug, i)
+			}
+		default:
+			return fmt.Errorf("policy: %s permission %d: invalid action %q", slug, i, r.Action)
+		}
 	}
 	return nil
 }

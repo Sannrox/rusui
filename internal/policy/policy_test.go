@@ -87,6 +87,9 @@ projects:
 		strings.Replace(good, "rusui:\n", "rusui:\n    budgets: {tokens: 1}\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    budgets: {dollars: 1}\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    budgets: {max_concurrent_leases: 0}\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{command: npm, action: warp}]\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{action: reject}]\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{command: npm, verdict: reject}]\n", 1),
 	}
 	for i, c := range cases {
 		if _, err := Parse([]byte(c)); err == nil {
@@ -116,5 +119,31 @@ projects:
 	p, ok := e.Project("rusui")
 	if !ok || p.MaxConcurrentLeases() != 3 {
 		t.Fatalf("project %+v ok=%v", p, ok)
+	}
+}
+
+func TestParseRejectRules(t *testing.T) {
+	raw := []byte(`
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+projects:
+  rusui:
+    permissions:
+      - command: npm
+      - command: npm publish
+        action: reject
+    repos:
+      Sannrox/rusui:
+        visibility: public
+`)
+	e, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ := e.Project("rusui")
+	if len(p.Permissions) != 2 || p.Permissions[1].Action != "reject" {
+		t.Fatalf("permissions %+v", p.Permissions)
 	}
 }
