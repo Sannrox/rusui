@@ -53,8 +53,11 @@ operator's perimeter and there is no per-minute meter.
 2. **Keep the semantics, change the nouns.** Intake, fenced ownership, leases,
    receipts, immutable policy revisions, and evidence classes carry over from
    v1 unchanged in meaning.
-3. **No secret enters an environment.** Credentials are brokered per turn and
-   redeemed only through plane-owned proxies.
+3. **No durable provider secret enters a managed environment.** Managed guest
+   credentials are scoped per turn and redeemed through plane-owned proxies.
+   The experimental local profile in [ADR 0016](docs/decisions/0016-local-interactive-runtime.md)
+   runs as the Sumika daemon's user and may access local CLI authentication; it
+   is a separate trust profile, outside the managed guest guarantee.
 4. **Every external action has a receipt.** Policy is re-read inside the
    transaction that commits the action.
 5. **Fail closed.** Missing secrets, unknown policy fields, unreachable
@@ -74,6 +77,7 @@ operator's perimeter and there is no per-minute meter.
 | Machines, snapshots, sleep and wake, runners | rusui |
 | Credential brokering, git and API proxies, egress classes | rusui |
 | Events, schedules, sessions, actions, receipts | rusui |
+| Local interactive Process and Attach (experimental) | Sumika |
 | Agent turn loop and tool execution | shikigami or any ACP agent |
 | Policy decisions, budgets, approvals across projects (when required) | sekai-chisei |
 | Release and deployment of the binaries | tenkai |

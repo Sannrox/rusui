@@ -63,13 +63,13 @@
     },
     {
       "name": "RusuiProject",
-      "description": "Operator-named policy and budget domain. A session belongs to exactly one project; an environment belongs to exactly one; a GitHub repository binds to at most one. GitHub is optional; review requires a bound repository.",
+      "description": "Operator-named policy and budget domain. A session belongs to exactly one project; an environment belongs to exactly one; a GitHub repository binds to at most one. GitHub is optional; review requires a bound repository. Its optional Sumika project value is display grouping only, not a second identity or policy domain.",
       "superclasses": [],
       "properties": []
     },
     {
       "name": "RusuiEnvironment",
-      "description": "The machine a session runs on. One session, one environment. Created from a snapshot; idle 72h expire then re-materialize. P1 dogfood machine isolation is a container; the process driver and immortal local environment are not dogfood. Tool fence is the guest, not this class.",
+      "description": "The machine a session runs on. One session, one Rusui Environment record. Managed environments are created from a snapshot and expire after 72h idle; the experimental local profile identifies the operator's host and provides no isolation. P1 dogfood machine isolation is a container; the process driver and immortal local environment are not dogfood.",
       "superclasses": [],
       "properties": []
     },
@@ -81,8 +81,26 @@
     },
     {
       "name": "RusuiSession",
-      "description": "Unit of work on one project and one environment. Review identity is (project, bound repo, item). run and scheduled identities are minted at create. A follow-up prompt is a new turn on the same session.",
+      "description": "Unit of work on one project and one environment. Review identity is (project, bound repo, item). run and scheduled identities are minted at create. A follow-up prompt is a new turn on the same session. The accepted experimental local kind is human-driven and has no Turn.",
       "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiTurn",
+      "description": "One lease-fenced attempt on an unattended Rusui Session. Local sessions have no Turn.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiUnattendedSession",
+      "description": "Rusui Session kind whose execution is mediated by leased Turns, including review, run, and scheduled work. The experimental local kind is excluded.",
+      "superclasses": ["RusuiSession"],
+      "properties": []
+    },
+    {
+      "name": "RusuiLocalSession",
+      "description": "Accepted experimental human-driven Rusui Session kind associated with at most one Sumika Process. It creates no Turn, lease, managed grant, model proxy credential, or GitHub credential and is not an OS isolation boundary.",
+      "superclasses": ["RusuiSession"],
       "properties": []
     },
     {
@@ -171,7 +189,13 @@
     },
     {
       "name": "SumikaProcess",
-      "description": "Proposed (ADR 0016, not current contract). Live local PTY child owned by the Sumika daemon, named rusui-<project>-<session id>. Sumika calls it a Session. Sumika is authoritative for the process and attach; rusui records only its name and reported status events.",
+      "description": "Live local PTY child owned by the Sumika daemon and named rusui-<Rusui session id>. Sumika calls it a Session. Sumika is authoritative for the process and local Attach; Rusui records its name and observed lifecycle events. Its optional project string is display grouping only. Rusui never stores its PTY bytes.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiLocalAttach",
+      "description": "Ephemeral exclusive client connection to one Sumika Process. Sumika owns local Attach; a new Attach steals the prior one, while detach leaves the Process running.",
       "superclasses": [],
       "properties": []
     }
@@ -379,10 +403,34 @@
     },
     {
       "name": "rusui_local_session_drives_process",
-      "description": "Proposed (ADR 0016). A local session drives at most one Sumika process; rusui never stores its PTY bytes.",
-      "domain": "RusuiSession",
+      "description": "An experimental local Rusui Session may drive at most one Sumika Process; Rusui records observations and never stores its PTY bytes.",
+      "domain": "RusuiLocalSession",
       "range": "SumikaProcess",
       "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_unattended_session_has_turn",
+      "description": "Unattended review, run, and scheduled sessions may have leased Turns. A local session has none.",
+      "domain": "RusuiUnattendedSession",
+      "range": "RusuiTurn",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "sumika_process_has_local_attach",
+      "description": "A Sumika Process has at most one current exclusive local Attach; a new Attach steals the previous one.",
+      "domain": "SumikaProcess",
+      "range": "RusuiLocalAttach",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_project_groups_local_process",
+      "description": "Rusui may pass its Project name as Sumika's optional display grouping value for a local Process; the value grants no policy authority.",
+      "domain": "RusuiProject",
+      "range": "SumikaProcess",
+      "cardinality": { "min": 0, "max": null },
       "transitive": false
     }
   ],
@@ -502,15 +550,63 @@
       "confidence": 1.0
     },
     {
+      "subject": "RusuiProject",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d1-authority-and-identity",
+      "confidence": 1.0
+    },
+    {
       "subject": "RusuiSession",
       "source": "docs/decisions/0006-session-start.md",
       "locator": "docs/decisions/0006-session-start.md#decision",
       "confidence": 1.0
     },
     {
+      "subject": "RusuiSession",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2-a-separate-local-session-kind",
+      "confidence": 1.0
+    },
+    {
       "subject": "RusuiEnvironment",
       "source": "docs/decisions/0006-session-start.md",
       "locator": "docs/decisions/0006-session-start.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiEnvironment",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2-a-separate-local-session-kind",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiTurn",
+      "source": "docs/decisions/0011-unattended-session-contract.md",
+      "locator": "docs/decisions/0011-unattended-session-contract.md#d1-identities",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiTurn",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2-a-separate-local-session-kind",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiUnattendedSession",
+      "source": "docs/decisions/0011-unattended-session-contract.md",
+      "locator": "docs/decisions/0011-unattended-session-contract.md#d1-identities",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiUnattendedSession",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2-a-separate-local-session-kind",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiLocalSession",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2-a-separate-local-session-kind",
       "confidence": 1.0
     },
     {
@@ -558,8 +654,38 @@
     {
       "subject": "SumikaProcess",
       "source": "docs/decisions/0016-local-interactive-runtime.md",
-      "locator": "docs/decisions/0016-local-interactive-runtime.md#d1-authority",
-      "confidence": 0.5
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d1-authority-and-identity",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiLocalAttach",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d1-authority-and-identity",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_local_session_drives_process",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d1-authority-and-identity",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_unattended_session_has_turn",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2-a-separate-local-session-kind",
+      "confidence": 1.0
+    },
+    {
+      "subject": "sumika_process_has_local_attach",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d1-authority-and-identity",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_project_groups_local_process",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d1-authority-and-identity",
+      "confidence": 1.0
     }
   ]
 }
