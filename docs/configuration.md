@@ -32,6 +32,7 @@ Upgrade procedure: [upgrade.md](upgrade.md).
 | `-name` | `local` | Runner name. |
 | `-driver` | (required unless `-acp`) | Process driver command (space-separated). |
 | `-acp` | false | Host one ACP turn with the plane's guest (Grok or Claude Code) instead of the process driver. |
+| `-ca` | `$RUSUI_PLANE_CA` | Plane CA; required for an `https` plane URL (setup-generated TLS). |
 | `-once` | false | Claim at most one turn and exit. |
 | `-version` | false | Print version and exit. |
 
@@ -84,6 +85,8 @@ RUSUI_ANTHROPIC_API_KEY=<the proxy's client key>
 Run a CLI proxy on loopback with its own client key; rusui does not ship
 or manage it. Whether a subscription may be used this way for automated
 work is set by the provider's terms, not by rusui.
+
+With plane TLS, every client of an `https` plane URL (`rusui-runner`, `rusui run`, `sessions`, `logs`, `approvals`, `approve`, `prompt`, `drain`) trusts `RUSUI_PLANE_CA`.
 
 GitHub token: read-only. Do not give it to the runner or the model.
 Guest `XAI_API_KEY` and git HTTP auth are the per-turn grant, except in
