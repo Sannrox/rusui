@@ -11,14 +11,31 @@ import (
 	"strings"
 	"testing"
 
+	guestimage "github.com/sannrox/rusui/build/guest-image"
 	"github.com/sannrox/rusui/internal/ops"
 )
 
-type fakeNet struct{ exists, created bool }
+type fakeNet struct {
+	exists, created bool
+	images          map[string]bool
+	builds          int
+}
 
 func (f *fakeNet) NetworkExists(string) bool { return f.exists }
 func (f *fakeNet) EnsureNetwork(string) error {
 	f.created, f.exists = true, true
+	return nil
+}
+func (f *fakeNet) ImageExists(tag string) bool { return f.images[tag] }
+func (f *fakeNet) BuildImage(tag string, dockerfile []byte) error {
+	if len(dockerfile) == 0 {
+		return os.ErrInvalid
+	}
+	if f.images == nil {
+		f.images = map[string]bool{}
+	}
+	f.images[tag] = true
+	f.builds++
 	return nil
 }
 
@@ -286,5 +303,70 @@ func TestRotateTightensLooseKeysAndAppendKeepsLastLine(t *testing.T) {
 	vals := ReadEnv(p2.Env)
 	if vals["RUSUI_XAI_API_KEY"] != "operator-value" || vals["RUSUI_TLS_CERT"] != p2.PlaneCert {
 		t.Fatalf("append corrupted the last line: %v", vals)
+	}
+}
+
+func TestApplyBuildsAndRecordsTheGuestImageOnce(t *testing.T) {
+	dir := t.TempDir()
+	rt := &fakeNet{}
+	plan, err := Plan(Options{StateDir: dir, Network: rt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actions(plan)["guest image"] != Create || rt.builds != 0 {
+		t.Fatalf("plan %v builds %d", actions(plan), rt.builds)
+	}
+	steps, err := Apply(Options{StateDir: dir, Network: rt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rt.builds != 1 {
+		t.Fatalf("builds %d", rt.builds)
+	}
+	vals := ReadEnv(PathsFor(dir).Env)
+	if vals["RUSUI_GUEST_IMAGE"] != guestimage.Tag() || vals["RUSUI_GUEST"] != "claude" {
+		t.Fatalf("env %v", vals)
+	}
+	if _, ok := actions(steps)["RUSUI_GUEST_IMAGE"]; ok {
+		t.Fatal("guest image still reported as needs-you")
+	}
+	again, err := Apply(Options{StateDir: dir, Network: rt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rt.builds != 1 || actions(again)["guest image"] != Keep || actions(again)["guest image env"] != Keep {
+		t.Fatalf("second apply %v builds %d", actions(again), rt.builds)
+	}
+}
+
+func TestApplyKeepsAnOperatorGuestImage(t *testing.T) {
+	dir := t.TempDir()
+	p := PathsFor(dir)
+	if err := os.WriteFile(p.Env, []byte("RUSUI_GUEST_IMAGE=ghcr.io/me/guest:1\nRUSUI_GUEST=grok\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Apply(Options{StateDir: dir, Network: &fakeNet{}}); err != nil {
+		t.Fatal(err)
+	}
+	vals := ReadEnv(p.Env)
+	if vals["RUSUI_GUEST_IMAGE"] != "ghcr.io/me/guest:1" || vals["RUSUI_GUEST"] != "grok" {
+		t.Fatalf("operator choices overwritten: %v", vals)
+	}
+}
+
+func TestSetEnvValuesRewritesExportedKeysInPlace(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rusui.env")
+	if err := os.WriteFile(path, []byte("# comment\nexport RUSUI_GUEST_IMAGE=rusui-guest:old\nRUSUI_GUEST = \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := setEnvValues(path, map[string]string{"RUSUI_GUEST_IMAGE": "rusui-guest:new", "RUSUI_GUEST": "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	if strings.Count(string(b), "RUSUI_GUEST_IMAGE") != 1 || strings.Count(string(b), "RUSUI_GUEST=") != 1 || !strings.Contains(string(b), "# comment") {
+		t.Fatalf("env file:\n%s", b)
+	}
+	if v := ReadEnv(path); v["RUSUI_GUEST_IMAGE"] != "rusui-guest:new" || v["RUSUI_GUEST"] != "claude" {
+		t.Fatalf("values %v", v)
 	}
 }

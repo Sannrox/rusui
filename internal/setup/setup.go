@@ -17,9 +17,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
+	guestimage "github.com/sannrox/rusui/build/guest-image"
 	"github.com/sannrox/rusui/internal/env"
 )
 
@@ -40,10 +42,12 @@ type Step struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-// Network is the container network runtime; env.DockerCLI satisfies it.
+// Network is the container runtime setup uses; env.DockerCLI satisfies it.
 type Network interface {
 	NetworkExists(name string) bool
 	EnsureNetwork(name string) error
+	ImageExists(tag string) bool
+	BuildImage(tag string, dockerfile []byte) error
 }
 
 type Options struct {
@@ -186,6 +190,14 @@ func run(o Options, apply bool) ([]Step, error) {
 		}
 	}
 
+	if o.Network != nil {
+		st, err := ensureGuestImage(p, o.Network, apply)
+		if err != nil {
+			return steps, err
+		}
+		steps = append(steps, st...)
+	}
+
 	vals := readEnv(p.Env)
 	for k, v := range vals {
 		if v == "" {
@@ -213,7 +225,7 @@ func needsYou(vals map[string]string) [][2]string {
 		out = append(out, [2]string{"model access", "set RUSUI_ANTHROPIC_API_KEY or RUSUI_XAI_API_KEY, or RUSUI_MODEL_UPSTREAM for a CLI proxy you logged in to"})
 	}
 	if vals["RUSUI_GUEST_IMAGE"] == "" {
-		out = append(out, [2]string{"RUSUI_GUEST_IMAGE", "guest image tag; the reference image is built by a later setup slice"})
+		out = append(out, [2]string{"RUSUI_GUEST_IMAGE", "guest image tag; setup builds the reference image when Docker or Podman is installed"})
 	}
 	return out
 }
@@ -270,6 +282,76 @@ func ensureEnv(p Paths, apply bool) (Step, error) {
 	return step, err
 }
 
+// ensureGuestImage builds the reference guest (ADR 0018 D4) and records it
+// in the env file unless the operator chose another image.
+func ensureGuestImage(p Paths, rt Network, apply bool) ([]Step, error) {
+	tag := guestimage.Tag()
+	var steps []Step
+	if rt.ImageExists(tag) {
+		steps = append(steps, Step{Keep, "guest image", tag})
+	} else {
+		steps = append(steps, Step{Create, "guest image", "build " + tag + " (git, gh, Node.js, claude-agent-acp)"})
+		if apply {
+			if err := rt.BuildImage(tag, guestimage.Dockerfile); err != nil {
+				return steps, err
+			}
+		}
+	}
+	vals := readEnv(p.Env)
+	cur := vals["RUSUI_GUEST_IMAGE"]
+	if cur != "" && !strings.HasPrefix(cur, guestimage.Repository+":") {
+		return append(steps, Step{Keep, "guest image env", "operator image " + cur}), nil
+	}
+	set := map[string]string{}
+	if cur != tag {
+		set["RUSUI_GUEST_IMAGE"] = tag
+	}
+	if vals["RUSUI_GUEST"] == "" {
+		set["RUSUI_GUEST"] = "claude" // the reference image carries the Claude Code adapter
+	}
+	if len(set) == 0 {
+		return append(steps, Step{Keep, "guest image env", tag}), nil
+	}
+	keys := make([]string, 0, len(set))
+	for k := range set {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	steps = append(steps, Step{Update, "guest image env", "set " + strings.Join(keys, ", ")})
+	if apply {
+		if err := setEnvValues(p.Env, set); err != nil {
+			return steps, err
+		}
+	}
+	return steps, nil
+}
+
+// setEnvValues rewrites KEY= lines in place and appends absent keys.
+func setEnvValues(path string, set map[string]string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	done := map[string]bool{}
+	for i, line := range lines {
+		k, _, ok := envLine(line)
+		if !ok {
+			continue
+		}
+		if v, want := set[k]; want {
+			lines[i] = k + "=" + v
+			done[k] = true
+		}
+	}
+	for k, v := range set {
+		if !done[k] {
+			lines = append(lines, k+"="+v)
+		}
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600)
+}
+
 // readEnv parses KEY=VALUE lines; comments and blanks are ignored.
 func readEnv(path string) map[string]string {
 	out := map[string]string{}
@@ -280,15 +362,25 @@ func readEnv(path string) map[string]string {
 	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if k, v, ok := strings.Cut(line, "="); ok {
-			out[strings.TrimSpace(strings.TrimPrefix(k, "export "))] = strings.TrimSpace(v)
+		if k, v, ok := envLine(sc.Text()); ok {
+			out[k] = v
 		}
 	}
 	return out
+}
+
+// envLine parses one `[export ]KEY=VALUE` line; comments and blanks are not
+// lines.
+func envLine(line string) (key, value string, ok bool) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return "", "", false
+	}
+	k, v, ok := strings.Cut(line, "=")
+	if !ok {
+		return "", "", false
+	}
+	return strings.TrimSpace(strings.TrimPrefix(k, "export ")), strings.TrimSpace(v), true
 }
 
 // ReadEnv exposes the env file to the CLI (for the final diagnose).

@@ -38,6 +38,12 @@ test:
 release-images:
 	./build/release-images.sh
 
+.PHONY: guest-image
+# Build the reference guest image (git, gh, Node.js, claude-agent-acp).
+# Example: make guest-image CONTAINER_RUNTIME=podman
+guest-image:
+	./scripts/make-targets/guest-image.sh
+
 .PHONY: docker-clean
 # Remove docker build/data containers, rusui build tags, and _output
 docker-clean:

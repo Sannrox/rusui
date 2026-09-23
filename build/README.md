@@ -45,3 +45,11 @@ DOCKER_REGISTRY=ghcr.io/sannrox/rusui ./build/release.sh
 
 The server still binds loopback by default. Publish a port only after
 passing `-addr 0.0.0.0:8080`.
+
+## Guest image
+
+`build/guest-image/Dockerfile` is the reference rusui guest (ADR 0018 D4):
+pinned Node.js 22 base, git, `gh` (checksum-verified), and
+`@agentclientprotocol/claude-agent-acp`. `make guest-image` builds it as
+`rusui-guest:<first 16 hex of the Dockerfile sha256>`, the same tag
+`rusui setup apply` uses. The plane CA is mounted at run time.

@@ -66,13 +66,17 @@ rusui setup apply   # idempotent; ends with rusui diagnose
 platform default), plane TLS (a local CA and a certificate for
 `127.0.0.1`, `localhost`, and `rusui.plane`), `rusui.env` (`0600`) with
 generated worker, webhook, Slack, and operator secrets, a policy skeleton
-when none exists, and the `rusui-trusted` container network when Docker or
-Podman is installed. It never overwrites a policy or existing TLS
+when none exists, and, when Docker or Podman is installed, the
+`rusui-trusted` network and the reference guest image. The image
+(`build/guest-image`: git, `gh`, Node.js 22, `claude-agent-acp` 0.81.1) is
+tagged by its Dockerfile digest; setup records it as `RUSUI_GUEST_IMAGE`
+and sets `RUSUI_GUEST=claude` unless you chose another image or guest.
+`make guest-image` builds the same tag from a checkout. It never overwrites a policy or existing TLS
 (`-rotate-tls` replaces TLS only) and never prints secret values.
 
-Lines marked `needs-you` are inputs only you can supply: the GitHub token,
-model access (a key, or `RUSUI_MODEL_UPSTREAM` for a CLI proxy you logged
-in to), and the guest image. Put them in `rusui.env`, then start the plane
+Lines marked `needs-you` are inputs only you can supply: the GitHub token
+and model access (a key, or `RUSUI_MODEL_UPSTREAM` for a CLI proxy you
+logged in to), plus a guest image when no container runtime is installed. Put them in `rusui.env`, then start the plane
 with the command `apply` prints. The sections below describe the same
 steps by hand.
 
