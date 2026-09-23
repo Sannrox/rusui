@@ -22,25 +22,32 @@ func (DenyUnmatched) Decide(PermissionParams) Decision {
 	return Decision{Matched: false, Allow: false}
 }
 
+// pickOption answers with one of the guest's options. A plane deny never
+// selects an option whose id or kind looks like allow, whatever the guest
+// offered; with no reject option it answers a synthesized reject-once.
 func pickOption(opts []PermOption, allow bool) string {
-	want := []string{"reject-once", "reject_once", "deny"}
-	if allow {
-		want = []string{"allow-once", "allow_once", "allow-always", "allow"}
-	}
-	for _, o := range opts {
-		id := strings.ToLower(o.OptionID)
-		kind := strings.ToLower(o.Kind)
-		for _, w := range want {
-			if id == w || kind == w || strings.Contains(id, w) || strings.Contains(kind, w) {
+	if !allow {
+		for _, o := range opts {
+			if looksLike(o, "reject", "deny") && !looksLike(o, "allow") {
 				return o.OptionID
 			}
 		}
+		return "reject-once"
 	}
-	if len(opts) > 0 {
-		return opts[0].OptionID
+	for _, o := range opts {
+		if looksLike(o, "allow") {
+			return o.OptionID
+		}
 	}
-	if allow {
-		return "allow-once"
+	return "allow-once"
+}
+
+func looksLike(o PermOption, words ...string) bool {
+	id, kind := strings.ToLower(o.OptionID), strings.ToLower(o.Kind)
+	for _, w := range words {
+		if strings.Contains(id, w) || strings.Contains(kind, w) {
+			return true
+		}
 	}
-	return "reject-once"
+	return false
 }
