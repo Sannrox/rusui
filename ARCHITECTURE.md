@@ -49,17 +49,23 @@ land-eligible verdict plus policy `land: true`. Never CI green alone.
 ## Experimental local-interactive profile
 
 [ADR 0016](docs/decisions/0016-local-interactive-runtime.md) accepts the
-ownership boundary for a future local-interactive profile. It does not ship a
-Sumika adapter or change the currently executable v1 policy and session kinds.
-Until follow-up implementation lands, the profile cannot be started through
-Rusui.
+ownership boundary for the experimental local-interactive profile. Issue #183
+adds durable Process and Attach observation records plus an additive session
+detail API. It does not ship a Sumika adapter or change the currently
+executable v1 policy and session kinds, so the profile still cannot be started
+through Rusui.
 
-When implemented, a local session will be an explicit, default-off session
-kind. It will create no Turn, lease, retry budget, managed credential, or model
-proxy grant. Rusui will own its Project, durable Session, Environment record,
-policy, events, and receipts. Sumika will own the live Process, exclusive
-Attach, and local PTY. Sumika's optional project value will be display grouping
-only and will not participate in policy decisions.
+When enabled, a local session is an explicit, default-off session kind. It
+creates no Turn, lease, retry budget, managed credential, or model proxy grant.
+Rusui owns its Project, durable Session, Environment record, policy, events,
+receipts, and versioned Process and Attach observation records. Each Process
+generation and each Attach generation has its own Rusui identity and revision;
+these records preserve observations, while Sumika remains authoritative for
+the live Process and exclusive Attach. An unknown Process blocks another start
+until Sumika confirms it is dead or lost. Rusui exposes these records separately
+from Turns and Environment state without exposing PTY bytes. Sumika's optional
+project value is display grouping only and does not participate in policy
+decisions.
 
 The local Environment will identify the operator's host, not an isolated
 container or VM; multiple local sessions may share that host. The Process runs
@@ -72,8 +78,8 @@ same-host, same-user socket only; remote pairing is out of scope.
 The managed runner, container, terminal write lease, and ACP editor contracts
 remain unchanged. The local profile is not part of the supported 1.0 core
 unless [#141](https://github.com/Sannrox/rusui/issues/141) explicitly includes
-it. Issues #183–#186 own the schema, adapter, attach, and cross-profile
-evidence work.
+it. Issue #183 owns the observation schema and API; #184–#186 own the adapter,
+attach, and cross-profile evidence work.
 
 ## System
 

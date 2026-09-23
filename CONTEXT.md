@@ -53,8 +53,10 @@ _Avoid_: machine isolation, `--always-approve`, tool jail inside rusui
 
 **Process** ([ADR 0016](docs/decisions/0016-local-interactive-runtime.md)):
 A live local PTY child owned by Sumika, named `rusui-<session id>`. Sumika calls
-it a Session; Rusui does not. Rusui records the name and observed lifecycle
-events, never local PTY bytes.
+it a Session; Rusui does not. Rusui keeps one durable Process record per local
+session generation, with the last observed state and revision. That record is
+an observation, not authority that the child is currently live. Rusui never
+stores local PTY bytes.
 _Avoid_: session (for the PTY child), turn, environment
 
 **Local session** (experimental, ADR 0016):
@@ -66,7 +68,9 @@ _Avoid_: run session, implement session, attach
 **Attach**:
 A live client connection to a Process or managed terminal. Sumika owns local
 Attach and enforces one writer by stealing the previous Attach; detach leaves
-the Process running. Rusui's managed terminal keeps its own write lease.
+the Process running. Rusui keeps separate Attach generation observations with
+stale-disconnect fencing. They are not client connections or Turn state.
+Rusui's managed terminal keeps its own write lease.
 _Avoid_: session, turn, process ownership
 
 **Cancel**:

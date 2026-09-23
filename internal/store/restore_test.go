@@ -54,6 +54,18 @@ func TestRestoreClearsStaleAuthority(t *testing.T) {
 	if err := PutApprovalDecision(st, "old-allow", "allow"); err != nil {
 		t.Fatal(err)
 	}
+	localSessionID := insertLocalSession(t, st)
+	process, err := StartSumikaProcess(st, localSessionID, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	process, err = ObserveSumikaProcess(st, process.ID, process.Generation, process.Revision, ProcessIdle, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := BeginSumikaAttach(st, process.ID, process.Generation, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -88,5 +100,12 @@ func TestRestoreClearsStaleAuthority(t *testing.T) {
 	dec, found, err := GetApprovalDecision(st2, "old-allow")
 	if err != nil || !found || dec != "allow" {
 		t.Fatalf("approval record %s found=%v %v", dec, found, err)
+	}
+	processes, err := ListSessionProcesses(st2, localSessionID)
+	if err != nil || len(processes) != 1 || processes[0].State != ProcessUnknown {
+		t.Fatalf("restored process observations %+v %v", processes, err)
+	}
+	if len(processes[0].Attaches) != 1 || processes[0].Attaches[0].State != AttachUnknown {
+		t.Fatalf("restored attach observations %+v", processes[0].Attaches)
 	}
 }

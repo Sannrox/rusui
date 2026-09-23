@@ -51,12 +51,17 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	if turns == nil {
 		turns = []store.Turn{}
 	}
+	processes, err := store.ListSessionProcesses(s.Eng.Store, id)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
 	envState := ""
 	if envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID); err == nil {
 		envState = envRow.State
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"session": sess, "turns": turns, "environment_state": envState})
+	_ = json.NewEncoder(w).Encode(map[string]any{"session": sess, "turns": turns, "processes": processes, "environment_state": envState})
 }
 
 func (s *Server) attachSession(w http.ResponseWriter, r *http.Request) {

@@ -112,3 +112,85 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 		t.Fatalf("v4 handle column: %v", err)
 	}
 }
+
+func TestV17AddsProcessAndAttachTablesWithoutRewritingRuntimeState(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v16.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`DROP TABLE IF EXISTS process_attaches; DROP TABLE IF EXISTS session_processes;
+		DELETE FROM schema_migrations WHERE version=?`, CurrentSchema); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	if _, err := st.DB.Exec(`INSERT INTO sessions (id, environment_id, kind, repo, item, item_kind, state, created_at)
+		VALUES (501, 1, 'run', 'example/test-repo', -1, 'run', 'open', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO turns (id, session_id, lane, lease_generation, state) VALUES (601, 501, 'run', 4, 'leased')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO receipts (job_id, lease_generation, claimed_revision, kind, payload)
+		VALUES (601, 4, 3, 'complete', '{"preserved":true}')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO approval_decisions (action_id, decision, decided_at) VALUES ('approval-1', 'allow', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO terminal_leases (environment_id, session_id, generation, expires_at)
+		VALUES (1, 501, 9, ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	upgraded, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = upgraded.Close() })
+	var version int
+	if err := upgraded.DB.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil || version != CurrentSchema {
+		t.Fatalf("schema version %d: %v", version, err)
+	}
+	var sessionState, kind, turnState string
+	var envID int64
+	if err := upgraded.DB.QueryRow(`SELECT kind, state, environment_id FROM sessions WHERE id=501`).Scan(&kind, &sessionState, &envID); err != nil {
+		t.Fatal(err)
+	}
+	if kind != SessionKindRun || sessionState != "open" || envID != DefaultEnvironmentID {
+		t.Fatalf("session kind=%s state=%s environment=%d", kind, sessionState, envID)
+	}
+	var environmentCount int
+	if err := upgraded.DB.QueryRow(`SELECT COUNT(*) FROM environments WHERE id=?`, envID).Scan(&environmentCount); err != nil || environmentCount != 1 {
+		t.Fatalf("preserved environment count=%d: %v", environmentCount, err)
+	}
+	var generation int
+	if err := upgraded.DB.QueryRow(`SELECT state, lease_generation FROM turns WHERE id=601`).Scan(&turnState, &generation); err != nil {
+		t.Fatal(err)
+	}
+	if turnState != "leased" || generation != 4 {
+		t.Fatalf("turn state=%s generation=%d", turnState, generation)
+	}
+	var receipt, approval, terminal int
+	if err := upgraded.DB.QueryRow(`SELECT COUNT(*) FROM receipts WHERE job_id=601 AND lease_generation=4 AND payload='{"preserved":true}'`).Scan(&receipt); err != nil {
+		t.Fatal(err)
+	}
+	if err := upgraded.DB.QueryRow(`SELECT COUNT(*) FROM approval_decisions WHERE action_id='approval-1' AND decision='allow'`).Scan(&approval); err != nil {
+		t.Fatal(err)
+	}
+	if err := upgraded.DB.QueryRow(`SELECT COUNT(*) FROM terminal_leases WHERE environment_id=1 AND session_id=501 AND generation=9`).Scan(&terminal); err != nil {
+		t.Fatal(err)
+	}
+	if receipt != 1 || approval != 1 || terminal != 1 {
+		t.Fatalf("preserved receipt=%d approval=%d terminal_lease=%d", receipt, approval, terminal)
+	}
+	for _, table := range []string{"session_processes", "process_attaches"} {
+		var count int
+		if err := upgraded.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("table %s count=%d: %v", table, count, err)
+		}
+	}
+}

@@ -99,7 +99,7 @@
     },
     {
       "name": "RusuiLocalSession",
-      "description": "Accepted experimental human-driven Rusui Session kind associated with at most one Sumika Process. It creates no Turn, lease, managed grant, model proxy credential, or GitHub credential and is not an OS isolation boundary.",
+      "description": "Accepted experimental human-driven Rusui Session kind with successive Process observation records and at most one active Sumika Process. It creates no Turn, lease, managed grant, model proxy credential, or GitHub credential and is not an OS isolation boundary.",
       "superclasses": ["RusuiSession"],
       "properties": []
     },
@@ -190,6 +190,18 @@
     {
       "name": "SumikaProcess",
       "description": "Live local PTY child owned by the Sumika daemon and named rusui-<Rusui session id>. Sumika calls it a Session. Sumika is authoritative for the process and local Attach; Rusui records its name and observed lifecycle events. Its optional project string is display grouping only. Rusui never stores its PTY bytes.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiProcessRecord",
+      "description": "Durable Rusui identity and latest observation for one Sumika process generation. Generation and revision fence stale reports; unknown after restart is not proof of death and blocks duplicate start. Sumika remains authoritative for the live child.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiAttachObservation",
+      "description": "Durable Rusui identity and status observation for one Sumika Attach generation. It contains no client token, socket, or PTY data; stale disconnects cannot end a newer generation. Sumika remains authoritative for the live connection.",
       "superclasses": [],
       "properties": []
     },
@@ -402,10 +414,34 @@
       "transitive": false
     },
     {
-      "name": "rusui_local_session_drives_process",
-      "description": "An experimental local Rusui Session may drive at most one Sumika Process; Rusui records observations and never stores its PTY bytes.",
+      "name": "rusui_local_session_has_process_record",
+      "description": "An experimental local Rusui Session retains successive Process generation records; at most one is active, and unknown remains active until reconciled.",
       "domain": "RusuiLocalSession",
+      "range": "RusuiProcessRecord",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_process_record_observes_sumika_process",
+      "description": "A Process record may refer to the Sumika child observed by its stable name; absence or an old observation does not assert current liveness.",
+      "domain": "RusuiProcessRecord",
       "range": "SumikaProcess",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_process_record_has_attach_observation",
+      "description": "A Process record retains Attach generation observations; at most one is currently observed attached, while history remains durable.",
+      "domain": "RusuiProcessRecord",
+      "range": "RusuiAttachObservation",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_attach_observation_identifies_sumika_attach",
+      "description": "An Attach observation may correspond to the Sumika-owned live client connection; Rusui does not own or proxy that connection.",
+      "domain": "RusuiAttachObservation",
+      "range": "RusuiLocalAttach",
       "cardinality": { "min": 0, "max": 1 },
       "transitive": false
     },
@@ -610,6 +646,12 @@
       "confidence": 1.0
     },
     {
+      "subject": "RusuiLocalSession",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2a-rusui-process-and-attach-records",
+      "confidence": 1.0
+    },
+    {
       "subject": "RusuiSchedule",
       "source": "docs/decisions/0006-session-start.md",
       "locator": "docs/decisions/0006-session-start.md#decision",
@@ -664,9 +706,39 @@
       "confidence": 1.0
     },
     {
-      "subject": "rusui_local_session_drives_process",
+      "subject": "RusuiProcessRecord",
       "source": "docs/decisions/0016-local-interactive-runtime.md",
-      "locator": "docs/decisions/0016-local-interactive-runtime.md#d1-authority-and-identity",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2a-rusui-process-and-attach-records",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiAttachObservation",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2a-rusui-process-and-attach-records",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_local_session_has_process_record",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2a-rusui-process-and-attach-records",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_process_record_observes_sumika_process",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2a-rusui-process-and-attach-records",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_process_record_has_attach_observation",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2a-rusui-process-and-attach-records",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_attach_observation_identifies_sumika_attach",
+      "source": "docs/decisions/0016-local-interactive-runtime.md",
+      "locator": "docs/decisions/0016-local-interactive-runtime.md#d2a-rusui-process-and-attach-records",
       "confidence": 1.0
     },
     {

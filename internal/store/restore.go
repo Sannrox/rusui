@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"os"
+	"time"
 )
 
 // RestoreReport is the inventory of a restored plane database.
@@ -72,5 +73,8 @@ func sanitizeRestored(s *Store) (RestoreReport, error) {
 	}
 	n, _ = res.RowsAffected()
 	r.GrantsDropped += int(n)
+	if err := MarkRuntimeObservationsUnknown(s, time.Now().UTC()); err != nil {
+		return r, err
+	}
 	return r, nil
 }
