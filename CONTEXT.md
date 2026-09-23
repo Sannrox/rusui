@@ -44,6 +44,14 @@ _Avoid_: tool fence, shikigami sandbox
 Grok `--permission-mode default` plus policy-mapped `session/request_permission`. A live unmatched request waits on the RPC with a current-policy recheck; inbox history is not a grant.
 _Avoid_: machine isolation, `--always-approve`, tool jail inside rusui
 
+**Process** (proposed, [ADR 0016](docs/decisions/0016-local-interactive-runtime.md)):
+A live local PTY child owned by Sumika, named `rusui-<project>-<session id>`. Sumika calls it a Session; rusui does not.
+_Avoid_: session (for the PTY child), turn, environment
+
+**Local session** (proposed, ADR 0016):
+A session of kind `local`: a human drives one Process on their own machine. No turns, leases, grants, or GitHub credential.
+_Avoid_: run session, implement session, attach
+
 **Cancel**:
 Operator action that stops a live guest and fails the claimed turn without automatic retry. Distinct from pause.
 _Avoid_: pause, expire environment
