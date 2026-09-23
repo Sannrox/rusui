@@ -209,6 +209,11 @@ func run(o Options, apply bool) ([]Step, error) {
 			vals[k] = o.Getenv(k)
 		}
 	}
+	if o.Network != nil && vals["RUSUI_GUEST_IMAGE"] == "" {
+		// The guest image step above builds and records it; plan and apply
+		// must agree that the operator need not supply one.
+		vals["RUSUI_GUEST_IMAGE"] = guestimage.Tag()
+	}
 	for _, n := range needsYou(vals) {
 		add(NeedsYou, n[0], n[1])
 	}
