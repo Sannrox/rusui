@@ -3,8 +3,8 @@
 `rusui` is a self-hosted environment plane. You write `policy.yaml`. The
 server admits work onto environments, sessions, turns, runners, events,
 and actions; records immutable reviews; and dry-runs apply for comment
-and close. Plane-owned `open_pr` / `update_pr` of a proven candidate is
-the named publication path ([ADR 0013](docs/decisions/0013-publication-authority.md)).
+and close. In `implement` sessions the agent pushes and opens its own pull
+requests with the operator's credential ([ADR 0015](docs/decisions/0015-agent-publication.md)).
 `ARCHITECTURE.md` is the product contract. Do not implement live comment,
 close, merge, land, or unnamed GitHub writes. Direction beyond the current
 contract is proposed in `VISION.md` and `ROADMAP.md`; decisions live in
@@ -23,8 +23,8 @@ Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
 - Parse issue dependencies only from `## Dependencies`.
 - Bind examples to loopback. `-addr` may bind elsewhere; do not document
   `0.0.0.0` unless the change is about listen addresses. The intake GitHub
-  client is read-only. Publication uses the installation token only after
-  a `proven` outcome; model CLIs never receive it.
+  client is read-only. Only `implement` sessions receive a GitHub write
+  credential (ADR 0015); review sessions never do.
 - Use `verify-change` before delivery. Fix actionable review findings.
 - Preserve other delivery lanes; never switch, reset, or stash the primary
   checkout.
@@ -41,7 +41,8 @@ Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
 ## Never
 
 - Implement live comment, close, merge, land, or unnamed GitHub writes.
-- Give a model process a GitHub write token, or commit secrets, webhook
+- Give a model process a GitHub write token outside an `implement`
+  session, or commit secrets, webhook
   secrets, worker secrets, Slack tokens, `*.db`, `.version`, or `_output/`.
 - Link private repositories or put private names in public issues, pull
   requests, or documentation.
@@ -197,7 +198,7 @@ procedure is `.agents/skills/deliver-ready-issue/references/parallel-delivery.md
 
 Never commit secrets, GitHub or Slack tokens, webhook secrets, worker
 secrets, local SQLite databases, `.version`, or `_output/`. Bind examples
-to loopback. The intake GitHub client is read-only. Model CLIs never
-receive GitHub write tokens. This repository is public; do not link private
+to loopback. The intake GitHub client is read-only. Model CLIs receive
+a GitHub write credential only in `implement` sessions (ADR 0015). This repository is public; do not link private
 repos. Canonical agent policy is this file; `AGENT.md` and `CLAUDE.md`
 are pointers. Skills live in `.agents/skills/`.

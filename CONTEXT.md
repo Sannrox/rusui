@@ -53,7 +53,7 @@ Project `budgets.max_concurrent_leases` (default 1). Unnamed budget keys fail cl
 _Avoid_: token or dollar limits (unavailable)
 
 **Per-turn grant**:
-The only credential in a P1 guest: D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets.
+The only credential in a P1 guest outside `implement` sessions (ADR 0015): D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets.
 _Avoid_: PAT, installation token, `auth.json`, xAI API key (in the guest)
 
 **Plane proxy**:
@@ -77,5 +77,5 @@ Isolated verifier output `(command, exit_code, log_digest, head_sha, base_sha)` 
 _Avoid_: CI green, author-session review, expired or drifted proof
 
 **Publication**:
-Plane-owned GitHub pull request whose head is the proven `commit_sha`. Permitted actions: `open_pr`, `update_pr`. Human merge is required.
-_Avoid_: guest-opened PR, merge, close, unnamed GitHub write
+A pull request the agent opens or updates itself from an `implement` session, with the operator's GitHub credential via `git` and `gh` (ADR 0015). Commits carry `Co-authored-by: rusui` and `Rusui-Session` trailers. No proof gates it. Human merge is required.
+_Avoid_: plane-owned publish step, agent merge or close, trailer as authorization

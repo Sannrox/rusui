@@ -1,6 +1,6 @@
 # ADR 0013: Exact-artifact verification and plane-owned publication
 
-- Status: Accepted
+- Status: Superseded by [`0015-agent-publication.md`](0015-agent-publication.md)
 - Date: 2026-09-20
 - Accepted: 2026-09-21
 - Resolves: [#96](https://github.com/Sannrox/rusui/issues/96)

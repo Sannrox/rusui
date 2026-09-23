@@ -16,8 +16,9 @@ Decisions that must outlive a single pull request.
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted |
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
 | [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted |
-| [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Accepted |
+| [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
 | [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Proposed |
+| [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted |
 
 ## When to write an ADR
 

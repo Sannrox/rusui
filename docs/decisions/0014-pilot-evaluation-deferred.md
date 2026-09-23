@@ -1,6 +1,9 @@
 # ADR 0014: Ten-task pilot evaluation is deferred pending live plane-owned publication
 
-- Status: Proposed
+- Status: Proposed; amended by [ADR 0015](0015-agent-publication.md)
+  (preconditions 1–2 and the identity-collapse failure criterion no
+  longer apply; the pilot runs once ADR 0015 is implemented, against a
+  named pilot repository and guest)
 - Date: 2026-09-22
 - Investigates: [#103](https://github.com/Sannrox/rusui/issues/103)
 - Related: [ADR 0010](0010-hybrid-roadmap-sequence.md) (M2 verified
