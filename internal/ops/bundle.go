@@ -41,7 +41,7 @@ func SecretValues(getenv func(string) string) []string {
 	keys := []string{
 		"RUSUI_WORKER_SECRET", "RUSUI_WEBHOOK_SECRET", "RUSUI_SLACK_SECRET",
 		"RUSUI_GITHUB_TOKEN", "GITHUB_TOKEN", "XAI_API_KEY", "RUSUI_XAI_API_KEY",
-		"RUSUI_SLACK_BOT_TOKEN",
+		"RUSUI_SLACK_BOT_TOKEN", "RUSUI_AGENT_GITHUB_TOKEN",
 	}
 	var out []string
 	for _, k := range keys {

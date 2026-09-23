@@ -176,13 +176,19 @@ func (d DockerCLI) Exec(id string, cmd []string) error {
 }
 
 func (d DockerCLI) ExecStdio(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+	// Values travel through the CLI's environment, never its argv, so
+	// credentials do not appear in the host process list.
 	args := []string{"exec", "-i", "-w", workspaceDir}
+	cliEnv := os.Environ()
 	for _, e := range env {
-		args = append(args, "-e", e)
+		k, _, _ := strings.Cut(e, "=")
+		args = append(args, "-e", k)
+		cliEnv = append(cliEnv, e)
 	}
 	args = append(args, handle)
 	args = append(args, argv...)
 	cmd := exec.Command(d.bin(), args...)
+	cmd.Env = cliEnv
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, nil, nil, err
