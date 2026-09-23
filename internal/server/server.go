@@ -33,8 +33,9 @@ type Server struct {
 	SlackSec            string
 	SlackUsers          map[string]bool
 	PolicyPath          string
+	ModelProvider       string // ProviderXAI (default) or ProviderAnthropic
 	ModelKey            string
-	ModelOrigin         *url.URL
+	ModelOrigin         *url.URL // operator model upstream; keyless forwarding allowed
 	GitHubToken         string
 	GitHubTokens        gh.TokenSource
 	AgentGitHubToken    string // operator credential for implement sessions (ADR 0015)
