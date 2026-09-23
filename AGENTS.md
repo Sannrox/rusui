@@ -78,6 +78,8 @@ make all && make test && make validate
 - `make validate` runs golangci-lint, govulncheck, go-fix, and shellcheck.
 - `make release-images` builds Linux binaries and runtime images when
   Docker is available.
+- `make guest-image` builds the reference guest image
+  (`build/guest-image`, ADR 0018).
 
 The Makefile is a thin façade over `scripts/make-targets/`. Verification
 should be proportional to the change. Before delivery, use `verify-change`.
