@@ -21,6 +21,7 @@ Decisions that must outlive a single pull request.
 | [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted |
 | [0016](0016-local-interactive-runtime.md) | Local interactive runtime boundary with Sumika | Proposed |
 | [0017](0017-claude-guest-and-model-upstream.md) | Claude Code guest, operator model upstream, and a fenced self-test | Accepted |
+| [0018](0018-rusui-setup.md) | `rusui setup` provisions a host; `rusui diagnose` verifies it | Accepted |
 
 ## When to write an ADR
 
