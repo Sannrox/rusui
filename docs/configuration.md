@@ -56,6 +56,8 @@ Need `-repo` and `-driver`, or `-repo` and `-acp`.
 | `RUSUI_GUEST_IMAGE` | container guests | Guest image identity. Empty fails closed. |
 | `XAI_API_KEY` or `RUSUI_XAI_API_KEY` | model proxy | Plane secret; never copied into the guest. |
 | `RUSUI_AGENT_GITHUB_TOKEN` | `implement` sessions | Your GitHub credential for agent publication ([ADR 0015](decisions/0015-agent-publication.md)). Given only to `run`/`scheduled` sessions of repositories with `implement: true`, as `GH_TOKEN` and git's credential for `https://github.com`. Unset: no session can push. |
+| `RUSUI_DISABLE_COAUTHOR_TRAILER` | no | `1` drops `Co-authored-by: rusui <noreply@rusui.invalid>` from agent commits. |
+| `RUSUI_DISABLE_SESSION_TRAILER` | no | `1` drops `Rusui-Session: <session id>` from agent commits. |
 
 GitHub token: read-only. Do not give it to the runner or the model.
 Guest `XAI_API_KEY` and git HTTP auth are the per-turn grant, except in
@@ -63,6 +65,13 @@ Guest `XAI_API_KEY` and git HTTP auth are the per-turn grant, except in
 Issue that as a fine-grained token limited to the bound repositories
 (contents and pull requests write; no administration, workflow, or secrets)
 and protect default branches. The guest image must provide `gh`.
+
+Agent commits in `run` and `scheduled` sessions carry both trailers
+([ADR 0015](decisions/0015-agent-publication.md) D3). The runner installs a
+`commit-msg` hook through `core.hooksPath` that first runs the repository's
+own hooks, then adds any trailer not already present. Trailers are
+attribution only; a commit made with `--no-verify` or outside the session
+will not carry them.
 
 ## HTTP
 

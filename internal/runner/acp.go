@@ -228,6 +228,12 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 		cleanup = func() { _ = os.RemoveAll(dir) }
 	}
 	defer cleanup()
+	unhook, err := PrepareCommitHooks(c.Exec, a)
+	if err != nil {
+		_ = c.Fail(a)
+		return err
+	}
+	defer unhook()
 	runCtx := ctx
 	cancel := func() {}
 	if a.ExecutionDeadline != nil {

@@ -160,20 +160,22 @@ func main() {
 		modelKey = os.Getenv("RUSUI_XAI_API_KEY")
 	}
 	srv := &server.Server{
-		Eng:              eng,
-		WebhookSec:       os.Getenv("RUSUI_WEBHOOK_SECRET"),
-		WorkerSec:        os.Getenv("RUSUI_WORKER_SECRET"),
-		OperatorTok:      os.Getenv("RUSUI_OPERATOR_TOKEN"),
-		SlackSec:         os.Getenv("RUSUI_SLACK_SECRET"),
-		SlackUsers:       slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
-		PolicyPath:       *pol,
-		Addr:             *addr,
-		ModelKey:         modelKey,
-		GitHubToken:      token,
-		GitHubTokens:     tokens,
-		AgentGitHubToken: os.Getenv("RUSUI_AGENT_GITHUB_TOKEN"),
-		GuestHTTPSOnly:   tlsCert != "" && tlsKey != "",
-		PreviewBase:      os.Getenv("RUSUI_PREVIEW_BASE"),
+		Eng:               eng,
+		WebhookSec:        os.Getenv("RUSUI_WEBHOOK_SECRET"),
+		WorkerSec:         os.Getenv("RUSUI_WORKER_SECRET"),
+		OperatorTok:       os.Getenv("RUSUI_OPERATOR_TOKEN"),
+		SlackSec:          os.Getenv("RUSUI_SLACK_SECRET"),
+		SlackUsers:        slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
+		PolicyPath:        *pol,
+		Addr:              *addr,
+		ModelKey:          modelKey,
+		GitHubToken:       token,
+		GitHubTokens:      tokens,
+		AgentGitHubToken:  os.Getenv("RUSUI_AGENT_GITHUB_TOKEN"),
+		NoCoauthorTrailer: os.Getenv("RUSUI_DISABLE_COAUTHOR_TRAILER") == "1",
+		NoSessionTrailer:  os.Getenv("RUSUI_DISABLE_SESSION_TRAILER") == "1",
+		GuestHTTPSOnly:    tlsCert != "" && tlsKey != "",
+		PreviewBase:       os.Getenv("RUSUI_PREVIEW_BASE"),
 	}
 	if err := eng.Recover(); err != nil {
 		log.Printf("recover: %v", err)
