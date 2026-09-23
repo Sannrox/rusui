@@ -41,7 +41,7 @@ Rusui’s OS boundary for a session: a container in P1 dogfood. The process driv
 _Avoid_: tool fence, shikigami sandbox
 
 **Tool fence**:
-Grok `--permission-mode default` plus policy-mapped `session/request_permission`. A live unmatched request waits on the RPC with a current-policy recheck; inbox history is not a grant.
+The guest's default permission mode plus policy-mapped `session/request_permission`. A live unmatched request waits on the RPC with a current-policy recheck; inbox history is not a grant.
 _Avoid_: machine isolation, `--always-approve`, tool jail inside rusui
 
 **Process** (proposed, [ADR 0016](docs/decisions/0016-local-interactive-runtime.md)):

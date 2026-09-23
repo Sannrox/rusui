@@ -46,7 +46,7 @@ func main() {
 	for {
 		var err error
 		if *acpHost {
-			err = runner.OneACPTurn(context.Background(), c, runner.GrokHost(c))
+			err = runner.OneACPTurn(context.Background(), c, runner.GuestHost(c))
 		} else {
 			err = runner.OneTurn(context.Background(), c, cmd)
 		}

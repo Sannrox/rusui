@@ -45,7 +45,7 @@ projects:
         close: true
 `
 
-func setup(t *testing.T) (*engine.Engine, *store.Store, *httptest.Server) {
+func setup(t *testing.T, opts ...func(*server.Server)) (*engine.Engine, *store.Store, *httptest.Server) {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
@@ -75,6 +75,9 @@ func setup(t *testing.T) (*engine.Engine, *store.Store, *httptest.Server) {
 		t.Fatalf("refresh %v %v", ok, err)
 	}
 	srv := &server.Server{Eng: e, WebhookSec: "whsec", WorkerSec: "wsec", SlackSec: "slsec", SlackUsers: map[string]bool{"U1": true}}
+	for _, o := range opts {
+		o(srv)
+	}
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return e, st, hs
@@ -206,7 +209,7 @@ func TestGrokHostExecsInContainer(t *testing.T) {
 	cli := &runner.Client{Base: hs.URL, Bootstrap: "wsec", Repo: "example/test-repo", Name: "local", Exec: rt}
 	done := make(chan struct{})
 	go allowPendingApprovals(t, hs.URL, done)
-	if err := runner.OneACPTurn(context.Background(), cli, runner.GrokHost(cli)); err != nil {
+	if err := runner.OneACPTurn(context.Background(), cli, runner.GuestHost(cli)); err != nil {
 		t.Fatal(err)
 	}
 	close(done)
@@ -224,6 +227,60 @@ func TestGrokHostExecsInContainer(t *testing.T) {
 	var turnID int64
 	if err := st.DB.QueryRow(`SELECT id FROM turns WHERE state='completed'`).Scan(&turnID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestClaudeGuestExecsAdapterInContainer(t *testing.T) {
+	e, st, hs := setup(t, func(s *server.Server) { s.Guest = acp.GuestClaude })
+	rt := &env.FakeRuntime{}
+	rt.StdioHook = func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+		return startFakeACPStdio(t)
+	}
+	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	cli := &runner.Client{Base: hs.URL, Bootstrap: "wsec", Repo: "example/test-repo", Name: "local", Exec: rt}
+	done := make(chan struct{})
+	go allowPendingApprovals(t, hs.URL, done)
+	if err := runner.OneACPTurn(context.Background(), cli, runner.GuestHost(cli)); err != nil {
+		t.Fatal(err)
+	}
+	close(done)
+	if len(rt.Stdio) != 1 || strings.Join(rt.Stdio[0].Argv, " ") != acp.ClaudeStdio {
+		t.Fatalf("stdio %#v", rt.Stdio)
+	}
+	envj := strings.Join(rt.Stdio[0].Env, "\n")
+	for _, want := range []string{"ANTHROPIC_AUTH_TOKEN=", "ANTHROPIC_BASE_URL=https://rusui.plane", "CLAUDE_CONFIG_DIR=/tmp/rusui-claude"} {
+		if !strings.Contains(envj, want) {
+			t.Fatalf("missing %s in\n%s", want, envj)
+		}
+	}
+	if strings.Contains(envj, "XAI_API_KEY") || strings.Contains(envj, "GROK_") {
+		t.Fatalf("grok env in claude guest:\n%s", envj)
+	}
+	var n int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM turns WHERE state='completed'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("completed turns %d %v", n, err)
+	}
+}
+
+func TestClaudeGuestEnvHoldsOnlyTheGrant(t *testing.T) {
+	a := &runner.Assignment{TurnID: 9, TurnToken: "grant", Guest: acp.GuestClaude, ModelBaseURL: "http://127.0.0.1:8080/model-proxy"}
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-operator")
+	t.Setenv("CLAUDE_CONFIG_DIR", "/Users/op/.claude")
+	joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
+	if !strings.Contains(joined, "ANTHROPIC_AUTH_TOKEN=grant") || !strings.Contains(joined, "CLAUDE_CONFIG_DIR=/tmp/home/.rusui-claude") {
+		t.Fatal(joined)
+	}
+	if strings.Contains(joined, "sk-ant-operator") || strings.Contains(joined, "/Users/op/.claude") {
+		t.Fatalf("operator claude credential or login leaked:\n%s", joined)
+	}
+}
+
+func TestUnknownGuestFailsClosed(t *testing.T) {
+	if _, err := acp.SpawnArgsFor("codex"); err == nil {
+		t.Fatal("unknown guest accepted")
+	}
+	if argv, err := acp.SpawnArgsFor(""); err != nil || strings.Join(argv, " ") != acp.GrokStdio {
+		t.Fatalf("default %v %v", argv, err)
 	}
 }
 
