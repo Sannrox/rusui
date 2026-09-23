@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -28,6 +29,59 @@ func modelBaseURL(r *http.Request, driver string) string {
 	return u.String()
 }
 
+// Model providers (ADR 0017 D2). The guest picks the provider; the
+// operator picks the upstream and credential.
+const (
+	ProviderXAI       = "xai"
+	ProviderAnthropic = "anthropic"
+)
+
+var defaultModelOrigins = map[string]string{
+	ProviderXAI:       "https://api.x.ai",
+	ProviderAnthropic: "https://api.anthropic.com",
+}
+
+// ModelConfig is the plane side of the model proxy: which provider the
+// guest speaks, the upstream to forward to, and the key sent upstream.
+type ModelConfig struct {
+	Provider string
+	Key      string
+	Origin   *url.URL // operator upstream (gateway or CLI proxy); nil uses the provider default
+}
+
+// ModelConfigFromEnv reads RUSUI_GUEST, RUSUI_MODEL_UPSTREAM, and the
+// provider key. An unknown guest or a malformed upstream is an error.
+func ModelConfigFromEnv(getenv func(string) string) (ModelConfig, error) {
+	var c ModelConfig
+	switch g := getenv("RUSUI_GUEST"); g {
+	case "", "grok":
+		c.Provider = ProviderXAI
+		c.Key = firstNonEmpty(getenv("XAI_API_KEY"), getenv("RUSUI_XAI_API_KEY"))
+	case "claude":
+		c.Provider = ProviderAnthropic
+		c.Key = firstNonEmpty(getenv("RUSUI_ANTHROPIC_API_KEY"), getenv("ANTHROPIC_API_KEY"))
+	default:
+		return c, fmt.Errorf("RUSUI_GUEST %q: want grok or claude", g)
+	}
+	if raw := getenv("RUSUI_MODEL_UPSTREAM"); raw != "" {
+		u, err := url.Parse(raw)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return c, fmt.Errorf("RUSUI_MODEL_UPSTREAM %q: want an http(s) URL", raw)
+		}
+		c.Origin = u
+	}
+	return c, nil
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func (s *Server) modelProxy(w http.ResponseWriter, r *http.Request) {
 	if !s.requireGuestTLS(w, r) {
 		return
@@ -37,8 +91,10 @@ func (s *Server) modelProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
-	if s.ModelKey == "" {
-		http.Error(w, "model key unset", http.StatusServiceUnavailable)
+	// A key alone uses the provider's API; an operator upstream (gateway or
+	// CLI proxy) may run without one. Neither fails closed.
+	if s.ModelKey == "" && s.ModelOrigin == nil {
+		http.Error(w, "model upstream unset", http.StatusServiceUnavailable)
 		return
 	}
 	upstream := s.modelOrigin()
@@ -47,7 +103,16 @@ func (s *Server) modelProxy(w http.ResponseWriter, r *http.Request) {
 	proxy.Director = func(req *http.Request) {
 		orig(req)
 		req.Host = upstream.Host
-		req.Header.Set("Authorization", "Bearer "+s.ModelKey)
+		// The guest's grant never goes upstream.
+		req.Header.Del("Authorization")
+		req.Header.Del("X-Api-Key")
+		if s.ModelKey != "" {
+			if s.modelProvider() == ProviderAnthropic {
+				req.Header.Set("X-Api-Key", s.ModelKey)
+			} else {
+				req.Header.Set("Authorization", "Bearer "+s.ModelKey)
+			}
+		}
 		path := strings.TrimPrefix(req.URL.Path, "/model-proxy")
 		if path == "" {
 			path = "/"
@@ -57,10 +122,17 @@ func (s *Server) modelProxy(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
+func (s *Server) modelProvider() string {
+	if s.ModelProvider == "" {
+		return ProviderXAI
+	}
+	return s.ModelProvider
+}
+
 func (s *Server) modelOrigin() *url.URL {
 	if s.ModelOrigin != nil {
 		return s.ModelOrigin
 	}
-	u, _ := url.Parse("https://api.x.ai")
+	u, _ := url.Parse(defaultModelOrigins[s.modelProvider()])
 	return u
 }

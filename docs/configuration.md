@@ -54,10 +54,36 @@ Need `-repo` and `-driver`, or `-repo` and `-acp`.
 | `RUSUI_TLS_CERT` / `RUSUI_TLS_KEY` | container guests | Plane TLS identity. Unset disables the container driver. |
 | `RUSUI_PLANE_CA` | container guests | CA file mounted at `/usr/local/share/ca-certificates/rusui-plane.crt`. |
 | `RUSUI_GUEST_IMAGE` | container guests | Guest image identity. Empty fails closed. |
-| `XAI_API_KEY` or `RUSUI_XAI_API_KEY` | model proxy | Plane secret; never copied into the guest. |
+| `XAI_API_KEY` or `RUSUI_XAI_API_KEY` | model proxy (Grok) | Plane secret; never copied into the guest. |
+| `RUSUI_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY` | model proxy (Claude Code) | Plane secret, sent upstream as `x-api-key`; never copied into the guest. |
+| `RUSUI_GUEST` | no | `grok` (default) or `claude`; picks the model provider ([ADR 0017](decisions/0017-claude-guest-and-model-upstream.md)). |
+| `RUSUI_MODEL_UPSTREAM` | no | http(s) URL replacing the provider API, e.g. a gateway or a CLI proxy on the plane host. With it set, the provider key may be empty. |
 | `RUSUI_AGENT_GITHUB_TOKEN` | `implement` sessions | Your GitHub credential for agent publication ([ADR 0015](decisions/0015-agent-publication.md)). Given only to implement sessions — `run` sessions started for an open pinned task (`rusui run -effort …`) on repositories with `implement: true` — as `GH_TOKEN` and git's credential for `https://github.com`. Unset: no session can push. |
 | `RUSUI_DISABLE_COAUTHOR_TRAILER` | no | `1` drops `Co-authored-by: rusui <noreply@rusui.invalid>` from agent commits. |
 | `RUSUI_DISABLE_SESSION_TRAILER` | no | `1` drops `Rusui-Session: <session id>` from agent commits. |
+
+### Model upstream
+
+The guest only ever holds its per-turn grant; the plane model proxy strips
+it and sends the operator's credential upstream. The upstream is, in order:
+
+1. `RUSUI_MODEL_UPSTREAM` when set: a gateway or a **CLI proxy** that uses
+   your own CLI login on the plane host, such as
+   [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI). The provider
+   key, if set, is forwarded as the proxy's client key.
+2. The provider API (`https://api.x.ai` or `https://api.anthropic.com`)
+   with the provider key.
+3. Neither: the proxy answers 503.
+
+```bash
+RUSUI_GUEST=claude
+RUSUI_MODEL_UPSTREAM=http://127.0.0.1:8317     # CLI proxy on the plane host
+RUSUI_ANTHROPIC_API_KEY=<the proxy's client key>
+```
+
+Run a CLI proxy on loopback with its own client key; rusui does not ship
+or manage it. Whether a subscription may be used this way for automated
+work is set by the provider's terms, not by rusui.
 
 GitHub token: read-only. Do not give it to the runner or the model.
 Guest `XAI_API_KEY` and git HTTP auth are the per-turn grant, except in

@@ -154,9 +154,9 @@ func main() {
 			log.Printf("slack exception: %v", err)
 		}
 	}
-	modelKey := os.Getenv("XAI_API_KEY")
-	if modelKey == "" {
-		modelKey = os.Getenv("RUSUI_XAI_API_KEY")
+	model, err := server.ModelConfigFromEnv(os.Getenv)
+	if err != nil {
+		log.Fatal(err)
 	}
 	srv := &server.Server{
 		Eng:               eng,
@@ -167,7 +167,9 @@ func main() {
 		SlackUsers:        slackpkg.ParseUsers(os.Getenv("RUSUI_SLACK_USERS")),
 		PolicyPath:        *pol,
 		Addr:              *addr,
-		ModelKey:          modelKey,
+		ModelProvider:     model.Provider,
+		ModelKey:          model.Key,
+		ModelOrigin:       model.Origin,
 		GitHubToken:       token,
 		GitHubTokens:      tokens,
 		AgentGitHubToken:  os.Getenv("RUSUI_AGENT_GITHUB_TOKEN"),

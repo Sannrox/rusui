@@ -71,7 +71,7 @@ func TestModelProxyRejectsBadTokenAndMissingKey(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("code %d", resp.StatusCode)
 	}
-	hs2 := httptest.NewServer((&Server{Eng: e, ModelOrigin: origin}).Handler())
+	hs2 := httptest.NewServer((&Server{Eng: e}).Handler())
 	t.Cleanup(hs2.Close)
 	req, _ = http.NewRequest("POST", hs2.URL+"/model-proxy/v1/x", strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -180,4 +180,93 @@ func leasedTurn(t *testing.T) (*engine.Engine, *clock.Fake, string) {
 		t.Fatal(err)
 	}
 	return e, clk, tok
+}
+
+// upstreamSaw proxies one guest request through a plane configured with srv
+// and returns the headers the upstream received.
+func upstreamSaw(t *testing.T, srv *Server, guestHeaders map[string]string) http.Header {
+	t.Helper()
+	var saw http.Header
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		saw = r.Header.Clone()
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(up.Close)
+	origin, err := url.Parse(up.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, _, tok := leasedTurn(t)
+	srv.Eng = e
+	srv.ModelOrigin = origin
+	hs := httptest.NewServer(srv.Handler())
+	t.Cleanup(hs.Close)
+	req, err := http.NewRequest("POST", hs.URL+"/model-proxy/v1/messages", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+	for k, v := range guestHeaders {
+		req.Header.Set(k, strings.ReplaceAll(v, "$GRANT", tok))
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("code %d %s", resp.StatusCode, body)
+	}
+	for k, vs := range saw {
+		for _, v := range vs {
+			if strings.Contains(v, tok) {
+				t.Fatalf("grant reached upstream in %s", k)
+			}
+		}
+	}
+	return saw
+}
+
+func TestModelProxyAnthropicSendsAPIKeyHeader(t *testing.T) {
+	saw := upstreamSaw(t, &Server{ModelProvider: ProviderAnthropic, ModelKey: "sk-ant-plane"},
+		map[string]string{"X-Api-Key": "$GRANT", "Anthropic-Version": "2023-06-01"})
+	if saw.Get("X-Api-Key") != "sk-ant-plane" || saw.Get("Authorization") != "" {
+		t.Fatalf("upstream auth x-api-key=%q authorization=%q", saw.Get("X-Api-Key"), saw.Get("Authorization"))
+	}
+	if saw.Get("Anthropic-Version") != "2023-06-01" {
+		t.Fatal("anthropic-version not passed through")
+	}
+}
+
+func TestModelProxyKeylessOperatorUpstream(t *testing.T) {
+	// A CLI proxy on the plane host holds the operator's login itself.
+	saw := upstreamSaw(t, &Server{ModelProvider: ProviderAnthropic}, nil)
+	if saw.Get("X-Api-Key") != "" || saw.Get("Authorization") != "" {
+		t.Fatalf("keyless upstream got credentials %v", saw)
+	}
+}
+
+func TestModelConfigFromEnv(t *testing.T) {
+	env := func(kv map[string]string) func(string) string { return func(k string) string { return kv[k] } }
+	c, err := ModelConfigFromEnv(env(map[string]string{"RUSUI_XAI_API_KEY": "x"}))
+	if err != nil || c.Provider != ProviderXAI || c.Key != "x" || c.Origin != nil {
+		t.Fatalf("default %+v %v", c, err)
+	}
+	c, err = ModelConfigFromEnv(env(map[string]string{
+		"RUSUI_GUEST": "claude", "ANTHROPIC_API_KEY": "a", "RUSUI_ANTHROPIC_API_KEY": "b",
+		"RUSUI_MODEL_UPSTREAM": "http://127.0.0.1:8317", "XAI_API_KEY": "x",
+	}))
+	if err != nil || c.Provider != ProviderAnthropic || c.Key != "b" || c.Origin.String() != "http://127.0.0.1:8317" {
+		t.Fatalf("claude %+v %v", c, err)
+	}
+	for _, bad := range []map[string]string{
+		{"RUSUI_GUEST": "codex"},
+		{"RUSUI_MODEL_UPSTREAM": "127.0.0.1:8317"},
+		{"RUSUI_MODEL_UPSTREAM": "file:///etc/passwd"},
+	} {
+		if _, err := ModelConfigFromEnv(env(bad)); err == nil {
+			t.Fatalf("accepted %v", bad)
+		}
+	}
 }
