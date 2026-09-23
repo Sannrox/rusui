@@ -51,7 +51,12 @@ func runCLI(args []string) {
 	if *idem != "" {
 		req.Header.Set("Idempotency-Key", *idem)
 	}
-	res, err := http.DefaultClient.Do(req)
+	client, err := planeHTTP(*url)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	res, err := client.Do(req)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
