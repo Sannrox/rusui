@@ -65,9 +65,11 @@ func ModelConfigFromEnv(getenv func(string) string) (ModelConfig, error) {
 		return c, fmt.Errorf("RUSUI_GUEST %q: want grok or claude", g)
 	}
 	if raw := getenv("RUSUI_MODEL_UPSTREAM"); raw != "" {
+		// The URL may carry a gateway credential; errors end up in service
+		// logs, so they never echo it.
 		u, err := url.Parse(raw)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return c, fmt.Errorf("RUSUI_MODEL_UPSTREAM %q: want an http(s) URL", raw)
+			return c, fmt.Errorf("RUSUI_MODEL_UPSTREAM: want an http(s) URL with a host")
 		}
 		c.Origin = u
 	}

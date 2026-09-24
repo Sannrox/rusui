@@ -77,6 +77,10 @@ it and sends the operator's credential upstream. The upstream is, in order:
    with the provider key.
 3. Neither: the proxy answers 503.
 
+Upstream failures answer 502 and are logged without the provider key, the
+guest grant, or `RUSUI_MODEL_UPSTREAM` itself, which may carry a gateway
+credential.
+
 ```bash
 RUSUI_GUEST=claude
 RUSUI_MODEL_UPSTREAM=http://127.0.0.1:8317     # CLI proxy on the plane host

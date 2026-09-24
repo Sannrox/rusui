@@ -4,9 +4,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -267,6 +269,51 @@ func TestModelConfigFromEnv(t *testing.T) {
 	} {
 		if _, err := ModelConfigFromEnv(env(bad)); err == nil {
 			t.Fatalf("accepted %v", bad)
+		}
+	}
+}
+
+func TestModelUpstreamErrorsNeverEchoCredentials(t *testing.T) {
+	for _, raw := range []string{"ftp://op:s3cret-key@gateway", "http://op:s3cret-key@[bad", "op:s3cret-key@gateway"} {
+		_, err := ModelConfigFromEnv(func(k string) string {
+			if k == "RUSUI_MODEL_UPSTREAM" {
+				return raw
+			}
+			return ""
+		})
+		if err == nil || strings.Contains(err.Error(), "s3cret-key") {
+			t.Fatalf("%q: %v", raw, err)
+		}
+	}
+}
+
+// A failing upstream must not put the provider key or the guest grant in
+// the plane log or the guest-visible response.
+func TestModelProxyFailureLeaksNoSecrets(t *testing.T) {
+	var logs strings.Builder
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	e, _, tok := leasedTurn(t)
+	origin, _ := url.Parse("http://127.0.0.1:1")
+	hs := httptest.NewServer((&Server{Eng: e, ModelKey: "sk-provider-secret", ModelOrigin: origin}).Handler())
+	t.Cleanup(hs.Close)
+	req, _ := http.NewRequest("POST", hs.URL+"/model-proxy/v1/messages", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("code %d %s", resp.StatusCode, body)
+	}
+	if logs.Len() == 0 {
+		t.Fatal("proxy failure was not logged")
+	}
+	for _, secret := range []string{"sk-provider-secret", tok} {
+		if strings.Contains(logs.String(), secret) || strings.Contains(string(body), secret) {
+			t.Fatalf("secret leaked:\nlog: %s\nbody: %s", logs.String(), body)
 		}
 	}
 }
