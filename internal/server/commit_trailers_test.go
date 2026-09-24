@@ -115,3 +115,41 @@ func TestReviewSessionsGetNoTrailers(t *testing.T) {
 		t.Fatalf("scheduled trailers %q", got)
 	}
 }
+
+// Agents export their own GIT_CONFIG_COUNT settings (for example a
+// safe.directory workaround); the runner's settings must survive (#221).
+func TestAgentGitConfigExportKeepsRunnerSettings(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	hs, e := agentCredentialEnv(t, true, agentToken)
+	a := claim(t, hs, e, true)
+	if len(a.CommitTrailers) == 0 {
+		t.Fatal("implement turn has no trailers")
+	}
+	unhook, err := runner.PrepareCommitHooks(nil, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unhook()
+	repo := t.TempDir()
+	guestEnv := append(runner.DriverEnv(a, t.TempDir(), os.Getenv("PATH")),
+		"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=safe.directory", "GIT_CONFIG_VALUE_0="+repo)
+
+	gitIn(t, repo, guestEnv, "init", "-q")
+	if err := os.WriteFile(filepath.Join(repo, "f"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, guestEnv, "add", "f")
+	gitIn(t, repo, guestEnv, "commit", "-q", "-m", "agent change")
+	msg := gitIn(t, repo, guestEnv, "log", "-1", "--format=%B")
+	if !strings.Contains(msg, CoauthorTrailer) || !strings.Contains(msg, "Rusui-Session: ") {
+		t.Fatalf("commit message:\n%s", msg)
+	}
+	if out := gitCredential(t, guestEnv); !strings.Contains(out, "password="+agentToken) {
+		t.Fatalf("git credential fill:\n%s", out)
+	}
+	if got := gitIn(t, repo, guestEnv, "config", "--get-all", "safe.directory"); !strings.Contains(got, repo) {
+		t.Fatalf("agent setting lost:\n%s", got)
+	}
+}
