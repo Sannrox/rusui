@@ -20,7 +20,22 @@ type TaskResult struct {
 	ClaimedChecks []string  `json:"claimed_checks,omitempty"`
 	BlockedReason string    `json:"blocked_reason,omitempty"`
 	AgentVerified bool      `json:"agent_verified,omitempty"`
+	// PullRequest is the pull request the agent claims it opened or
+	// updated in the turn's repository (ADR 0015).
+	PullRequest int `json:"pull_request,omitempty"`
+	// PublishedSHA and Outcome are observed by the plane on Complete;
+	// values sent by the runner or guest are discarded.
+	PublishedSHA string `json:"published_sha,omitempty"`
+	Outcome      string `json:"outcome,omitempty"`
 }
+
+// Turn outcomes the plane records for a run result.
+const (
+	OutcomePublished   = "published"   // GitHub shows the claimed PR at the candidate SHA
+	OutcomeUnconfirmed = "unconfirmed" // a PR was claimed but GitHub does not show it at the candidate SHA
+	OutcomeBlocked     = "blocked"     // the agent reported why it stopped
+	OutcomeReported    = "reported"    // findings only
+)
 
 type Finding struct {
 	Title string `json:"title"`
@@ -50,8 +65,39 @@ func ValidateResult(art Artifact) error {
 	if r.AgentVerified {
 		return fmt.Errorf("agent cannot declare verified")
 	}
-	if len(r.Findings) == 0 && r.BlockedReason == "" {
+	if len(r.Findings) == 0 && r.BlockedReason == "" && r.PullRequest <= 0 {
 		return fmt.Errorf("empty result")
 	}
 	return nil
+}
+
+// observeResult records what the plane itself sees about a run result: a
+// claimed pull request counts as published only when the read-only
+// GitHub client shows it in the turn's repository at the candidate SHA
+// the runner observed in the workspace.
+func (e *Engine) observeResult(art *Artifact) {
+	r := art.Result
+	if art.ItemKind != "run" || r == nil {
+		return
+	}
+	r.PublishedSHA, r.Outcome = "", ""
+	switch {
+	case r.PullRequest > 0:
+		r.Outcome = OutcomeUnconfirmed
+		if e.GitHub == nil {
+			return
+		}
+		pr, err := e.GitHub.GetItem(art.Repo, r.PullRequest, "pull")
+		if err != nil || pr.ItemKind != "pull" {
+			return
+		}
+		r.PublishedSHA = pr.HeadSHA
+		if r.CandidateSHA != "" && pr.HeadSHA == r.CandidateSHA {
+			r.Outcome = OutcomePublished
+		}
+	case r.BlockedReason != "":
+		r.Outcome = OutcomeBlocked
+	default:
+		r.Outcome = OutcomeReported
+	}
 }

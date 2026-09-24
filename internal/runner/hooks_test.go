@@ -138,3 +138,30 @@ func TestRepoHooksPathFromGlobalConfigStillRuns(t *testing.T) {
 		t.Fatalf("message:\n%s", msg)
 	}
 }
+
+func TestContainerGuestsTrustOnlyTheWorkspace(t *testing.T) {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not on PATH")
+	}
+	get := func(a *Assignment) string {
+		cmd := exec.Command(git, "config", "--get-all", "safe.directory")
+		cmd.Dir = t.TempDir()
+		cmd.Env = append(DriverEnv(a, t.TempDir(), os.Getenv("PATH")), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
+		out, _ := cmd.Output()
+		return strings.TrimSpace(string(out))
+	}
+	if got := get(&Assignment{Driver: "container", Handle: "ctr"}); got != "/workspace" {
+		t.Fatalf("container safe.directory %q", got)
+	}
+	if got := get(&Assignment{}); got != "" {
+		t.Fatalf("process guest safe.directory %q", got)
+	}
+}
+
+func TestGitConfigParametersQuoting(t *testing.T) {
+	got := gitConfigParameters([][2]string{{"a.b", `it's !x`}})
+	if got != `'a.b'='it'\''s '\!'x'` {
+		t.Fatal(got)
+	}
+}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
+	rusuienv "github.com/sannrox/rusui/internal/env"
 )
 
 // Client talks outbound-only to the plane. Bootstrap authenticates
@@ -55,7 +56,10 @@ type Assignment struct {
 	CommitTrailers  []string `json:"commit_trailers,omitempty"`
 	// CommitHooksDir is where PrepareCommitHooks placed the attribution
 	// hooks for this turn; set on the runner, never by the plane.
-	CommitHooksDir    string          `json:"-"`
+	CommitHooksDir string `json:"-"`
+	// ResultPath is where a run turn's guest writes its structured result
+	// (PrepareResult).
+	ResultPath        string          `json:"-"`
 	Permissions       []acp.Rule      `json:"permissions"`
 	ExecutionDeadline *time.Time      `json:"execution_deadline"`
 	Input             json.RawMessage `json:"input"`
@@ -198,6 +202,9 @@ func DriverEnv(a *Assignment, home, path string) []string {
 			env = append(env, "GROK_XAI_API_BASE_URL="+a.ModelBaseURL)
 		}
 	}
+	if a.ResultPath != "" {
+		env = append(env, "RUSUI_RESULT="+a.ResultPath)
+	}
 	var git [][2]string
 	if a.GitHubToken != "" {
 		// Implement session (ADR 0015): the agent talks to GitHub directly as
@@ -215,13 +222,33 @@ func DriverEnv(a *Assignment, home, path string) []string {
 		env = append(env, "RUSUI_COMMIT_TRAILERS="+strings.Join(a.CommitTrailers, "\n"))
 		git = append(git, [2]string{"core.hooksPath", a.CommitHooksDir})
 	}
+	if a.Driver == "container" && a.Handle != "" {
+		// The tree is copied in with another owner; trust only the
+		// workspace so agents need no safe.directory workaround.
+		git = append(git, [2]string{"safe.directory", rusuienv.WorkspaceDir})
+	}
 	if len(git) > 0 {
-		env = append(env, fmt.Sprintf("GIT_CONFIG_COUNT=%d", len(git)))
-		for i, kv := range git {
-			env = append(env, fmt.Sprintf("GIT_CONFIG_KEY_%d=%s", i, kv[0]), fmt.Sprintf("GIT_CONFIG_VALUE_%d=%s", i, kv[1]))
-		}
+		env = append(env, "GIT_CONFIG_PARAMETERS="+gitConfigParameters(git))
 	}
 	return env
+}
+
+// gitConfigParameters encodes settings the way git passes `git -c` values
+// to its children. They keep command-line precedence but, unlike
+// GIT_CONFIG_COUNT, are not replaced when an agent exports its own
+// GIT_CONFIG_COUNT/KEY/VALUE settings.
+func gitConfigParameters(kvs [][2]string) string {
+	parts := make([]string, len(kvs))
+	for i, kv := range kvs {
+		parts[i] = sqQuote(kv[0]) + "=" + sqQuote(kv[1])
+	}
+	return strings.Join(parts, " ")
+}
+
+// sqQuote single-quotes s as git's sq_quote_buf does.
+func sqQuote(s string) string {
+	r := strings.NewReplacer("'", `'\''`, "!", `'\!'`)
+	return "'" + r.Replace(s) + "'"
 }
 
 func RunProcess(ctx context.Context, command []string, env []string, dir string) ([]byte, error) {
