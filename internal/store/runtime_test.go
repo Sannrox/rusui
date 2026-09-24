@@ -97,6 +97,53 @@ func TestSumikaProcessAndAttachGenerations(t *testing.T) {
 	}
 }
 
+func TestDeadProcessObservationRollsBackWhenAttachClosureFails(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "runtime-attach-failure.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	sessionID := insertLocalSession(t, st)
+	now := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
+	process, err := StartSumikaProcess(st, sessionID, "test-process-identity", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	process, err = ObserveSumikaProcess(st, process.ID, process.Generation, process.Revision, ProcessRunning, now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	attach, err := BeginSumikaAttach(st, process.ID, process.Generation, now.Add(2*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	process, err = RequestSumikaCancel(st, process.ID, process.Generation, process.Revision, now.Add(3*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`CREATE TRIGGER reject_process_exit_attach BEFORE UPDATE ON process_attaches
+		WHEN NEW.state='process_exited' BEGIN SELECT RAISE(ABORT, 'attach update rejected'); END`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := ObserveSumikaProcess(st, process.ID, process.Generation, process.Revision, ProcessDead, now.Add(4*time.Second)); err == nil {
+		t.Fatal("dead observation succeeded despite attach update failure")
+	}
+	process, err = GetSumikaProcess(st, process.ID)
+	if err != nil || process.State != ProcessRunning {
+		t.Fatalf("process after rejected observation %+v: %v", process, err)
+	}
+	attaches, err := ListSumikaAttaches(st, process.ID)
+	if err != nil || len(attaches) != 1 || attaches[0].Generation != attach.Generation || attaches[0].State != AttachAttached {
+		t.Fatalf("attach after rejected observation %+v: %v", attaches, err)
+	}
+	sess, err := GetSession(st, sessionID)
+	if err != nil || sess.State != "open" {
+		t.Fatalf("session after rejected observation %+v: %v", sess, err)
+	}
+}
+
 func TestUnknownRuntimeObservationsRemainActiveUntilReconciled(t *testing.T) {
 	st, err := Open(filepath.Join(t.TempDir(), "runtime-restart.db"))
 	if err != nil {

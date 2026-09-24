@@ -167,6 +167,9 @@ func ObserveSumikaProcess(s *Store, processID, generation, revision int64, state
 		if state == ProcessDead || state == ProcessLost {
 			_, err = tx.Exec(`UPDATE process_attaches SET state=?, revision=revision+1, observed_at=?
 				WHERE process_id=? AND process_generation=? AND state IN ('attached', 'unknown')`, AttachProcessExited, at, processID, generation)
+			if err != nil {
+				return err
+			}
 		}
 		if state == ProcessDead {
 			_, err = tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=(SELECT session_id FROM session_processes WHERE id=?)

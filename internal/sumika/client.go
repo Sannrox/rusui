@@ -206,6 +206,10 @@ func (c *SocketClient) connect() (*net.UnixConn, error) {
 		_ = conn.Close()
 		return nil, errors.New("sumika connection is not a Unix socket")
 	}
+	if err := sameUserPeer(unix); err != nil {
+		_ = unix.Close()
+		return nil, err
+	}
 	return unix, nil
 }
 
