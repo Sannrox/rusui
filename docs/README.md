@@ -17,6 +17,7 @@ the runbook.
 | First look | [README](../README.md) |
 | First session | [tutorial.md](tutorial.md) |
 | Operator | [operator.md](operator.md) |
+| Install as a user service | [user-service.md](user-service.md) |
 | Flags, env, HTTP, policy | [configuration.md](configuration.md) |
 | Contributor | [CONTRIBUTING.md](../CONTRIBUTING.md), [development.md](development.md) |
 | Agent | [AGENTS.md](../AGENTS.md) |
@@ -33,6 +34,7 @@ the runbook.
 | [../VISION.md](../VISION.md) | explanation | accepted direction; not the runbook |
 | [../ROADMAP.md](../ROADMAP.md) | explanation | published M1–M6 sequence ([ADR 0010](decisions/0010-hybrid-roadmap-sequence.md) Accepted) |
 | [operator.md](operator.md) | how-to | run, webhook, Slack, troubleshoot |
+| [user-service.md](user-service.md) | how-to | install, update, and remove the per-user host service |
 | [upgrade.md](upgrade.md) | how-to | drain, packaged upgrade, redacted diagnostics |
 | [proofs/d6-session-workflow.md](proofs/d6-session-workflow.md) | explanation | D6 twenty-run matrix and supported claim |
 | [proofs/u8-operator-journey.md](proofs/u8-operator-journey.md) | explanation | U8 self-hosting journey (narrowed; not external-user evidence) |

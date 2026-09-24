@@ -33,6 +33,7 @@ const (
 	Update   = "update"
 	NeedsYou = "needs-you"
 	Skip     = "skip"
+	Remove   = "remove"
 )
 
 // Step is one line of a plan or apply report.
@@ -54,13 +55,15 @@ type Network interface {
 
 type Options struct {
 	StateDir  string
+	Addr      string
 	RotateTLS bool
 	// RebuildImage rebuilds the reference guest with --pull --no-cache; a
 	// changed image gets a new recorded tag.
-	RebuildImage bool
-	Network      Network // nil when no container runtime is installed
-	Now          func() time.Time
-	Getenv       func(string) string // process environment consulted for needs-you
+	RebuildImage   bool
+	Network        Network // nil when no container runtime is installed
+	ServiceManager ServiceManager
+	Now            func() time.Time
+	Getenv         func(string) string // process environment used as one-shot setup fallback
 }
 
 // DefaultStateDir is $XDG_DATA_HOME/rusui, or the platform default.
@@ -110,6 +113,11 @@ func run(o Options, apply bool) ([]Step, error) {
 	if o.StateDir == "" {
 		return nil, fmt.Errorf("setup: state directory required")
 	}
+	stateDir, err := filepath.Abs(o.StateDir)
+	if err != nil {
+		return nil, fmt.Errorf("setup: resolve state directory: %w", err)
+	}
+	o.StateDir = stateDir
 	if o.Now == nil {
 		o.Now = time.Now
 	}
@@ -202,16 +210,31 @@ func run(o Options, apply bool) ([]Step, error) {
 		}
 		steps = append(steps, st...)
 	}
+	if o.ServiceManager != nil {
+		var st Step
+		var err error
+		if apply {
+			st, err = o.ServiceManager.Apply(o, p)
+		} else {
+			st, err = o.ServiceManager.Plan(o, p)
+		}
+		if err != nil {
+			return steps, err
+		}
+		steps = append(steps, st)
+	}
 
 	vals := readEnv(p.Env)
 	for k, v := range vals {
-		if v == "" {
+		if v == "" && o.ServiceManager == nil {
 			vals[k] = o.Getenv(k)
 		}
 	}
 	for _, k := range externalKeys {
 		if _, ok := vals[k]; !ok {
-			vals[k] = o.Getenv(k)
+			if o.ServiceManager == nil {
+				vals[k] = o.Getenv(k)
+			}
 		}
 	}
 	if o.Network != nil && vals["RUSUI_GUEST_IMAGE"] == "" {
@@ -220,6 +243,9 @@ func run(o Options, apply bool) ([]Step, error) {
 		vals["RUSUI_GUEST_IMAGE"] = guestimage.CacheTag()
 	}
 	for _, n := range needsYou(vals) {
+		if o.ServiceManager != nil {
+			n[1] += "; persist it in " + p.Env + " for the user service"
+		}
 		add(NeedsYou, n[0], n[1])
 	}
 	return steps, nil
@@ -406,8 +432,8 @@ func readEnv(path string) map[string]string {
 	return out
 }
 
-// envLine parses one `[export ]KEY=VALUE` line; comments and blanks are not
-// lines.
+// envLine parses one `[export ]KEY=VALUE` line; matching outer quotes are
+// removed, but shell expansion is not evaluated.
 func envLine(line string) (key, value string, ok bool) {
 	line = strings.TrimSpace(line)
 	if line == "" || strings.HasPrefix(line, "#") {
@@ -417,7 +443,30 @@ func envLine(line string) (key, value string, ok bool) {
 	if !ok {
 		return "", "", false
 	}
-	return strings.TrimSpace(strings.TrimPrefix(k, "export ")), strings.TrimSpace(v), true
+	return strings.TrimSpace(strings.TrimPrefix(k, "export ")), parseEnvValue(strings.TrimSpace(v)), true
+}
+
+func parseEnvValue(value string) string {
+	if len(value) < 2 || value[0] != value[len(value)-1] || (value[0] != '\'' && value[0] != '"') {
+		return value
+	}
+	value = value[1 : len(value)-1]
+	if value == "" || value[0] == '\'' {
+		return value
+	}
+	var b strings.Builder
+	for i := 0; i < len(value); i++ {
+		if value[i] == '\\' && i+1 < len(value) {
+			switch value[i+1] {
+			case '\\', '"', '$', '`':
+				b.WriteByte(value[i+1])
+				i++
+				continue
+			}
+		}
+		b.WriteByte(value[i])
+	}
+	return b.String()
 }
 
 // ReadEnv exposes the env file to the CLI (for the final diagnose).
