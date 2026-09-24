@@ -107,6 +107,16 @@ own hooks, then adds any trailer not already present. Trailers are
 attribution only; a commit made with `--no-verify` or outside the session
 will not carry them.
 
+### Run turn results
+
+The runner gives each run-turn guest `RUSUI_RESULT`, a file path. The
+agent writes one JSON object there: `{"pull_request": N}` or
+`{"blocked_reason": "..."}`. Prose is not a result; a turn without one
+fails closed. The plane records its own outcome: `published` only when
+GitHub shows pull request N at the workspace `HEAD`, otherwise
+`unconfirmed` for a claimed pull request or `blocked` for a reported
+reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
+
 ## HTTP
 
 | Method | Path | Auth |
