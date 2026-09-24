@@ -170,7 +170,7 @@ func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
 		if sess.Kind == store.SessionKindLocal {
 			process, processErr := store.LatestSumikaProcess(s.Eng.Store, id)
 			if processErr == nil && process.CancelRequestedAt != nil {
-				if current, err := store.GetSession(s.Eng.Store, id); err == nil {
+				if current, stateErr := store.GetSession(s.Eng.Store, id); stateErr == nil {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusAccepted)
 					_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "confirmed": current.State == "cancelled", "state": current.State})
@@ -182,8 +182,13 @@ func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if sess, err := store.GetSession(s.Eng.Store, id); err == nil && sess.Kind == store.SessionKindLocal {
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "confirmed": sess.State == "cancelled", "state": sess.State})
+	if sess.Kind == store.SessionKindLocal {
+		current, err := store.GetSession(s.Eng.Store, id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "confirmed": current.State == "cancelled", "state": current.State})
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})

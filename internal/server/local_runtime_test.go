@@ -2,7 +2,9 @@ package server
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -51,6 +53,17 @@ projects:
 	socketPath := filepath.Join(socketDir, "s.sock")
 	t.Setenv("SUMIKA_SOCK", socketPath)
 	daemon := newLocalFakeDaemon(t, socketPath)
+	var unstartedID int64
+	if err := e.Store.Tx(func(tx *sql.Tx) error {
+		var err error
+		unstartedID, err = store.InsertLocalSessionTx(tx, "test", time.Now().UTC())
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.AttachLocalSession(unstartedID); !errors.Is(err, store.ErrProcessNotAttachable) {
+		t.Fatalf("attach before first Process reservation returned %v", err)
+	}
 
 	response, body := localRequest(t, hs, http.MethodPost, "/projects/test/sessions", `{"kind":"local"}`, "first")
 	if response.StatusCode != http.StatusCreated {

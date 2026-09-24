@@ -507,6 +507,9 @@ func (e *Engine) AttachLocalSession(sessionID int64) (*store.Attach, io.ReadWrit
 		return nil, nil, fmt.Errorf("session is not local")
 	}
 	process, err := store.LatestSumikaProcess(e.Store, sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, store.ErrProcessNotAttachable
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -533,6 +536,9 @@ func (e *Engine) AttachLocalSession(sessionID int64) (*store.Attach, io.ReadWrit
 		return nil, nil, fmt.Errorf("policy")
 	}
 	process, err = store.LatestSumikaProcess(e.Store, sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, store.ErrProcessNotAttachable
+	}
 	if err != nil {
 		return nil, nil, err
 	}
