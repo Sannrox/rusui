@@ -569,6 +569,16 @@ Only `implement` sessions receive a GitHub write credential, the
 operator's own, scoped where it is issued
 ([ADR 0015](docs/decisions/0015-agent-publication.md)).
 
+A run turn completes only with a structured result. The runner gives the
+guest `RUSUI_RESULT`, a file for one JSON object: `{"pull_request": N}`
+or `{"blocked_reason": "..."}`. Prose is not a result; a turn without
+one fails closed. The runner adds the workspace `HEAD` it observes as
+the candidate SHA. On `complete` the plane discards any outcome in the
+payload and records its own: `published` only when the read-only GitHub
+client shows pull request N in the turn's repository at that candidate
+SHA, `unconfirmed` for any other claimed pull request, `blocked` for a
+reported reason. The outcome is a record, not a proof or a merge gate.
+
 `internal/acp` is the host-side Agent Client Protocol client. The plane
 names the guest per turn (`RUSUI_GUEST`,
 [ADR 0017](docs/decisions/0017-claude-guest-and-model-upstream.md)): Grok
