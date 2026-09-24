@@ -64,7 +64,9 @@ running generation. Sumika responses are accepted only when name and identity
 match. A mismatch is recorded as lost and is never attached to or killed.
 Daemon loss makes observations unknown; a successful List that confirms
 absence records lost. Restart is explicit. Cancellation intent is durable and
-remains unconfirmed until Sumika reports dead.
+remains unconfirmed until Sumika reports dead. An explicit restart after a
+generation becomes lost starts a new generation without resolving that prior
+cancellation intent.
 Disabling the local kind prevents new starts while existing Process records
 remain reconcilable and cancellable by their generation fingerprints.
 Cancellation first sends SIGTERM; if the Process remains alive after 30 seconds,

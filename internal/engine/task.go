@@ -35,7 +35,8 @@ type TaskSpec struct {
 }
 
 func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
-	p, ok := e.Policy.Project(project)
+	pol := e.PolicySnapshot()
+	p, ok := pol.Project(project)
 	if !ok || !p.AllowsKind(policy.KindRun) {
 		return nil, fmt.Errorf("policy")
 	}
@@ -74,7 +75,7 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 	if spec.ContextRefs == nil {
 		ctxs = []byte("[]")
 	}
-	hash := specHash(spec, e.Policy.Hash)
+	hash := specHash(spec, pol.Hash)
 	var out *store.Task
 	err = e.Store.Tx(func(tx *sql.Tx) error {
 		paused, err := store.Paused(tx, project)
@@ -115,7 +116,7 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 		id, err := store.InsertTaskTx(tx, store.Task{
 			EffortKey: spec.EffortKey, Revision: rev, SpecHash: hash,
 			SessionID: sid, Repo: spec.Repo, Ref: spec.Ref, BaseSHA: spec.BaseSHA,
-			PolicyHash: e.Policy.Hash, AllowedPaths: string(paths), ContextRefs: string(ctxs),
+			PolicyHash: pol.Hash, AllowedPaths: string(paths), ContextRefs: string(ctxs),
 			Prompt: spec.Prompt, BudgetRepairs: spec.BudgetRepairs, State: "open",
 		})
 		if err != nil {
@@ -124,7 +125,7 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 		out = &store.Task{
 			ID: id, EffortKey: spec.EffortKey, Revision: rev, SpecHash: hash,
 			SessionID: sid, Repo: spec.Repo, Ref: spec.Ref, BaseSHA: spec.BaseSHA,
-			PolicyHash: e.Policy.Hash, AllowedPaths: string(paths), ContextRefs: string(ctxs),
+			PolicyHash: pol.Hash, AllowedPaths: string(paths), ContextRefs: string(ctxs),
 			Prompt: spec.Prompt, BudgetRepairs: spec.BudgetRepairs, State: "open",
 		}
 		return nil

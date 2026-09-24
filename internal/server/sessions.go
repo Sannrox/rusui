@@ -161,8 +161,24 @@ func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	if err := s.Eng.CancelSession(id); err != nil {
+	sess, err := store.GetSession(s.Eng.Store, id)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	if cancelErr := s.Eng.CancelSession(id); cancelErr != nil {
+		if sess.Kind == store.SessionKindLocal {
+			process, processErr := store.LatestSumikaProcess(s.Eng.Store, id)
+			if processErr == nil && process.CancelRequestedAt != nil {
+				if current, err := store.GetSession(s.Eng.Store, id); err == nil {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusAccepted)
+					_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "confirmed": current.State == "cancelled", "state": current.State})
+					return
+				}
+			}
+		}
+		http.Error(w, cancelErr.Error(), http.StatusConflict)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

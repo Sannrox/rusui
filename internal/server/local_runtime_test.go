@@ -225,8 +225,14 @@ projects:
 		t.Fatalf("lost process cancellation result process=%+v session=%+v errors=%v/%v", process, sess, err, sessionErr)
 	}
 	response, body = localRequest(t, hs, http.MethodPost, "/sessions/"+strconv.FormatInt(created.SessionID, 10)+"/restart", `{}`, "")
-	if response.StatusCode != http.StatusConflict {
-		t.Fatalf("unconfirmed cancellation restart status=%d body=%s", response.StatusCode, body)
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("explicit restart after lost cancellation status=%d body=%s", response.StatusCode, body)
+	}
+	var restartedAfterCancel struct {
+		Process store.Process `json:"process"`
+	}
+	if err := json.Unmarshal(body, &restartedAfterCancel); err != nil || restartedAfterCancel.Process.Generation != 4 || restartedAfterCancel.Process.State != store.ProcessRunning {
+		t.Fatalf("explicit restart after lost cancellation %+v: %v", restartedAfterCancel, err)
 	}
 
 	response, body = localRequest(t, hs, http.MethodPost, "/projects/test/sessions", `{"kind":"local"}`, "second")
@@ -340,8 +346,16 @@ projects:
 	}
 	liveRuntime := daemon.session(pending.Process.Name)
 	daemon.stop()
-	if confirmed, err := e.CancelLocalSession(pending.SessionID); err == nil || confirmed {
-		t.Fatalf("offline pending cancellation confirmed=%v err=%v", confirmed, err)
+	response, body = localRequest(t, hs, http.MethodPost, "/sessions/"+strconv.FormatInt(pending.SessionID, 10)+"/cancel", `{}`, "")
+	if response.StatusCode != http.StatusAccepted {
+		t.Fatalf("offline pending cancellation status=%d body=%s", response.StatusCode, body)
+	}
+	var pendingCancel struct {
+		Confirmed bool   `json:"confirmed"`
+		State     string `json:"state"`
+	}
+	if err := json.Unmarshal(body, &pendingCancel); err != nil || pendingCancel.Confirmed || pendingCancel.State != "open" {
+		t.Fatalf("offline pending cancellation response %+v: %v", pendingCancel, err)
 	}
 	process, err = store.LatestSumikaProcess(e.Store, pending.SessionID)
 	if err != nil || process.State != store.ProcessUnknown || process.CancelRequestedAt == nil {
@@ -392,6 +406,35 @@ projects:
 	if err != nil || process.State != store.ProcessLost || daemon.killCount() != killsBefore || daemon.session(collision.Process.Name).Status != sumika.StatusRunning {
 		t.Fatalf("identity collision handling process=%+v err=%v kills=%d/%d runtime=%+v", process, err, daemon.killCount(), killsBefore, daemon.session(collision.Process.Name))
 	}
+	var collisionNotices []string
+	previousNotify = e.Notify
+	e.Notify = func(message string) { collisionNotices = append(collisionNotices, message) }
+	err = e.ReconcileSumika()
+	e.Notify = previousNotify
+	identityWarning, orphanWarning := false, false
+	for _, message := range collisionNotices {
+		if strings.Contains(message, collision.Process.Name) && strings.Contains(message, "unresolved local identity") {
+			identityWarning = true
+		}
+		if strings.Contains(message, "orphan Sumika process \""+collision.Process.Name+"\"") {
+			orphanWarning = true
+		}
+	}
+	if err != nil || !identityWarning || orphanWarning {
+		t.Fatalf("lost identity notifications=%v err=%v", collisionNotices, err)
+	}
+	daemon.setStartError("invalid_request")
+	response, body = localRequest(t, hs, http.MethodPost, "/projects/test/sessions", `{"kind":"local"}`, "rejected-start")
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("rejected local start status=%d body=%s", response.StatusCode, body)
+	}
+	var rejectedStart struct {
+		Process    store.Process `json:"process"`
+		StartError string        `json:"start_error"`
+	}
+	if err := json.Unmarshal(body, &rejectedStart); err != nil || rejectedStart.StartError == "" || rejectedStart.Process.State != store.ProcessUnknown {
+		t.Fatalf("rejected local start %+v: %v", rejectedStart, err)
+	}
 }
 
 func localRequest(t *testing.T, hs *httptest.Server, method, path, body, idem string) (*http.Response, []byte) {
@@ -425,6 +468,7 @@ type localFakeDaemon struct {
 	conns      map[net.Conn]struct{}
 	ignoreTerm map[string]bool
 	forceKills map[string]int
+	startError string
 	starts     int
 	kills      int
 }
@@ -481,6 +525,12 @@ func (d *localFakeDaemon) serve(conn net.Conn) {
 	switch req.Op {
 	case "start":
 		d.mu.Lock()
+		if d.startError != "" {
+			code := d.startError
+			d.mu.Unlock()
+			_ = json.NewEncoder(conn).Encode(map[string]any{"ok": false, "error": map[string]string{"code": code, "message": "rejected by fake daemon"}})
+			return
+		}
 		session, ok := d.sessions[req.Name]
 		if !ok || session.Status == sumika.StatusDead {
 			d.starts++
@@ -574,6 +624,12 @@ func (d *localFakeDaemon) session(name string) sumika.Session {
 func (d *localFakeDaemon) restoreSession(session sumika.Session) {
 	d.mu.Lock()
 	d.sessions[session.Name] = session
+	d.mu.Unlock()
+}
+
+func (d *localFakeDaemon) setStartError(code string) {
+	d.mu.Lock()
+	d.startError = code
 	d.mu.Unlock()
 }
 

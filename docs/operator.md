@@ -169,6 +169,11 @@ curl -fsS -X POST http://127.0.0.1:8080/projects/local/sessions \
   -d '{"kind":"local"}'
 ```
 
+HTTP `201` confirms the durable Session was created; it does not guarantee that
+Sumika confirmed the Process start. A start error is returned as `start_error`
+with the Process state `unknown`. Reconcile that generation before requesting
+an explicit restart.
+
 The request cannot supply argv or cwd. Rusui stores a Session without a Turn,
 then records Sumika's Process observations separately. A client disconnect
 does not kill the Process. Use Rusui cancellation to request a kill; the
@@ -178,7 +183,9 @@ the Process remains alive. If
 the daemon is unavailable, state stays unknown or cancellation remains
 unconfirmed until reconciliation. Never infer death or restart automatically.
 After death or a successful List confirms a Process is absent, an operator can
-request its next generation explicitly, as long as cancellation is not pending:
+request its next generation explicitly. A lost generation with a pending cancel
+remains unconfirmed; an explicit restart creates a new generation without
+marking the old cancellation complete:
 
 ```bash
 curl -fsS -X POST "http://127.0.0.1:8080/sessions/$SESSION_ID/restart" \

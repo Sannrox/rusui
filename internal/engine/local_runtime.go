@@ -38,7 +38,8 @@ func (e *Engine) localRuntimeClient() (sumika.Client, error) {
 }
 
 func (e *Engine) StartLocalSession(project, idem string) (LocalSessionResult, error) {
-	p, ok := e.Policy.Project(project)
+	pol := e.PolicySnapshot()
+	p, ok := pol.Project(project)
 	if !ok || !p.AllowsKind(policy.KindLocal) || p.LocalRuntime == nil {
 		return LocalSessionResult{}, fmt.Errorf("policy")
 	}
@@ -110,7 +111,7 @@ func (e *Engine) RestartLocalProcess(sessionID int64) (LocalSessionResult, error
 	if sess.Kind != store.SessionKindLocal || sess.State != "open" {
 		return LocalSessionResult{}, fmt.Errorf("session is not an open local session")
 	}
-	p, ok := e.Policy.Project(sess.Project)
+	p, ok := e.PolicySnapshot().Project(sess.Project)
 	if !ok || !p.AllowsKind(policy.KindLocal) || p.LocalRuntime == nil {
 		return LocalSessionResult{}, fmt.Errorf("policy")
 	}
@@ -136,7 +137,7 @@ func (e *Engine) startLocalProcess(sessionID int64) (*store.Process, error) {
 	if err != nil {
 		return nil, err
 	}
-	p, ok := e.Policy.Project(sess.Project)
+	p, ok := e.PolicySnapshot().Project(sess.Project)
 	if !ok || !p.AllowsKind(policy.KindLocal) || p.LocalRuntime == nil {
 		return nil, fmt.Errorf("policy")
 	}
@@ -158,13 +159,7 @@ func (e *Engine) startLocalProcess(sessionID int64) (*store.Process, error) {
 	}
 	info, err := client.Start(process.Name, p.LocalRuntime.Argv, p.LocalRuntime.Cwd, sess.Project)
 	if err != nil {
-		if definiteStartFailure(err) {
-			updated, observeErr := e.observeLocalProcess(process, store.ProcessDead)
-			if updated == nil {
-				updated = process
-			}
-			return updated, errors.Join(err, observeErr)
-		}
+		// A failed Start response does not prove Sumika failed before spawning.
 		updated, observeErr := e.observeLocalProcess(process, store.ProcessUnknown)
 		if updated == nil {
 			updated = process
@@ -184,14 +179,6 @@ func (e *Engine) startLocalProcess(sessionID int64) (*store.Process, error) {
 		updated = process
 	}
 	return updated, observeErr
-}
-
-func definiteStartFailure(err error) bool {
-	var remote *sumika.RemoteError
-	if !errors.As(err, &remote) {
-		return false
-	}
-	return remote.Code == "spawn_failed" || remote.Code == "invalid_request"
 }
 
 func forceLocalCancel(process *store.Process, now time.Time) bool {
@@ -366,7 +353,7 @@ func (e *Engine) ReconcileSumika() error {
 	if err != nil {
 		return err
 	}
-	if len(sessions) == 0 && !policyAllowsLocal(e.Policy) {
+	if len(sessions) == 0 && !policyAllowsLocal(e.PolicySnapshot()) {
 		return nil
 	}
 	client, err := e.localRuntimeClient()
@@ -382,6 +369,7 @@ func (e *Engine) ReconcileSumika() error {
 		byName[info.Name] = info
 	}
 	known := make(map[string]bool)
+	unresolved := make(map[string]bool)
 	var first error
 	for _, sess := range sessions {
 		if sess.State != "open" {
@@ -397,7 +385,11 @@ func (e *Engine) ReconcileSumika() error {
 			}
 			continue
 		}
-		if process.State == store.ProcessDead || process.State == store.ProcessLost {
+		if process.State == store.ProcessDead {
+			continue
+		}
+		if process.State == store.ProcessLost {
+			unresolved[process.Name] = true
 			continue
 		}
 		known[process.Name] = true
@@ -447,7 +439,11 @@ func (e *Engine) ReconcileSumika() error {
 	}
 	for _, info := range infos {
 		if strings.HasPrefix(info.Name, "rusui-") && info.Status != sumika.StatusDead && !known[info.Name] {
-			e.exception(fmt.Sprintf("orphan Sumika process %q left untouched", info.Name))
+			if unresolved[info.Name] {
+				e.exception(fmt.Sprintf("Sumika process %q has an unresolved local identity; process left untouched", info.Name))
+			} else {
+				e.exception(fmt.Sprintf("orphan Sumika process %q left untouched", info.Name))
+			}
 		}
 	}
 	return first
@@ -468,6 +464,8 @@ func policyAllowsLocal(p *policy.Effective) bool {
 type trackedAttach struct {
 	conn       net.Conn
 	store      *store.Store
+	now        func() time.Time
+	onError    func(error)
 	processID  int64
 	processGen int64
 	attachGen  int64
@@ -492,9 +490,9 @@ func (c *trackedAttach) Close() error {
 
 func (c *trackedAttach) end() {
 	c.once.Do(func() {
-		_, err := store.EndSumikaAttach(c.store, c.processID, c.processGen, c.attachGen, store.AttachDetached, time.Now().UTC())
+		_, err := store.EndSumikaAttach(c.store, c.processID, c.processGen, c.attachGen, store.AttachDetached, c.now())
 		if err != nil && !errors.Is(err, store.ErrStaleAttach) {
-			return
+			c.onError(fmt.Errorf("record local attach detach: %w", err))
 		}
 	})
 }
@@ -526,10 +524,11 @@ func (e *Engine) AttachLocalSession(sessionID int64) (*store.Attach, io.ReadWrit
 	if sess.Kind != store.SessionKindLocal || sess.State != "open" {
 		return nil, nil, store.ErrProcessNotAttachable
 	}
-	if e.Policy == nil {
+	pol := e.PolicySnapshot()
+	if pol == nil {
 		return nil, nil, fmt.Errorf("policy")
 	}
-	p, ok := e.Policy.Project(sess.Project)
+	p, ok := pol.Project(sess.Project)
 	if !ok || !p.AllowsKind(policy.KindLocal) || p.LocalRuntime == nil {
 		return nil, nil, fmt.Errorf("policy")
 	}
@@ -571,5 +570,9 @@ func (e *Engine) AttachLocalSession(sessionID int64) (*store.Attach, io.ReadWrit
 		_ = conn.Close()
 		return nil, nil, err
 	}
-	return attach, &trackedAttach{conn: conn, store: e.Store, processID: process.ID, processGen: process.Generation, attachGen: attach.Generation}, nil
+	return attach, &trackedAttach{
+		conn: conn, store: e.Store, now: e.now,
+		onError:   func(err error) { e.exception(err.Error()) },
+		processID: process.ID, processGen: process.Generation, attachGen: attach.Generation,
+	}, nil
 }

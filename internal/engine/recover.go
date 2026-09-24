@@ -46,8 +46,9 @@ func (e *Engine) ReconcileConfigured() error {
 		e.exception("delivery reconcile skipped: RUSUI_GITHUB_HOOK_IDS is unset")
 		return nil
 	}
+	pol := e.PolicySnapshot()
 	var first error
-	for repo := range e.Policy.Repos {
+	for repo := range pol.Repos {
 		if e.HookIDs[repo] == "" {
 			e.exception("delivery reconcile skipped for " + repo + ": no hook id")
 			continue
@@ -66,7 +67,7 @@ func (e *Engine) ReconcileConfigured() error {
 // locally tracked non-terminal items (including items closed during downtime).
 func (e *Engine) CatchUpConfigured() error {
 	var open []snapshot.Item
-	for repo := range e.Policy.Repos {
+	for repo := range e.PolicySnapshot().Repos {
 		items, err := e.GitHub.ListOpenItems(repo)
 		if err != nil {
 			e.exception("list open " + repo + ": " + err.Error())

@@ -110,7 +110,8 @@ func StartSumikaProcess(s *Store, sessionID int64, identityHash string, now time
 			return ErrLocalSessionHasTurn
 		}
 		var active int
-		if err := tx.QueryRow(`SELECT COUNT(*) FROM session_processes WHERE session_id=? AND (state IN ('starting', 'running', 'idle', 'blocked', 'unknown') OR (state='lost' AND cancel_requested_at IS NOT NULL))`, sessionID).Scan(&active); err != nil {
+		// A lost generation permits an explicit restart without confirming its pending cancellation.
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM session_processes WHERE session_id=? AND state IN ('starting', 'running', 'idle', 'blocked', 'unknown')`, sessionID).Scan(&active); err != nil {
 			return err
 		}
 		if active != 0 {
