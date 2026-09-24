@@ -62,6 +62,7 @@ Need `-repo` and `-driver`, or `-repo` and `-acp`.
 | `RUSUI_AGENT_GITHUB_TOKEN` | `implement` sessions | Your GitHub credential for agent publication ([ADR 0015](decisions/0015-agent-publication.md)). Given only to implement sessions — `run` sessions started for an open pinned task (`rusui run -effort …`) on repositories with `implement: true` — as `GH_TOKEN` and git's credential for `https://github.com`. Unset: no session can push. |
 | `RUSUI_DISABLE_COAUTHOR_TRAILER` | no | `1` drops `Co-authored-by: rusui <noreply@rusui.invalid>` from agent commits. |
 | `RUSUI_DISABLE_SESSION_TRAILER` | no | `1` drops `Rusui-Session: <session id>` from agent commits. |
+| `SUMIKA_SOCK` | local interactive profile | Optional same-user Unix socket path; otherwise Sumika's per-user default path is used. |
 
 ### Model upstream
 
@@ -163,6 +164,25 @@ projects:
 
 `visibility` is a policy attribute of the **bound GitHub repository**, not of
 this source repo. Use `private` when that bound repo is private.
+
+The experimental `local` session kind is absent from defaults. Enable it per
+Project and configure the exact command and working directory in
+`local_runtime`; both fields are required, `cwd` must be an absolute clean
+path, and session-create requests cannot override them.
+
+```yaml
+projects:
+  local:
+    session_kinds: [local]
+    local_runtime:
+      argv: ["claude", "--continue"]
+      cwd: "/path/to/project"
+    repos: {}
+```
+
+The Rusui server and Sumika daemon must run as the same OS user on macOS or
+Linux. Rusui connects to Sumika's local Unix socket and never injects managed
+credentials into the local process. See [the local operator profile](operator.md#local-interactive-profile).
 
 Project `budgets` may set `max_concurrent_leases` (integer ≥ 1, default 1).
 Any other budget key fails closed at parse.

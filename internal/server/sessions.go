@@ -1,7 +1,9 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -161,12 +163,68 @@ func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	if err := s.Eng.CancelSession(id); err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
+	sess, err := store.GetSession(s.Eng.Store, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if cancelErr := s.Eng.CancelSession(id); cancelErr != nil {
+		if sess.Kind == store.SessionKindLocal {
+			process, processErr := store.LatestSumikaProcess(s.Eng.Store, id)
+			if processErr == nil && process.CancelRequestedAt != nil {
+				if current, stateErr := store.GetSession(s.Eng.Store, id); stateErr == nil {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusAccepted)
+					_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "confirmed": current.State == "cancelled", "state": current.State})
+					return
+				}
+			}
+		}
+		http.Error(w, cancelErr.Error(), http.StatusConflict)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
+	if sess.Kind == store.SessionKindLocal {
+		current, err := store.GetSession(s.Eng.Store, id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "confirmed": current.State == "cancelled", "state": current.State})
+		return
+	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+}
+
+func (s *Server) restartLocalSession(w http.ResponseWriter, r *http.Request) {
+	if !s.workerOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "id", http.StatusBadRequest)
+		return
+	}
+	result, startErr := s.Eng.RestartLocalProcess(id)
+	if result.Session == nil {
+		if startErr == nil {
+			startErr = fmt.Errorf("local session was not restarted")
+		}
+		http.Error(w, startErr.Error(), http.StatusConflict)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	response := map[string]any{"session_id": result.Session.ID, "kind": "local", "session": result.Session, "process": result.Process}
+	if startErr != nil {
+		response["start_error"] = startErr.Error()
+	}
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func writeSSE(w http.ResponseWriter, event string, v any) {

@@ -6,8 +6,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -20,6 +22,8 @@ const (
 	KindReview                = "review"
 	KindRun                   = "run"
 	KindScheduled             = "scheduled"
+	// Local sessions remain project-opt-in and are never inherited from defaults.
+	KindLocal                 = "local"
 	BudgetMaxConcurrentLeases = "max_concurrent_leases"
 )
 
@@ -46,9 +50,15 @@ type DefaultsYAML struct {
 type ProjectYAML struct {
 	Repos        map[string]RepoYAML `yaml:"repos"`
 	SessionKinds []string            `yaml:"session_kinds"`
+	LocalRuntime *LocalRuntimeYAML   `yaml:"local_runtime"`
 	Egress       string              `yaml:"egress"`
 	Budgets      map[string]int      `yaml:"budgets"`
 	Permissions  []AllowRule         `yaml:"permissions"`
+}
+
+type LocalRuntimeYAML struct {
+	Argv []string `yaml:"argv"`
+	Cwd  string   `yaml:"cwd"`
 }
 
 type RepoYAML struct {
@@ -84,10 +94,16 @@ type Repo struct {
 type Project struct {
 	Slug         string
 	SessionKinds []string
+	LocalRuntime *LocalRuntime
 	Egress       string
 	Budgets      map[string]int
 	Permissions  []AllowRule
 	Repos        []string
+}
+
+type LocalRuntime struct {
+	Argv []string
+	Cwd  string
 }
 
 type Effective struct {
@@ -127,6 +143,9 @@ func Parse(raw []byte) (*Effective, error) {
 	if len(defKinds) == 0 {
 		defKinds = []string{KindReview, KindRun, KindScheduled}
 	}
+	if slices.Contains(defKinds, KindLocal) {
+		return nil, fmt.Errorf("policy: local session kind cannot be enabled in defaults")
+	}
 	defEgress := f.Defaults.Egress
 	if defEgress == "" {
 		defEgress = EgressTrusted
@@ -140,6 +159,10 @@ func Parse(raw []byte) (*Effective, error) {
 			kinds = append([]string(nil), defKinds...)
 		}
 		if err := validKinds(slug, kinds); err != nil {
+			return nil, err
+		}
+		localRuntime, err := validLocalRuntime(slug, y.LocalRuntime, kinds)
+		if err != nil {
 			return nil, err
 		}
 		if err := validRules(slug, y.Permissions); err != nil {
@@ -159,6 +182,7 @@ func Parse(raw []byte) (*Effective, error) {
 		p := Project{
 			Slug:         slug,
 			SessionKinds: kinds,
+			LocalRuntime: localRuntime,
 			Egress:       egress,
 			Budgets:      budgets,
 			Permissions:  y.Permissions,
@@ -258,7 +282,7 @@ func validKinds(slug string, kinds []string) error {
 	seen := map[string]bool{}
 	for _, k := range kinds {
 		switch k {
-		case KindReview, KindRun, KindScheduled:
+		case KindReview, KindRun, KindScheduled, KindLocal:
 		default:
 			return fmt.Errorf("policy: %s invalid session kind %q", slug, k)
 		}
@@ -268,6 +292,28 @@ func validKinds(slug string, kinds []string) error {
 		seen[k] = true
 	}
 	return nil
+}
+
+func validLocalRuntime(slug string, runtime *LocalRuntimeYAML, kinds []string) (*LocalRuntime, error) {
+	enabled := slices.Contains(kinds, KindLocal)
+	if enabled != (runtime != nil) {
+		return nil, fmt.Errorf("policy: %s must configure local_runtime exactly when local is enabled", slug)
+	}
+	if !enabled {
+		return nil, nil
+	}
+	if len(runtime.Argv) == 0 || runtime.Argv[0] == "" {
+		return nil, fmt.Errorf("policy: %s local_runtime.argv must contain an executable", slug)
+	}
+	for i, arg := range runtime.Argv {
+		if strings.IndexByte(arg, 0) >= 0 {
+			return nil, fmt.Errorf("policy: %s local_runtime.argv[%d] contains NUL", slug, i)
+		}
+	}
+	if runtime.Cwd == "" || strings.IndexByte(runtime.Cwd, 0) >= 0 || !filepath.IsAbs(runtime.Cwd) || filepath.Clean(runtime.Cwd) != runtime.Cwd {
+		return nil, fmt.Errorf("policy: %s local_runtime.cwd must be a clean absolute path", slug)
+	}
+	return &LocalRuntime{Argv: append([]string(nil), runtime.Argv...), Cwd: runtime.Cwd}, nil
 }
 
 func validEgress(slug, egress string) error {

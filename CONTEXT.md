@@ -13,9 +13,9 @@ A GitHub `owner/name` listed under a project. Review requires at least one. GitH
 _Avoid_: Using the repository full name as the policy identity
 
 **Session kind**:
-The current runtime accepts `review`, `run`, and `scheduled`; `local` is an
-accepted experimental kind from [ADR 0016](docs/decisions/0016-local-interactive-runtime.md)
-and is not implemented or enabled by the current policy parser.
+The runtime accepts `review`, `run`, and `scheduled`. The experimental
+`local` kind from [ADR 0016](docs/decisions/0016-local-interactive-runtime.md)
+is default-off and requires a project `local_runtime` policy profile.
 _Avoid_: operator, interactive, chat, implement (as a session kind)
 
 **Session**:
@@ -55,8 +55,9 @@ _Avoid_: machine isolation, `--always-approve`, tool jail inside rusui
 A live local PTY child owned by Sumika, named `rusui-<session id>`. Sumika calls
 it a Session; Rusui does not. Rusui keeps one durable Process record per local
 session generation, with the last observed state and revision. That record is
-an observation, not authority that the child is currently live. Rusui never
-stores local PTY bytes.
+an observation, not authority that the child is currently live. Its internal
+identity fingerprint pins the argv and cwd used for that generation across
+policy reloads. Rusui never stores local PTY bytes.
 _Avoid_: session (for the PTY child), turn, environment
 
 **Local session** (experimental, ADR 0016):

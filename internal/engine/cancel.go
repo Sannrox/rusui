@@ -13,6 +13,10 @@ func (e *Engine) CancelSession(sessionID int64) error {
 	if err != nil {
 		return err
 	}
+	if sess.Kind == store.SessionKindLocal {
+		_, err := e.CancelLocalSession(sessionID)
+		return err
+	}
 	turns, err := store.ListTurnsForSession(e.Store, sessionID)
 	if err != nil {
 		return err

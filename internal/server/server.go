@@ -101,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /approvals/{id}", s.decideApproval)
 	mux.HandleFunc("POST /sessions/{id}/turns", s.followUpTurn)
 	mux.HandleFunc("POST /sessions/{id}/cancel", s.cancelSession)
+	mux.HandleFunc("POST /sessions/{id}/restart", s.restartLocalSession)
 	mux.HandleFunc("POST /projects/{slug}/sessions", s.createSession)
 	mux.HandleFunc("POST /projects/{slug}/schedules", s.createSchedule)
 	mux.HandleFunc("POST /jobs/{id}/heartbeat", s.heartbeat)
@@ -413,10 +414,11 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 			if t := s.commitTrailers(sess); len(t) > 0 {
 				out["commit_trailers"] = t
 			}
-			if p, ok := s.Eng.Policy.Project(sess.Project); ok {
+			pol := s.Eng.PolicySnapshot()
+			if p, ok := pol.Project(sess.Project); ok {
 				out["permissions"] = p.Permissions
-			} else if rr, ok := s.Eng.Policy.Repo(c.Job.Repo); ok {
-				if p, ok := s.Eng.Policy.Project(rr.Project); ok {
+			} else if rr, ok := pol.Repo(c.Job.Repo); ok {
+				if p, ok := pol.Project(rr.Project); ok {
 					out["permissions"] = p.Permissions
 				}
 			}
@@ -439,11 +441,12 @@ func (s *Server) agentGitHubToken(sess *store.Session) string {
 	if s.AgentGitHubToken == "" || sess == nil || sess.Kind != store.SessionKindRun {
 		return ""
 	}
-	rr, ok := s.Eng.Policy.Repo(sess.Repo)
+	pol := s.Eng.PolicySnapshot()
+	rr, ok := pol.Repo(sess.Repo)
 	if !ok || !rr.Implement {
 		return ""
 	}
-	if p, ok := s.Eng.Policy.Project(sess.Project); !ok || !p.AllowsKind(policy.KindRun) {
+	if p, ok := pol.Project(sess.Project); !ok || !p.AllowsKind(policy.KindRun) {
 		return ""
 	}
 	task, err := store.OpenTaskForSession(s.Eng.Store, sess.ID)

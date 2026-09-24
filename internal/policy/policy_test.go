@@ -165,6 +165,69 @@ projects:
 	}
 }
 
+func TestLocalRuntimeIsExplicitAndPolicyConfigured(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := `
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+projects:
+  local-test:
+    repos: {}
+`
+	e, err := Parse([]byte(base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ := e.Project("local-test")
+	if p.AllowsKind(KindLocal) || p.LocalRuntime != nil {
+		t.Fatalf("local runtime defaulted on: %+v", p)
+	}
+	configured := base[:len(base)-1] + `
+    session_kinds: [local]
+    local_runtime:
+      argv: ["/bin/sh", "-i"]
+      cwd: "` + cwd + `"
+`
+	e, err = Parse([]byte(configured))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ = e.Project("local-test")
+	if !p.AllowsKind(KindLocal) || p.LocalRuntime == nil || p.LocalRuntime.Cwd != cwd || len(p.LocalRuntime.Argv) != 2 || p.LocalRuntime.Argv[0] != "/bin/sh" {
+		t.Fatalf("local runtime config %+v", p)
+	}
+	for _, invalid := range []string{
+		base[:len(base)-1] + `
+    session_kinds: [local]
+`,
+		base[:len(base)-1] + `
+    local_runtime:
+      argv: ["/bin/sh"]
+      cwd: "` + cwd + `"
+`,
+		strings.Replace(configured, cwd, "relative/path", 1),
+		strings.Replace(configured, "[\"/bin/sh\", \"-i\"]", "[]", 1),
+		`version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+  session_kinds: [review, run, scheduled, local]
+projects:
+  local-test:
+    repos: {}
+`,
+	} {
+		if _, err := Parse([]byte(invalid)); err == nil {
+			t.Fatalf("invalid local policy accepted:\n%s", invalid)
+		}
+	}
+}
+
 func TestParseRejectRules(t *testing.T) {
 	raw := []byte(`
 version: 2

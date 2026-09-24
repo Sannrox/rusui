@@ -113,14 +113,14 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	}
 }
 
-func TestV17AddsProcessAndAttachTablesWithoutRewritingRuntimeState(t *testing.T) {
+func TestLocalRuntimeMigrationsPreserveManagedState(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "v16.db")
 	st, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.DB.Exec(`DROP TABLE IF EXISTS process_attaches; DROP TABLE IF EXISTS session_processes;
-		DELETE FROM schema_migrations WHERE version=?`, CurrentSchema); err != nil {
+		DELETE FROM schema_migrations WHERE version>=17`); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
@@ -192,5 +192,9 @@ func TestV17AddsProcessAndAttachTablesWithoutRewritingRuntimeState(t *testing.T)
 		if err := upgraded.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&count); err != nil || count != 1 {
 			t.Fatalf("table %s count=%d: %v", table, count, err)
 		}
+	}
+	var identityHash sql.NullString
+	if err := upgraded.DB.QueryRow(`SELECT identity_hash FROM session_processes LIMIT 1`).Scan(&identityHash); err != sql.ErrNoRows {
+		t.Fatalf("identity_hash migration result %v, want empty table with column present", err)
 	}
 }
