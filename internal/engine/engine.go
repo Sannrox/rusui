@@ -11,6 +11,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sannrox/rusui/internal/clock"
@@ -40,7 +41,7 @@ const (
 
 type Engine struct {
 	Store   *store.Store
-	Policy  *policy.Effective
+	policy  *policy.Effective
 	GitHub  gh.Client
 	Clock   clock.Clock
 	Log     *log.Logger
@@ -56,10 +57,12 @@ type Engine struct {
 	EnvTTL       time.Duration
 	Tree         TreeSource
 	SnapshotRoot string
+	policyMu     sync.RWMutex
+	sumikaMu     sync.Mutex
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {
-	e := &Engine{Store: st, Policy: pol, GitHub: g, Clock: clk, Log: log.New(os.Stderr, "rusui: ", 0), FetchTimeout: FetchTimeout, OwnerTTL: OwnerTTL}
+	e := &Engine{Store: st, policy: pol, GitHub: g, Clock: clk, Log: log.New(os.Stderr, "rusui: ", 0), FetchTimeout: FetchTimeout, OwnerTTL: OwnerTTL}
 	e.Notify = func(msg string) { e.Log.Println(msg) }
 	return e
 }
@@ -81,11 +84,20 @@ func (e *Engine) execDeadline() time.Duration {
 }
 
 func (e *Engine) ReloadPolicy(p *policy.Effective) {
-	e.Policy = p
+	e.policyMu.Lock()
+	e.policy = p
+	e.policyMu.Unlock()
 	_ = e.Store.Tx(func(tx *sql.Tx) error {
 		_, err := tx.Exec(`INSERT INTO policy_revisions(hash,payload) VALUES(?,?)`, p.Hash, string(p.Raw))
 		return err
 	})
+}
+
+// PolicySnapshot returns the active immutable policy while synchronizing with reloads.
+func (e *Engine) PolicySnapshot() *policy.Effective {
+	e.policyMu.RLock()
+	defer e.policyMu.RUnlock()
+	return e.policy
 }
 
 func (e *Engine) IngestWebhook(deliveryID, repo string, item int, kind string) error {
@@ -358,7 +370,7 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int) erro
 	if err == nil && curGen != gen {
 		return nil
 	}
-	if repoPolicy, ok := e.Policy.Repo(it.Repo); !ok || !repoPolicy.Review {
+	if repoPolicy, ok := e.PolicySnapshot().Repo(it.Repo); !ok || !repoPolicy.Review {
 		return nil
 	}
 	if force {
@@ -493,6 +505,7 @@ func anySlice(xs []string) []any {
 
 func (e *Engine) Claim(repo string) (*Claim, error) {
 	var c *Claim
+	activePolicy := e.PolicySnapshot()
 	err := e.Store.Tx(func(tx *sql.Tx) error {
 		paused, err := e.repoPaused(tx, repo)
 		if err != nil {
@@ -501,11 +514,11 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		if paused {
 			return errPaused
 		}
-		pol, ok := e.Policy.Repo(repo)
+		repoPolicy, ok := activePolicy.Repo(repo)
 		if !ok {
 			return errPolicy
 		}
-		proj, ok := e.Policy.Project(pol.Project)
+		proj, ok := activePolicy.Project(repoPolicy.Project)
 		if !ok {
 			return errPolicy
 		}
@@ -513,13 +526,13 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		// run and scheduled need the project to admit that session kind.
 		var lanes []string
 		budgetOut := false
-		if pol.Review {
+		if repoPolicy.Review {
 			day := e.now().Format("2006-01-02")
 			n, err := store.CountReviewsToday(tx, repo, day)
 			if err != nil {
 				return err
 			}
-			if n >= pol.MaxReviewsPerRepoPerUTCDay {
+			if n >= repoPolicy.MaxReviewsPerRepoPerUTCDay {
 				// Reviews stop; run and scheduled work may still be claimed.
 				budgetOut = true
 				e.exception(fmt.Sprintf("daily review budget exhausted for %s", repo))
@@ -563,12 +576,12 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		if err != nil {
 			return err
 		}
-		leased, err := store.CountLeasedTurnsTx(tx, pol.Project, proj.Repos)
+		leased, err := store.CountLeasedTurnsTx(tx, repoPolicy.Project, proj.Repos)
 		if err != nil {
 			return err
 		}
 		if leased >= proj.MaxConcurrentLeases() {
-			e.exception(fmt.Sprintf("concurrent lease cap exhausted for project %s", pol.Project))
+			e.exception(fmt.Sprintf("concurrent lease cap exhausted for project %s", repoPolicy.Project))
 			return errBudget
 		}
 		now := e.now()
@@ -826,7 +839,7 @@ func (e *Engine) maybeEnqueueApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Ite
 	if err != nil || paused {
 		return err
 	}
-	pol, ok := e.Policy.Repo(j.Repo)
+	pol, ok := e.PolicySnapshot().Repo(j.Repo)
 	if !ok {
 		return nil
 	}
@@ -929,7 +942,7 @@ func (e *Engine) runApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Item, revID 
 	if err != nil {
 		return err
 	}
-	pol, ok := e.Policy.Repo(j.Repo)
+	pol, ok := e.PolicySnapshot().Repo(j.Repo)
 	if !ok || (a.Type == "close" && !pol.Close) || (a.Type == "comment" && !pol.Comments) {
 		_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
 		return err
@@ -1045,7 +1058,7 @@ func (e *Engine) ApplyAttempt(repo string, item int) error {
 
 func (e *Engine) repoPaused(tx *sql.Tx, repo string) (bool, error) {
 	slug := ""
-	if r, ok := e.Policy.Repo(repo); ok {
+	if r, ok := e.PolicySnapshot().Repo(repo); ok {
 		slug = r.Project
 	}
 	return store.Paused(tx, slug)
@@ -1054,7 +1067,7 @@ func (e *Engine) repoPaused(tx *sql.Tx, repo string) (bool, error) {
 func (e *Engine) SetPause(project string, on bool) error {
 	key := "pause:global"
 	if project != "" {
-		if _, ok := e.Policy.Project(project); !ok {
+		if _, ok := e.PolicySnapshot().Project(project); !ok {
 			return fmt.Errorf("unknown project %q", project)
 		}
 		key = "pause:" + project
@@ -1090,7 +1103,7 @@ func (e *Engine) OperatorRetry(repo string, item int, actor string) error {
 
 func (e *Engine) Sweep(repo string) error {
 	if repo == "" {
-		for name := range e.Policy.Repos {
+		for name := range e.PolicySnapshot().Repos {
 			if err := e.Sweep(name); err != nil {
 				return err
 			}

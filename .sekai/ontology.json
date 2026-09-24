@@ -51,7 +51,7 @@
     },
     {
       "name": "RusuiPolicyOverlay",
-      "description": "Durable SQLite overlay that may only narrow policy.yaml. Pause is global or per project and stops new claims and apply. Overlay cannot add a session kind, egress class, or permission allow-rule. In-flight complete/fail still succeed. Pause does not reset failed jobs.",
+      "description": "Durable SQLite overlay that may only narrow policy.yaml. Pause is global or per project and stops new claims, local Process starts, and apply. It does not kill an existing local Process. Overlay cannot add a session kind, egress class, or permission allow-rule. In-flight complete/fail still succeed. Pause does not reset failed jobs.",
       "superclasses": [],
       "properties": []
     },
@@ -101,6 +101,12 @@
       "name": "RusuiLocalSession",
       "description": "Accepted experimental human-driven Rusui Session kind with successive Process observation records and at most one active Sumika Process. It creates no Turn, lease, managed grant, model proxy credential, or GitHub credential and is not an OS isolation boundary.",
       "superclasses": ["RusuiSession"],
+      "properties": []
+    },
+    {
+      "name": "RusuiLocalRuntimeProfile",
+      "description": "Explicit per-project, default-off policy settings for one Sumika local runtime: exact argv and clean absolute cwd. Create requests cannot override them; the Process runs with the Sumika daemon's OS identity and receives no managed credential.",
+      "superclasses": [],
       "properties": []
     },
     {
@@ -195,7 +201,7 @@
     },
     {
       "name": "RusuiProcessRecord",
-      "description": "Durable Rusui identity and latest observation for one Sumika process generation. Generation and revision fence stale reports; unknown after restart is not proof of death and blocks duplicate start. Sumika remains authoritative for the live child.",
+      "description": "Durable Rusui identity, generation-pinned argv/cwd fingerprint, latest observation, and optional cancellation intent for one Sumika process generation. Generation and revision fence stale reports; unknown after restart is not proof of death and blocks duplicate start. Cancellation starts with SIGTERM and escalates to SIGKILL after 30 seconds; it remains unconfirmed until Sumika reports dead. Sumika remains authoritative for the live child.",
       "superclasses": [],
       "properties": []
     },
@@ -347,6 +353,14 @@
       "domain": "RusuiPolicyRevision",
       "range": "RusuiProject",
       "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_project_configures_local_runtime",
+      "description": "A project may explicitly configure one default-off local runtime profile when local sessions are enabled.",
+      "domain": "RusuiProject",
+      "range": "RusuiLocalRuntimeProfile",
+      "cardinality": { "min": 0, "max": 1 },
       "transitive": false
     },
     {
@@ -652,6 +666,12 @@
       "confidence": 1.0
     },
     {
+      "subject": "RusuiLocalRuntimeProfile",
+      "source": "docs/configuration.md",
+      "locator": "docs/configuration.md#policy-schema",
+      "confidence": 1.0
+    },
+    {
       "subject": "RusuiSchedule",
       "source": "docs/decisions/0006-session-start.md",
       "locator": "docs/decisions/0006-session-start.md#decision",
@@ -709,6 +729,12 @@
       "subject": "RusuiProcessRecord",
       "source": "docs/decisions/0016-local-interactive-runtime.md",
       "locator": "docs/decisions/0016-local-interactive-runtime.md#d2a-rusui-process-and-attach-records",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_project_configures_local_runtime",
+      "source": "docs/configuration.md",
+      "locator": "docs/configuration.md#policy-schema",
       "confidence": 1.0
     },
     {

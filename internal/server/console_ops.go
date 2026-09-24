@@ -173,7 +173,7 @@ func (s *Server) consoleBudgets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var out [][]string
-	for slug, p := range s.Eng.Policy.Projects {
+	for slug, p := range s.Eng.PolicySnapshot().Projects {
 		cap := 0
 		if p.Budgets != nil {
 			cap = p.Budgets[policy.BudgetMaxConcurrentLeases]
@@ -194,8 +194,8 @@ func (s *Server) consoleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash := ""
-	if s.Eng.Policy != nil {
-		hash = s.Eng.Policy.Hash
+	if pol := s.Eng.PolicySnapshot(); pol != nil {
+		hash = pol.Hash
 	}
 	rows := [][]string{
 		{"policy_hash", hash},

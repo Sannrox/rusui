@@ -55,7 +55,7 @@ func TestRestoreClearsStaleAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	localSessionID := insertLocalSession(t, st)
-	process, err := StartSumikaProcess(st, localSessionID, time.Now().UTC())
+	process, err := StartSumikaProcess(st, localSessionID, "test-process-identity", time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}

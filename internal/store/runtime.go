@@ -14,6 +14,8 @@ var (
 	ErrProcessNotAttachable    = errors.New("process is not attachable")
 	ErrStaleAttach             = errors.New("stale attach generation")
 	ErrInvalidProcessState     = errors.New("invalid process state")
+	ErrLocalRuntimePaused      = errors.New("local runtime start is paused")
+	ErrLocalSessionNotOpen     = errors.New("local session is not open")
 )
 
 type scanner interface {
@@ -23,8 +25,8 @@ type scanner interface {
 func scanProcess(row scanner) (*Process, error) {
 	p := &Process{}
 	var created string
-	var observed sql.NullString
-	if err := row.Scan(&p.ID, &p.SessionID, &p.Generation, &p.Runtime, &p.Name, &p.State, &p.Revision, &created, &observed); err != nil {
+	var observed, cancelRequested sql.NullString
+	if err := row.Scan(&p.ID, &p.SessionID, &p.Generation, &p.Runtime, &p.Name, &p.IdentityHash, &p.State, &p.Revision, &created, &observed, &cancelRequested); err != nil {
 		return nil, err
 	}
 	t, err := time.Parse(time.RFC3339Nano, created)
@@ -38,6 +40,13 @@ func scanProcess(row scanner) (*Process, error) {
 			return nil, err
 		}
 		p.ObservedAt = &t
+	}
+	if cancelRequested.Valid {
+		t, err := time.Parse(time.RFC3339Nano, cancelRequested.String)
+		if err != nil {
+			return nil, err
+		}
+		p.CancelRequestedAt = &t
 	}
 	p.Attaches = []Attach{}
 	return p, nil
@@ -65,20 +74,33 @@ func scanAttach(row scanner) (*Attach, error) {
 	return a, nil
 }
 
-const processColumns = `id, session_id, generation, runtime, name, state, revision, created_at, observed_at`
+const processColumns = `id, session_id, generation, runtime, name, identity_hash, state, revision, created_at, observed_at, cancel_requested_at`
 const attachColumns = `id, process_id, process_generation, generation, revision, state, created_at, observed_at`
 
 // StartSumikaProcess reserves the next process identity for a local Session.
 // An unknown process remains active until Sumika confirms that it is gone.
-func StartSumikaProcess(s *Store, sessionID int64, now time.Time) (*Process, error) {
+func StartSumikaProcess(s *Store, sessionID int64, identityHash string, now time.Time) (*Process, error) {
+	if identityHash == "" {
+		return nil, fmt.Errorf("process runtime identity is empty")
+	}
 	var processID int64
 	err := s.Tx(func(tx *sql.Tx) error {
-		var kind string
-		if err := tx.QueryRow(`SELECT kind FROM sessions WHERE id=?`, sessionID).Scan(&kind); err != nil {
+		var kind, project, state string
+		if err := tx.QueryRow(`SELECT kind, project, state FROM sessions WHERE id=?`, sessionID).Scan(&kind, &project, &state); err != nil {
 			return err
 		}
 		if kind != SessionKindLocal {
 			return fmt.Errorf("process runtime requires a local session")
+		}
+		if state != "open" {
+			return ErrLocalSessionNotOpen
+		}
+		paused, err := Paused(tx, project)
+		if err != nil {
+			return err
+		}
+		if paused {
+			return ErrLocalRuntimePaused
 		}
 		var turns int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM turns WHERE session_id=?`, sessionID).Scan(&turns); err != nil {
@@ -88,6 +110,7 @@ func StartSumikaProcess(s *Store, sessionID int64, now time.Time) (*Process, err
 			return ErrLocalSessionHasTurn
 		}
 		var active int
+		// A lost generation permits an explicit restart without confirming its pending cancellation.
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM session_processes WHERE session_id=? AND state IN ('starting', 'running', 'idle', 'blocked', 'unknown')`, sessionID).Scan(&active); err != nil {
 			return err
 		}
@@ -98,8 +121,8 @@ func StartSumikaProcess(s *Store, sessionID int64, now time.Time) (*Process, err
 		if err := tx.QueryRow(`SELECT COALESCE(MAX(generation), 0) + 1 FROM session_processes WHERE session_id=?`, sessionID).Scan(&generation); err != nil {
 			return err
 		}
-		res, err := tx.Exec(`INSERT INTO session_processes (session_id, generation, runtime, name, state, revision, created_at)
-			VALUES (?, ?, ?, ?, ?, 1, ?)`, sessionID, generation, ProcessRuntimeSumika, fmt.Sprintf("rusui-%d", sessionID), ProcessStarting, formatRuntimeTime(now))
+		res, err := tx.Exec(`INSERT INTO session_processes (session_id, generation, runtime, name, identity_hash, state, revision, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, 1, ?)`, sessionID, generation, ProcessRuntimeSumika, fmt.Sprintf("rusui-%d", sessionID), identityHash, ProcessStarting, formatRuntimeTime(now))
 		if err != nil {
 			return err
 		}
@@ -144,6 +167,13 @@ func ObserveSumikaProcess(s *Store, processID, generation, revision int64, state
 		if state == ProcessDead || state == ProcessLost {
 			_, err = tx.Exec(`UPDATE process_attaches SET state=?, revision=revision+1, observed_at=?
 				WHERE process_id=? AND process_generation=? AND state IN ('attached', 'unknown')`, AttachProcessExited, at, processID, generation)
+			if err != nil {
+				return err
+			}
+		}
+		if state == ProcessDead {
+			_, err = tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=(SELECT session_id FROM session_processes WHERE id=?)
+				AND EXISTS (SELECT 1 FROM session_processes WHERE id=? AND cancel_requested_at IS NOT NULL)`, processID, processID)
 		}
 		return err
 	})
@@ -160,6 +190,64 @@ func validObservedProcessState(state string) bool {
 	default:
 		return false
 	}
+}
+
+// CancelLocalSessionWithoutProcess cancels a local session only while it has
+// no recorded process generation.
+func CancelLocalSessionWithoutProcess(s *Store, sessionID int64) error {
+	return s.Tx(func(tx *sql.Tx) error {
+		var kind string
+		if err := tx.QueryRow(`SELECT kind FROM sessions WHERE id=?`, sessionID).Scan(&kind); err != nil {
+			return err
+		}
+		if kind != SessionKindLocal {
+			return fmt.Errorf("process runtime requires a local session")
+		}
+		var processID int64
+		err := tx.QueryRow(`SELECT id FROM session_processes WHERE session_id=? ORDER BY generation DESC LIMIT 1`, sessionID).Scan(&processID)
+		if err == nil {
+			return ErrStaleProcessObservation
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		_, err = tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=? AND kind=?`, sessionID, SessionKindLocal)
+		return err
+	})
+}
+
+// CancelLocalSessionAfterDeath cancels only if the exact latest process
+// generation is still dead at the revision observed by the caller.
+func CancelLocalSessionAfterDeath(s *Store, sessionID, processID, generation, revision int64) error {
+	return s.Tx(func(tx *sql.Tx) error {
+		var processSessionID, currentGeneration, currentRevision int64
+		var state string
+		if err := tx.QueryRow(`SELECT session_id, generation, revision, state FROM session_processes WHERE id=?`, processID).Scan(&processSessionID, &currentGeneration, &currentRevision, &state); err != nil {
+			return err
+		}
+		if processSessionID != sessionID || currentGeneration != generation || currentRevision != revision || state != ProcessDead {
+			return ErrStaleProcessObservation
+		}
+		var latestID int64
+		if err := tx.QueryRow(`SELECT id FROM session_processes WHERE session_id=? ORDER BY generation DESC LIMIT 1`, sessionID).Scan(&latestID); err != nil {
+			return err
+		}
+		if latestID != processID {
+			return ErrStaleProcessObservation
+		}
+		res, err := tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=? AND kind=?`, sessionID, SessionKindLocal)
+		if err != nil {
+			return err
+		}
+		changed, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if changed != 1 {
+			return sql.ErrNoRows
+		}
+		return nil
+	})
 }
 
 // BeginSumikaAttach allocates a distinct Attach generation. The new generation
@@ -253,6 +341,88 @@ func GetSumikaProcess(s *Store, id int64) (*Process, error) {
 	}
 	p.Attaches, err = ListSumikaAttaches(s, p.ID)
 	return p, err
+}
+
+func LatestSumikaProcess(s *Store, sessionID int64) (*Process, error) {
+	return scanProcess(s.DB.QueryRow(`SELECT `+processColumns+` FROM session_processes WHERE session_id=? ORDER BY generation DESC LIMIT 1`, sessionID))
+}
+
+func ListLocalSessions(s *Store) ([]Session, error) {
+	rows, err := s.DB.Query(`SELECT id, environment_id, kind, repo, item, item_kind, state, project, prompt, created_at
+		FROM sessions WHERE kind=? ORDER BY id`, SessionKindLocal)
+	if err != nil {
+		return nil, err
+	}
+	var out []Session
+	for rows.Next() {
+		var sess Session
+		var created string
+		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &created); err != nil {
+			return nil, errors.Join(err, rows.Close())
+		}
+		if at, err := time.Parse(time.RFC3339Nano, created); err == nil {
+			sess.CreatedAt = at
+		}
+		out = append(out, sess)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, errors.Join(err, rows.Close())
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func InsertLocalSessionTx(tx *sql.Tx, project string, now time.Time) (int64, error) {
+	// Store.Open's single connection serializes the transaction choosing this local-only item ID.
+	var item int
+	if err := tx.QueryRow(`SELECT COALESCE(MIN(item), 0) - 1 FROM sessions WHERE kind=? AND repo=''`, SessionKindLocal).Scan(&item); err != nil {
+		return 0, err
+	}
+	res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, created_at)
+		VALUES (?, ?, '', ?, 'local', 'open', ?, ?)`, DefaultEnvironmentID, SessionKindLocal, item, project, formatRuntimeTime(now))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// RequestSumikaCancel durably records intent before the external Kill request.
+func RequestSumikaCancel(s *Store, processID, generation, revision int64, requestedAt time.Time) (*Process, error) {
+	err := s.Tx(func(tx *sql.Tx) error {
+		p, err := scanProcess(tx.QueryRow(`SELECT `+processColumns+` FROM session_processes WHERE id=?`, processID))
+		if err != nil {
+			return err
+		}
+		if p.Generation != generation || p.Revision != revision {
+			return ErrStaleProcessObservation
+		}
+		if p.State == ProcessDead {
+			_, err := tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=?`, p.SessionID)
+			return err
+		}
+		if p.CancelRequestedAt != nil {
+			return nil
+		}
+		res, err := tx.Exec(`UPDATE session_processes SET cancel_requested_at=?, revision=revision+1
+			WHERE id=? AND generation=? AND revision=? AND cancel_requested_at IS NULL`, formatRuntimeTime(requestedAt), processID, generation, revision)
+		if err != nil {
+			return err
+		}
+		changed, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if changed != 1 {
+			return ErrStaleProcessObservation
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return GetSumikaProcess(s, processID)
 }
 
 func GetSumikaAttach(s *Store, id int64) (*Attach, error) {

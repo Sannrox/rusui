@@ -51,12 +51,31 @@ land-eligible verdict plus policy `land: true`. Never CI green alone.
 [ADR 0016](docs/decisions/0016-local-interactive-runtime.md) accepts the
 ownership boundary for the experimental local-interactive profile. Issue #183
 adds durable Process and Attach observation records plus an additive session
-detail API. It does not ship a Sumika adapter or change the currently
-executable v1 policy and session kinds, so the profile still cannot be started
-through Rusui.
+detail API. Issue #184 adds an explicitly configured, same-user Sumika
+adapter. The operator-facing unified attach client remains in #185.
 
-When enabled, a local session is an explicit, default-off session kind. It
-creates no Turn, lease, retry budget, managed credential, or model proxy grant.
+`local` is default-off and can be enabled only on a Project that defines a
+`local_runtime` profile with exact argv and clean absolute cwd. An
+authenticated create request names only `kind: local`; it cannot override
+either value. Rusui reserves the durable Session before asking Sumika to start
+`rusui-<session id>`. Each Process generation records a fingerprint of the
+argv and cwd used at start, so policy edits do not change the identity of a
+running generation. Sumika responses are accepted only when name and identity
+match. A mismatch is recorded as lost and is never attached to or killed.
+Daemon loss makes observations unknown; a successful List that confirms
+absence records lost. Restart is explicit. Cancellation intent is durable and
+remains unconfirmed until Sumika reports dead. An explicit restart after a
+generation becomes lost starts a new generation without resolving that prior
+cancellation intent.
+Disabling the local kind prevents new starts while existing Process records
+remain reconcilable and cancellable by their generation fingerprints.
+Cancellation first sends SIGTERM. After the 30-second grace period, the next
+reconciliation sends SIGKILL if Sumika still reports the Process alive, then
+keeps observing until death is confirmed. Periodic reconciliation can delay
+escalation until its next run.
+
+A local session creates no Turn, lease, retry budget, managed credential, or
+model proxy grant.
 Rusui owns its Project, durable Session, Environment record, policy, events,
 receipts, and versioned Process and Attach observation records. Each Process
 generation and each Attach generation has its own Rusui identity and revision;
@@ -67,7 +86,13 @@ from Turns and Environment state without exposing PTY bytes. Sumika's optional
 project value is display grouping only and does not participate in policy
 decisions.
 
-The local Environment will identify the operator's host, not an isolated
+Rusui uses Sumika's same-host Unix socket for Start, List, Attach, and Kill.
+Attach streams remain raw PTY connections and are not persisted by Rusui.
+Startup and a one-minute reconciliation cadence update Process observations
+and report orphan `rusui-` names without killing them. This profile supports
+macOS and Linux against the Sumika source baseline recorded on issue #184.
+
+The local Environment identifies the operator's host, not an isolated
 container or VM; multiple local sessions may share that host. The Process runs
 with the Sumika daemon's OS identity and inherited environment and may access
 same-user CLI authentication. Rusui injects no managed credential into it.
@@ -78,8 +103,8 @@ same-host, same-user socket only; remote pairing is out of scope.
 The managed runner, container, terminal write lease, and ACP editor contracts
 remain unchanged. The local profile is not part of the supported 1.0 core
 unless [#141](https://github.com/Sannrox/rusui/issues/141) explicitly includes
-it. Issue #183 owns the observation schema and API; #184–#186 own the adapter,
-attach, and cross-profile evidence work.
+it. Issue #183 owns the observation schema and API; #184 owns the runtime
+adapter, #185 the unified attach client, and #186 the cross-profile evidence.
 
 ## System
 
@@ -90,6 +115,8 @@ flowchart LR
   GitHub -->|webhook push| Server
   GitHub -->|delivery reconcile poll| Server
   PolicyFile[policy.yaml] -->|baseline revision| Server
+  Server -->|same-user Unix socket| Sumika[Sumika daemon]
+  Operator -->|local PTY Attach| Sumika
 
   Server --> DB[(SQLite)]
   DB --> Exports[optional JSON/MD exports]
@@ -178,8 +205,12 @@ bound repository that UTC day (catch-up and webhook-driven). Exhaustion
 is a Slack/log exception; work stays queued. Operator `retry` counts
 against the budget. In-flight leases are not cancelled.
 
-`session_kinds` is an allowlist: `review`, `run`, `scheduled`. `run` is
-operator-started. A `review` session requires at least one bound
+`session_kinds` is an allowlist: `review`, `run`, `scheduled`, and the
+experimental `local` kind. `local` is never inherited from defaults and
+requires a per-project `local_runtime` profile. Request bodies cannot
+override its configured argv or cwd. Local work runs as the Sumika daemon's
+OS user and is outside the managed runtime's isolation and credential
+guarantees. `run` is operator-started. A `review` session requires at least one bound
 repository. Permission allow-rules on the project grant matching
 `session/request_permission` requests. A live unmatched request **waits**
 on the JSON-RPC until allow-once, reject-once, or the execution deadline;

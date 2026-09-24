@@ -10,7 +10,7 @@ import (
 )
 
 func (e *Engine) StartRun(project, prompt, idem string) (int64, error) {
-	p, ok := e.Policy.Project(project)
+	p, ok := e.PolicySnapshot().Project(project)
 	if !ok || !p.AllowsKind(policy.KindRun) {
 		return 0, fmt.Errorf("policy")
 	}

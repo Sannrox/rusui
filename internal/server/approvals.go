@@ -107,7 +107,7 @@ func (s *Server) allowStillValid(actionID string) bool {
 			return false
 		}
 	}
-	if p, ok := s.Eng.Policy.Project(sess.Project); ok {
+	if p, ok := s.Eng.PolicySnapshot().Project(sess.Project); ok {
 		rules := make([]acp.Rule, 0, len(p.Permissions))
 		for _, r := range p.Permissions {
 			rules = append(rules, acp.Rule{Tool: r.Tool, Kind: r.Kind, Command: r.Command, Action: r.Action})

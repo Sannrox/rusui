@@ -612,7 +612,7 @@ func TestPolicyRevoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	delete(p.Repos, "example/test-repo")
-	h.e.Policy = p
+	h.e.ReloadPolicy(p)
 	c2, err := h.e.Claim("example/test-repo")
 	if err == nil && c2 != nil {
 		t.Fatal("claimed after revoke")

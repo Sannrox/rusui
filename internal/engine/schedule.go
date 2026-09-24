@@ -13,7 +13,7 @@ import (
 const MinScheduleEvery = time.Minute
 
 func (e *Engine) CreateSchedule(project, name, every, prompt string) (int64, error) {
-	p, ok := e.Policy.Project(project)
+	p, ok := e.PolicySnapshot().Project(project)
 	if !ok || !p.AllowsKind(policy.KindScheduled) {
 		return 0, fmt.Errorf("policy")
 	}
@@ -47,7 +47,7 @@ func (e *Engine) StepSchedules(now time.Time) error {
 }
 
 func (e *Engine) StartScheduled(sc store.Schedule, idem string) (int64, error) {
-	p, ok := e.Policy.Project(sc.Project)
+	p, ok := e.PolicySnapshot().Project(sc.Project)
 	if !ok || !p.AllowsKind(policy.KindScheduled) {
 		return 0, fmt.Errorf("policy")
 	}

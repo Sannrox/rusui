@@ -65,16 +65,18 @@ type Turn struct {
 // Process is a durable Rusui identity for one Sumika process generation.
 // State is the last accepted observation, not proof of the process's live state.
 type Process struct {
-	ID         int64      `json:"id"`
-	SessionID  int64      `json:"session_id"`
-	Generation int64      `json:"generation"`
-	Runtime    string     `json:"runtime"`
-	Name       string     `json:"name"`
-	State      string     `json:"state"`
-	Revision   int64      `json:"revision"`
-	CreatedAt  time.Time  `json:"created_at"`
-	ObservedAt *time.Time `json:"observed_at,omitempty"`
-	Attaches   []Attach   `json:"attaches"`
+	ID                int64      `json:"id"`
+	SessionID         int64      `json:"session_id"`
+	Generation        int64      `json:"generation"`
+	Runtime           string     `json:"runtime"`
+	Name              string     `json:"name"`
+	IdentityHash      string     `json:"-"`
+	State             string     `json:"state"`
+	Revision          int64      `json:"revision"`
+	CreatedAt         time.Time  `json:"created_at"`
+	ObservedAt        *time.Time `json:"observed_at,omitempty"`
+	CancelRequestedAt *time.Time `json:"cancel_requested_at,omitempty"`
+	Attaches          []Attach   `json:"attaches"`
 }
 
 // Attach is a durable identity/status observation for a temporary Sumika

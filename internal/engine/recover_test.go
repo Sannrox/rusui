@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -43,6 +44,7 @@ func TestRecoverExpiresOwnerBeforeStepRefresh(t *testing.T) {
 
 func TestRecoverInvalidatesRuntimeObservationsWithoutReleasingTurn(t *testing.T) {
 	h := setup(t)
+	t.Setenv("SUMIKA_SOCK", filepath.Join(t.TempDir(), "missing", "sumika.sock"))
 	runSessionID, err := h.e.StartRun("test", "keep the turn", "")
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +65,7 @@ func TestRecoverInvalidatesRuntimeObservationsWithoutReleasingTurn(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	process, err := store.StartSumikaProcess(h.st, localSessionID, h.clk.T)
+	process, err := store.StartSumikaProcess(h.st, localSessionID, "test-process-identity", h.clk.T)
 	if err != nil {
 		t.Fatal(err)
 	}

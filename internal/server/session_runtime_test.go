@@ -24,7 +24,7 @@ func TestSessionDetailReturnsSeparateProcessAndAttachIdentities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	process, err := store.StartSumikaProcess(e.Store, sessionID, now)
+	process, err := store.StartSumikaProcess(e.Store, sessionID, "test-process-identity", now)
 	if err != nil {
 		t.Fatal(err)
 	}
