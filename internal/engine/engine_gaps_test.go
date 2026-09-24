@@ -433,7 +433,8 @@ func TestDisabledReviewPolicySkipsAdmissionAcrossIntakeSources(t *testing.T) {
 	for _, source := range []string{"catch-up", "webhook", "reconcile"} {
 		t.Run(source, func(t *testing.T) {
 			h := setup(t)
-			raw := strings.ReplaceAll(fixture, "review: true", "review: false")
+			raw := strings.Replace(fixture, "  review: true\n", "  review: false\n", 1)
+			raw = strings.Replace(raw, "        review: true\n", "", 1)
 			pol, err := policy.Parse([]byte(raw))
 			if err != nil {
 				t.Fatal(err)

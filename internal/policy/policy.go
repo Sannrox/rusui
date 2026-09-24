@@ -13,13 +13,13 @@ import (
 )
 
 const (
-	EgressNone    = "none"
-	EgressTrusted = "trusted"
-	EgressCustom  = "custom"
-	EgressFull    = "full"
-	KindReview    = "review"
-	KindRun       = "run"
-	KindScheduled = "scheduled"
+	EgressNone                = "none"
+	EgressTrusted             = "trusted"
+	EgressCustom              = "custom"
+	EgressFull                = "full"
+	KindReview                = "review"
+	KindRun                   = "run"
+	KindScheduled             = "scheduled"
 	BudgetMaxConcurrentLeases = "max_concurrent_leases"
 )
 
@@ -35,7 +35,7 @@ type DefaultsYAML struct {
 	SessionKinds               []string `yaml:"session_kinds"`
 	Egress                     string   `yaml:"egress"`
 	Visibility                 string   `yaml:"visibility"`
-	Review                     bool     `yaml:"review"`
+	Review                     *bool    `yaml:"review"`
 	Comments                   bool     `yaml:"comments"`
 	Close                      bool     `yaml:"close"`
 	Implement                  bool     `yaml:"implement"`
@@ -180,6 +180,9 @@ func Parse(raw []byte) (*Effective, error) {
 			}
 			if f.Defaults.MaxReviewsPerRepoPerUTCDay != 0 {
 				r.MaxReviewsPerRepoPerUTCDay = f.Defaults.MaxReviewsPerRepoPerUTCDay
+			}
+			if f.Defaults.Review != nil {
+				r.Review = *f.Defaults.Review
 			}
 			r.Comments = f.Defaults.Comments
 			r.Close = f.Defaults.Close

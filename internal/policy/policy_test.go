@@ -62,6 +62,49 @@ projects:
 	}
 }
 
+func TestParseReviewDefaultAndRepoOverride(t *testing.T) {
+	base := `
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+projects:
+  rusui:
+    repos:
+      Sannrox/rusui:
+        visibility: private
+`
+	tests := []struct {
+		name         string
+		defaultFalse bool
+		repoTrue     bool
+		wantReview   bool
+	}{
+		{name: "default remains enabled when omitted", wantReview: true},
+		{name: "explicit default disables review", defaultFalse: true, wantReview: false},
+		{name: "repo override enables review", defaultFalse: true, repoTrue: true, wantReview: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw := base
+			if tt.defaultFalse {
+				raw = strings.Replace(raw, "projects:\n", "  review: false\nprojects:\n", 1)
+			}
+			if tt.repoTrue {
+				raw = strings.Replace(raw, "        visibility:", "        review: true\n        visibility:", 1)
+			}
+			e, err := Parse([]byte(raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			r, ok := e.Repo("Sannrox/rusui")
+			if !ok || r.Review != tt.wantReview {
+				t.Fatalf("repo %+v ok=%v, want review=%v", r, ok, tt.wantReview)
+			}
+		})
+	}
+}
+
 func TestParseRejects(t *testing.T) {
 	good := `
 version: 2
