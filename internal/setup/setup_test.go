@@ -389,6 +389,18 @@ func TestSetEnvValuesRewritesExportedKeysInPlace(t *testing.T) {
 	}
 }
 
+func TestReadEnvRemovesMatchingOuterQuotes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rusui.env")
+	contents := "RUSUI_GITHUB_TOKEN='token with spaces'\nRUSUI_MODEL_UPSTREAM=\"https://proxy.example/path?a=b\"\nRUSUI_WORKER_SECRET=plain\nRUSUI_SINGLE_QUOTED='secret\\$suffix'\nRUSUI_DOUBLE_QUOTED=\"'secret\\$suffix\"\n"
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	values := ReadEnv(path)
+	if values["RUSUI_GITHUB_TOKEN"] != "token with spaces" || values["RUSUI_MODEL_UPSTREAM"] != "https://proxy.example/path?a=b" || values["RUSUI_WORKER_SECRET"] != "plain" || values["RUSUI_SINGLE_QUOTED"] != `secret\$suffix` || values["RUSUI_DOUBLE_QUOTED"] != "'secret$suffix" {
+		t.Fatalf("parsed env values = %#v", values)
+	}
+}
+
 func TestPlanStillNeedsAGuestImageWithoutARuntime(t *testing.T) {
 	plan, err := Plan(Options{StateDir: t.TempDir()})
 	if err != nil {

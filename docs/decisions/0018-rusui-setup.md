@@ -53,7 +53,7 @@ Under one state directory (default `$XDG_DATA_HOME/rusui`, or
 | `policy.yaml` | writes a skeleton when absent | overwrites an existing policy |
 | guest image | builds the reference image from `build/guest-image` and records its tag | pulls unpinned images |
 | container network | creates `rusui-trusted` | changes other networks |
-| service | installs a launchd user agent (macOS) or systemd `--user` unit (Linux) that runs the plane with `rusui.env` on loopback | binds anything but loopback |
+| service | installs a launchd user agent (macOS) or a systemd `--user` unit with user lingering enabled (Linux) that runs the plane with `rusui.env` on loopback | binds anything but loopback |
 
 ### D3. Secrets and interactive steps
 

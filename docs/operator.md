@@ -78,9 +78,12 @@ and sets `RUSUI_GUEST=claude` unless you chose another image or guest.
 
 Lines marked `needs-you` are inputs only you can supply: the GitHub token
 and model access (a key, or `RUSUI_MODEL_UPSTREAM` for a CLI proxy you
-logged in to), plus a guest image when no container runtime is installed. Put them in `rusui.env`, then start the plane
-with the command `apply` prints. The sections below describe the same
-steps by hand.
+logged in to), plus a guest image when no container runtime is installed.
+Put them in `rusui.env`, then rerun `rusui setup apply`; it starts or updates
+the user service and checks readiness. Linux setup enables account-wide user
+lingering so the service starts at boot and continues after logout. See
+[user-service.md](user-service.md) for service behavior and removal. The
+sections below describe the same setup steps by hand.
 
 ## 1. Build and policy
 
