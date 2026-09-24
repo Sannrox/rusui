@@ -13,6 +13,9 @@
   core delivery).
 - Discussion: none. GitHub Discussions are disabled. The maintainer chose
   this model directly; merging with this status is the acceptance act.
+- Proposed amendment: [ADR 0020](0020-turn-scoped-github-publication.md)
+  evaluates D1 and D4. This accepted decision remains in force until that
+  proposal is accepted.
 
 ## Context
 

@@ -8,6 +8,9 @@
   redeems secrets). D3’s per-turn credential (32 bytes, ten-minute
   TTL, one environment, hashed at rest) stands.
 - Resolves: [#44](https://github.com/Sannrox/rusui/issues/44)
+- Proposed amendment: [ADR 0020](0020-turn-scoped-github-publication.md)
+  evaluates implement-session Git access. This accepted decision remains in
+  force until that proposal is accepted.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context
