@@ -513,6 +513,7 @@ func (e *Engine) AttachLocalSession(sessionID int64) (*store.Attach, io.ReadWrit
 		return nil, nil, err
 	}
 	if process.State == store.ProcessUnknown {
+		// Reconciliation owns its lock; all attach preconditions are rechecked after the lock below.
 		if err := e.ReconcileSumika(); err != nil {
 			return nil, nil, err
 		}

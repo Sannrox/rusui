@@ -69,8 +69,10 @@ generation becomes lost starts a new generation without resolving that prior
 cancellation intent.
 Disabling the local kind prevents new starts while existing Process records
 remain reconcilable and cancellable by their generation fingerprints.
-Cancellation first sends SIGTERM; if the Process remains alive after 30 seconds,
-reconciliation escalates to SIGKILL and keeps observing until death is confirmed.
+Cancellation first sends SIGTERM. After the 30-second grace period, the next
+reconciliation sends SIGKILL if Sumika still reports the Process alive, then
+keeps observing until death is confirmed. Periodic reconciliation can delay
+escalation until its next run.
 
 A local session creates no Turn, lease, retry budget, managed credential, or
 model proxy grant.

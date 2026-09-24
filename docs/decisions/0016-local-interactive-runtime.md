@@ -130,15 +130,16 @@ the PTY.
 | Process death | Reaps the child and reports dead | Records dead and closes its current Attach observation as process_exited; the durable Session remains inspectable |
 | Daemon restart | Rebuilds an empty in-memory Process table | Marks Process and Attach observations unknown and advances revisions; it does not infer death or restart a possibly orphaned child |
 | Explicit restart | Starts the named Process only after the prior instance is confirmed dead or lost | Records the next Process generation against the same durable Session |
-| Cancel | Sends SIGTERM, then SIGKILL after 30 seconds if still alive | Records cancel_requested and confirms cancellation only after Sumika reports dead |
+| Cancel | Sends SIGTERM; the first reconciliation after 30 seconds sends SIGKILL if still alive | Records cancel_requested and confirms cancellation only after Sumika reports dead |
 | Environment replacement | Not applicable to the local host | No effect on managed Environment replacement behavior |
 | Sleep or wake | Not controlled by Rusui | No local Process transition is inferred |
 | Expiry | No automatic local Process expiry | The local Session remains until explicit operator action |
 
 If Sumika is unavailable during cancellation, Rusui keeps the cancellation
 unconfirmed for reconciliation. The durable request time controls the 30-second
-grace period across restarts. It must not report a stopped Process based only on
-a failed socket request.
+grace period across restarts. Reconciliation sends SIGKILL after that period;
+its periodic cadence may delay escalation until the next run. Rusui must not
+report a stopped Process based only on a failed socket request.
 
 ### D4. Names, collisions, and reconciliation
 

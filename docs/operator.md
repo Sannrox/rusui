@@ -178,10 +178,11 @@ The request cannot supply argv or cwd. Rusui stores a Session without a Turn,
 then records Sumika's Process observations separately. A client disconnect
 does not kill the Process. Use Rusui cancellation to request a kill; the
 Session is marked cancelled only after Sumika reports the Process dead. Rusui
-first sends a graceful SIGTERM, then escalates to SIGKILL after 30 seconds if
-the Process remains alive. If
-the daemon is unavailable, state stays unknown or cancellation remains
-unconfirmed until reconciliation. Never infer death or restart automatically.
+first sends a graceful SIGTERM, then a reconciliation after the 30-second grace
+period sends SIGKILL if the Process remains alive. Periodic reconciliation can
+delay escalation until its next run. If the daemon is unavailable, state stays
+unknown or cancellation remains unconfirmed until reconciliation. Never infer
+death or restart automatically.
 After death or a successful List confirms a Process is absent, an operator can
 request its next generation explicitly. A lost generation with a pending cancel
 remains unconfirmed; an explicit restart creates a new generation without
