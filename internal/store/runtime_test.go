@@ -17,7 +17,7 @@ func TestSumikaProcessAndAttachGenerations(t *testing.T) {
 
 	sessionID := insertLocalSession(t, st)
 	now := time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC)
-	process, err := StartSumikaProcess(st, sessionID, now)
+	process, err := StartSumikaProcess(st, sessionID, "test-process-identity", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestSumikaProcessAndAttachGenerations(t *testing.T) {
 		t.Fatalf("attach history %+v", processes[0].Attaches)
 	}
 
-	if _, err := StartSumikaProcess(st, sessionID, now.Add(8*time.Second)); err != nil {
+	if _, err := StartSumikaProcess(st, sessionID, "test-process-identity", now.Add(8*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ObserveSumikaProcess(st, process.ID, process.Generation, process.Revision-1, ProcessRunning, now.Add(9*time.Second)); !errors.Is(err, ErrStaleProcessObservation) {
@@ -89,6 +89,12 @@ func TestSumikaProcessAndAttachGenerations(t *testing.T) {
 	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM turns WHERE session_id=?`, sessionID).Scan(&turns); err != nil || turns != 0 {
 		t.Fatalf("local turn count %d %v", turns, err)
 	}
+	if _, err := st.DB.Exec(`UPDATE sessions SET state='cancelled' WHERE id=?`, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := StartSumikaProcess(st, sessionID, "test-process-identity", now.Add(9*time.Second)); !errors.Is(err, ErrLocalSessionNotOpen) {
+		t.Fatalf("cancelled session allowed process restart: %v", err)
+	}
 }
 
 func TestUnknownRuntimeObservationsRemainActiveUntilReconciled(t *testing.T) {
@@ -100,7 +106,7 @@ func TestUnknownRuntimeObservationsRemainActiveUntilReconciled(t *testing.T) {
 
 	sessionID := insertLocalSession(t, st)
 	now := time.Date(2026, 9, 23, 19, 0, 0, 0, time.UTC)
-	process, err := StartSumikaProcess(st, sessionID, now)
+	process, err := StartSumikaProcess(st, sessionID, "test-process-identity", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +136,7 @@ func TestUnknownRuntimeObservationsRemainActiveUntilReconciled(t *testing.T) {
 	if _, err := ObserveSumikaProcess(st, process.ID, process.Generation, staleRevision, ProcessDead, now.Add(5*time.Second)); !errors.Is(err, ErrStaleProcessObservation) {
 		t.Fatalf("stale death report after repeated restart error %v", err)
 	}
-	if _, err := StartSumikaProcess(st, sessionID, now.Add(4*time.Second)); !errors.Is(err, ErrProcessAlreadyActive) {
+	if _, err := StartSumikaProcess(st, sessionID, "test-process-identity", now.Add(4*time.Second)); !errors.Is(err, ErrProcessAlreadyActive) {
 		t.Fatalf("unknown process allowed duplicate start: %v", err)
 	}
 	if _, err := EndSumikaAttach(st, process.ID, process.Generation, attach.Generation, AttachDetached, now.Add(5*time.Second)); !errors.Is(err, ErrStaleAttach) {

@@ -76,9 +76,9 @@ Local interactive work uses a new session kind, local, not run. A run session
 means unattended work with turns, lease budgets, and managed credentials. A
 local session is human-driven and must not acquire those authorities.
 
-- Policy must explicitly enable local for a Project. It is absent from the
-  defaults. The current policy parser and runtime do not implement this kind;
-  follow-up work must add it fail-closed.
+- Policy must explicitly enable local for a Project and provide its
+  `local_runtime` argv and cwd. It is absent from defaults. Issue #184 adds
+  this fail-closed policy configuration and the initial Sumika adapter.
 - Local sessions create no Turn, lease, retry budget, per-turn grant, model
   proxy credential, or GitHub credential. They are never implement sessions.
 - Pause prevents new local sessions but does not kill a running Process.
@@ -130,14 +130,15 @@ the PTY.
 | Process death | Reaps the child and reports dead | Records dead and closes its current Attach observation as process_exited; the durable Session remains inspectable |
 | Daemon restart | Rebuilds an empty in-memory Process table | Marks Process and Attach observations unknown and advances revisions; it does not infer death or restart a possibly orphaned child |
 | Explicit restart | Starts the named Process only after the prior instance is confirmed dead or lost | Records the next Process generation against the same durable Session |
-| Cancel | Attempts to kill the named Process | Records cancel_requested and confirms cancellation only after Sumika reports dead |
+| Cancel | Sends SIGTERM, then SIGKILL after 30 seconds if still alive | Records cancel_requested and confirms cancellation only after Sumika reports dead |
 | Environment replacement | Not applicable to the local host | No effect on managed Environment replacement behavior |
 | Sleep or wake | Not controlled by Rusui | No local Process transition is inferred |
 | Expiry | No automatic local Process expiry | The local Session remains until explicit operator action |
 
 If Sumika is unavailable during cancellation, Rusui keeps the cancellation
-unconfirmed for reconciliation. It must not report a stopped Process based only
-on a failed socket request.
+unconfirmed for reconciliation. The durable request time controls the 30-second
+grace period across restarts. It must not report a stopped Process based only on
+a failed socket request.
 
 ### D4. Names, collisions, and reconciliation
 
@@ -151,8 +152,10 @@ on a failed socket request.
   grouping. It is display metadata only and is never used to authorize work.
 - Sumika may return an existing live Process for a duplicate name without
   checking that argv and cwd match. Before associating it with a Rusui Session,
-  Rusui must compare the returned name, argv, and cwd. A mismatch is a
-  collision: record it and do not attach or kill the Process.
+  Rusui compares the returned name and a fingerprint of argv and cwd against
+  the identity pinned to that Process generation. A mismatch is a collision:
+  record it and do not attach or kill the Process. Policy changes apply to new
+  generations; reconciliation and cancellation use the original fingerprint.
 - At startup and on a bounded cadence, Rusui lists Sumika Processes. A
   rusui-named Process with no open local Session is an orphan. Rusui reports
   it and does not kill it automatically because it may contain unsaved work.
@@ -199,10 +202,10 @@ read-only, but it does not expose local PTY bytes.
 
 - Core: none yet. The local profile is not part of the supported 1.0 core;
   decision #141 must explicitly include it before that claim changes.
-- Experimental: the local session kind, same-user Sumika start/list/kill
-  integration, status events, and orphan reporting. Issue #183 adds only the
-  additive Process/Attach observation records and session detail fields; no
-  local adapter is implemented yet.
+- Experimental: the local session kind, same-user Sumika start/list/attach/kill
+  integration, status observations, cancellation intent, and orphan reporting.
+  Issue #183 adds the additive Process/Attach observation records; #184 adds
+  the initial runtime adapter. The unified client remains in #185.
 - Deferred: Sumika remote pairing from Rusui, remote hosts, shared Attach,
   console Attach to local PTYs, automatic orphan cleanup, and any claim that
   local execution has managed-container isolation.
@@ -237,25 +240,30 @@ policy or receipt store, and makes the local host trust boundary explicit.
 ## Validation and reversal
 
 This decision was checked against Rusui's SQLite auto-increment Session IDs,
-current policy defaults, managed terminal and credential contracts, and
+policy defaults, managed terminal and credential contracts, and
 Sumika's current protocol and implementation at
-[commit 3dad7a9](https://github.com/Sannrox/sumika/commit/3dad7a97fba2aaaa53aea767f269dfa6c1cfff0).
+[commit 3dadc7a](https://github.com/Sannrox/sumika/commit/3dadc7a97fba2aaaa53aea767f269dfa6c1cfff0).
 That implementation has an optional project grouping field, a 64-character
 restricted Process name, a same-user local socket, an in-memory Process table,
-and exclusive Attach stealing. The decision does not claim that a Rusui local
-adapter exists or that the lifecycle has passed an end-to-end runtime test.
+and exclusive Attach stealing. Issue #184 adds a protocol-conformant black-box
+lifecycle test for the adapter; it does not promote the local profile to core.
 Issue #183 adds an additive v17 schema and session detail API for Process and
-Attach observation records. Issues #184–#186 own the adapter and cross-profile
-evidence; #141 controls stable core promotion. Reverse by superseding this ADR
+Attach observation records. Issue #184 adds schema v18 cancellation intent
+and v19 Process identity fingerprints so policy reloads do not rewrite an
+existing generation. Issue #185 owns the unified attach client and #186 the
+cross-profile evidence; #141
+controls stable core promotion. Reverse by superseding this ADR
 before any core promotion; this decision itself adds no runtime schema.
 
 ## Sources
 
 - [#182](https://github.com/Sannrox/rusui/issues/182)
+- [#183](https://github.com/Sannrox/rusui/issues/183)
+- [#184](https://github.com/Sannrox/rusui/issues/184)
 - Rusui [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [CONTEXT.md](../../CONTEXT.md), [ADR 0011](0011-unattended-session-contract.md),
   [ADR 0012](0012-operator-access.md), and [ADR 0015](0015-agent-publication.md)
 - Sumika [CONTEXT.md](https://github.com/Sannrox/sumika/blob/main/CONTEXT.md),
   [ADR 0004](https://github.com/Sannrox/sumika/blob/main/docs/decisions/0004-project-is-a-grouping-key.md),
   [ADR 0005](https://github.com/Sannrox/sumika/blob/main/docs/decisions/0005-pairing-token-remote-attach.md),
-  and [protocol](https://github.com/Sannrox/sumika/blob/3dad7a97fba2aaaa53aea767f269dfa6c1cfff0/crates/sumika-protocol/src/lib.rs)
+  and [protocol](https://github.com/Sannrox/sumika/blob/3dadc7a97fba2aaaa53aea767f269dfa6c1cfff0/crates/sumika-protocol/src/lib.rs)

@@ -141,6 +141,56 @@ curl -fsS http://127.0.0.1:8080/readyz
 `run` creates a `run` session through the public API. Container turns still
 need the guest image, plane TLS, and a runner.
 
+## Local interactive profile
+
+The experimental local profile runs a policy-configured command through
+Sumika on the Rusui host. Build Sumika from the source baseline recorded in
+[issue #184](https://github.com/Sannrox/rusui/issues/184), start its daemon as
+the same OS user as Rusui (`sumika daemon`), and explicitly add a `local` kind plus
+`local_runtime` argv and absolute cwd to the Project in `policy.yaml`. The
+initial supported hosts are macOS and Linux. The compatibility baseline is
+Sumika commit [`3dadc7a`](https://github.com/Sannrox/sumika/commit/3dadc7a97fba2aaaa53aea767f269dfa6c1cfff0),
+workspace version `0.1.0`, built with Rust `1.97.1`. Sumika's socket defaults to its
+per-user location; set `SUMIKA_SOCK` on the Rusui process only when using an
+alternate local socket.
+
+Each Process generation stores an internal fingerprint of the argv and cwd
+used at start. Policy edits affect future starts; existing Processes continue
+to reconcile and can still be cancelled if the local profile is later disabled.
+The fingerprint is not returned by the session API.
+
+Create a local Session through the authenticated API:
+
+```bash
+curl -fsS -X POST http://127.0.0.1:8080/projects/local/sessions \
+  -H "Authorization: Bearer $RUSUI_WORKER_SECRET" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: local-example-1' \
+  -d '{"kind":"local"}'
+```
+
+The request cannot supply argv or cwd. Rusui stores a Session without a Turn,
+then records Sumika's Process observations separately. A client disconnect
+does not kill the Process. Use Rusui cancellation to request a kill; the
+Session is marked cancelled only after Sumika reports the Process dead. Rusui
+first sends a graceful SIGTERM, then escalates to SIGKILL after 30 seconds if
+the Process remains alive. If
+the daemon is unavailable, state stays unknown or cancellation remains
+unconfirmed until reconciliation. Never infer death or restart automatically.
+After death or a successful List confirms a Process is absent, an operator can
+request its next generation explicitly, as long as cancellation is not pending:
+
+```bash
+curl -fsS -X POST "http://127.0.0.1:8080/sessions/$SESSION_ID/restart" \
+  -H "Authorization: Bearer $RUSUI_WORKER_SECRET"
+```
+
+This profile runs with Sumika's OS identity and inherited environment. It may
+use same-user files and CLI authentication; it has no managed-container
+isolation, GitHub credential, turn grant, or model proxy credential. Local PTY
+bytes remain with Sumika. The unified Rusui client path is being completed in
+issue #185.
+
 Do not pass `-addr 0.0.0.0:8080` unless secrets are set. Operator HTTP
 (`-addr`) has no TLS unless `RUSUI_TLS_CERT` and `RUSUI_TLS_KEY` are set.
 

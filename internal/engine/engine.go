@@ -11,6 +11,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sannrox/rusui/internal/clock"
@@ -56,6 +57,7 @@ type Engine struct {
 	EnvTTL       time.Duration
 	Tree         TreeSource
 	SnapshotRoot string
+	sumikaMu     sync.Mutex
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {

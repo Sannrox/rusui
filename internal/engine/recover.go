@@ -20,6 +20,9 @@ func (e *Engine) Recover() error {
 		e.exception("startup invalidate runtime observations: " + err.Error())
 		return err
 	}
+	if err := e.ReconcileSumika(); err != nil {
+		e.exception("Sumika startup reconcile: " + err.Error())
+	}
 	if err := e.StartupExpireOwners(); err != nil {
 		e.exception("startup expire owners: " + err.Error())
 		return err

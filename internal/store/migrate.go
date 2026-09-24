@@ -7,7 +7,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 17
+const CurrentSchema = 19
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -310,8 +310,36 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 17); err != nil {
 			return err
 		}
+		ver = 17
+	}
+	if ver < 18 {
+		if err := migrateV18(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 18); err != nil {
+			return err
+		}
+		ver = 18
+	}
+	if ver < 19 {
+		if err := migrateV19(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 19); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func migrateV18(db *sql.DB) error {
+	_, err := db.Exec(`ALTER TABLE session_processes ADD COLUMN cancel_requested_at TEXT`)
+	return err
+}
+
+func migrateV19(db *sql.DB) error {
+	_, err := db.Exec(`ALTER TABLE session_processes ADD COLUMN identity_hash TEXT NOT NULL DEFAULT ''`)
+	return err
 }
 
 func migrateV17(db *sql.DB) error {
