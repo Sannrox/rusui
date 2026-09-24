@@ -314,6 +314,7 @@ func ListLocalSessions(s *Store) ([]Session, error) {
 }
 
 func InsertLocalSessionTx(tx *sql.Tx, project string, now time.Time) (int64, error) {
+	// Store.Open's single connection serializes the transaction choosing this local-only item ID.
 	var item int
 	if err := tx.QueryRow(`SELECT COALESCE(MIN(item), 0) - 1 FROM sessions WHERE kind=? AND repo=''`, SessionKindLocal).Scan(&item); err != nil {
 		return 0, err

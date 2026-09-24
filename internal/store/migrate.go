@@ -338,6 +338,7 @@ func migrateV18(db *sql.DB) error {
 }
 
 func migrateV19(db *sql.DB) error {
+	// Legacy rows have no launch identity; reconciliation fails closed on their empty fingerprint.
 	_, err := db.Exec(`ALTER TABLE session_processes ADD COLUMN identity_hash TEXT NOT NULL DEFAULT ''`)
 	return err
 }
