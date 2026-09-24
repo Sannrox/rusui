@@ -374,11 +374,12 @@ func TestSystemdServiceApplyReapplyAndRemove(t *testing.T) {
 }
 
 func TestSystemdUnitUsesEnvironmentFileAndLoopback(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state with spaces%\\literal\"quote")
+	state := filepath.Join(t.TempDir(), "state with spaces%\\literal\"quote${RUSUI_DB}")
 	p := PathsFor(state)
 	envPath := filepath.Join(t.TempDir(), "systemd user%\\literal\"quote", "rusui.service.env")
 	pathEnv := "/opt/tools with spaces/$literal%spec:/bin"
-	content, err := systemdUnit(p, "/usr/local/bin/rusui", "127.0.0.1:8080", pathEnv, "test-input-digest", envPath)
+	binary := "/usr/local/bin/rusui$literal"
+	content, err := systemdUnit(p, binary, "127.0.0.1:8080", pathEnv, "test-input-digest", envPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,8 +389,9 @@ func TestSystemdUnitUsesEnvironmentFileAndLoopback(t *testing.T) {
 		"WorkingDirectory=" + systemdPathValue(p.Dir),
 		"EnvironmentFile=" + systemdPathValue(envPath),
 		"Environment=" + systemdEnvironmentValue("PATH="+pathEnv),
+		"ExecStart=" + systemdUnitValue(binary),
 		"\"-addr\" \"127.0.0.1:8080\"",
-		"\"-db\" " + systemdQuote(p.DB),
+		"\"-db\" " + systemdExecArg(p.DB),
 		"Restart=on-failure",
 		"WantedBy=default.target",
 		"rusui-inputs-sha256=test-input-digest",

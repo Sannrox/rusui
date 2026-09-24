@@ -450,8 +450,9 @@ func parseEnvValue(value string) string {
 	if len(value) < 2 || value[0] != value[len(value)-1] || (value[0] != '\'' && value[0] != '"') {
 		return value
 	}
+	quote := value[0]
 	value = value[1 : len(value)-1]
-	if value == "" || value[0] == '\'' {
+	if value == "" || quote != '"' {
 		return value
 	}
 	var b strings.Builder

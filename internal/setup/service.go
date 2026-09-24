@@ -674,13 +674,9 @@ func systemdUnit(p Paths, binary, addr, pathEnv, inputDigest, environmentFile st
 	if pathEnv != "" {
 		b.WriteString("Environment=" + systemdEnvironmentValue("PATH="+pathEnv) + "\n")
 	}
-	b.WriteString("ExecStart=" + strings.Join([]string{systemdQuote(binary), systemdQuote("-addr"), systemdQuote(addr), systemdQuote("-db"), systemdQuote(p.DB), systemdQuote("-policy"), systemdQuote(p.Policy)}, " ") + "\n")
+	b.WriteString("ExecStart=" + strings.Join([]string{systemdUnitValue(binary), systemdExecArg("-addr"), systemdExecArg(addr), systemdExecArg("-db"), systemdExecArg(p.DB), systemdExecArg("-policy"), systemdExecArg(p.Policy)}, " ") + "\n")
 	b.WriteString("Restart=on-failure\nRestartSec=5s\n\n[Install]\nWantedBy=default.target\n")
 	return []byte(b.String()), nil
-}
-
-func systemdQuote(value string) string {
-	return systemdUnitValue(value)
 }
 
 func systemdUnitValue(value string) string {
