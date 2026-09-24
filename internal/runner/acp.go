@@ -246,6 +246,12 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 		return err
 	}
 	defer unhook()
+	unresult, err := PrepareResult(c.Exec, a)
+	if err != nil {
+		_ = c.Fail(a)
+		return err
+	}
+	defer unresult()
 	runCtx := ctx
 	cancel := func() {}
 	if a.ExecutionDeadline != nil {
@@ -281,6 +287,9 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 		_ = c.Fail(a)
 		return err
 	}
+	if a.ItemKind == "run" {
+		art.Result = collectResult(c.Exec, a, cwd, art.SnapshotHash)
+	}
 	return c.Complete(a, art)
 }
 
@@ -302,7 +311,11 @@ func HostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string) (
 			return engine.Artifact{}, err
 		}
 	}
-	pr, err := host.SessionPrompt(ctx, sid, promptFromInput(a.Input))
+	prompt := promptFromInput(a.Input)
+	if a.ResultPath != "" {
+		prompt += resultInstructions
+	}
+	pr, err := host.SessionPrompt(ctx, sid, prompt)
 	if err != nil {
 		return engine.Artifact{}, err
 	}
@@ -362,7 +375,8 @@ func artifactFromAssignment(a *Assignment, pr *acp.PromptResult) engine.Artifact
 		Publishable:     map[string]any{"stop_reason": stop},
 	}
 	if a.ItemKind == "run" {
-		// Stop reason is not a finding. Run turns fail closed without a result.
+		// Stop reason is not a finding. Run turns fail closed unless the
+		// agent reports a structured result (collectResult).
 		art.Verdict = "blocked"
 		art.Confidence = ""
 		art.Result = nil

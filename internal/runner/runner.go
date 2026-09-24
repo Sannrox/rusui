@@ -56,7 +56,10 @@ type Assignment struct {
 	CommitTrailers  []string `json:"commit_trailers,omitempty"`
 	// CommitHooksDir is where PrepareCommitHooks placed the attribution
 	// hooks for this turn; set on the runner, never by the plane.
-	CommitHooksDir    string          `json:"-"`
+	CommitHooksDir string `json:"-"`
+	// ResultPath is where a run turn's guest writes its structured result
+	// (PrepareResult).
+	ResultPath        string          `json:"-"`
 	Permissions       []acp.Rule      `json:"permissions"`
 	ExecutionDeadline *time.Time      `json:"execution_deadline"`
 	Input             json.RawMessage `json:"input"`
@@ -198,6 +201,9 @@ func DriverEnv(a *Assignment, home, path string) []string {
 		if a.ModelBaseURL != "" {
 			env = append(env, "GROK_XAI_API_BASE_URL="+a.ModelBaseURL)
 		}
+	}
+	if a.ResultPath != "" {
+		env = append(env, "RUSUI_RESULT="+a.ResultPath)
 	}
 	var git [][2]string
 	if a.GitHubToken != "" {

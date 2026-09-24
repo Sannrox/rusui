@@ -695,6 +695,9 @@ type Evidence struct {
 }
 
 func (e *Engine) Complete(jobID int64, gen, claimed int, art Artifact) (map[string]any, error) {
+	// Outside the transaction: it may call GitHub. The transaction still
+	// checks that art.Repo is the job's repository.
+	e.observeResult(&art)
 	var out map[string]any
 	err := e.Store.Tx(func(tx *sql.Tx) error {
 		kind, payload, ok, err := store.GetReceiptTx(tx, jobID, gen, claimed)

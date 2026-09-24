@@ -1,9 +1,12 @@
 package engine_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/snapshot"
+	"github.com/sannrox/rusui/internal/store"
 )
 
 func TestCompleteRunRejectsSyntheticKeep(t *testing.T) {
@@ -57,5 +60,35 @@ func TestValidateResultRejectsAgentVerified(t *testing.T) {
 	}}
 	if err := engine.ValidateResult(art); err == nil {
 		t.Fatal("agent verified")
+	}
+}
+
+// A guest holding the turn token can call Complete itself; the plane
+// recomputes what it observes instead of trusting the payload.
+func TestCompleteRecomputesClaimedOutcome(t *testing.T) {
+	h := setup(t)
+	h.f.Put(snapshot.Item{Repo: "example/test-repo", Item: 9, ItemKind: "pull", State: "open", HeadSHA: "real"})
+	if _, err := h.e.StartRun("test", "do the thing", ""); err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	a := art(c, "keep", "", "")
+	a.Result = &engine.TaskResult{
+		SchemaVersion: engine.ResultSchema, SourceHash: c.ItemHash, PullRequest: 9,
+		CandidateSHA: "forged", PublishedSHA: "forged", Outcome: engine.OutcomePublished,
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a); err != nil {
+		t.Fatal(err)
+	}
+	p, err := store.LatestReviewJSON(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got engine.Artifact
+	if err := json.Unmarshal([]byte(p), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Result.Outcome != engine.OutcomeUnconfirmed || got.Result.PublishedSHA != "real" {
+		t.Fatalf("result %+v", got.Result)
 	}
 }
