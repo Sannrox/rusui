@@ -1,7 +1,9 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -162,8 +164,12 @@ func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess, err := store.GetSession(s.Eng.Store, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if cancelErr := s.Eng.CancelSession(id); cancelErr != nil {

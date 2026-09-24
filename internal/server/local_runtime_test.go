@@ -53,6 +53,10 @@ projects:
 	socketPath := filepath.Join(socketDir, "s.sock")
 	t.Setenv("SUMIKA_SOCK", socketPath)
 	daemon := newLocalFakeDaemon(t, socketPath)
+	response, body := localRequest(t, hs, http.MethodPost, "/sessions/999999999/cancel", `{}`, "")
+	if response.StatusCode != http.StatusNotFound || strings.TrimSpace(string(body)) != "not found" {
+		t.Fatalf("cancel missing session: %d %q", response.StatusCode, body)
+	}
 	var unstartedID int64
 	if err := e.Store.Tx(func(tx *sql.Tx) error {
 		var err error
@@ -65,7 +69,7 @@ projects:
 		t.Fatalf("attach before first Process reservation returned %v", err)
 	}
 
-	response, body := localRequest(t, hs, http.MethodPost, "/projects/test/sessions", `{"kind":"local"}`, "first")
+	response, body = localRequest(t, hs, http.MethodPost, "/projects/test/sessions", `{"kind":"local"}`, "first")
 	if response.StatusCode != http.StatusCreated {
 		t.Fatalf("create local session: %d %s", response.StatusCode, body)
 	}
