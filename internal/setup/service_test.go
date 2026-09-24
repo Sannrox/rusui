@@ -505,6 +505,59 @@ func TestServiceRefusesUnmanagedFile(t *testing.T) {
 	}
 }
 
+func TestRemoveRefusesLoadedServiceWhenDefinitionIsMissing(t *testing.T) {
+	for _, platform := range []string{"launchd", "systemd"} {
+		for _, active := range []bool{true, false} {
+			if platform == "launchd" && !active {
+				continue
+			}
+			name := platform
+			if active {
+				name += "-active"
+			} else {
+				name += "-inactive"
+			}
+			t.Run(name, func(t *testing.T) {
+				home, config := t.TempDir(), t.TempDir()
+				runner := &fakeServiceCommands{active: active}
+				manager := &nativeServiceManager{platform: platform, runner: runner}
+				values := map[string]string{"HOME": home, "XDG_CONFIG_HOME": config}
+				o := Options{Getenv: func(key string) string { return values[key] }, ServiceManager: manager}
+				path, err := manager.servicePath(o)
+				if err != nil {
+					t.Fatal(err)
+				}
+				runner.source = path
+				if platform == "systemd" {
+					envPath := systemdEnvironmentPath(path)
+					if err := os.MkdirAll(filepath.Dir(envPath), 0o700); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(envPath, []byte(systemdEnvMarker+"\n"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				step, err := manager.Remove(o)
+				if err == nil || step.Item != "" {
+					t.Fatalf("remove step=%+v err=%v, want ownership error", step, err)
+				}
+				if !strings.Contains(err.Error(), "ownership cannot be verified") {
+					t.Fatalf("remove error=%v, want ownership explanation", err)
+				}
+				if mutations := runner.mutationCount(); mutations != 0 {
+					t.Fatalf("remove changed a service whose ownership could not be verified: %d mutations", mutations)
+				}
+				if platform == "systemd" {
+					if _, err := os.Stat(systemdEnvironmentPath(path)); err != nil {
+						t.Fatalf("remove changed the environment file before establishing ownership: %v", err)
+					}
+				}
+			})
+		}
+	}
+}
+
 type testServiceManager struct {
 	plans     int
 	applies   int

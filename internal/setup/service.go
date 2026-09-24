@@ -212,6 +212,16 @@ func (m *nativeServiceManager) Remove(o Options) (Step, error) {
 	}
 	content, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
+		active, source, err := m.current(o, path)
+		if err != nil {
+			return Step{}, err
+		}
+		if (active || source != "") && source != "" && !sameServicePath(source, path) {
+			return Step{}, fmt.Errorf("setup: service name is active from another file")
+		}
+		if active || source != "" {
+			return Step{}, fmt.Errorf("setup: service definition is missing but the user service manager still reports it loaded; refusing removal because ownership cannot be verified")
+		}
 		if m.platform == "systemd" {
 			if err := removeSystemdEnvironmentFile(path); err != nil {
 				return Step{}, err
