@@ -87,6 +87,19 @@ projects:
 	if got := daemon.startCount(); got != 1 {
 		t.Fatalf("Sumika start count %d", got)
 	}
+	operatorRestart, err := http.NewRequest(http.MethodPost, hs.URL+"/sessions/"+strconv.FormatInt(created.SessionID, 10)+"/restart", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	operatorRestart.Header.Set("Authorization", "Bearer op-tok")
+	operatorResponse, err := http.DefaultClient.Do(operatorRestart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = operatorResponse.Body.Close()
+	if operatorResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("operator credential restarted a local process: %d", operatorResponse.StatusCode)
+	}
 	response, body = localRequest(t, hs, http.MethodPost, "/sessions/"+strconv.FormatInt(created.SessionID, 10)+"/restart", `{}`, "")
 	if response.StatusCode != http.StatusConflict || daemon.startCount() != 1 {
 		t.Fatalf("active process restart status=%d starts=%d body=%s", response.StatusCode, daemon.startCount(), body)

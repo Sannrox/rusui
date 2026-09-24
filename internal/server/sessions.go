@@ -201,7 +201,7 @@ func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) restartLocalSession(w http.ResponseWriter, r *http.Request) {
-	if !s.operatorOrWorkerOK(r) {
+	if !s.workerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
