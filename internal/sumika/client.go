@@ -161,6 +161,7 @@ func (c *SocketClient) Attach(name string) (Session, net.Conn, error) {
 		_ = conn.Close()
 		return Session{}, nil, errors.New("sumika attach response has no session")
 	}
+	// A PTY may be idle while waiting for operator input, so only the handshake has a deadline.
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		_ = conn.Close()
 		return Session{}, nil, err

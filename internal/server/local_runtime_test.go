@@ -225,12 +225,12 @@ projects:
 	}
 
 	daemon.stop()
-	if confirmed, err := e.CancelLocalSession(created.SessionID); err == nil || confirmed {
-		t.Fatalf("offline cancellation confirmed=%v err=%v", confirmed, err)
+	if err := e.ReconcileSumika(); err == nil {
+		t.Fatal("socket loss was not reported")
 	}
 	process, err = store.LatestSumikaProcess(e.Store, created.SessionID)
-	if err != nil || process.CancelRequestedAt == nil || process.State != store.ProcessUnknown {
-		t.Fatalf("offline cancellation state %+v: %v", process, err)
+	if err != nil || process.CancelRequestedAt != nil || process.State != store.ProcessUnknown {
+		t.Fatalf("offline reconciliation state %+v: %v", process, err)
 	}
 	daemon = newLocalFakeDaemon(t, socketPath)
 	if err := e.ReconcileSumika(); err != nil {
@@ -238,8 +238,23 @@ projects:
 	}
 	process, err = store.LatestSumikaProcess(e.Store, created.SessionID)
 	sess, sessionErr = store.GetSession(e.Store, created.SessionID)
-	if err != nil || sessionErr != nil || process.State != store.ProcessLost || process.CancelRequestedAt == nil || sess.State != "open" {
-		t.Fatalf("lost process cancellation result process=%+v session=%+v errors=%v/%v", process, sess, err, sessionErr)
+	if err != nil || sessionErr != nil || process.State != store.ProcessLost || process.CancelRequestedAt != nil || sess.State != "open" {
+		t.Fatalf("lost process observation process=%+v session=%+v errors=%v/%v", process, sess, err, sessionErr)
+	}
+	response, body = localRequest(t, hs, http.MethodPost, "/sessions/"+strconv.FormatInt(created.SessionID, 10)+"/cancel", `{}`, "")
+	var lostCancel struct {
+		Confirmed bool   `json:"confirmed"`
+		State     string `json:"state"`
+	}
+	if response.StatusCode != http.StatusAccepted {
+		t.Fatalf("lost cancellation status=%d body=%s", response.StatusCode, body)
+	}
+	if err := json.Unmarshal(body, &lostCancel); err != nil || lostCancel.Confirmed || lostCancel.State != "open" {
+		t.Fatalf("lost cancellation response %+v: %v", lostCancel, err)
+	}
+	process, err = store.LatestSumikaProcess(e.Store, created.SessionID)
+	if err != nil || process.State != store.ProcessLost || process.CancelRequestedAt == nil {
+		t.Fatalf("lost cancellation intent process=%+v: %v", process, err)
 	}
 	response, body = localRequest(t, hs, http.MethodPost, "/sessions/"+strconv.FormatInt(created.SessionID, 10)+"/restart", `{}`, "")
 	if response.StatusCode != http.StatusCreated {

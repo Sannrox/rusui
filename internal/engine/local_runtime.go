@@ -274,6 +274,10 @@ func (e *Engine) CancelLocalSession(sessionID int64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if process.State == store.ProcessLost {
+		// Preserve cancellation intent for lost generations; it stays unconfirmed through explicit restart.
+		return false, fmt.Errorf("lost Sumika process cannot be cancelled without a current identity")
+	}
 	client, err := e.localRuntimeClient()
 	if err != nil {
 		_, observeErr := e.observeLocalProcess(process, store.ProcessUnknown)
@@ -284,9 +288,6 @@ func (e *Engine) CancelLocalSession(sessionID int64) (bool, error) {
 		_, observeErr := e.observeLocalProcess(process, store.ProcessUnknown)
 		return false, errors.Join(err, observeErr)
 	}
-	if process.State == store.ProcessLost {
-		return false, fmt.Errorf("lost Sumika process cannot be cancelled without a current identity")
-	}
 	var current *sumika.Session
 	for i := range infos {
 		if infos[i].Name == process.Name {
@@ -295,11 +296,9 @@ func (e *Engine) CancelLocalSession(sessionID int64) (bool, error) {
 		}
 	}
 	if current == nil {
-		if process.State != store.ProcessLost {
-			_, observeErr := e.observeLocalProcess(process, store.ProcessLost)
-			if observeErr != nil {
-				return false, observeErr
-			}
+		_, observeErr := e.observeLocalProcess(process, store.ProcessLost)
+		if observeErr != nil {
+			return false, observeErr
 		}
 		return false, fmt.Errorf("sumika process absent; cancellation unconfirmed")
 	}
