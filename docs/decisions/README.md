@@ -22,6 +22,7 @@ Decisions that must outlive a single pull request.
 | [0016](0016-local-interactive-runtime.md) | Local interactive runtime boundary with Sumika | Accepted |
 | [0017](0017-claude-guest-and-model-upstream.md) | Claude Code guest, operator model upstream, and a fenced self-test | Accepted |
 | [0018](0018-rusui-setup.md) | `rusui setup` provisions a host; `rusui diagnose` verifies it | Accepted |
+| [0019](0019-rusui-attach-client.md) | One Rusui attach command selects the runtime-owned transport | Accepted |
 
 ## When to write an ADR
 

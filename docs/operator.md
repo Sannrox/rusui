@@ -196,11 +196,28 @@ curl -fsS -X POST "http://127.0.0.1:8080/sessions/$SESSION_ID/restart" \
   -H "Authorization: Bearer $RUSUI_WORKER_SECRET"
 ```
 
+Attach to either runtime with the same operator command:
+
+```bash
+export RUSUI_OPERATOR_TOKEN=...   # generated in rusui.env by rusui setup
+rusui attach [-url http://127.0.0.1:8080] [-db rusui.db] SESSION_ID
+```
+
+The CLI reports the Session, Environment, runtime, current Process, and Turn
+before connecting. For a local Session, run it on the Sumika host as the same
+OS user and point `-db` at the server's SQLite database if it is not
+`rusui.db`. It attaches directly to Sumika; `Ctrl+]` detaches and terminal
+resizes follow the local terminal. For a managed Session, input remains
+line-oriented and the CLI acquires an audited write lease when available. If a
+browser or another CLI already holds that lease, this CLI connects read-only.
+It releases only the lease generation it acquired. Typing renews the lease; after
+an idle period longer than the lease TTL, input fails with `no write lease`
+and the command must be run again.
+
 This profile runs with Sumika's OS identity and inherited environment. It may
 use same-user files and CLI authentication; it has no managed-container
 isolation, GitHub credential, turn grant, or model proxy credential. Local PTY
-bytes remain with Sumika. The unified Rusui client path is being completed in
-issue #185.
+bytes remain with Sumika.
 
 Do not pass `-addr 0.0.0.0:8080` unless secrets are set. Operator HTTP
 (`-addr`) has no TLS unless `RUSUI_TLS_CERT` and `RUSUI_TLS_KEY` are set.

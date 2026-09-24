@@ -154,6 +154,7 @@ nav a{margin-right:1rem}
 </form>
 <form method="post" action="/console/sessions/{{.Sess.ID}}/terminal/revoke">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
+<input type="hidden" name="generation" value="{{.TermGen}}">
 <button type="submit">Release write</button>
 </form>
 {{else}}

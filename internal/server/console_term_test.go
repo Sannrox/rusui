@@ -101,13 +101,27 @@ func TestTerminalWriteLeaseAndGuestExec(t *testing.T) {
 	if len(rt.Stdio) < 1 {
 		t.Fatal("guest exec not used")
 	}
-	rr = post("/console/sessions/"+itoa64(sid)+"/terminal/revoke", form)
+	revoke := url.Values{"csrf": {csrf}, "generation": {itoa64(int64(lease.Generation))}}.Encode()
+	rr = post("/console/sessions/"+itoa64(sid)+"/terminal/revoke", revoke)
 	if rr.Code != 303 && rr.Code != 200 {
 		t.Fatalf("revoke %d %s", rr.Code, rr.Body.String())
 	}
 	rr = post("/console/sessions/"+itoa64(sid)+"/terminal/lease", form)
 	if rr.Code != 303 && rr.Code != 200 {
 		t.Fatalf("reacquire %d %s", rr.Code, rr.Body.String())
+	}
+	lease, ok, err = store.GetTerminalLease(e.Store, envRow.ID)
+	if err != nil || !ok {
+		t.Fatalf("reacquired lease %v %v", ok, err)
+	}
+	staleRevoke := url.Values{"csrf": {csrf}, "generation": {itoa64(int64(lease.Generation - 1))}}.Encode()
+	rr = post("/console/sessions/"+itoa64(sid)+"/terminal/revoke", staleRevoke)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("stale revoke %d %s", rr.Code, rr.Body.String())
+	}
+	current, ok, err := store.GetTerminalLease(e.Store, envRow.ID)
+	if err != nil || !ok || current.Generation != lease.Generation {
+		t.Fatalf("stale revoke changed lease %+v held=%v err=%v", current, ok, err)
 	}
 }
 
@@ -144,6 +158,26 @@ func TestTerminalExpiredEnvironment(t *testing.T) {
 	s.Handler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expired lease %d %s", rr.Code, rr.Body.String())
+	}
+	input := url.Values{"csrf": {csrf}, "generation": {"1"}, "data": {"echo ignored"}}.Encode()
+	req, _ = http.NewRequest("POST", "/console/sessions/"+itoa64(sid)+"/terminal/input", strings.NewReader(input))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for _, ck := range c.Jar.Cookies(u) {
+		req.AddCookie(ck)
+	}
+	rr = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "environment not ready") {
+		t.Fatalf("expired input %d %s", rr.Code, rr.Body.String())
+	}
+	res, err = c.Get(hs.URL + "/console/sessions/" + itoa64(sid) + "/terminal/output")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusConflict {
+		t.Fatalf("expired output %d", res.StatusCode)
 	}
 }
 

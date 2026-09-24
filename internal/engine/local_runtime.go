@@ -520,6 +520,11 @@ func (e *Engine) AttachLocalSession(sessionID int64) (*store.Attach, io.ReadWrit
 	}
 	e.sumikaMu.Lock()
 	defer e.sumikaMu.Unlock()
+	unlockAttach, err := sumika.LockAttach()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer unlockAttach()
 	sess, err = store.GetSession(e.Store, sessionID)
 	if err != nil {
 		return nil, nil, err

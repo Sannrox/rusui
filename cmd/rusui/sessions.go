@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"flag"
@@ -99,37 +98,5 @@ func promptCLI(args []string) {
 	os.Stdout.Write(b)
 	if len(b) == 0 || b[len(b)-1] != '\n' {
 		fmt.Println()
-	}
-}
-
-func attachCLI(args []string) {
-	fs := flag.NewFlagSet("attach", flag.ExitOnError)
-	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
-	token := fs.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "operator/worker token")
-	_ = fs.Parse(args)
-	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: rusui attach [-url URL] [-token TOKEN] SESSION_ID")
-		os.Exit(2)
-	}
-	id := fs.Arg(0)
-	if _, err := strconv.ParseInt(id, 10, 64); err != nil {
-		fmt.Fprintln(os.Stderr, "session id")
-		os.Exit(2)
-	}
-	res, err := planeClient(*url, *token, "/sessions/"+id+"/attach")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	defer res.Body.Close()
-	if res.StatusCode >= 300 {
-		b, _ := io.ReadAll(res.Body)
-		fmt.Fprintf(os.Stderr, "attach: %s %s\n", res.Status, b)
-		os.Exit(1)
-	}
-	sc := bufio.NewScanner(res.Body)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		fmt.Println(sc.Text())
 	}
 }
