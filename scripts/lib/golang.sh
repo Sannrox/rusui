@@ -227,9 +227,24 @@ function golang::place_binary() {
     target_output="${OUTPUT_BINPATH}/${platform}/${target_name}"
     mkdir -p "$(dirname "${target_output}")"
 
-    # Copy binary to final location
+    # Replace through a same-directory rename so macOS never sees a partial binary.
     if [[ -f "${source_binary}" ]]; then
-        cp "${source_binary}" "${target_output}"
+        local temporary_output
+        temporary_output="$(mktemp "${target_output}.XXXXXX")" || {
+            echo "Error: Unable to create temporary output for ${target_output}"
+            return 1
+        }
+
+        if ! cp -p "${source_binary}" "${temporary_output}"; then
+            rm -f "${temporary_output}"
+            echo "Error: Unable to copy ${source_binary} to temporary output"
+            return 1
+        fi
+        if ! mv -f "${temporary_output}" "${target_output}"; then
+            rm -f "${temporary_output}"
+            echo "Error: Unable to replace ${target_output}"
+            return 1
+        fi
         echo "Placed binary: ${target_output}"
     else
         echo "Error: Binary not found at ${source_binary}"
