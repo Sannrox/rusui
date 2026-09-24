@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -141,6 +142,60 @@ func TestDeadProcessObservationRollsBackWhenAttachClosureFails(t *testing.T) {
 	sess, err := GetSession(st, sessionID)
 	if err != nil || sess.State != "open" {
 		t.Fatalf("session after rejected observation %+v: %v", sess, err)
+	}
+}
+
+func TestLocalSessionCancellationFencesProcessGeneration(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "runtime-cancel-fence.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
+	noProcessSession := insertLocalSession(t, st)
+	if err := CancelLocalSessionWithoutProcess(st, noProcessSession); err != nil {
+		t.Fatal(err)
+	}
+	if sess, err := GetSession(st, noProcessSession); err != nil || sess.State != "cancelled" {
+		t.Fatalf("session without process %+v: %v", sess, err)
+	}
+
+	var sessionID int64
+	if err := st.Tx(func(tx *sql.Tx) error {
+		var insertErr error
+		sessionID, insertErr = InsertLocalSessionTx(tx, "test", now)
+		return insertErr
+	}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := StartSumikaProcess(st, sessionID, "first-process-identity", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CancelLocalSessionWithoutProcess(st, sessionID); !errors.Is(err, ErrStaleProcessObservation) {
+		t.Fatalf("cancel with a recorded generation error %v", err)
+	}
+	first, err = ObserveSumikaProcess(st, first.ID, first.Generation, first.Revision, ProcessDead, now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := StartSumikaProcess(st, sessionID, "second-process-identity", now.Add(2*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CancelLocalSessionAfterDeath(st, sessionID, first.ID, first.Generation, first.Revision); !errors.Is(err, ErrStaleProcessObservation) {
+		t.Fatalf("cancel from an older generation error %v", err)
+	}
+	second, err = ObserveSumikaProcess(st, second.ID, second.Generation, second.Revision, ProcessDead, now.Add(3*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CancelLocalSessionAfterDeath(st, sessionID, second.ID, second.Generation, second.Revision); err != nil {
+		t.Fatal(err)
+	}
+	if sess, err := GetSession(st, sessionID); err != nil || sess.State != "cancelled" {
+		t.Fatalf("session after current dead generation %+v: %v", sess, err)
 	}
 }
 

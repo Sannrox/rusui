@@ -234,6 +234,7 @@ func readResponse(conn net.Conn, out *response) error {
 	line := make([]byte, 0, 1024)
 	var one [1]byte
 	for {
+		// Attach switches to raw PTY bytes after this line, so do not buffer past its newline.
 		if _, err := io.ReadFull(conn, one[:]); err != nil {
 			return err
 		}

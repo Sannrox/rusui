@@ -192,6 +192,64 @@ func validObservedProcessState(state string) bool {
 	}
 }
 
+// CancelLocalSessionWithoutProcess cancels a local session only while it has
+// no recorded process generation.
+func CancelLocalSessionWithoutProcess(s *Store, sessionID int64) error {
+	return s.Tx(func(tx *sql.Tx) error {
+		var kind string
+		if err := tx.QueryRow(`SELECT kind FROM sessions WHERE id=?`, sessionID).Scan(&kind); err != nil {
+			return err
+		}
+		if kind != SessionKindLocal {
+			return fmt.Errorf("process runtime requires a local session")
+		}
+		var processID int64
+		err := tx.QueryRow(`SELECT id FROM session_processes WHERE session_id=? ORDER BY generation DESC LIMIT 1`, sessionID).Scan(&processID)
+		if err == nil {
+			return ErrStaleProcessObservation
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		_, err = tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=? AND kind=?`, sessionID, SessionKindLocal)
+		return err
+	})
+}
+
+// CancelLocalSessionAfterDeath cancels only if the exact latest process
+// generation is still dead at the revision observed by the caller.
+func CancelLocalSessionAfterDeath(s *Store, sessionID, processID, generation, revision int64) error {
+	return s.Tx(func(tx *sql.Tx) error {
+		var processSessionID, currentGeneration, currentRevision int64
+		var state string
+		if err := tx.QueryRow(`SELECT session_id, generation, revision, state FROM session_processes WHERE id=?`, processID).Scan(&processSessionID, &currentGeneration, &currentRevision, &state); err != nil {
+			return err
+		}
+		if processSessionID != sessionID || currentGeneration != generation || currentRevision != revision || state != ProcessDead {
+			return ErrStaleProcessObservation
+		}
+		var latestID int64
+		if err := tx.QueryRow(`SELECT id FROM session_processes WHERE session_id=? ORDER BY generation DESC LIMIT 1`, sessionID).Scan(&latestID); err != nil {
+			return err
+		}
+		if latestID != processID {
+			return ErrStaleProcessObservation
+		}
+		res, err := tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=? AND kind=?`, sessionID, SessionKindLocal)
+		if err != nil {
+			return err
+		}
+		changed, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if changed != 1 {
+			return sql.ErrNoRows
+		}
+		return nil
+	})
+}
+
 // BeginSumikaAttach allocates a distinct Attach generation. The new generation
 // marks the previously observed writer as stolen without changing Process state.
 func BeginSumikaAttach(s *Store, processID, processGeneration int64, now time.Time) (*Attach, error) {
