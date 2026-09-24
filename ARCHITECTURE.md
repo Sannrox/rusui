@@ -52,7 +52,9 @@ land-eligible verdict plus policy `land: true`. Never CI green alone.
 ownership boundary for the experimental local-interactive profile. Issue #183
 adds durable Process and Attach observation records plus an additive session
 detail API. Issue #184 adds an explicitly configured, same-user Sumika
-adapter. The operator-facing unified attach client remains in #185.
+adapter. Issue #185 implements the operator-facing unified attach client:
+local PTY bytes stay on the Sumika socket, while managed sessions keep the
+existing console terminal lease and audit path.
 
 `local` is default-off and can be enabled only on a Project that defines a
 `local_runtime` profile with exact argv and clean absolute cwd. An
@@ -103,8 +105,9 @@ same-host, same-user socket only; remote pairing is out of scope.
 The managed runner, container, terminal write lease, and ACP editor contracts
 remain unchanged. The local profile is not part of the supported 1.0 core
 unless [#141](https://github.com/Sannrox/rusui/issues/141) explicitly includes
-it. Issue #183 owns the observation schema and API; #184 owns the runtime
-adapter, #185 the unified attach client, and #186 the cross-profile evidence.
+it. Issues #183 and #184 established the observation API and runtime adapter;
+#185 provides the unified attach client, and #186 owns the cross-profile
+evidence.
 
 ## System
 

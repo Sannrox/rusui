@@ -52,6 +52,8 @@ type request struct {
 	Cwd     string   `json:"cwd,omitempty"`
 	Project *string  `json:"project,omitempty"`
 	Force   bool     `json:"force,omitempty"`
+	Cols    int      `json:"cols,omitempty"`
+	Rows    int      `json:"rows,omitempty"`
 }
 
 type response struct {
@@ -167,6 +169,15 @@ func (c *SocketClient) Attach(name string) (Session, net.Conn, error) {
 		return Session{}, nil, err
 	}
 	return *res.Session, conn, nil
+}
+
+// Resize updates the PTY dimensions for a named Sumika Process.
+func (c *SocketClient) Resize(name string, cols, rows int) error {
+	if name == "" || cols < 1 || rows < 1 {
+		return errors.New("sumika resize requires a name and positive dimensions")
+	}
+	_, err := c.rpc(request{Op: "resize", Name: name, Cols: cols, Rows: rows})
+	return err
 }
 
 func (c *SocketClient) rpc(req request) (response, error) {

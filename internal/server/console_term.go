@@ -17,6 +17,7 @@ import (
 )
 
 const terminalLeaseTTL = engine.GrantTTL
+const terminalGenerationHeader = "X-Rusui-Terminal-Generation"
 
 type termSess struct {
 	mu     sync.Mutex
@@ -105,6 +106,7 @@ func (s *Server) consoleTermLease(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	w.Header().Set(terminalGenerationHeader, strconv.Itoa(gen))
 	_ = store.InsertTerminalAccess(s.Eng.Store, envRow.ID, sess.ID, "acquire", envRow.Handle)
 	http.Redirect(w, r, "/console/sessions/"+strconv.FormatInt(sess.ID, 10)+"/terminal", http.StatusSeeOther)
 }
@@ -122,8 +124,24 @@ func (s *Server) consoleTermRevoke(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	want, err := strconv.Atoi(r.FormValue("generation"))
+	if err != nil || want < 1 {
+		http.Error(w, "generation", http.StatusBadRequest)
+		return
+	}
+	lease, held, err := store.GetTerminalLease(s.Eng.Store, envRow.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !held || lease.SessionID != sess.ID || lease.Generation != want {
+		_ = store.InsertTerminalAccess(s.Eng.Store, envRow.ID, sess.ID, "refuse", "stale generation")
+		http.Error(w, "stale generation", http.StatusConflict)
+		return
+	}
 	s.stopTerm(envRow.ID)
-	_ = store.DeleteTerminalLease(s.Eng.Store, envRow.ID)
+	lease.ExpiresAt = time.Now().UTC().Add(-time.Second)
+	_ = store.PutTerminalLease(s.Eng.Store, *lease)
 	_ = store.InsertTerminalAccess(s.Eng.Store, envRow.ID, sess.ID, "revoke", "")
 	http.Redirect(w, r, "/console/sessions/"+strconv.FormatInt(sess.ID, 10)+"/terminal", http.StatusSeeOther)
 }
@@ -139,6 +157,10 @@ func (s *Server) consoleTermInput(w http.ResponseWriter, r *http.Request) {
 	sess, envRow, err := s.termSessionEnv(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if envRow.Handle == "" || envRow.State != store.EnvReady {
+		http.Error(w, "environment not ready", http.StatusConflict)
 		return
 	}
 	lease, held, err := store.GetTerminalLease(s.Eng.Store, envRow.ID)
@@ -190,6 +212,10 @@ func (s *Server) consoleTermOutput(w http.ResponseWriter, r *http.Request) {
 	_, envRow, err := s.termSessionEnv(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if envRow.Handle == "" || envRow.State != store.EnvReady {
+		http.Error(w, "environment not ready", http.StatusConflict)
 		return
 	}
 	fl, ok := w.(http.Flusher)
