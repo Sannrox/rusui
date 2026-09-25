@@ -40,6 +40,10 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
+	if r.URL.Query().Get("view") == "review-status" {
+		s.getSessionReviewStatus(w, r, id)
+		return
+	}
 	sess, err := store.GetSession(s.Eng.Store, id)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -109,6 +113,35 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		response["review_result"] = reviewResult
 	}
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+type reviewStatusResponse struct {
+	TurnID          int64  `json:"turn_id"`
+	TurnState       string `json:"turn_state"`
+	PendingRevision int    `json:"pending_revision"`
+	ClaimedRevision int    `json:"claimed_revision"`
+}
+
+func (s *Server) getSessionReviewStatus(w http.ResponseWriter, r *http.Request, sessionID int64) {
+	turnID, err := strconv.ParseInt(r.URL.Query().Get("turn_id"), 10, 64)
+	if err != nil || turnID <= 0 {
+		http.Error(w, "turn_id", http.StatusBadRequest)
+		return
+	}
+	turn, err := store.GetTurn(s.Eng.Store, turnID)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && turn.SessionID != sessionID) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(reviewStatusResponse{
+		TurnID: turn.ID, TurnState: turn.State,
+		PendingRevision: turn.PendingRevision, ClaimedRevision: turn.ClaimedRevision,
+	})
 }
 
 func (s *Server) attachSession(w http.ResponseWriter, r *http.Request) {
