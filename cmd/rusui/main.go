@@ -73,6 +73,7 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen")
 	db := flag.String("db", "rusui.db", "sqlite path")
 	pol := flag.String("policy", "policy.yaml", "policy file")
+	envIdleSleep := flag.Duration("env-idle-sleep", 5*time.Minute, "sleep managed container environments after this idle period (0 disables)")
 	printVersion := flag.Bool("version", false, "print version and exit")
 	allowInsecure := flag.Bool("allow-insecure", false, "start without webhook, worker, and Slack secrets")
 	flag.Parse()
@@ -117,6 +118,7 @@ func main() {
 		api.BaseURL = u
 	}
 	eng := engine.New(st, p, api, clock.Real{})
+	eng.EnvIdleSleep = *envIdleSleep
 	eng.HookIDs = api.HookIDs
 	eng.SnapshotRoot = filepath.Join(filepath.Dir(*db), "snapshots")
 	tlsCert := os.Getenv("RUSUI_TLS_CERT")
@@ -230,6 +232,9 @@ func runScheduler(eng *engine.Engine) {
 		case <-sched.C:
 			if err := eng.StepSchedules(time.Now()); err != nil {
 				eng.Notify("schedules: " + err.Error())
+			}
+			if err := eng.SleepIdleEnvironments(); err != nil {
+				eng.Notify("sleep idle environments: " + err.Error())
 			}
 		case <-sumikaReconcile.C:
 			if err := eng.ReconcileSumika(); err != nil {

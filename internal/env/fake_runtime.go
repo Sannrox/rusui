@@ -26,6 +26,8 @@ type FakeRuntime struct {
 	Stdio           []StdioCall
 	StdioHook       func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error)
 	ExecHook        func(id string, cmd []string) error
+	StartHook       func(id string) error
+	StopHook        func(id string) error
 	alive           map[string]bool
 }
 
@@ -73,6 +75,11 @@ func (f *FakeRuntime) Stop(id string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Stopped = append(f.Stopped, id)
+	if f.StopHook != nil {
+		if err := f.StopHook(id); err != nil {
+			return err
+		}
+	}
 	if f.alive != nil {
 		f.alive[id] = false
 	}
@@ -83,6 +90,11 @@ func (f *FakeRuntime) Start(id string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Started = append(f.Started, id)
+	if f.StartHook != nil {
+		if err := f.StartHook(id); err != nil {
+			return err
+		}
+	}
 	if f.alive == nil {
 		f.alive = map[string]bool{}
 	}

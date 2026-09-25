@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
@@ -69,6 +70,10 @@ func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 		Handle: envRow.Handle, Port: port, ExpiresAt: time.Now().UTC().Add(previewTTL),
 	}
 	if err := store.PutPreviewGrant(s.Eng.Store, g); err != nil {
+		if errors.Is(err, store.ErrEnvironmentUnavailable) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		http.Error(w, err.Error(), 500)
 		return
 	}

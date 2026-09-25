@@ -7,7 +7,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 19
+const CurrentSchema = 20
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -328,8 +328,33 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 19); err != nil {
 			return err
 		}
+		ver = 19
+	}
+	if ver < 20 {
+		if err := migrateV20(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 20); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func migrateV20(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS environment_receipts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  environment_id INTEGER NOT NULL,
+  session_id INTEGER,
+  kind TEXT NOT NULL CHECK (kind IN ('sleep', 'wake')),
+  state TEXT NOT NULL CHECK (state IN ('succeeded', 'failed')),
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS environment_receipts_session ON environment_receipts(session_id, id);
+`)
+	return err
 }
 
 func migrateV18(db *sql.DB) error {

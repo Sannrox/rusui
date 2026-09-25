@@ -71,12 +71,13 @@ nav a{margin-right:1rem}
 <ul>
 {{range .Sessions}}
 <li><a href="/console/sessions/{{.ID}}">#{{.ID}} {{.Project}} {{.Kind}}</a>
- — {{.State}}{{if .TurnState}} / {{.TurnState}}{{end}}{{if .Reason}} — {{.Reason}}{{end}}</li>
+— {{.State}}{{if .TurnState}} / {{.TurnState}}{{end}} · environment {{.EnvironmentState}}{{if .Reason}} — {{.Reason}}{{end}}</li>
 {{end}}
 </ul>
 {{else if eq .View "session"}}
 <h1>Session {{.Sess.ID}}</h1>
-<p>Project {{.Sess.Project}} · {{.Sess.Kind}} · {{.Sess.State}}{{if .TurnState}} · turn {{.TurnState}}{{end}}</p>
+<p>Project {{.Sess.Project}} · {{.Sess.Kind}} · {{.Sess.State}} · environment {{.Sess.EnvironmentState}}{{if .TurnState}} · turn {{.TurnState}}{{end}}</p>
+{{if .EnvironmentReceipts}}<h2>Environment activity</h2><ul>{{range .EnvironmentReceipts}}<li>{{.CreatedAt.Format "2006-01-02 15:04:05 MST"}} {{.Kind}} {{.State}}{{if .Detail}} — {{.Detail}}{{end}}</li>{{end}}</ul>{{end}}
 <p>{{.Sess.Prompt}}</p>
 <p><a href="/console/sessions/{{.Sess.ID}}/terminal">Terminal</a></p>
 <form method="post" action="/console/sessions/{{.Sess.ID}}/preview">
@@ -184,33 +185,34 @@ nav a{margin-right:1rem}
 </body></html>`
 
 type consolePage struct {
-	Title              string
-	View               string
-	Authed             bool
-	CSRF               string
-	Err                string
-	Sessions           []consoleSess
-	Sess               *store.Session
-	TurnState          string
-	Reason             string
-	Artifact           string
-	HistoryUnavailable bool
-	Entries            []consoleEntry
-	Files              []consoleFile
-	FilesErr           string
-	FileName           string
-	FileBody           string
-	FileState          string
-	Approvals          []consoleApproval
-	Notice             string
-	Heading            string
-	Head               []string
-	Rows               [][]string
-	TermHandle         string
-	TermDriver         string
-	TermState          string
-	TermWrite          bool
-	TermGen            int
+	Title               string
+	View                string
+	Authed              bool
+	CSRF                string
+	Err                 string
+	Sessions            []consoleSess
+	Sess                *store.Session
+	EnvironmentReceipts []store.EnvironmentReceipt
+	TurnState           string
+	Reason              string
+	Artifact            string
+	HistoryUnavailable  bool
+	Entries             []consoleEntry
+	Files               []consoleFile
+	FilesErr            string
+	FileName            string
+	FileBody            string
+	FileState           string
+	Approvals           []consoleApproval
+	Notice              string
+	Heading             string
+	Head                []string
+	Rows                [][]string
+	TermHandle          string
+	TermDriver          string
+	TermState           string
+	TermWrite           bool
+	TermGen             int
 }
 
 type consoleApproval struct {
@@ -225,12 +227,13 @@ type consoleApproval struct {
 }
 
 type consoleSess struct {
-	ID        int64
-	Project   string
-	Kind      string
-	State     string
-	TurnState string
-	Reason    string
+	ID               int64
+	Project          string
+	Kind             string
+	State            string
+	EnvironmentState string
+	TurnState        string
+	Reason           string
 }
 
 type consoleEntry struct {
@@ -367,7 +370,7 @@ func (s *Server) consoleSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]consoleSess, 0, len(list))
 	for _, sess := range list {
-		cs := consoleSess{ID: sess.ID, Project: sess.Project, Kind: sess.Kind, State: sess.State}
+		cs := consoleSess{ID: sess.ID, Project: sess.Project, Kind: sess.Kind, State: sess.State, EnvironmentState: sess.EnvironmentState}
 		turns, _ := store.ListTurnsForSession(s.Eng.Store, sess.ID)
 		if len(turns) > 0 {
 			cs.TurnState = turns[len(turns)-1].State
@@ -409,6 +412,10 @@ func (s *Server) sessionPage(id int64) (consolePage, error) {
 		return consolePage{}, err
 	}
 	page := consolePage{Title: fmt.Sprintf("Session %d", id), View: "session", Sess: sess}
+	page.EnvironmentReceipts, err = store.ListEnvironmentReceipts(s.Eng.Store, id)
+	if err != nil {
+		page.HistoryUnavailable = true
+	}
 	turns, err := store.ListTurnsForSession(s.Eng.Store, id)
 	if err != nil {
 		page.HistoryUnavailable = true

@@ -33,8 +33,16 @@ func GetTerminalLease(s *Store, envID int64) (*TerminalLease, bool, error) {
 }
 
 func PutTerminalLease(s *Store, l TerminalLease) error {
-	_, err := s.DB.Exec(`INSERT OR REPLACE INTO terminal_leases (environment_id, session_id, generation, expires_at) VALUES (?,?,?,?)`,
-		l.EnvironmentID, l.SessionID, l.Generation, l.ExpiresAt.UTC().Format(time.RFC3339Nano))
+	res, err := s.DB.Exec(`INSERT OR REPLACE INTO terminal_leases (environment_id, session_id, generation, expires_at)
+SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM environments WHERE id=? AND state=?)`,
+		l.EnvironmentID, l.SessionID, l.Generation, l.ExpiresAt.UTC().Format(time.RFC3339Nano), l.EnvironmentID, EnvReady)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err == nil && n == 0 {
+		return ErrEnvironmentUnavailable
+	}
 	return err
 }
 

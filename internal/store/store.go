@@ -555,13 +555,14 @@ func ListSessions(s *Store, project string, limit int) ([]Session, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	q := `SELECT id, environment_id, kind, repo, item, item_kind, state, project, prompt, created_at FROM sessions`
+	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.created_at
+FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	args := []any{}
 	if project != "" {
-		q += ` WHERE project=?`
+		q += ` WHERE s.project=?`
 		args = append(args, project)
 	}
-	q += ` ORDER BY id DESC LIMIT ?`
+	q += ` ORDER BY s.id DESC LIMIT ?`
 	args = append(args, limit)
 	rows, err := s.DB.Query(q, args...)
 	if err != nil {
@@ -572,7 +573,7 @@ func ListSessions(s *Store, project string, limit int) ([]Session, error) {
 	for rows.Next() {
 		var sess Session
 		var created string
-		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &created); err != nil {
+		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &created); err != nil {
 			return nil, err
 		}
 		if t, err := time.Parse(time.RFC3339Nano, created); err == nil {
@@ -630,8 +631,9 @@ func ListActionsForSession(s *Store, sessionID int64) ([]Action, error) {
 func GetSession(s *Store, id int64) (*Session, error) {
 	var sess Session
 	var created string
-	err := s.DB.QueryRow(`SELECT id, environment_id, kind, repo, item, item_kind, state, project, prompt, guest_session_id, created_at FROM sessions WHERE id=?`, id).Scan(
-		&sess.ID, &sess.EnvironmentID, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &created)
+	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.created_at
+FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id WHERE s.id=?`, id).Scan(
+		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &created)
 	if err != nil {
 		return nil, err
 	}

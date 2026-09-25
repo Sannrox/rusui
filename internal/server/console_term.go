@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -103,6 +104,10 @@ func (s *Server) consoleTermLease(w http.ResponseWriter, r *http.Request) {
 		EnvironmentID: envRow.ID, SessionID: sess.ID, Generation: gen,
 		ExpiresAt: time.Now().UTC().Add(terminalLeaseTTL),
 	}); err != nil {
+		if errors.Is(err, store.ErrEnvironmentUnavailable) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		http.Error(w, err.Error(), 500)
 		return
 	}

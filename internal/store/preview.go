@@ -28,8 +28,16 @@ func PutPreviewGrant(s *Store, g PreviewGrant) error {
 	if g.Revoked {
 		rev = 1
 	}
-	_, err := s.DB.Exec(`INSERT INTO preview_grants (token_hash, session_id, environment_id, handle, port, expires_at, revoked) VALUES (?,?,?,?,?,?,?)`,
-		g.TokenHash, g.SessionID, g.EnvironmentID, g.Handle, g.Port, g.ExpiresAt.UTC().Format(time.RFC3339Nano), rev)
+	res, err := s.DB.Exec(`INSERT INTO preview_grants (token_hash, session_id, environment_id, handle, port, expires_at, revoked)
+SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM environments WHERE id=? AND state=?)`,
+		g.TokenHash, g.SessionID, g.EnvironmentID, g.Handle, g.Port, g.ExpiresAt.UTC().Format(time.RFC3339Nano), rev, g.EnvironmentID, EnvReady)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err == nil && n == 0 {
+		return ErrEnvironmentUnavailable
+	}
 	return err
 }
 

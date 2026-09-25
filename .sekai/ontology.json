@@ -69,7 +69,13 @@
     },
     {
       "name": "RusuiEnvironment",
-      "description": "The machine a session runs on. One session, one Rusui Environment record. Managed environments are created from a snapshot and expire after 72h idle; the experimental local profile identifies the operator's host and provides no isolation. P1 dogfood machine isolation is a container; the process driver and immortal local environment are not dogfood.",
+      "description": "The machine a session runs on. One session, one Rusui Environment record. Managed environments are created from a snapshot, sleep after a configurable idle period, wake on the same handle before a follow-up turn, and expire after 72h idle; the experimental local profile identifies the operator's host and provides no isolation. P1 dogfood machine isolation is a container; the process driver and immortal local environment are not dogfood.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiEnvironmentReceipt",
+      "description": "Durable outcome record for an environment sleep or wake operation, including its state, time, and failure detail when present.",
       "superclasses": [],
       "properties": []
     },
@@ -412,6 +418,14 @@
       "transitive": false
     },
     {
+      "name": "rusui_environment_records_receipt",
+      "description": "An environment records each sleep and wake outcome as a durable receipt.",
+      "domain": "RusuiEnvironment",
+      "range": "RusuiEnvironmentReceipt",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
       "name": "rusui_proof_judges_candidate",
       "description": "An isolated proof is valid only for the candidate SHA and source snapshot it names.",
       "domain": "RusuiProof",
@@ -627,6 +641,24 @@
       "subject": "RusuiEnvironment",
       "source": "docs/decisions/0016-local-interactive-runtime.md",
       "locator": "docs/decisions/0016-local-interactive-runtime.md#d2-a-separate-local-session-kind",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiEnvironment",
+      "source": "internal/engine/environment.go",
+      "locator": "internal/engine/environment.go#SleepIdleEnvironments",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiEnvironmentReceipt",
+      "source": "internal/store/environment.go",
+      "locator": "internal/store/environment.go#InsertEnvironmentReceipt",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_environment_records_receipt",
+      "source": "internal/store/environment.go",
+      "locator": "internal/store/environment.go#InsertEnvironmentReceipt",
       "confidence": 1.0
     },
     {
