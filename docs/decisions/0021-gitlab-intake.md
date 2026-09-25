@@ -1,7 +1,8 @@
 # ADR 0021: First GitLab intake is GitLab.com project issues only
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-25
+- Accepted by: Sannrox, repository maintainer (2026-09-25)
 - Resolves: [Issue #247](https://github.com/Sannrox/rusui/issues/247)
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md) (current product contract)
 - Base: `85a487b6bf71b246775fa34de145d81238e1ff21`
@@ -72,10 +73,9 @@ other commands, but no equivalents for that maintenance set
 
 ## Decision
 
-**Proposed recommendation: NARROW.** If GitLab intake is approved, begin with
-one explicit profile: issues from a bound GitLab.com project. Do not treat
-this proposal as accepted product behavior; `ARCHITECTURE.md` remains the
-contract until a maintainer accepts a follow-up change.
+**Decision: NARROW.** The first GitLab intake profile is issues from a bound
+GitLab.com project. `ARCHITECTURE.md` remains the product contract until a
+follow-up changes it.
 
 The first workflow is: a maintainer configures one project webhook for ordinary
 issue events and leaves confidential-issue events disabled; an open, edit,
