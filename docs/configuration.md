@@ -18,6 +18,25 @@ Subcommand `rusui diagnose [-policy PATH] [-addr ADDR] [-url URL]` prints a
 JSON topology report (`ready` / `misconfigured` / `unavailable`) and exits
 0 only when every blocking check is ready. It does not print secret values.
 
+Policy tools run locally and do not start the server:
+
+```bash
+rusui policy init [-file policy.yaml]
+rusui policy explain -repo OWNER/REPO [-policy policy.yaml] [-db rusui.db]
+rusui policy simulate review -repo OWNER/REPO -item NUMBER [-policy policy.yaml] [-db rusui.db]
+```
+
+`policy init` creates the conservative operator starter file and refuses to
+overwrite an existing file. `policy explain` prints effective repository and
+project values with their source, plus global and project pauses and the
+current UTC-day review count. `policy simulate review` applies the same pure
+policy and pause and budget checks used by the server to a prospective review.
+It reads the SQLite database in read-only mode. It does not contact GitHub,
+admit a job, or start a guest. It does not inspect whether the item is already
+queued or whether another turn holds the project lease cap. If the database
+path does not exist, the explanation reports an empty pause and count state;
+pass the server's actual `-db` path to include durable state.
+
 `rusui drain -url URL -token TOKEN` POSTs `/drain` (worker auth), pauses new
 claims, and lists leased turns. Do not open `rusui.db` while the plane holds it.
 `rusui diagnostics` writes a redacted bundle (`diagnostics.json`).
@@ -152,6 +171,18 @@ Policy v2 is keyed by **project** ([ADR 0005](decisions/0005-policy-v2-project.m
 
 Operator default: [policy.example.yaml](../policy.example.yaml). Tests that
 need eligible dry-run comments/close load [policy.fixture.yaml](../policy.fixture.yaml).
+
+The current operator starter is the managed policy v2 profile: review, run,
+and scheduled session kinds, with review enabled and comments, close,
+implement, and land disabled. `comments` and `close` authorize dry-run
+intended-actions only; rusui does not write either action to GitHub. The
+`implement` field is an opt-in for the accepted agent-publication path and
+requires the configured agent GitHub credential; it is off in the starter.
+`land` remains unauthorized by the current contract and should stay false.
+The test fixture's comments/close settings are for dry-run coverage, not an
+operator profile. The `local` session kind is experimental, default-off, and
+outside the supported 1.0 core; enabling it requires the explicit
+`local_runtime` configuration below.
 
 ```yaml
 version: 2

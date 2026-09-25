@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -42,22 +43,23 @@ func (e *Engine) RequestReview(repo string, item int) (ReviewRequest, error) {
 		return ReviewRequest{}, ErrReviewRequestInvalid
 	}
 	activePolicy := e.PolicySnapshot()
-	repoPolicy, ok := activePolicy.Repo(repo)
-	if !ok {
+	decision := activePolicy.ReviewAccess(repo, false)
+	switch decision.Reason {
+	case policy.ReviewReasonUnboundRepo, policy.ReviewReasonMissingProject:
 		return ReviewRequest{}, ErrReviewRepoUnbound
-	}
-	if !repoPolicy.Review {
+	case policy.ReviewReasonDisabled:
 		return ReviewRequest{}, ErrReviewDisabled
 	}
-	if _, ok := activePolicy.Project(repoPolicy.Project); !ok {
-		return ReviewRequest{}, ErrReviewRepoUnbound
+	repoPolicy, _ := activePolicy.Repo(repo)
+	if !decision.Allowed {
+		return ReviewRequest{}, ErrReviewRequestInvalid
 	}
 	if err := e.Store.Tx(func(tx *sql.Tx) error {
 		paused, err := store.Paused(tx, repoPolicy.Project)
 		if err != nil {
 			return err
 		}
-		if paused {
+		if !activePolicy.ReviewAccess(repo, paused).Allowed {
 			return ErrReviewPaused
 		}
 		return store.EnsureRefreshQueuedTx(tx, repo, item, "pull", false)
