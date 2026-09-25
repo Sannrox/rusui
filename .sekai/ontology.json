@@ -182,6 +182,12 @@
       "properties": []
     },
     {
+      "name": "RusuiGitLabIntakeProfile",
+      "description": "Accepted ADR 0021 target, not implemented or part of the current ARCHITECTURE v1 contract: one bound GitLab.com project for ordinary issues. Signed Issue Hooks trigger canonical read-only refreshes; identity is provider, origin, project, and issue IID, using Guest read_api and updated_after checkpointed reconciliation. Confidential issues and GitLab writes are excluded; CLI maintenance parity precedes Slack-free operation.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiCandidate",
       "description": "Git object (commit_sha, tree_sha, ref) on refs/heads/rusui/<session>/*. Not a working tree or default-branch tip.",
       "superclasses": [],
@@ -294,6 +300,14 @@
       "description": "Control plane recovers missed or failed GitHub deliveries.",
       "domain": "RusuiControlPlane",
       "range": "RusuiWebhookReconciler",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_targets_gitlab_issue_intake",
+      "description": "Accepted ADR 0021 names a GitLab.com project-issue intake profile as the future target; this relation does not assert implementation or alter ARCHITECTURE v1.",
+      "domain": "RusuiControlPlane",
+      "range": "RusuiGitLabIntakeProfile",
       "cardinality": { "min": 0, "max": 1 },
       "transitive": false
     },
@@ -815,6 +829,18 @@
       "subject": "rusui_project_groups_local_process",
       "source": "docs/decisions/0016-local-interactive-runtime.md",
       "locator": "docs/decisions/0016-local-interactive-runtime.md#d1-authority-and-identity",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiGitLabIntakeProfile",
+      "source": "docs/decisions/0021-gitlab-intake.md",
+      "locator": "docs/decisions/0021-gitlab-intake.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_targets_gitlab_issue_intake",
+      "source": "docs/decisions/0021-gitlab-intake.md",
+      "locator": "docs/decisions/0021-gitlab-intake.md#decision",
       "confidence": 1.0
     }
   ]
