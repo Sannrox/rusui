@@ -133,6 +133,10 @@ func TestIdleContainerSleepsAndFollowUpWakesSameEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	pin := c.Snapshot.GitPin()
+	if pin == "" || envRow.SourceHash != engine.SourceHash("rusui-guest:test", pin, nil) {
+		t.Fatalf("environment did not retain source git pin %q: %+v", pin, envRow)
+	}
 	if _, err := h.e.SleepEnvironment(envRow.ID); err == nil {
 		t.Fatal("leased environment slept")
 	}
@@ -158,11 +162,23 @@ func TestIdleContainerSleepsAndFollowUpWakesSameEnvironment(t *testing.T) {
 	if _, _, err := h.e.PromptFollowUp(sess.ID, "continue in the same workspace"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.e.Claim("example/test-repo"); err != nil {
+	next, err := h.e.Claim("example/test-repo")
+	if err != nil {
 		t.Fatal(err)
 	}
+	if next == nil || next.Snapshot.GitPin() != pin {
+		t.Fatalf("follow-up changed git pin from %q: %+v", pin, next)
+	}
+	nextTurn, err := store.GetTurn(h.st, next.Job.ID)
+	if err != nil || nextTurn.SessionID != sess.ID {
+		t.Fatalf("follow-up changed session identity: turn=%+v err=%v", nextTurn, err)
+	}
+	nextSession, err := store.GetSession(h.st, sess.ID)
+	if err != nil || nextSession.EnvironmentID != envRow.ID {
+		t.Fatalf("follow-up changed environment identity: session=%+v err=%v", nextSession, err)
+	}
 	got, err = store.GetEnvironment(h.st, envRow.ID)
-	if err != nil || got.State != store.EnvReady || got.Handle != envRow.Handle || len(rt.Created) != 1 || len(rt.Started) != 1 || rt.Started[0] != envRow.Handle {
+	if err != nil || got.State != store.EnvReady || got.Handle != envRow.Handle || got.SourceHash != envRow.SourceHash || len(rt.Created) != 1 || len(rt.Started) != 1 || rt.Started[0] != envRow.Handle {
 		t.Fatalf("follow-up did not wake same environment: %+v created=%v started=%v err=%v", got, rt.Created, rt.Started, err)
 	}
 	receipts, err = store.ListEnvironmentReceipts(h.st, sess.ID)
@@ -273,13 +289,19 @@ func TestLiveIdleContainerTurnResume(t *testing.T) {
 	if _, _, err := h.e.PromptFollowUp(sess.ID, "resume same workspace"); err != nil {
 		t.Fatal(err)
 	}
+	wakeStarted := time.Now()
 	next, err := h.e.Claim("example/test-repo")
 	if err != nil || next == nil {
 		t.Fatalf("follow-up claim %+v: %v", next, err)
 	}
+	t.Logf("idle environment wake and follow-up claim latency: %s", time.Since(wakeStarted))
 	resumed, err := store.GetEnvironment(h.st, envRow.ID)
-	if err != nil || resumed.State != store.EnvReady || resumed.Handle != handle {
+	if err != nil || resumed.State != store.EnvReady || resumed.Handle != handle || resumed.SourceHash != envRow.SourceHash || next.Snapshot.GitPin() != c.Snapshot.GitPin() {
 		t.Fatalf("resumed environment %+v err=%v", resumed, err)
+	}
+	nextTurn, err := store.GetTurn(h.st, next.Job.ID)
+	if err != nil || nextTurn.SessionID != sess.ID {
+		t.Fatalf("follow-up claim changed session identity: turn=%+v err=%v", nextTurn, err)
 	}
 	marker, err := rt.ReadFile(handle, "live-marker")
 	if err != nil || string(marker) != "workspace-preserved" {

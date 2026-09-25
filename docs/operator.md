@@ -213,6 +213,9 @@ browser or another CLI already holds that lease, this CLI connects read-only.
 It releases only the lease generation it acquired. Typing renews the lease; after
 an idle period longer than the lease TTL, input fails with `no write lease`
 and the command must be run again.
+Managed attachment replays the existing Session, Turn, and action transcript
+events to stderr while terminal output stays on stdout. It reconnects by the
+existing session id and environment; it does not create either object.
 
 This profile runs with Sumika's OS identity and inherited environment. It may
 use same-user files and CLI authentication; it has no managed-container

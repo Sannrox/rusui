@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -119,6 +120,187 @@ func TestRunAttachManagedUsesOperatorLeaseAndAudit(t *testing.T) {
 
 	if err := runAttach(attachOptions{URL: hs.URL, Token: "worker-token", DB: dbPath}, sid, strings.NewReader(""), io.Discard, io.Discard); err == nil {
 		t.Fatal("worker token opened the operator terminal")
+	}
+}
+
+func TestRunAttachManagedAfterWakeReusesSessionEnvironmentAndTranscript(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "managed-wake.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	pol, err := policy.Parse([]byte(attachPolicy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := engine.New(st, pol, gh.NewFake(), clock.Real{})
+	e.ReloadPolicy(pol)
+	rt := &env.FakeRuntime{DefaultFiles: map[string]bool{env.ResumePath: true}}
+	terminalInput := &lockedBuffer{}
+	rt.StdioHook = func(string, []string, []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+		return terminalInput, io.NopCloser(strings.NewReader("terminal resumed after wake\n")), func() {}, nil
+	}
+	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	sessionID, err := e.StartRun("test", "initial turn", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := e.Claim("example/test-repo")
+	if err != nil || claim == nil {
+		t.Fatalf("initial claim %+v: %v", claim, err)
+	}
+	session, err := store.GetSession(st, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envBefore, err := store.GetEnvironment(st, session.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin := claim.Snapshot.GitPin()
+	if pin == "" || envBefore.SourceHash != engine.SourceHash("rusui-guest:test", pin, nil) {
+		t.Fatalf("environment source hash does not identify pin %q: %+v", pin, envBefore)
+	}
+	artifact := engine.Artifact{
+		SchemaVersion: 1, Repo: claim.Job.Repo, Item: claim.Job.Item, ItemKind: claim.Job.ItemKind,
+		ClaimedRevision: claim.Job.ClaimedRevision, SnapshotHash: claim.ItemHash,
+		MainSHA: claim.Snapshot.MainSHA, Verdict: "keep", Confidence: "high",
+		Result: &engine.TaskResult{
+			SchemaVersion: engine.ResultSchema,
+			SourceHash:    claim.ItemHash,
+			Findings:      []engine.Finding{{Title: "existing workspace", Body: "ready for follow-up"}},
+		},
+	}
+	if _, err := e.Complete(claim.Job.ID, claim.Job.LeaseGeneration, claim.Job.ClaimedRevision, artifact); err != nil {
+		t.Fatal(err)
+	}
+	transcript := "existing transcript entry" + strings.Repeat("x", (1<<20)+1)
+	if _, err := e.IngestTurnAction(claim.Job.ID, "acp.session.update", "recorded", map[string]string{"text": transcript}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.SleepEnvironment(envBefore.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.PromptFollowUp(sessionID, "continue after wake"); err != nil {
+		t.Fatal(err)
+	}
+	followUp, err := e.Claim("example/test-repo")
+	if err != nil || followUp == nil {
+		t.Fatalf("follow-up claim %+v: %v", followUp, err)
+	}
+	sessionAfter, err := store.GetSession(st, sessionID)
+	if err != nil || sessionAfter.ID != session.ID || sessionAfter.EnvironmentID != envBefore.ID {
+		t.Fatalf("wake changed session identity: before=%+v after=%+v err=%v", session, sessionAfter, err)
+	}
+	envAfter, err := store.GetEnvironment(st, sessionAfter.EnvironmentID)
+	if err != nil || envAfter.State != store.EnvReady || envAfter.Handle != envBefore.Handle || envAfter.SourceHash != envBefore.SourceHash || followUp.Snapshot.GitPin() != pin {
+		t.Fatalf("wake changed environment or git pin: before=%+v after=%+v pin=%q follow-up=%+v err=%v", envBefore, envAfter, pin, followUp, err)
+	}
+	if len(rt.Created) != 1 || len(rt.Started) != 1 || rt.Started[0] != envBefore.Handle {
+		t.Fatalf("wake replaced the environment: created=%v started=%v", rt.Created, rt.Started)
+	}
+
+	hs := httptest.NewServer((&server.Server{Eng: e, WorkerSec: "worker-token", OperatorTok: "op-token"}).Handler())
+	t.Cleanup(hs.Close)
+	stdin, sendInput := io.Pipe()
+	stdout := &signalBuffer{signal: "terminal resumed after wake", ready: make(chan struct{})}
+	stderr := &signalBuffer{signal: "existing transcript entry", ready: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() {
+		done <- runAttach(attachOptions{URL: hs.URL, Token: "op-token", DB: dbPath}, sessionID, stdin, stdout, stderr)
+	}()
+	waitForAttachSignal(t, stdout.ready, done, &bytes.Buffer{})
+	waitForAttachSignal(t, stderr.ready, done, &bytes.Buffer{})
+	_, _ = io.WriteString(sendInput, "echo continue\n")
+	_ = sendInput.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("runAttach after wake: %v (stderr: %s)", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "terminal resumed after wake") {
+		t.Fatalf("terminal output %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "Transcript acp.session.update:") || !strings.Contains(stderr.String(), "existing transcript entry") {
+		t.Fatalf("existing transcript was not replayed: %s", stderr.String())
+	}
+	if got := terminalInput.String(); got != "echo continue\n" {
+		t.Fatalf("terminal input %q", got)
+	}
+	if count, err := store.CountTerminalAccess(st, envBefore.ID, "acquire"); err != nil || count != 1 {
+		t.Fatalf("terminal lease did not attach to the existing environment: count=%d err=%v", count, err)
+	}
+}
+
+func TestRunAttachManagedDisconnectCancelsTerminalAndReleasesLease(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "managed-disconnect.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	pol, err := policy.Parse([]byte(attachPolicy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := engine.New(st, pol, gh.NewFake(), clock.Real{})
+	e.ReloadPolicy(pol)
+	rt := &env.FakeRuntime{}
+	rt.StdioHook = func(string, []string, []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+		return &lockedBuffer{}, io.NopCloser(strings.NewReader("terminal ready\n")), func() {}, nil
+	}
+	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	sessionID, err := e.StartRun("test", "attach", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := store.GetSession(st, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow, err := store.GetEnvironment(st, session.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow.Driver, envRow.Handle, envRow.State = env.KindContainer, "ctr-disconnect", store.EnvReady
+	if err := store.UpdateEnvironment(st, *envRow); err != nil {
+		t.Fatal(err)
+	}
+	leaseAcquired := make(chan struct{})
+	handler := (&server.Server{Eng: e, WorkerSec: "worker-token", OperatorTok: "op-token"}).Handler()
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/sessions/"+strconv.FormatInt(sessionID, 10)+"/attach" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			w.(http.Flusher).Flush()
+			select {
+			case <-leaseAcquired:
+			case <-r.Context().Done():
+			}
+			return
+		}
+		if r.Method == http.MethodPost && r.URL.Path == "/console/sessions/"+strconv.FormatInt(sessionID, 10)+"/terminal/lease" {
+			handler.ServeHTTP(w, r)
+			if w.Header().Get(terminalGenerationHeader) != "" {
+				close(leaseAcquired)
+			}
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(hs.Close)
+	stdin, sendInput := io.Pipe()
+	t.Cleanup(func() { _ = sendInput.Close() })
+	var stdout bytes.Buffer
+	stderr := &signalBuffer{signal: "Session transcript stream disconnected", ready: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() {
+		done <- runAttach(attachOptions{URL: hs.URL, Token: "op-token"}, sessionID, stdin, &stdout, stderr)
+	}()
+	waitForAttachSignal(t, stderr.ready, done, &bytes.Buffer{})
+	if err := <-done; err == nil || !strings.Contains(err.Error(), "session transcript") {
+		t.Fatalf("attach result after transcript disconnect: %v", err)
+	}
+	if count, err := store.CountTerminalAccess(st, envRow.ID, "revoke"); err != nil || count != 1 {
+		t.Fatalf("terminal lease not released after detach: count=%d err=%v", count, err)
 	}
 }
 
