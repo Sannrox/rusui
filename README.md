@@ -69,7 +69,8 @@ BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
 turn with the guest the plane names (`RUSUI_GUEST`: Grok by default, or
 Claude Code). A process driver is a command that prints review JSON
 on stdout; pass `-driver` instead of `-acp`. There is no in-tree
-`review-driver` binary.
+`review-driver` binary. Repeat `-repo OWNER/REPO` to let one runner serve
+several policy-bound repositories; each turn keeps its own workspace.
 
 The process refuses to start if webhook, worker, or Slack secrets are unset.
 Pass `-allow-insecure` only for local experiments. GitHub and Slack cannot

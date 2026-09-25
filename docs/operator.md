@@ -133,6 +133,24 @@ BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
   -acp
 ```
 
+To serve more than one policy-bound repository, repeat `-repo`. The runner
+rotates the first repository it checks on each poll, skips a repository that
+is paused or at its lease budget for that poll, and keeps each turn in its own
+workspace. Existing single-`-repo` commands continue to work:
+
+```bash
+"$BIN/rusui-runner" \
+  -url http://127.0.0.1:8080 \
+  -repo OWNER/REPO-A \
+  -repo OWNER/REPO-B \
+  -token "$RUSUI_WORKER_SECRET" \
+  -acp
+```
+
+Every listed repository must still be enabled by the plane policy. An
+unconfigured repository fails closed; the runner never enumerates or claims
+repositories outside its explicit `-repo` list.
+
 `GET http://127.0.0.1:8080/healthz` must return `ok`. Then:
 
 ```bash

@@ -19,9 +19,28 @@ var (
 	BuildTime = "unknown"
 )
 
+type repoFlags []string
+
+func (r *repoFlags) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return fmt.Errorf("repository must not be empty")
+	}
+	for _, existing := range *r {
+		if strings.EqualFold(existing, value) {
+			return fmt.Errorf("repository %q was listed more than once", value)
+		}
+	}
+	*r = append(*r, value)
+	return nil
+}
+
+func (r *repoFlags) String() string { return strings.Join(*r, ",") }
+
 func main() {
 	base := flag.String("url", "http://127.0.0.1:8080", "plane URL")
-	repo := flag.String("repo", "", "repository to claim")
+	var repos repoFlags
+	flag.Var(&repos, "repo", "repository to claim (repeat to serve multiple repositories)")
 	token := flag.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "runner bootstrap token")
 	name := flag.String("name", "local", "runner name")
 	driver := flag.String("driver", "", "process driver command (space-separated)")
@@ -34,11 +53,11 @@ func main() {
 		fmt.Printf("rusui-runner %s commit=%s time=%s\n", Version, GitCommit, BuildTime)
 		return
 	}
-	if *repo == "" || (*driver == "" && !*acpHost) {
-		fmt.Fprintln(os.Stderr, "need -repo and -driver, or -repo and -acp")
+	if len(repos) == 0 || (*driver == "" && !*acpHost) {
+		fmt.Fprintln(os.Stderr, "need at least one -repo and -driver, or -repo and -acp")
 		os.Exit(1)
 	}
-	c := &runner.Client{Base: *base, Bootstrap: *token, Repo: *repo, Name: *name}
+	c := &runner.Client{Base: *base, Bootstrap: *token, Repos: append([]string(nil), repos...), Name: *name}
 	if strings.HasPrefix(*base, "https://") {
 		if *caFile == "" {
 			fmt.Fprintln(os.Stderr, "need -ca or RUSUI_PLANE_CA for an https plane URL")

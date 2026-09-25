@@ -705,6 +705,7 @@ var (
 	errPolicy = fmt.Errorf("policy")
 	errBudget = fmt.Errorf("budget")
 	ErrBudget = errBudget
+	ErrPaused = errPaused
 )
 
 func (e *Engine) Heartbeat(jobID int64, gen, claimed int) error {
