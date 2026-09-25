@@ -17,6 +17,25 @@ Direction beyond the current contract lives in [VISION.md](VISION.md),
 [ROADMAP.md](ROADMAP.md), and [docs/decisions/](docs/decisions/). An accepted
 ADR does not change the contract until `ARCHITECTURE.md` is rewritten.
 
+## Repository map
+
+| Area | Start here | Contract or operator guide |
+| --- | --- | --- |
+| Policy | [`internal/policy`](internal/policy), [`policy.example.yaml`](policy.example.yaml) | [`docs/configuration.md`](docs/configuration.md) |
+| Intake and admission | [`internal/gh`](internal/gh) reads GitHub; [`internal/server`](internal/server) accepts events; [`internal/engine`](internal/engine) refreshes and admits work | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| Runner and guest | [`cmd/rusui-runner`](cmd/rusui-runner), [`internal/runner`](internal/runner), [`internal/acp`](internal/acp), [`internal/env`](internal/env) | [`docs/operator.md`](docs/operator.md) |
+| Receipts and persistence | [`internal/store`](internal/store), with review and turn flows in [`internal/engine`](internal/engine) | [`ARCHITECTURE.md`](ARCHITECTURE.md) |
+| Operator surfaces | [`cmd/rusui`](cmd/rusui), [`internal/server`](internal/server), [`internal/slack`](internal/slack), [`internal/setup`](internal/setup) | [`docs/operator.md`](docs/operator.md), [`docs/configuration.md`](docs/configuration.md) |
+| Terms and decisions | [`CONTEXT.md`](CONTEXT.md), [`docs/decisions/`](docs/decisions/) | [`ARCHITECTURE.md`](ARCHITECTURE.md) is the product contract; proposed direction stays proposed |
+
+For a Go contributor, the fake ACP conformance case is
+[`TestConformanceFakeAgent`](internal/acp/client_test.go); run it with
+`go test ./internal/acp -run '^TestConformanceFakeAgent$'`. The review
+evaluation set is [`eval/set.md`](eval/set.md), and its evidence work is
+tracked in [issue #105](https://github.com/Sannrox/rusui/issues/105). Do not
+present evaluation results as public evidence until #105 supplies a sanitized,
+reproducible record.
+
 ## Development setup
 
 You need:
@@ -57,6 +76,12 @@ Use the [bug](.github/ISSUE_TEMPLATE/bug.yml) or
 through [SECURITY.md](SECURITY.md). Durable boundary changes need an
 [ADR](docs/decisions/README.md).
 
+A good first-issue candidate for someone comfortable with protocol research
+is [issue #247](https://github.com/Sannrox/rusui/issues/247): decide one
+GitLab intake profile and operator workflow. It is ready with no dependencies,
+and its outcome is a reviewed adopt, defer, or reject decision, not an adapter
+implementation.
+
 ## Pull requests
 
 `main` accepts changes through pull requests. Do not push commits to `main`
@@ -77,7 +102,9 @@ do not need that protocol.
    configuration, compatibility, or security.
 6. Fix actionable review findings before merge.
 
-The intake GitHub client is read-only. Model CLIs never receive GitHub write tokens.
+The intake GitHub client is read-only. Review sessions never receive a GitHub
+write credential; only implement sessions do under
+[ADR 0015](docs/decisions/0015-agent-publication.md).
 Bind the HTTP server to loopback in examples unless the change is explicitly
 about listen addresses.
 

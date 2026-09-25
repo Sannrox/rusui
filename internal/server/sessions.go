@@ -62,13 +62,53 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	if envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID); err == nil {
 		envState = envRow.State
 	}
+	var reviewResult any
+	revisionID, payload, hasReview, err := store.LatestReviewForSession(s.Eng.Store, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if hasReview {
+		var artifact json.RawMessage
+		if !json.Valid([]byte(payload)) {
+			http.Error(w, "invalid stored review", http.StatusInternalServerError)
+			return
+		}
+		artifact = json.RawMessage(payload)
+		actions, err := store.ListActionsForSession(s.Eng.Store, id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		dryRun := make([]map[string]string, 0)
+		for _, action := range actions {
+			if action.ReviewRevisionID == nil || *action.ReviewRevisionID != revisionID {
+				continue
+			}
+			dryRun = append(dryRun, map[string]string{
+				"type": action.Type, "reason_code": action.ReasonCode,
+				"evidence_class": action.EvidenceClass, "limit_sentence": action.LimitSentence,
+				"body": action.Body,
+			})
+		}
+		reviewResult = map[string]any{
+			"revision_id": revisionID, "artifact": artifact, "dry_run_actions": dryRun,
+		}
+	}
 	receipts, err := store.ListEnvironmentReceipts(s.Eng.Store, id)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"session": sess, "turns": turns, "processes": processes, "environment_state": envState, "environment_receipts": receipts})
+	response := map[string]any{
+		"session": sess, "turns": turns, "processes": processes,
+		"environment_state": envState, "environment_receipts": receipts,
+	}
+	if reviewResult != nil {
+		response["review_result"] = reviewResult
+	}
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func (s *Server) attachSession(w http.ResponseWriter, r *http.Request) {

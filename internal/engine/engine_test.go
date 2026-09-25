@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -99,6 +100,63 @@ func (h *harn) putRefresh(it snapshot.Item) {
 	}
 	if !ok {
 		h.t.Fatal("refresh did no work")
+	}
+}
+
+func TestOnDemandReviewSerializesBackgroundRefresh(t *testing.T) {
+	h := setup(t)
+	it := issue(42)
+	it.ItemKind = "pull"
+	it.HeadSHA = "head-42"
+	h.f.Put(it)
+	if err := h.e.CatchUpItem(it.Repo, it.Item, it.ItemKind); err != nil {
+		t.Fatal(err)
+	}
+	blocked := make(chan struct{})
+	h.f.SetBlockFetch(blocked)
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(blocked) }) }
+	defer release()
+
+	backgroundDone := make(chan error, 1)
+	go func() {
+		_, err := h.e.StepRefresh()
+		backgroundDone <- err
+	}()
+	deadline := time.After(time.Second)
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for h.f.CallCount() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("background refresh did not start")
+		case <-ticker.C:
+		}
+	}
+
+	requestStarted := make(chan struct{})
+	requestDone := make(chan error, 1)
+	go func() {
+		close(requestStarted)
+		_, err := h.e.RequestReview(it.Repo, it.Item)
+		requestDone <- err
+	}()
+	<-requestStarted
+	select {
+	case err := <-requestDone:
+		t.Fatalf("on-demand review returned while the background refresh owned the item: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	release()
+	if err := <-backgroundDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-requestDone; err != nil {
+		t.Fatalf("on-demand review after background refresh: %v", err)
+	}
+	if calls := h.f.CallCount(); calls != 2 {
+		t.Fatalf("expected the existing refresh and the targeted idempotency check; calls=%d", calls)
 	}
 }
 
