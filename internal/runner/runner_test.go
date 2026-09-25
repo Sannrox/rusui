@@ -43,7 +43,20 @@ projects:
         review: true
         comments: true
         close: true
+  other:
+    repos:
+      example/other-repo:
+        visibility: public
 `
+
+func fixtureItem(repo string, item int) snapshot.Item {
+	return snapshot.Item{
+		Repo: repo, Item: item, ItemKind: "issue", State: "open",
+		Title: "bug", Body: "repro", Labels: []string{"bug"}, UpdatedAt: "2026-01-01T00:00:00Z",
+		CreatedAt: "2025-01-01T00:00:00Z", LastNonBotCommentAt: "2025-01-02T00:00:00Z",
+		DefaultBranch: "main", MainSHA: "aaa",
+	}
+}
 
 func setup(t *testing.T, opts ...func(*server.Server)) (*engine.Engine, *store.Store, *httptest.Server) {
 	t.Helper()
@@ -58,12 +71,7 @@ func setup(t *testing.T, opts ...func(*server.Server)) (*engine.Engine, *store.S
 	}
 	clk := clock.Real{}
 	f := gh.NewFake()
-	it := snapshot.Item{
-		Repo: "example/test-repo", Item: 1, ItemKind: "issue", State: "open",
-		Title: "bug", Body: "repro", Labels: []string{"bug"}, UpdatedAt: "2026-01-01T00:00:00Z",
-		CreatedAt: "2025-01-01T00:00:00Z", LastNonBotCommentAt: "2025-01-02T00:00:00Z",
-		DefaultBranch: "main", MainSHA: "aaa",
-	}
+	it := fixtureItem("example/test-repo", 1)
 	f.Put(it)
 	e := engine.New(st, pol, f, clk)
 	e.ReloadPolicy(pol)
@@ -81,6 +89,132 @@ func setup(t *testing.T, opts ...func(*server.Server)) (*engine.Engine, *store.S
 	hs := httptest.NewServer(srv.Handler())
 	t.Cleanup(hs.Close)
 	return e, st, hs
+}
+
+func enqueueItem(t *testing.T, e *engine.Engine, item snapshot.Item) {
+	t.Helper()
+	f, ok := e.GitHub.(*gh.Fake)
+	if !ok {
+		t.Fatal("engine does not use the fake GitHub client")
+	}
+	f.Put(item)
+	if err := e.CatchUpItem(item.Repo, item.Item, item.ItemKind); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := e.StepRefresh(); err != nil || !ok {
+		t.Fatalf("refresh %s#%d: ok=%v err=%v", item.Repo, item.Item, ok, err)
+	}
+}
+
+func runnerArtifact(a *runner.Assignment) engine.Artifact {
+	return engine.Artifact{
+		SchemaVersion:   1,
+		Repo:            a.Repo,
+		Item:            a.Item,
+		ItemKind:        a.ItemKind,
+		ClaimedRevision: a.ClaimedRevision,
+		SnapshotHash:    a.ItemHash,
+		MainSHA:         "aaa",
+		Verdict:         "keep",
+		Confidence:      "high",
+	}
+}
+
+func TestMultiRepoClaimFairnessAndWorkspaceIsolation(t *testing.T) {
+	e, st, hs := setup(t)
+	e.Env = env.Process{Root: t.TempDir()}
+	busy, err := e.Claim("example/test-repo")
+	if err != nil || busy == nil {
+		t.Fatalf("initial claim %v %v", busy, err)
+	}
+	itemA := fixtureItem("example/test-repo", 2)
+	itemB := fixtureItem("example/other-repo", 1)
+	enqueueItem(t, e, itemA)
+	enqueueItem(t, e, itemB)
+
+	cli := &runner.Client{
+		Base: hs.URL, Bootstrap: "wsec", Name: "multi",
+		Repos: []string{"example/test-repo", "example/other-repo"},
+	}
+	claimedB, err := cli.Claim()
+	if err != nil || claimedB == nil || claimedB.Repo != itemB.Repo {
+		t.Fatalf("claim past busy repository: assignment=%+v err=%v", claimedB, err)
+	}
+	if err := cli.Complete(claimedB, runnerArtifact(claimedB)); err != nil {
+		t.Fatalf("complete repository B: %v", err)
+	}
+	turn, err := store.GetTurn(st, busy.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.CancelSession(turn.SessionID); err != nil {
+		t.Fatalf("release repository A capacity: %v", err)
+	}
+
+	claimedA, err := cli.Claim()
+	if err != nil || claimedA == nil || claimedA.Repo != itemA.Repo || claimedA.Item != itemA.Item {
+		t.Fatalf("claim repository A after capacity frees: assignment=%+v err=%v", claimedA, err)
+	}
+	if claimedA.SessionID == claimedB.SessionID || claimedA.Workspace == "" || claimedA.Workspace == claimedB.Workspace {
+		t.Fatalf("repositories shared session/workspace: A=%+v B=%+v", claimedA, claimedB)
+	}
+	if err := cli.Complete(claimedA, runnerArtifact(claimedA)); err != nil {
+		t.Fatalf("complete repository A: %v", err)
+	}
+	for _, assignment := range []*runner.Assignment{claimedA, claimedB} {
+		session, err := store.GetSession(st, assignment.SessionID)
+		if err != nil || session.Repo != assignment.Repo || session.EnvironmentID == 0 {
+			t.Fatalf("session for assignment %+v: session=%+v err=%v", assignment, session, err)
+		}
+	}
+}
+
+func TestMultiRepoClaimFailsClosedForUnboundRepository(t *testing.T) {
+	_, _, hs := setup(t)
+	cli := &runner.Client{
+		Base: hs.URL, Bootstrap: "wsec", Name: "multi",
+		Repos: []string{"example/unbound", "example/test-repo"},
+	}
+	if assignment, err := cli.Claim(); err == nil || assignment != nil {
+		t.Fatalf("unbound repository claim assignment=%+v err=%v", assignment, err)
+	}
+	assignment, err := cli.Claim()
+	if err != nil || assignment == nil || assignment.Repo != "example/test-repo" {
+		t.Fatalf("claim after unbound repository refusal: assignment=%+v err=%v", assignment, err)
+	}
+}
+
+func TestMultiRepoClaimSkipsPausedProject(t *testing.T) {
+	e, _, hs := setup(t)
+	if err := e.SetPause("test", true); err != nil {
+		t.Fatal(err)
+	}
+	item := fixtureItem("example/other-repo", 1)
+	enqueueItem(t, e, item)
+	cli := &runner.Client{
+		Base: hs.URL, Bootstrap: "wsec", Name: "multi",
+		Repos: []string{"example/test-repo", "example/other-repo"},
+	}
+	assignment, err := cli.Claim()
+	if err != nil || assignment == nil || assignment.Repo != item.Repo {
+		t.Fatalf("claim past paused project: assignment=%+v err=%v", assignment, err)
+	}
+}
+
+func TestClientRejectsAssignmentOutsideConfiguredRepositories(t *testing.T) {
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/jobs/claim" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(runner.Assignment{TurnID: 1, Repo: "example/other-repo"})
+	}))
+	defer hs.Close()
+	cli := &runner.Client{Base: hs.URL, Bootstrap: "wsec", Repo: "example/test-repo"}
+	if assignment, err := cli.Claim(); err == nil || assignment != nil {
+		t.Fatalf("out-of-set assignment=%+v err=%v", assignment, err)
+	}
 }
 
 func TestProcessDriverCompletesWithReceipt(t *testing.T) {

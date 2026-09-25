@@ -1,16 +1,18 @@
 # ADR 0020: Turn-scoped GitHub publication stays behind the plane
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-24
+- Accepted by: Sannrox, repository maintainer, 2026-09-25.
 - Resolves: [Issue #243](https://github.com/Sannrox/rusui/issues/243)
-- Amends (proposed): [ADR 0015](0015-agent-publication.md) D1 and D4;
-  [ADR 0009](0009-credential-broker.md) for implement-session Git access.
+- Amends (target for follow-up implementation): [ADR 0015](0015-agent-publication.md)
+  D1 and D4; [ADR 0009](0009-credential-broker.md) for implement-session Git access.
 - Related: [ADR 0001](0001-environment-plane.md) D3 and D5,
   [ADR 0017](0017-claude-guest-and-model-upstream.md) D3 and D4,
   [ARCHITECTURE.md](../../ARCHITECTURE.md), [VISION.md](../../VISION.md).
-- Discussion: none. GitHub Discussions are disabled. This PR is the review
-  venue. This proposed ADR does not change the product contract until
-  accepted.
+- Discussion: none. GitHub Discussions are disabled. PR #244 was the review
+  venue. Acceptance records the target; it does not change
+  [ARCHITECTURE.md](../../ARCHITECTURE.md) or current code. A separate
+  implementation change must update the product contract and code.
 
 ## Context
 
@@ -31,7 +33,7 @@ the commit metadata to change.
 
 ## Decision
 
-**Proposal: give eligible `implement` turns a renewable, turn-scoped grant to
+**Decision: give eligible `implement` turns a renewable, turn-scoped grant to
 use plane-owned GitHub publication proxies. Never give a managed guest a
 GitHub write token.** The grant is a Rusui capability, not a GitHub token. It
 authorizes only the current turn, its bound repository, and the publication
@@ -66,10 +68,11 @@ operations below.
   these are attribution metadata, not proof that the operator pushed or
   created the PR. The human remains responsible for review and merge.
 
-If accepted, this amends ADR 0015 D1's direct `gh pr create` / `gh pr edit`
-path and replaces D4's guest-held operator credential. D2's lack of a proof
-gate, D3's session attribution, and D5's prohibition on agent merge, close,
-land, label, and release actions remain. The existing solo profile in ADR
+This decision sets the target that amends ADR 0015 D1's direct `gh pr create`
+/ `gh pr edit` path and replaces D4's guest-held operator credential when
+implemented. D2's lack of a proof gate, D3's session attribution, and D5's
+prohibition on agent merge, close, land, label, and release actions remain.
+The existing solo profile in ADR
 0017 D4 remains the minimum: PRs, required checks, conversation resolution,
 and no force pushes or deletion on the default branch. An App-authored PR
 lets the solo operator be a distinct human reviewer if the repository also
@@ -113,11 +116,12 @@ repository, ref, and operation boundaries together.
   Its proxy must authorize every request against the live turn, policy,
   repository, ref, and operation, and must record a receipt. The App token
   still has GitHub-granted permissions while it is on the plane.
-- This ADR records the target only. Before implementation, update the product
-  contract, VISION identity wording, and operator docs; migrate the runner off
-  direct `GH_TOKEN`; and prove the supported App identity and branch rules in
-  the pilot profile. Until acceptance and that implementation lands, the
-  current contract and code still use ADR 0015's direct operator credential.
+- This ADR records the accepted target only. Before implementation, update the
+  product contract, VISION identity wording, and operator docs; migrate the
+  runner off direct `GH_TOKEN`; and prove the supported App identity and
+  branch rules in the pilot profile. Until that follow-up lands,
+  `ARCHITECTURE.md` and current code retain ADR 0015's direct operator
+  credential path.
 
 ## Rejected alternatives
 

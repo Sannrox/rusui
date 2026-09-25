@@ -27,7 +27,13 @@
     },
     {
       "name": "RusuiImplementLane",
-      "description": "ADR 0015 publication path. An implement session (a run session for an open pinned task on a repository with implement: true) holds the operator GitHub credential; the agent pushes and opens or updates its own pull request with git and gh. No plane proof gate. Merge, close, and land stay unauthorized; token scope and branch protection enforce that.",
+      "description": "Current ARCHITECTURE v1 and ADR 0015 publication path. An implement session (a run session for an open pinned task on a repository with implement: true) holds the operator GitHub credential; the agent pushes and opens or updates its own pull request with git and gh. No plane proof gate. Merge, close, and land stay unauthorized; token scope and branch protection enforce that. Accepted ADR 0020 defines a future target without asserting it is implemented.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiTurnScopedPublicationTarget",
+      "description": "Accepted ADR 0020 target for future implement-session publication: turn-scoped guest capability, plane-owned git and PR proxies, repository/ref/operation limits, and a GitHub App credential retained by the plane. Not implemented and not part of the current ARCHITECTURE v1 contract.",
       "superclasses": [],
       "properties": []
     },
@@ -182,6 +188,12 @@
       "properties": []
     },
     {
+      "name": "RusuiGitLabIntakeProfile",
+      "description": "Accepted ADR 0021 target, not implemented or part of the current ARCHITECTURE v1 contract: one bound GitLab.com project for ordinary issues. Signed Issue Hooks trigger canonical read-only refreshes; identity is provider, origin, project, and issue IID, using Guest read_api and updated_after checkpointed reconciliation. Confidential issues and GitLab writes are excluded; CLI maintenance parity precedes Slack-free operation.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiCandidate",
       "description": "Git object (commit_sha, tree_sha, ref) on refs/heads/rusui/<session>/*. Not a working tree or default-branch tip.",
       "superclasses": [],
@@ -294,6 +306,14 @@
       "description": "Control plane recovers missed or failed GitHub deliveries.",
       "domain": "RusuiControlPlane",
       "range": "RusuiWebhookReconciler",
+      "cardinality": { "min": 0, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_targets_gitlab_issue_intake",
+      "description": "Accepted ADR 0021 names a GitLab.com project-issue intake profile as the future target; this relation does not assert implementation or alter ARCHITECTURE v1.",
+      "domain": "RusuiControlPlane",
+      "range": "RusuiGitLabIntakeProfile",
       "cardinality": { "min": 0, "max": 1 },
       "transitive": false
     },
@@ -435,10 +455,18 @@
     },
     {
       "name": "rusui_implement_session_publishes",
-      "description": "The agent in an implement session opens or updates its own pull request with the operator credential. Proofs are optional evidence, not a gate.",
+      "description": "Current ARCHITECTURE v1 path: the agent in an implement session opens or updates its own pull request with the operator credential. Proofs are optional evidence, not a gate.",
       "domain": "RusuiImplementLane",
       "range": "RusuiPublication",
       "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_targets_turn_scoped_publication",
+      "description": "Accepted ADR 0020 defines a future turn-scoped, plane-owned publication target for implement sessions; this relation does not assert implementation or change ARCHITECTURE v1.",
+      "domain": "RusuiImplementLane",
+      "range": "RusuiTurnScopedPublicationTarget",
+      "cardinality": { "min": 0, "max": 1 },
       "transitive": false
     },
     {
@@ -815,6 +843,30 @@
       "subject": "rusui_project_groups_local_process",
       "source": "docs/decisions/0016-local-interactive-runtime.md",
       "locator": "docs/decisions/0016-local-interactive-runtime.md#d1-authority-and-identity",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiGitLabIntakeProfile",
+      "source": "docs/decisions/0021-gitlab-intake.md",
+      "locator": "docs/decisions/0021-gitlab-intake.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_targets_gitlab_issue_intake",
+      "source": "docs/decisions/0021-gitlab-intake.md",
+      "locator": "docs/decisions/0021-gitlab-intake.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiTurnScopedPublicationTarget",
+      "source": "docs/decisions/0020-turn-scoped-github-publication.md",
+      "locator": "docs/decisions/0020-turn-scoped-github-publication.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_targets_turn_scoped_publication",
+      "source": "docs/decisions/0020-turn-scoped-github-publication.md",
+      "locator": "docs/decisions/0020-turn-scoped-github-publication.md#decision",
       "confidence": 1.0
     }
   ]

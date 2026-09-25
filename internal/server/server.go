@@ -368,6 +368,11 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&req)
 	c, err := s.Eng.Claim(req.Repo)
 	if err != nil {
+		if errors.Is(err, engine.ErrBudget) {
+			w.Header().Set("X-Rusui-Claim-Blocked", "budget")
+		} else if errors.Is(err, engine.ErrPaused) {
+			w.Header().Set("X-Rusui-Claim-Blocked", "paused")
+		}
 		http.Error(w, err.Error(), 409)
 		return
 	}

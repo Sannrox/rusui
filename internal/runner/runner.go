@@ -24,10 +24,12 @@ import (
 type Client struct {
 	Base      string
 	Bootstrap string
-	Repo      string
+	Repo      string // legacy single-repository configuration
+	Repos     []string
 	Name      string
 	HTTP      *http.Client
 	Exec      StdioExec
+	nextRepo  int
 }
 
 // StdioExec runs a command inside a container handle with ACP stdio.
@@ -94,33 +96,91 @@ func (c *Client) Hello() error {
 }
 
 func (c *Client) Claim() (*Assignment, error) {
-	body, _ := json.Marshal(map[string]string{"repo": c.Repo})
-	req, err := http.NewRequest("POST", c.Base+"/jobs/claim", bytes.NewReader(body))
+	repos, err := c.claimRepos()
 	if err != nil {
 		return nil, err
+	}
+	if len(repos) == 1 {
+		a, _, err := c.claimRepo(repos[0])
+		return a, err
+	}
+	start := c.nextRepo % len(repos)
+	c.nextRepo = (start + 1) % len(repos)
+	for offset := range len(repos) {
+		repo := repos[(start+offset)%len(repos)]
+		a, blocked, err := c.claimRepo(repo)
+		if err != nil {
+			if blocked {
+				continue
+			}
+			return nil, err
+		}
+		if a != nil {
+			return a, nil
+		}
+	}
+	return nil, nil
+}
+
+func (c *Client) claimRepos() ([]string, error) {
+	if c.Repo != "" && len(c.Repos) != 0 {
+		return nil, fmt.Errorf("claim: configure Repo or Repos, not both")
+	}
+	repos := append([]string(nil), c.Repos...)
+	if len(repos) == 0 && c.Repo != "" {
+		repos = []string{c.Repo}
+	}
+	if len(repos) == 0 {
+		return nil, fmt.Errorf("claim: at least one repository must be configured")
+	}
+	seen := make(map[string]struct{}, len(repos))
+	for i, repo := range repos {
+		repo = strings.TrimSpace(repo)
+		if repo == "" {
+			return nil, fmt.Errorf("claim: repository must not be empty")
+		}
+		key := strings.ToLower(repo)
+		if _, ok := seen[key]; ok {
+			return nil, fmt.Errorf("claim: repository %q was listed more than once", repo)
+		}
+		seen[key] = struct{}{}
+		repos[i] = repo
+	}
+	return repos, nil
+}
+
+func (c *Client) claimRepo(repo string) (*Assignment, bool, error) {
+	body, _ := json.Marshal(map[string]string{"repo": repo})
+	req, err := http.NewRequest("POST", c.Base+"/jobs/claim", bytes.NewReader(body))
+	if err != nil {
+		return nil, false, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Bootstrap)
 	req.Header.Set("Content-Type", "application/json")
 	res, err := c.http().Do(req)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode == 204 {
-		return nil, nil
+		return nil, false, nil
 	}
 	if res.StatusCode != 200 {
 		b, _ := io.ReadAll(res.Body)
-		return nil, fmt.Errorf("claim: %s %s", res.Status, b)
+		blocked := res.Header.Get("X-Rusui-Claim-Blocked")
+		return nil, blocked == "budget" || blocked == "paused", fmt.Errorf("claim: %s %s", res.Status, b)
 	}
 	var a Assignment
 	if err := json.NewDecoder(res.Body).Decode(&a); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if a.TurnID == 0 {
 		a.TurnID = a.JobID
 	}
-	return &a, nil
+	if !strings.EqualFold(a.Repo, repo) {
+		return nil, false, fmt.Errorf("claim: plane returned repository %q for configured repository %q", a.Repo, repo)
+	}
+	return &a, false, nil
 }
 
 func (c *Client) turnReq(method, path string, a *Assignment, payload any) error {

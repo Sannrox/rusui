@@ -1,16 +1,17 @@
 # ADR 0009: P1 credential broker
 
-- Status: Accepted; amended by [ADR 0015](0015-agent-publication.md)
-  (`implement` sessions receive the operator GitHub credential and
-  push directly; the model proxy and read-only grants stand)
+- Status: Accepted; [ADR 0015](0015-agent-publication.md) records the
+  implemented `implement` publication path; [ADR 0020](0020-turn-scoped-github-publication.md)
+  accepts its future target. The model proxy and read-only grants stand.
 - Date: 2026-09-15
 - Amends: [ADR 0001](0001-environment-plane.md) D5 (how the plane
   redeems secrets). D3’s per-turn credential (32 bytes, ten-minute
   TTL, one environment, hashed at rest) stands.
 - Resolves: [#44](https://github.com/Sannrox/rusui/issues/44)
-- Proposed amendment: [ADR 0020](0020-turn-scoped-github-publication.md)
-  evaluates implement-session Git access. This accepted decision remains in
-  force until that proposal is accepted.
+- Accepted target amendment: [ADR 0020](0020-turn-scoped-github-publication.md)
+  sets turn-scoped, plane-owned GitHub access for future implementation.
+  Until a follow-up updates [ARCHITECTURE.md](../../ARCHITECTURE.md) and the
+  code, its documented direct-credential path remains the current contract.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context
