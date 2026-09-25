@@ -253,7 +253,7 @@ func TestSessionsAndConsoleExposeEnvironmentStateAndReceipts(t *testing.T) {
 	if listed == nil || listed.EnvironmentState != store.EnvSleeping {
 		t.Fatalf("listed session %+v", listed)
 	}
-	detailReq, _ := http.NewRequest(http.MethodGet, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10), nil)
+	detailReq, _ := http.NewRequest(http.MethodGet, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"?include=receipts", nil)
 	detailReq.Header.Set("Authorization", "Bearer op-tok")
 	detailRes, err := client.Do(detailReq)
 	if err != nil {

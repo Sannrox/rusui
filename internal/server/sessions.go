@@ -12,6 +12,8 @@ import (
 	"github.com/sannrox/rusui/internal/store"
 )
 
+const environmentReceiptPageSize = 100
+
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
@@ -43,6 +45,16 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("view") == "review-status" {
 		s.getSessionReviewStatus(w, r, id)
 		return
+	}
+	includeReceipts := r.URL.Query().Get("include") == "receipts"
+	var receiptAfterID int64
+	query := r.URL.Query()
+	if includeReceipts && query.Has("receipt_after_id") {
+		receiptAfterID, err = strconv.ParseInt(query.Get("receipt_after_id"), 10, 64)
+		if err != nil || receiptAfterID < 0 {
+			http.Error(w, "receipt_after_id", http.StatusBadRequest)
+			return
+		}
 	}
 	sess, err := store.GetSession(s.Eng.Store, id)
 	if err != nil {
@@ -99,19 +111,25 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 			"revision_id": revisionID, "artifact": artifact, "dry_run_actions": dryRun,
 		}
 	}
-	receipts, err := store.ListEnvironmentReceipts(s.Eng.Store, id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
 	response := map[string]any{
 		"session": sess, "turns": turns, "processes": processes,
-		"environment_state": envState, "environment_receipts": receipts,
+		"environment_state": envState,
 	}
 	if reviewResult != nil {
 		response["review_result"] = reviewResult
 	}
+	if includeReceipts {
+		receipts, hasMore, err := store.ListEnvironmentReceiptPage(s.Eng.Store, id, receiptAfterID, environmentReceiptPageSize)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		response["environment_receipts"] = receipts
+		if hasMore {
+			response["environment_receipts_next_after_id"] = receipts[len(receipts)-1].ID
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
 }
 
