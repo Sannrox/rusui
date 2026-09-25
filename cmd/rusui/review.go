@@ -83,7 +83,8 @@ func reviewCLI(args []string) {
 		fmt.Fprintln(os.Stderr, "review: server returned an incomplete session")
 		os.Exit(1)
 	}
-	fmt.Printf("Review session %d for %s#%d; waiting for revision %d\n", started.SessionID, repo, item, started.PendingRevision)
+	waitingRevision := started.PendingRevision
+	fmt.Printf("Review session %d for %s#%d; waiting for revision %d\n", started.SessionID, repo, item, waitingRevision)
 
 	var deadline time.Time
 	if *timeout > 0 {
@@ -109,17 +110,23 @@ func reviewCLI(args []string) {
 			os.Exit(1)
 		}
 		var turnState string
+		var pendingRevision int
 		for _, turn := range session.Turns {
 			if turn.ID == started.TurnID {
 				turnState = turn.State
+				pendingRevision = turn.PendingRevision
 				break
 			}
+		}
+		if pendingRevision > waitingRevision {
+			waitingRevision = pendingRevision
+			fmt.Printf("Review session %d advanced; waiting for revision %d\n", started.SessionID, waitingRevision)
 		}
 		if session.ReviewResult != nil {
 			var artifact struct {
 				ClaimedRevision int `json:"claimed_revision"`
 			}
-			if json.Unmarshal(session.ReviewResult.Artifact, &artifact) == nil && artifact.ClaimedRevision >= started.PendingRevision {
+			if json.Unmarshal(session.ReviewResult.Artifact, &artifact) == nil && pendingRevision >= started.PendingRevision && artifact.ClaimedRevision >= pendingRevision {
 				out, err := json.MarshalIndent(session.ReviewResult, "", "  ")
 				if err != nil {
 					fmt.Fprintln(os.Stderr, err)
@@ -130,11 +137,11 @@ func reviewCLI(args []string) {
 			}
 		}
 		if turnState == "failed" {
-			fmt.Fprintf(os.Stderr, "review: session %d failed at revision %d\n", started.SessionID, started.PendingRevision)
+			fmt.Fprintf(os.Stderr, "review: session %d failed at revision %d\n", started.SessionID, waitingRevision)
 			os.Exit(1)
 		}
 		if !deadline.IsZero() && time.Now().After(deadline) {
-			fmt.Fprintf(os.Stderr, "review: timed out waiting for session %d revision %d\n", started.SessionID, started.PendingRevision)
+			fmt.Fprintf(os.Stderr, "review: timed out waiting for session %d revision %d\n", started.SessionID, waitingRevision)
 			os.Exit(1)
 		}
 		time.Sleep(*pollInterval)
