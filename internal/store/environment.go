@@ -141,9 +141,33 @@ FROM environment_receipts WHERE session_id=? ORDER BY id`, sessionID)
 	return out, rows.Err()
 }
 
-func TouchSessionEnvironmentTx(tx *sql.Tx, sessionID int64, expiresAt time.Time) error {
-	_, err := tx.Exec(`UPDATE environments SET expires_at=(?)
-WHERE id=(SELECT environment_id FROM sessions WHERE id=?) AND state!=?`,
-		expiresAt.UTC().Format(time.RFC3339Nano), sessionID, EnvExpired)
+func TouchSessionEnvironmentTx(tx *sql.Tx, sessionID int64, now, expiresAt time.Time) error {
+	var environmentID int64
+	var currentExpiry sql.NullString
+	err := tx.QueryRow(`SELECT id, expires_at FROM environments
+WHERE id=(SELECT environment_id FROM sessions WHERE id=?) AND state!=?`, sessionID, EnvExpired).
+		Scan(&environmentID, &currentExpiry)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if currentExpiry.Valid {
+		current, err := time.Parse(time.RFC3339Nano, currentExpiry.String)
+		if err != nil {
+			return err
+		}
+		if !current.After(now) {
+			return nil
+		}
+	}
+	query := `UPDATE environments SET expires_at=? WHERE id=? AND state!=? AND expires_at IS NULL`
+	args := []any{expiresAt.UTC().Format(time.RFC3339Nano), environmentID, EnvExpired}
+	if currentExpiry.Valid {
+		query = `UPDATE environments SET expires_at=? WHERE id=? AND state!=? AND expires_at=?`
+		args = append(args, currentExpiry.String)
+	}
+	_, err = tx.Exec(query, args...)
 	return err
 }

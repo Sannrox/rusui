@@ -47,7 +47,8 @@ func (e *Engine) CancelSession(sessionID int64) error {
 			if err != nil {
 				return err
 			}
-			if err := store.TouchSessionEnvironmentTx(tx, turn.SessionID, e.now().Add(e.envTTL())); err != nil {
+			now := e.now()
+			if err := store.TouchSessionEnvironmentTx(tx, turn.SessionID, now, now.Add(e.envTTL())); err != nil {
 				return err
 			}
 		}

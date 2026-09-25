@@ -522,7 +522,7 @@ func (e *Engine) expireLeaseTx(tx *sql.Tx, j *store.Job) error {
 	if err != nil {
 		return err
 	}
-	return store.TouchSessionEnvironmentTx(tx, turn.SessionID, now.Add(e.envTTL()))
+	return store.TouchSessionEnvironmentTx(tx, turn.SessionID, now, now.Add(e.envTTL()))
 }
 
 func (e *Engine) expireDeadLeasesTx(tx *sql.Tx, repo, lane string) error {
@@ -814,7 +814,8 @@ func (e *Engine) Complete(jobID int64, gen, claimed int, art Artifact) (map[stri
 		if err != nil {
 			return err
 		}
-		if err := store.TouchSessionEnvironmentTx(tx, turn.SessionID, e.now().Add(e.envTTL())); err != nil {
+		now := e.now()
+		if err := store.TouchSessionEnvironmentTx(tx, turn.SessionID, now, now.Add(e.envTTL())); err != nil {
 			return err
 		}
 		art.MainSHA = snap.MainSHA
@@ -907,7 +908,8 @@ func (e *Engine) finalizeFailureTx(tx *sql.Tx, j *store.Job, gen, claimed int) e
 	if err != nil {
 		return err
 	}
-	if err := store.TouchSessionEnvironmentTx(tx, turn.SessionID, e.now().Add(e.envTTL())); err != nil {
+	now := e.now()
+	if err := store.TouchSessionEnvironmentTx(tx, turn.SessionID, now, now.Add(e.envTTL())); err != nil {
 		return err
 	}
 	receipt := map[string]any{"kind": "fail"}

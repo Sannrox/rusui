@@ -238,6 +238,56 @@ func TestWakeFailureFailsClaimWithoutReplacingEnvironment(t *testing.T) {
 	}
 }
 
+func TestExpiredSleepingEnvironmentIsNotRenewedByFailedWake(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{DefaultFiles: map[string]bool{env.ResumePath: true}}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	h.e.EnvTTL = 24 * time.Hour
+	h.e.EnvIdleSleep = 5 * time.Minute
+	h.putRefresh(issue(1))
+	c := h.claim()
+	turn, err := store.GetTurn(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow, err := store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, art(c, "keep", "", "")); err != nil {
+		t.Fatal(err)
+	}
+	envRow, err = store.GetEnvironment(h.st, envRow.ID)
+	if err != nil || envRow.ExpiresAt == nil {
+		t.Fatalf("completed environment expiry %+v err=%v", envRow, err)
+	}
+	expiresAt := *envRow.ExpiresAt
+	if _, err := h.e.SleepEnvironment(envRow.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.e.PromptFollowUp(sess.ID, "wake after expiry"); err != nil {
+		t.Fatal(err)
+	}
+	h.clk.Advance(24*time.Hour + 500*time.Millisecond)
+	for attempt := range 2 {
+		claim, err := h.e.Claim("example/test-repo")
+		if err == nil || claim != nil || !strings.Contains(err.Error(), "environment state sleeping") {
+			t.Fatalf("attempt %d claim=%+v err=%v", attempt+1, claim, err)
+		}
+		got, err := store.GetEnvironment(h.st, envRow.ID)
+		if err != nil || got.State != store.EnvSleeping || got.Handle != envRow.Handle || got.ExpiresAt == nil || !got.ExpiresAt.Equal(expiresAt) {
+			t.Fatalf("attempt %d renewed expired environment: %+v err=%v", attempt+1, got, err)
+		}
+	}
+	if len(rt.Created) != 1 || len(rt.Started) != 0 {
+		t.Fatalf("expired environment was replaced or started: created=%v started=%v", rt.Created, rt.Started)
+	}
+}
+
 func TestLiveIdleContainerTurnResume(t *testing.T) {
 	if os.Getenv("RUSUI_LIVE_ENV_SLEEP") != "1" {
 		t.Skip("set RUSUI_LIVE_ENV_SLEEP=1 for disposable live container proof")
