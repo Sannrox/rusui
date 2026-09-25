@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"golang.org/x/term"
@@ -111,9 +112,155 @@ func runAttach(opts attachOptions, sessionID int64, stdin io.Reader, stdout, std
 		if err != nil {
 			return err
 		}
-		return attachManaged(client, opts.URL, opts.Token, sessionID, page, stdin, stdout, stderr)
+		return attachManagedSession(client, opts.URL, opts.Token, sessionID, page, stdin, stdout, stderr)
 	default:
 		return fmt.Errorf("unsupported session runtime %q", detail.Session.Kind)
+	}
+}
+
+func attachManagedSession(client *http.Client, baseURL, token string, sessionID int64, page terminalPage, stdin io.Reader, stdout, stderr io.Writer) error {
+	stderr = &synchronizedWriter{writer: stderr}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	streamDone, err := startSessionEventStream(ctx, client, baseURL, token, sessionID, stderr)
+	if err != nil {
+		return fmt.Errorf("session transcript: %w", err)
+	}
+	terminalDone := make(chan error, 1)
+	go func() {
+		terminalDone <- attachManaged(ctx, client, baseURL, token, sessionID, page, stdin, stdout, stderr)
+	}()
+	select {
+	case terminalErr := <-terminalDone:
+		cancel()
+		streamErr := <-streamDone
+		if errors.Is(streamErr, context.Canceled) {
+			streamErr = nil
+		}
+		if streamErr != nil {
+			_, _ = fmt.Fprintf(stderr, "Session transcript stream disconnected: %v\n", streamErr)
+			streamErr = fmt.Errorf("session transcript: %w", streamErr)
+		}
+		return errors.Join(terminalErr, streamErr)
+	case streamErr := <-streamDone:
+		if streamErr == nil {
+			streamErr = io.ErrUnexpectedEOF
+		}
+		_, writeErr := fmt.Fprintf(stderr, "Session transcript stream disconnected: %v\n", streamErr)
+		cancel()
+		terminalErr := <-terminalDone
+		if writeErr != nil {
+			streamErr = errors.Join(streamErr, writeErr)
+		}
+		return errors.Join(terminalErr, fmt.Errorf("session transcript: %w", streamErr))
+	}
+}
+
+type synchronizedWriter struct {
+	mu     sync.Mutex
+	writer io.Writer
+}
+
+func (w *synchronizedWriter) Write(data []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.writer.Write(data)
+}
+
+func startSessionEventStream(ctx context.Context, client *http.Client, baseURL, token string, sessionID int64, output io.Writer) (<-chan error, error) {
+	path := fmt.Sprintf("/sessions/%d/attach", sessionID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(baseURL, "/")+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(res.Body)
+		_ = res.Body.Close()
+		return nil, fmt.Errorf("%s %s", res.Status, body)
+	}
+	if !strings.HasPrefix(res.Header.Get("Content-Type"), "text/event-stream") {
+		_ = res.Body.Close()
+		return nil, errors.New("server did not return a session event stream")
+	}
+	done := make(chan error, 1)
+	go func() {
+		err := streamSessionEvents(res.Body, output)
+		if err == nil && ctx.Err() == nil {
+			err = io.ErrUnexpectedEOF
+		}
+		done <- err
+	}()
+	return done, nil
+}
+
+func streamSessionEvents(body io.ReadCloser, output io.Writer) error {
+	defer func() { _ = body.Close() }()
+	reader := bufio.NewReader(body)
+	event := ""
+	var data []string
+	flush := func() error {
+		if event == "" || len(data) == 0 {
+			event, data = "", nil
+			return nil
+		}
+		name := event
+		payload := strings.Join(data, "\n")
+		event, data = "", nil
+		return writeSessionEvent(output, name, []byte(payload))
+	}
+	for {
+		line, err := reader.ReadString('\n')
+		line = strings.TrimSuffix(line, "\n")
+		line = strings.TrimSuffix(line, "\r")
+		if line == "" {
+			if err := flush(); err != nil {
+				return err
+			}
+		} else if value, ok := strings.CutPrefix(line, "event:"); ok {
+			event = strings.TrimSpace(value)
+		} else if value, ok := strings.CutPrefix(line, "data:"); ok {
+			data = append(data, strings.TrimPrefix(value, " "))
+		}
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return err
+			}
+			return flush()
+		}
+	}
+}
+
+func writeSessionEvent(output io.Writer, event string, data []byte) error {
+	switch event {
+	case "session":
+		var session store.Session
+		if err := json.Unmarshal(data, &session); err != nil {
+			return fmt.Errorf("decode session event: %w", err)
+		}
+		_, err := fmt.Fprintf(output, "Session %d: %s (environment %d)\n", session.ID, session.State, session.EnvironmentID)
+		return err
+	case "turn":
+		var turn store.Turn
+		if err := json.Unmarshal(data, &turn); err != nil {
+			return fmt.Errorf("decode turn event: %w", err)
+		}
+		_, err := fmt.Fprintf(output, "Turn %d: %s (revision %d)\n", turn.ID, turn.State, turn.ClaimedRevision)
+		return err
+	case "action":
+		var action store.Action
+		if err := json.Unmarshal(data, &action); err != nil {
+			return fmt.Errorf("decode transcript event: %w", err)
+		}
+		_, err := fmt.Fprintf(output, "Transcript %s: %s\n", action.Type, action.Body)
+		return err
+	default:
+		return nil
 	}
 }
 
@@ -391,7 +538,10 @@ func resizeLocalTerminal(client *sumika.SocketClient, name string, fd int) error
 	return nil
 }
 
-func attachManaged(client *http.Client, baseURL, token string, sessionID int64, page terminalPage, stdin io.Reader, stdout, stderr io.Writer) (retErr error) {
+func attachManaged(parent context.Context, client *http.Client, baseURL, token string, sessionID int64, page terminalPage, stdin io.Reader, stdout, stderr io.Writer) (retErr error) {
+	if err := parent.Err(); err != nil {
+		return err
+	}
 	write := false
 	acquired := false
 	leaseGeneration := 0
@@ -449,7 +599,7 @@ func attachManaged(client *http.Client, baseURL, token string, sessionID int64, 
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	outputDone := make(chan error, 1)
 	inputDone := make(chan error, 1)

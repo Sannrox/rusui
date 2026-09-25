@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 )
@@ -22,6 +23,10 @@ func TestLiveContainerProcessIdentity(t *testing.T) {
 	name := fmt.Sprintf("proof-%d", time.Now().UnixNano()%1_000_000_000)
 	id, err := d.Create(name)
 	if err != nil {
+		message := strings.ToLower(err.Error())
+		if strings.Contains(message, "cannot connect to the docker daemon") || strings.Contains(message, "cannot connect to podman") {
+			t.Skipf("container runtime is installed but unavailable: %v", err)
+		}
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = d.Destroy(id) })

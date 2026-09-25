@@ -2,8 +2,10 @@ package engine_test
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
@@ -109,6 +111,251 @@ func TestContainerWakeStartsServices(t *testing.T) {
 	}
 	if len(rt.Execs) != 2 || rt.Execs[1][len(rt.Execs[1])-1] != "pnpm dev" {
 		t.Fatalf("wake execs %#v", rt.Execs)
+	}
+}
+
+func TestIdleContainerSleepsAndFollowUpWakesSameEnvironment(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{DefaultFiles: map[string]bool{env.ResumePath: true}}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	h.e.EnvIdleSleep = 5 * time.Minute
+	h.putRefresh(issue(1))
+	c := h.claim()
+	turn, err := store.GetTurn(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow, err := store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin := c.Snapshot.GitPin()
+	if pin == "" || envRow.SourceHash != engine.SourceHash("rusui-guest:test", pin, nil) {
+		t.Fatalf("environment did not retain source git pin %q: %+v", pin, envRow)
+	}
+	if _, err := h.e.SleepEnvironment(envRow.ID); err == nil {
+		t.Fatal("leased environment slept")
+	}
+	got, err := store.GetEnvironment(h.st, envRow.ID)
+	if err != nil || got.State != store.EnvReady || len(rt.Stopped) != 0 {
+		t.Fatalf("leased environment was slept: %+v stopped=%v err=%v", got, rt.Stopped, err)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, art(c, "keep", "", "")); err != nil {
+		t.Fatal(err)
+	}
+	h.clk.Advance(6 * time.Minute)
+	if err := h.e.SleepIdleEnvironments(); err != nil {
+		t.Fatal(err)
+	}
+	got, err = store.GetEnvironment(h.st, envRow.ID)
+	if err != nil || got.State != store.EnvSleeping || len(rt.Stopped) != 1 || rt.Stopped[0] != envRow.Handle {
+		t.Fatalf("idle sleep state=%+v stopped=%v err=%v", got, rt.Stopped, err)
+	}
+	receipts, err := store.ListEnvironmentReceipts(h.st, sess.ID)
+	if err != nil || len(receipts) != 1 || receipts[0].Kind != "sleep" || receipts[0].State != "succeeded" {
+		t.Fatalf("sleep receipts %+v %v", receipts, err)
+	}
+	if _, _, err := h.e.PromptFollowUp(sess.ID, "continue in the same workspace"); err != nil {
+		t.Fatal(err)
+	}
+	next, err := h.e.Claim("example/test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next == nil || next.Snapshot.GitPin() != pin {
+		t.Fatalf("follow-up changed git pin from %q: %+v", pin, next)
+	}
+	nextTurn, err := store.GetTurn(h.st, next.Job.ID)
+	if err != nil || nextTurn.SessionID != sess.ID {
+		t.Fatalf("follow-up changed session identity: turn=%+v err=%v", nextTurn, err)
+	}
+	nextSession, err := store.GetSession(h.st, sess.ID)
+	if err != nil || nextSession.EnvironmentID != envRow.ID {
+		t.Fatalf("follow-up changed environment identity: session=%+v err=%v", nextSession, err)
+	}
+	got, err = store.GetEnvironment(h.st, envRow.ID)
+	if err != nil || got.State != store.EnvReady || got.Handle != envRow.Handle || got.SourceHash != envRow.SourceHash || len(rt.Created) != 1 || len(rt.Started) != 1 || rt.Started[0] != envRow.Handle {
+		t.Fatalf("follow-up did not wake same environment: %+v created=%v started=%v err=%v", got, rt.Created, rt.Started, err)
+	}
+	receipts, err = store.ListEnvironmentReceipts(h.st, sess.ID)
+	if err != nil || len(receipts) != 2 || receipts[1].Kind != "wake" || receipts[1].State != "succeeded" {
+		t.Fatalf("wake receipts %+v %v", receipts, err)
+	}
+}
+
+func TestWakeFailureFailsClaimWithoutReplacingEnvironment(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	h.e.EnvIdleSleep = 5 * time.Minute
+	h.putRefresh(issue(1))
+	c := h.claim()
+	turn, err := store.GetTurn(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow, err := store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, art(c, "keep", "", "")); err != nil {
+		t.Fatal(err)
+	}
+	h.clk.Advance(6 * time.Minute)
+	if err := h.e.SleepIdleEnvironments(); err != nil {
+		t.Fatal(err)
+	}
+	rt.StartHook = func(string) error { return fmt.Errorf("runtime unavailable") }
+	if _, _, err := h.e.PromptFollowUp(sess.ID, "retry after outage"); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := h.e.Claim("example/test-repo")
+	if err == nil || claim != nil || !strings.Contains(err.Error(), "environment state sleeping") {
+		t.Fatalf("claim=%+v err=%v", claim, err)
+	}
+	got, err := store.GetEnvironment(h.st, envRow.ID)
+	if err != nil || got.State != store.EnvSleeping || got.Handle != envRow.Handle || len(rt.Created) != 1 {
+		t.Fatalf("failed wake replaced environment: %+v created=%v err=%v", got, rt.Created, err)
+	}
+	var gotRetry int
+	if err := h.st.DB.QueryRow(`SELECT retry_count FROM jobs WHERE id=?`, c.Job.ID).Scan(&gotRetry); err != nil {
+		t.Fatal(err)
+	}
+	if gotRetry != 1 {
+		t.Fatalf("failed turn retry count %d", gotRetry)
+	}
+	receipts, err := store.ListEnvironmentReceipts(h.st, sess.ID)
+	if err != nil || len(receipts) != 2 || receipts[1].Kind != "wake" || receipts[1].State != "failed" {
+		t.Fatalf("failed wake receipts %+v %v", receipts, err)
+	}
+}
+
+func TestExpiredSleepingEnvironmentIsNotRenewedByFailedWake(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{DefaultFiles: map[string]bool{env.ResumePath: true}}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	h.e.EnvTTL = 24 * time.Hour
+	h.e.EnvIdleSleep = 5 * time.Minute
+	h.putRefresh(issue(1))
+	c := h.claim()
+	turn, err := store.GetTurn(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow, err := store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, art(c, "keep", "", "")); err != nil {
+		t.Fatal(err)
+	}
+	envRow, err = store.GetEnvironment(h.st, envRow.ID)
+	if err != nil || envRow.ExpiresAt == nil {
+		t.Fatalf("completed environment expiry %+v err=%v", envRow, err)
+	}
+	expiresAt := *envRow.ExpiresAt
+	if _, err := h.e.SleepEnvironment(envRow.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.e.PromptFollowUp(sess.ID, "wake after expiry"); err != nil {
+		t.Fatal(err)
+	}
+	h.clk.Advance(24*time.Hour + 500*time.Millisecond)
+	for attempt := range 2 {
+		claim, err := h.e.Claim("example/test-repo")
+		if err == nil || claim != nil || !strings.Contains(err.Error(), "environment state sleeping") {
+			t.Fatalf("attempt %d claim=%+v err=%v", attempt+1, claim, err)
+		}
+		got, err := store.GetEnvironment(h.st, envRow.ID)
+		if err != nil || got.State != store.EnvSleeping || got.Handle != envRow.Handle || got.ExpiresAt == nil || !got.ExpiresAt.Equal(expiresAt) {
+			t.Fatalf("attempt %d renewed expired environment: %+v err=%v", attempt+1, got, err)
+		}
+	}
+	if len(rt.Created) != 1 || len(rt.Started) != 0 {
+		t.Fatalf("expired environment was replaced or started: created=%v started=%v", rt.Created, rt.Started)
+	}
+}
+
+func TestLiveIdleContainerTurnResume(t *testing.T) {
+	if os.Getenv("RUSUI_LIVE_ENV_SLEEP") != "1" {
+		t.Skip("set RUSUI_LIVE_ENV_SLEEP=1 for disposable live container proof")
+	}
+	image := os.Getenv("RUSUI_LIVE_GUEST_IMAGE")
+	if image == "" {
+		t.Skip("set RUSUI_LIVE_GUEST_IMAGE to a local rusui guest image")
+	}
+	rt, err := env.LookRuntime()
+	if err != nil {
+		t.Skip(err)
+	}
+	h := setup(t)
+	h.e.Container = env.Container{RT: rt, Image: image}
+	h.e.EnvIdleSleep = 5 * time.Minute
+	item := int(time.Now().UnixNano()%1_000_000_000) + 1
+	h.putRefresh(issue(item))
+	c, err := h.e.Claim("example/test-repo")
+	if err != nil || c == nil {
+		t.Fatalf("initial claim %+v: %v", c, err)
+	}
+	turn, err := store.GetTurn(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow, err := store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handle := envRow.Handle
+	t.Cleanup(func() { _ = rt.Remove(handle) })
+	if err := rt.Exec(handle, []string{"sh", "-c", "printf workspace-preserved > live-marker"}); err != nil {
+		t.Fatalf("write workspace marker: %v", err)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, art(c, "keep", "", "")); err != nil {
+		t.Fatal(err)
+	}
+	h.clk.Advance(6 * time.Minute)
+	if err := h.e.SleepIdleEnvironments(); err != nil {
+		t.Fatal(err)
+	}
+	if err := rt.Exec(handle, []string{"true"}); err == nil {
+		t.Fatal("container still accepts commands after idle sleep")
+	}
+	if _, _, err := h.e.PromptFollowUp(sess.ID, "resume same workspace"); err != nil {
+		t.Fatal(err)
+	}
+	wakeStarted := time.Now()
+	next, err := h.e.Claim("example/test-repo")
+	if err != nil || next == nil {
+		t.Fatalf("follow-up claim %+v: %v", next, err)
+	}
+	t.Logf("idle environment wake and follow-up claim latency: %s", time.Since(wakeStarted))
+	resumed, err := store.GetEnvironment(h.st, envRow.ID)
+	if err != nil || resumed.State != store.EnvReady || resumed.Handle != handle || resumed.SourceHash != envRow.SourceHash || next.Snapshot.GitPin() != c.Snapshot.GitPin() {
+		t.Fatalf("resumed environment %+v err=%v", resumed, err)
+	}
+	nextTurn, err := store.GetTurn(h.st, next.Job.ID)
+	if err != nil || nextTurn.SessionID != sess.ID {
+		t.Fatalf("follow-up claim changed session identity: turn=%+v err=%v", nextTurn, err)
+	}
+	marker, err := rt.ReadFile(handle, "live-marker")
+	if err != nil || string(marker) != "workspace-preserved" {
+		t.Fatalf("resumed workspace marker %q err=%v", marker, err)
 	}
 }
 

@@ -95,8 +95,16 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 			"revision_id": revisionID, "artifact": artifact, "dry_run_actions": dryRun,
 		}
 	}
+	receipts, err := store.ListEnvironmentReceipts(s.Eng.Store, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	response := map[string]any{"session": sess, "turns": turns, "processes": processes, "environment_state": envState}
+	response := map[string]any{
+		"session": sess, "turns": turns, "processes": processes,
+		"environment_state": envState, "environment_receipts": receipts,
+	}
 	if reviewResult != nil {
 		response["review_result"] = reviewResult
 	}

@@ -3,7 +3,9 @@ package engine
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/sannrox/rusui/internal/env"
@@ -115,6 +117,8 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 }
 
 func (e *Engine) SleepEnvironment(id int64) (*store.Environment, error) {
+	unlock := e.lockEnvironment(id)
+	defer unlock()
 	envRow, err := store.GetEnvironment(e.Store, id)
 	if err != nil {
 		return nil, err
@@ -125,26 +129,77 @@ func (e *Engine) SleepEnvironment(id int64) (*store.Environment, error) {
 	if envRow.State != store.EnvReady {
 		return nil, fmt.Errorf("env: sleep requires ready, have %s", envRow.State)
 	}
-	d, err := e.driverFor(envRow.Driver)
+	reserved, err := store.ReserveEnvironmentSleep(e.Store, id, e.now())
 	if err != nil {
 		return nil, err
 	}
+	if !reserved {
+		return nil, store.ErrEnvironmentBusy
+	}
+	return e.sleepReservedEnvironment(envRow)
+}
+
+func (e *Engine) sleepReservedEnvironment(envRow *store.Environment) (*store.Environment, error) {
+	current, err := store.GetEnvironment(e.Store, envRow.ID)
+	if err != nil {
+		return nil, e.failSleep(envRow, err, nil)
+	}
+	if current.State != store.EnvSleeping {
+		return nil, fmt.Errorf("env: sleep reservation lost, have %s", current.State)
+	}
+	envRow = current
+	d, err := e.driverFor(envRow.Driver)
+	if err != nil {
+		return nil, e.failSleep(envRow, err, nil)
+	}
 	if err := stopServices(d, envRow.Handle); err != nil {
-		return nil, err
+		recoveryErr := startServices(d, envRow.Handle)
+		return nil, e.failSleep(envRow, err, recoveryErr)
 	}
 	if err := d.Sleep(envRow.Handle); err != nil {
-		return nil, err
+		recoveryErr := d.Wake(envRow.Handle)
+		if recoveryErr == nil {
+			if r, ok := d.(env.Resumer); ok {
+				recoveryErr = r.Resume(envRow.Handle)
+			}
+		}
+		if recoveryErr == nil {
+			recoveryErr = startServices(d, envRow.Handle)
+		}
+		return nil, e.failSleep(envRow, err, recoveryErr)
 	}
 	now := e.now()
 	envRow.State = store.EnvSleeping
 	envRow.SleptAt = &now
 	if err := store.UpdateEnvironment(e.Store, *envRow); err != nil {
+		return nil, e.failSleep(envRow, err, fmt.Errorf("database remains reserved as sleeping"))
+	}
+	if err := store.InsertEnvironmentReceipt(e.Store, envRow.ID, "sleep", "succeeded", "", now); err != nil {
 		return nil, err
 	}
 	return envRow, nil
 }
 
+func (e *Engine) failSleep(envRow *store.Environment, cause, recoveryErr error) error {
+	detail := cause.Error()
+	if recoveryErr == nil {
+		if err := store.RestoreEnvironmentReady(e.Store, envRow.ID); err != nil {
+			detail += "; recovery succeeded but state restore failed: " + err.Error()
+		} else {
+			detail += "; environment recovered to ready"
+		}
+	} else {
+		detail += "; recovery failed: " + recoveryErr.Error()
+	}
+	if err := store.InsertEnvironmentReceipt(e.Store, envRow.ID, "sleep", "failed", detail, e.now()); err != nil {
+		return fmt.Errorf("env %d sleeping failed: %s; recording receipt: %w", envRow.ID, detail, err)
+	}
+	return fmt.Errorf("env %d sleeping failed: %s", envRow.ID, detail)
+}
+
 func (e *Engine) WakeEnvironment(id int64) (*store.Environment, error) {
+	unlock := e.lockEnvironment(id)
+	defer unlock()
 	envRow, err := store.GetEnvironment(e.Store, id)
 	if err != nil {
 		return nil, err
@@ -160,18 +215,18 @@ func (e *Engine) WakeEnvironment(id int64) (*store.Environment, error) {
 	}
 	d, err := e.driverFor(envRow.Driver)
 	if err != nil {
-		return nil, err
+		return nil, e.failWake(envRow, err)
 	}
 	if err := d.Wake(envRow.Handle); err != nil {
-		return nil, err
+		return nil, e.failWake(envRow, withRollbackError(err, rollbackWake(d, envRow.Handle)))
 	}
 	if r, ok := d.(env.Resumer); ok {
 		if err := r.Resume(envRow.Handle); err != nil {
-			return nil, err
+			return nil, e.failWake(envRow, withRollbackError(err, rollbackWake(d, envRow.Handle)))
 		}
 	}
 	if err := startServices(d, envRow.Handle); err != nil {
-		return nil, err
+		return nil, e.failWake(envRow, withRollbackError(err, rollbackWake(d, envRow.Handle)))
 	}
 	now := e.now()
 	exp := now.Add(e.envTTL())
@@ -179,9 +234,84 @@ func (e *Engine) WakeEnvironment(id int64) (*store.Environment, error) {
 	envRow.SleptAt = nil
 	envRow.ExpiresAt = &exp
 	if err := store.UpdateEnvironment(e.Store, *envRow); err != nil {
+		return nil, e.failWake(envRow, withRollbackError(err, rollbackWake(d, envRow.Handle)))
+	}
+	if err := store.InsertEnvironmentReceipt(e.Store, envRow.ID, "wake", "succeeded", "", now); err != nil {
 		return nil, err
 	}
 	return envRow, nil
+}
+
+func rollbackWake(d env.Driver, handle string) error {
+	return errors.Join(stopServices(d, handle), d.Sleep(handle))
+}
+
+func withRollbackError(cause, rollbackErr error) error {
+	if rollbackErr == nil {
+		return cause
+	}
+	return fmt.Errorf("%w; rollback failed: %w", cause, rollbackErr)
+}
+
+func (e *Engine) failWake(envRow *store.Environment, cause error) error {
+	detail := cause.Error()
+	if err := store.InsertEnvironmentReceipt(e.Store, envRow.ID, "wake", "failed", detail, e.now()); err != nil {
+		return fmt.Errorf("env %d wake failed in sleeping state: %s; recording receipt: %w", envRow.ID, detail, err)
+	}
+	return fmt.Errorf("env %d wake failed in sleeping state: %s", envRow.ID, detail)
+}
+
+func (e *Engine) SleepIdleEnvironments() error {
+	if e.EnvIdleSleep <= 0 {
+		return nil
+	}
+	rows, err := store.ListIdleContainerEnvironments(e.Store, e.now(), e.envTTL(), e.EnvIdleSleep)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for i := range rows {
+		id := rows[i].ID
+		unlock := e.lockEnvironment(id)
+		reserved, err := store.ReserveIdleEnvironmentSleep(e.Store, id, e.now(), e.envTTL(), e.EnvIdleSleep)
+		if err == nil && reserved {
+			_, err = e.sleepReservedEnvironment(&rows[i])
+		}
+		unlock()
+		if err != nil && !errors.Is(err, store.ErrEnvironmentBusy) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+type environmentOperationLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+func (e *Engine) lockEnvironment(id int64) func() {
+	e.envLockMu.Lock()
+	if e.envLocks == nil {
+		e.envLocks = make(map[int64]*environmentOperationLock)
+	}
+	lock := e.envLocks[id]
+	if lock == nil {
+		lock = &environmentOperationLock{}
+		e.envLocks[id] = lock
+	}
+	lock.refs++
+	e.envLockMu.Unlock()
+	lock.mu.Lock()
+	return func() {
+		lock.mu.Unlock()
+		e.envLockMu.Lock()
+		lock.refs--
+		if lock.refs == 0 {
+			delete(e.envLocks, id)
+		}
+		e.envLockMu.Unlock()
+	}
 }
 
 func (e *Engine) ReapEnvironments() error {
@@ -266,6 +396,13 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	}
 	hash := SourceHash(e.imageIdentity(), pin, nil)
 	if envRow.Handle != "" && envRow.SourceHash == hash {
+		if envRow.State == store.EnvSleeping {
+			_, err := e.WakeEnvironment(envRow.ID)
+			return err
+		}
+		if envRow.State != store.EnvReady {
+			return fmt.Errorf("env: session environment %d is %s", envRow.ID, envRow.State)
+		}
 		now := e.now()
 		exp := now.Add(e.envTTL())
 		envRow.ExpiresAt = &exp

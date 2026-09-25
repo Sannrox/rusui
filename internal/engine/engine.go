@@ -56,11 +56,14 @@ type Engine struct {
 	Env          env.Driver
 	Container    env.Driver
 	EnvTTL       time.Duration
+	EnvIdleSleep time.Duration
 	Tree         TreeSource
 	SnapshotRoot string
 	refreshMu    sync.Mutex
 	policyMu     sync.RWMutex
 	sumikaMu     sync.Mutex
+	envLockMu    sync.Mutex
+	envLocks     map[int64]*environmentOperationLock
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {
@@ -512,7 +515,14 @@ func (e *Engine) expireLeaseTx(tx *sql.Tx, j *store.Job) error {
 	} else {
 		j.State = "queued"
 	}
-	return store.UpdateJobTx(tx, j)
+	if err := store.UpdateJobTx(tx, j); err != nil {
+		return err
+	}
+	turn, err := store.GetTurnTx(tx, j.ID)
+	if err != nil {
+		return err
+	}
+	return store.TouchSessionEnvironmentTx(tx, turn.SessionID, now, now.Add(e.envTTL()))
 }
 
 func (e *Engine) expireDeadLeasesTx(tx *sql.Tx, repo, lane string) error {
@@ -668,7 +678,18 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		return c, err
 	}
 	if err := e.EnsureSessionEnvironment(c.Job.ID, c.Snapshot); err != nil {
-		return c, err
+		_, failErr := e.Fail(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision)
+		turn, _ := store.GetTurn(e.Store, c.Job.ID)
+		state := "unknown"
+		if turn != nil {
+			if sess, getErr := store.GetSession(e.Store, turn.SessionID); getErr == nil {
+				state = sess.EnvironmentState
+			}
+		}
+		if failErr != nil {
+			return nil, fmt.Errorf("environment setup failed with environment state %s: %w; failing turn: %w", state, err, failErr)
+		}
+		return nil, fmt.Errorf("environment setup failed with environment state %s: %w", state, err)
 	}
 	return c, nil
 }
@@ -789,6 +810,14 @@ func (e *Engine) Complete(jobID int64, gen, claimed int, art Artifact) (map[stri
 		if err := ValidateResult(art); err != nil {
 			return e.finalizeFailureTx(tx, j, gen, claimed)
 		}
+		turn, err := store.GetTurnTx(tx, j.ID)
+		if err != nil {
+			return err
+		}
+		now := e.now()
+		if err := store.TouchSessionEnvironmentTx(tx, turn.SessionID, now, now.Add(e.envTTL())); err != nil {
+			return err
+		}
 		art.MainSHA = snap.MainSHA
 		art.SnapshotHash = wantHash
 		b, _ := json.Marshal(art)
@@ -875,6 +904,14 @@ func (e *Engine) acceptLease(tx *sql.Tx, j *store.Job, gen, claimed int) error {
 }
 
 func (e *Engine) finalizeFailureTx(tx *sql.Tx, j *store.Job, gen, claimed int) error {
+	turn, err := store.GetTurnTx(tx, j.ID)
+	if err != nil {
+		return err
+	}
+	now := e.now()
+	if err := store.TouchSessionEnvironmentTx(tx, turn.SessionID, now, now.Add(e.envTTL())); err != nil {
+		return err
+	}
 	receipt := map[string]any{"kind": "fail"}
 	rb, _ := json.Marshal(receipt)
 	if err := store.InsertReceiptTx(tx, j.ID, gen, claimed, "fail", string(rb)); err != nil {

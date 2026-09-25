@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -205,6 +206,88 @@ func TestConsoleSignInListsAndDetails(t *testing.T) {
 	_ = res.Body.Close()
 	if !strings.Contains(string(miss), "missing") {
 		t.Fatalf("missing %s", miss)
+	}
+}
+
+func TestSessionsAndConsoleExposeEnvironmentStateAndReceipts(t *testing.T) {
+	_, hs, e := consoleEnv(t)
+	sid, err := e.StartRun("test", "show sleep", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(e.Store, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow, err := store.GetEnvironment(e.Store, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow.State = store.EnvSleeping
+	if err := store.UpdateEnvironment(e.Store, *envRow); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.InsertEnvironmentReceipt(e.Store, envRow.ID, "sleep", "succeeded", "idle timeout", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{}
+	listReq, _ := http.NewRequest(http.MethodGet, hs.URL+"/sessions", nil)
+	listReq.Header.Set("Authorization", "Bearer wsec")
+	listRes, err := client.Do(listReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listBody, _ := io.ReadAll(listRes.Body)
+	_ = listRes.Body.Close()
+	var sessions []store.Session
+	if listRes.StatusCode != http.StatusOK || json.Unmarshal(listBody, &sessions) != nil {
+		t.Fatalf("sessions list %d %s", listRes.StatusCode, listBody)
+	}
+	var listed *store.Session
+	for i := range sessions {
+		if sessions[i].ID == sid {
+			listed = &sessions[i]
+			break
+		}
+	}
+	if listed == nil || listed.EnvironmentState != store.EnvSleeping {
+		t.Fatalf("listed session %+v", listed)
+	}
+	detailReq, _ := http.NewRequest(http.MethodGet, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10), nil)
+	detailReq.Header.Set("Authorization", "Bearer op-tok")
+	detailRes, err := client.Do(detailReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	detailBody, _ := io.ReadAll(detailRes.Body)
+	_ = detailRes.Body.Close()
+	var detail struct {
+		Session          store.Session              `json:"session"`
+		EnvironmentState string                     `json:"environment_state"`
+		Receipts         []store.EnvironmentReceipt `json:"environment_receipts"`
+	}
+	if detailRes.StatusCode != http.StatusOK || json.Unmarshal(detailBody, &detail) != nil || detail.Session.EnvironmentState != store.EnvSleeping || detail.EnvironmentState != store.EnvSleeping || len(detail.Receipts) != 1 || detail.Receipts[0].State != "succeeded" {
+		t.Fatalf("session detail %d %s", detailRes.StatusCode, detailBody)
+	}
+
+	operator := operatorClient(t, hs)
+	res, err := operator.Get(hs.URL + "/console/sessions")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listHTML, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(listHTML), "environment sleeping") {
+		t.Fatalf("console list %d %s", res.StatusCode, listHTML)
+	}
+	res, err = operator.Get(hs.URL + "/console/sessions/" + strconv.FormatInt(sid, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	detailHTML, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK || !strings.Contains(string(detailHTML), "Environment activity") || !strings.Contains(string(detailHTML), "sleep succeeded") || !strings.Contains(string(detailHTML), "idle timeout") {
+		t.Fatalf("console detail %d %s", res.StatusCode, detailHTML)
 	}
 }
 

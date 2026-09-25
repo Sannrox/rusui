@@ -36,17 +36,28 @@ type Runner struct {
 }
 
 type Session struct {
-	ID             int64
-	EnvironmentID  int64
-	Kind           string
-	Repo           string
-	Item           int
-	ItemKind       string
-	State          string
-	Project        string
-	Prompt         string
-	GuestSessionID string
-	CreatedAt      time.Time
+	ID               int64
+	EnvironmentID    int64
+	EnvironmentState string `json:"environment_state"`
+	Kind             string
+	Repo             string
+	Item             int
+	ItemKind         string
+	State            string
+	Project          string
+	Prompt           string
+	GuestSessionID   string
+	CreatedAt        time.Time
+}
+
+type EnvironmentReceipt struct {
+	ID            int64     `json:"id"`
+	EnvironmentID int64     `json:"environment_id"`
+	SessionID     *int64    `json:"session_id,omitempty"`
+	Kind          string    `json:"kind"`
+	State         string    `json:"state"`
+	Detail        string    `json:"detail,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type Turn struct {

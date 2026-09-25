@@ -39,6 +39,9 @@ operator select runtime details that Session metadata already identifies.
   lease only when one is free; an existing writer leaves the CLI read-only.
   The command releases only the lease generation it acquired. The browser
   terminal and ACP editor contracts remain unchanged.
+- Before opening a managed terminal, the command replays and follows the
+  existing Session, Turn, and action events from `GET /sessions/{id}/attach`.
+  It keeps the session id and environment; it does not create either object.
 - A stale Process, expired Environment, denied authorization, or disconnected
   transport is reported as an error. The command never falls back to another
   runtime, Process, host, or transport.
