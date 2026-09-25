@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -61,57 +62,66 @@ func TestReviewCLIBlackboxWaitsForCurrentPendingRevision(t *testing.T) {
 	eng.ReloadPolicy(pol)
 	baseHandler := (&server.Server{Eng: eng, WorkerSec: "wsec", OperatorTok: "op"}).Handler()
 	var sessionGets atomic.Int32
+	var reviewStatusGets atomic.Int32
 	var workerOnce sync.Once
 	advanced := false
 	freshCompleted := false
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/sessions/") {
-			sessionGets.Add(1)
+			reviewStatus := r.URL.Query().Get("view") == "review-status"
+			if reviewStatus {
+				reviewStatusGets.Add(1)
+			} else {
+				sessionGets.Add(1)
+			}
 			rec := httptest.NewRecorder()
 			baseHandler.ServeHTTP(rec, r)
-			var current struct {
-				Turns        []store.Turn `json:"turns"`
-				ReviewResult *struct {
-					Artifact json.RawMessage `json:"artifact"`
-				} `json:"review_result"`
-			}
-			if json.Unmarshal(rec.Body.Bytes(), &current) == nil && len(current.Turns) > 0 && current.ReviewResult != nil {
-				var artifact struct {
-					ClaimedRevision int `json:"claimed_revision"`
+			if reviewStatus {
+				var current struct {
+					TurnID          int64  `json:"turn_id"`
+					TurnState       string `json:"turn_state"`
+					PendingRevision int    `json:"pending_revision"`
+					ClaimedRevision int    `json:"claimed_revision"`
 				}
-				if json.Unmarshal(current.ReviewResult.Artifact, &artifact) == nil && artifact.ClaimedRevision == 1 && !advanced {
-					fake.Put(snapshot.Item{
-						Repo: "example/test-repo", Item: 42, ItemKind: "pull", State: "open",
-						Title: "review me", HeadSHA: "head-43", BaseSHA: "base-42", MainSHA: "main-43",
-					})
-					latest, refreshErr := eng.RequestReview("example/test-repo", 42)
-					if refreshErr != nil || latest.PendingRevision != 2 {
-						http.Error(w, "test setup: newer review revision was not admitted", http.StatusInternalServerError)
-						return
+				if json.Unmarshal(rec.Body.Bytes(), &current) == nil && current.TurnID > 0 {
+					switch {
+					case current.TurnState == "completed" && current.ClaimedRevision == 1 && !advanced:
+						fake.Put(snapshot.Item{
+							Repo: "example/test-repo", Item: 42, ItemKind: "pull", State: "open",
+							Title: "review me", HeadSHA: "head-43", BaseSHA: "base-42", MainSHA: "main-43",
+						})
+						latest, refreshErr := eng.RequestReview("example/test-repo", 42)
+						if refreshErr != nil || latest.PendingRevision != 2 {
+							http.Error(w, "test setup: newer review revision was not admitted", http.StatusInternalServerError)
+							return
+						}
+						advanced = true
+						rec = httptest.NewRecorder()
+						baseHandler.ServeHTTP(rec, r)
+					case advanced && !freshCompleted && current.PendingRevision == 2 && current.ClaimedRevision == 1:
+						claim, claimErr := eng.Claim("example/test-repo")
+						if claimErr != nil || claim == nil || claim.Job.ClaimedRevision != 2 {
+							http.Error(w, "test setup: newer review revision was not claimed", http.StatusInternalServerError)
+							return
+						}
+						freshArtifact := engine.Artifact{
+							SchemaVersion: 1, Repo: claim.Job.Repo, Item: claim.Job.Item,
+							ItemKind: claim.Job.ItemKind, ClaimedRevision: claim.Job.ClaimedRevision,
+							SnapshotHash: claim.ItemHash, MainSHA: claim.Snapshot.MainSHA,
+							HeadSHA: claim.Snapshot.HeadSHA, Verdict: "propose_comment", Confidence: "high",
+							ProposedActions: []engine.ProposedAction{{Type: "comment", ReasonCode: "operator_review"}},
+						}
+						if _, completeErr := eng.Complete(claim.Job.ID, claim.Job.LeaseGeneration, claim.Job.ClaimedRevision, freshArtifact); completeErr != nil {
+							http.Error(w, "test setup: newer review revision did not complete", http.StatusInternalServerError)
+							return
+						}
+						freshCompleted = true
+						rec = httptest.NewRecorder()
+						baseHandler.ServeHTTP(rec, r)
 					}
-					advanced = true
-					rec = httptest.NewRecorder()
-					baseHandler.ServeHTTP(rec, r)
-				} else if advanced && !freshCompleted && artifact.ClaimedRevision == 1 && current.Turns[0].PendingRevision == 2 {
-					claim, claimErr := eng.Claim("example/test-repo")
-					if claimErr != nil || claim == nil || claim.Job.ClaimedRevision != 2 {
-						http.Error(w, "test setup: newer review revision was not claimed", http.StatusInternalServerError)
-						return
-					}
-					freshArtifact := engine.Artifact{
-						SchemaVersion: 1, Repo: claim.Job.Repo, Item: claim.Job.Item,
-						ItemKind: claim.Job.ItemKind, ClaimedRevision: claim.Job.ClaimedRevision,
-						SnapshotHash: claim.ItemHash, MainSHA: claim.Snapshot.MainSHA,
-						HeadSHA: claim.Snapshot.HeadSHA, Verdict: "propose_comment", Confidence: "high",
-						ProposedActions: []engine.ProposedAction{{Type: "comment", ReasonCode: "operator_review"}},
-					}
-					if _, completeErr := eng.Complete(claim.Job.ID, claim.Job.LeaseGeneration, claim.Job.ClaimedRevision, freshArtifact); completeErr != nil {
-						http.Error(w, "test setup: newer review revision did not complete", http.StatusInternalServerError)
-						return
-					}
-					freshCompleted = true
-					rec = httptest.NewRecorder()
-					baseHandler.ServeHTTP(rec, r)
+				}
+				if bytes.Contains(rec.Body.Bytes(), []byte(`"review_result"`)) || bytes.Contains(rec.Body.Bytes(), []byte(`"environment_receipts"`)) {
+					t.Errorf("compact review status included full session data: %s", rec.Body.Bytes())
 				}
 			}
 			for key, values := range rec.Header() {
@@ -179,8 +189,11 @@ func TestReviewCLIBlackboxWaitsForCurrentPendingRevision(t *testing.T) {
 			t.Fatalf("CLI output missing %q:\n%s", want, got)
 		}
 	}
-	if sessionGets.Load() < 2 {
-		t.Fatalf("CLI did not wait and poll the session: GET count %d", sessionGets.Load())
+	if got := sessionGets.Load(); got != 1 {
+		t.Fatalf("CLI fetched full session detail %d times; want one result fetch after status polling", got)
+	}
+	if got := reviewStatusGets.Load(); got < 2 {
+		t.Fatalf("CLI did not poll compact review status: GET count %d", got)
 	}
 
 	var sessionID int64
@@ -190,6 +203,19 @@ func TestReviewCLIBlackboxWaitsForCurrentPendingRevision(t *testing.T) {
 	turns, err := store.ListTurnsForSession(eng.Store, sessionID)
 	if err != nil || len(turns) != 1 {
 		t.Fatalf("review turns: %v %v", turns, err)
+	}
+	statusPath := "/sessions/" + strconv.FormatInt(sessionID+1, 10) + "?view=review-status&turn_id=" + strconv.FormatInt(turns[0].ID, 10)
+	unauthorized := httptest.NewRecorder()
+	baseHandler.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodGet, statusPath, nil))
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("review status without auth: got %d, want %d", unauthorized.Code, http.StatusUnauthorized)
+	}
+	wrongSessionReq := httptest.NewRequest(http.MethodGet, statusPath, nil)
+	wrongSessionReq.Header.Set("Authorization", "Bearer wsec")
+	wrongSession := httptest.NewRecorder()
+	baseHandler.ServeHTTP(wrongSession, wrongSessionReq)
+	if wrongSession.Code != http.StatusNotFound {
+		t.Fatalf("review status for another session's turn: got %d, want %d", wrongSession.Code, http.StatusNotFound)
 	}
 	n, err := store.CountReviews(eng.Store, turns[0].ID)
 	if err != nil || n != 2 {
