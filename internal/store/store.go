@@ -438,6 +438,15 @@ func LatestReviewJSON(s *Store, jobID int64) (string, error) {
 	return p, err
 }
 
+// LatestReviewForSession returns the latest immutable review for a session.
+func LatestReviewForSession(s *Store, sessionID int64) (revisionID int64, payload string, ok bool, err error) {
+	err = s.DB.QueryRow(`SELECT r.id, r.payload FROM review_revisions r JOIN turns t ON t.id=r.job_id WHERE t.session_id=? ORDER BY r.id DESC LIMIT 1`, sessionID).Scan(&revisionID, &payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, "", false, nil
+	}
+	return revisionID, payload, err == nil, err
+}
+
 func IntendedBodies(s *Store, repo string, item int) ([]string, error) {
 	rows, err := s.DB.Query(`SELECT body FROM actions WHERE repo=? AND item=?`, repo, item)
 	if err != nil {

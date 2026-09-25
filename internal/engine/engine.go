@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -57,6 +58,7 @@ type Engine struct {
 	EnvTTL       time.Duration
 	Tree         TreeSource
 	SnapshotRoot string
+	refreshMu    sync.Mutex
 	policyMu     sync.RWMutex
 	sumikaMu     sync.Mutex
 }
@@ -292,12 +294,29 @@ func (e *Engine) StartupExpireOwners() error {
 }
 
 func (e *Engine) StepRefresh() (bool, error) {
+	e.refreshMu.Lock()
+	defer e.refreshMu.Unlock()
+	return e.stepRefresh("", 0, "", false)
+}
+
+func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind string, enforceReviewBudget bool) (bool, error) {
 	var repo, kind string
 	var item, gen int
 	var force bool
 	now := e.now()
 	err := e.Store.Tx(func(tx *sql.Tx) error {
-		row := tx.QueryRow(`SELECT repo, item, item_kind, generation, force FROM refresh_requests WHERE state='queued' AND owner=0 AND (not_before IS NULL OR not_before<=?) LIMIT 1`, now.Format(time.RFC3339Nano))
+		query := `SELECT repo, item, item_kind, generation, force FROM refresh_requests WHERE state='queued' AND owner=0 AND (not_before IS NULL OR not_before<=?)`
+		args := []any{now.Format(time.RFC3339Nano)}
+		if filterRepo != "" {
+			query += ` AND repo=?`
+			args = append(args, filterRepo)
+		}
+		if filterItem > 0 {
+			query += ` AND item=?`
+			args = append(args, filterItem)
+		}
+		query += ` LIMIT 1`
+		row := tx.QueryRow(query, args...)
 		var f int
 		if err := row.Scan(&repo, &item, &kind, &gen, &f); err != nil {
 			if err == sql.ErrNoRows {
@@ -323,6 +342,10 @@ func (e *Engine) StepRefresh() (bool, error) {
 		return false, err
 	}
 	it, ferr := e.GitHub.GetItem(repo, item, kind)
+	if ferr == nil && expectedKind != "" && it.ItemKind != expectedKind {
+		ferr = fmt.Errorf("expected a pull request")
+	}
+	budgetDenied := false
 	err = e.Store.Tx(func(tx *sql.Tx) error {
 		var curGen, owner, needs, f int
 		if err := tx.QueryRow(`SELECT generation, owner, needs_another, force FROM refresh_requests WHERE repo=? AND item=?`, repo, item).Scan(&curGen, &owner, &needs, &f); err != nil {
@@ -343,7 +366,21 @@ func (e *Engine) StepRefresh() (bool, error) {
 			_, err := tx.Exec(`UPDATE refresh_requests SET owner=0, retry_count=?, state=? WHERE repo=? AND item=?`, n, st, repo, item)
 			return err
 		}
-		if err := e.admitTx(tx, it, force || f == 1, gen); err != nil {
+		if err := e.admitTx(tx, it, force || f == 1, gen, enforceReviewBudget); err != nil {
+			if !errors.Is(err, ErrReviewBudget) {
+				return err
+			}
+			budgetDenied = true
+			state := "idle"
+			forcePending := force || f == 1
+			forceValue := 0
+			if needs == 1 || forcePending {
+				state = "queued"
+			}
+			if forcePending {
+				forceValue = 1
+			}
+			_, err := tx.Exec(`UPDATE refresh_requests SET owner=0, needs_another=0, force=?, state=? WHERE repo=? AND item=?`, forceValue, state, repo, item)
 			return err
 		}
 		if needs == 1 {
@@ -356,12 +393,15 @@ func (e *Engine) StepRefresh() (bool, error) {
 	if err != nil {
 		return true, err
 	}
+	if budgetDenied {
+		return true, ErrReviewBudget
+	}
 	return true, nil
 }
 
 var errNoWork = fmt.Errorf("no work")
 
-func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int) error {
+func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int, enforceReviewBudget bool) error {
 	var curGen int
 	err := tx.QueryRow(`SELECT generation FROM refresh_requests WHERE repo=? AND item=?`, it.Repo, it.Item).Scan(&curGen)
 	if err != nil && err != sql.ErrNoRows {
@@ -373,6 +413,7 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int) erro
 	if repoPolicy, ok := e.PolicySnapshot().Repo(it.Repo); !ok || !repoPolicy.Review {
 		return nil
 	}
+	consumeInvalidations := false
 	if force {
 		var n int
 		err := tx.QueryRow(`SELECT COUNT(*) FROM evidence_invalidations ei JOIN review_revisions r ON r.id=ei.review_revision_id JOIN jobs j ON j.id=r.job_id WHERE j.repo=? AND j.item=? AND ei.consumed=0`, it.Repo, it.Item).Scan(&n)
@@ -382,10 +423,7 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int) erro
 		if n == 0 {
 			force = false
 		} else {
-			_, err = tx.Exec(`UPDATE evidence_invalidations SET consumed=1 WHERE consumed=0 AND review_revision_id IN (SELECT r.id FROM review_revisions r JOIN jobs j ON j.id=r.job_id WHERE j.repo=? AND j.item=?)`, it.Repo, it.Item)
-			if err != nil {
-				return err
-			}
+			consumeInvalidations = true
 		}
 	}
 	h := snapshot.ItemHash(it)
@@ -414,6 +452,25 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int) erro
 			if lastHash != "" && lastHash == h && (j == nil || j.State == "completed") {
 				return nil
 			}
+		}
+	}
+	if enforceReviewBudget {
+		repoPolicy, ok := e.PolicySnapshot().Repo(it.Repo)
+		if !ok || !repoPolicy.Review {
+			return nil
+		}
+		n, err := store.CountReviewsToday(tx, it.Repo, e.now().Format("2006-01-02"))
+		if err != nil {
+			return err
+		}
+		if n >= repoPolicy.MaxReviewsPerRepoPerUTCDay {
+			return ErrReviewBudget
+		}
+	}
+	if consumeInvalidations {
+		_, err = tx.Exec(`UPDATE evidence_invalidations SET consumed=1 WHERE consumed=0 AND review_revision_id IN (SELECT r.id FROM review_revisions r JOIN jobs j ON j.id=r.job_id WHERE j.repo=? AND j.item=?)`, it.Repo, it.Item)
+		if err != nil {
+			return err
 		}
 	}
 	rev := 1
