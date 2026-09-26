@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -77,8 +78,16 @@ nav a{margin-right:1rem}
 {{else if eq .View "session"}}
 <h1>Session {{.Sess.ID}}</h1>
 <p>Project {{.Sess.Project}} · {{.Sess.Kind}} · {{.Sess.State}} · environment {{.Sess.EnvironmentState}}{{if .TurnState}} · turn {{.TurnState}}{{end}}</p>
+{{if .Notice}}<p role="status">{{.Notice}}</p>{{end}}
 {{if .EnvironmentReceipts}}<h2>Environment activity</h2><ul>{{range .EnvironmentReceipts}}<li>{{.CreatedAt.Format "2006-01-02 15:04:05 MST"}} {{.Kind}} {{.State}}{{if .Detail}} — {{.Detail}}{{end}}</li>{{end}}</ul>{{end}}
 <p>{{.Sess.Prompt}}</p>
+<form method="post" action="/console/sessions/{{.Sess.ID}}/prompt">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<label for="prompt">Prompt</label>
+<textarea id="prompt" name="prompt" rows="4" required></textarea>
+<button type="submit" name="mode" value="follow_up">Queue follow-up</button>
+<button type="submit" name="mode" value="steer">Steer running turn</button>
+</form>
 <p><a href="/console/sessions/{{.Sess.ID}}/terminal">Terminal</a></p>
 <form method="post" action="/console/sessions/{{.Sess.ID}}/preview">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -403,7 +412,49 @@ func (s *Server) consoleSession(w http.ResponseWriter, r *http.Request) {
 	}
 	page.Authed = true
 	page.CSRF = s.consoleCSRF()
+	page.Notice = r.URL.Query().Get("notice")
 	s.renderConsole(w, page)
+}
+
+func (s *Server) consolePrompt(w http.ResponseWriter, r *http.Request) {
+	if !s.consoleRequire(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil || r.FormValue("csrf") != s.consoleCSRF() {
+		http.Error(w, "csrf", http.StatusForbidden)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "id", http.StatusBadRequest)
+		return
+	}
+	prompt := strings.TrimSpace(r.FormValue("prompt"))
+	var notice string
+	switch r.FormValue("mode") {
+	case "follow_up":
+		_, _, err = s.Eng.PromptFollowUp(id, prompt)
+		notice = "Follow-up queued."
+	case "steer":
+		var live bool
+		_, _, live, err = s.Eng.PromptSteer(id, prompt)
+		notice = "No live turn; prompt queued as a follow-up."
+		if live {
+			notice = "Steer queued for the running turn."
+		}
+	default:
+		http.Error(w, "mode", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	http.Redirect(w, r, "/console/sessions/"+strconv.FormatInt(id, 10)+"?notice="+url.QueryEscape(notice), http.StatusSeeOther)
 }
 
 func (s *Server) sessionPage(id int64) (consolePage, error) {

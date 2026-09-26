@@ -113,6 +113,49 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	}
 }
 
+func TestV22SteersReceiveFollowUpOrder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v22.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`DROP TABLE turn_steers;
+CREATE TABLE turn_steers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  turn_id INTEGER NOT NULL,
+  lease_generation INTEGER NOT NULL,
+  prompt TEXT NOT NULL,
+  acknowledged INTEGER NOT NULL DEFAULT 0,
+  promoted INTEGER NOT NULL DEFAULT 0,
+  offered INTEGER NOT NULL DEFAULT 0,
+  received INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX turn_steers_pending ON turn_steers(turn_id, lease_generation, acknowledged, promoted, id);
+CREATE INDEX turn_steers_unreceived ON turn_steers(turn_id, lease_generation, acknowledged, promoted, received, id);
+INSERT INTO followup_queue (session_id, seq, prompt) VALUES (77, 1, 'already queued');
+INSERT INTO turn_steers (session_id, turn_id, lease_generation, prompt) VALUES (77, 9, 2, 'pending steer');
+DELETE FROM schema_migrations WHERE version=23;`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	upgraded, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = upgraded.Close() })
+	var seq int
+	if err := upgraded.DB.QueryRow(`SELECT followup_seq FROM turn_steers WHERE session_id=77`).Scan(&seq); err != nil {
+		t.Fatal(err)
+	}
+	if seq != 2 {
+		t.Fatalf("upgraded steer sequence %d, want 2 after the existing follow-up", seq)
+	}
+}
+
 func TestLocalRuntimeMigrationsPreserveManagedState(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "v16.db")
 	st, err := Open(path)

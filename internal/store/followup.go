@@ -3,14 +3,27 @@ package store
 import "database/sql"
 
 func EnqueueFollowUpTx(tx *sql.Tx, sessionID int64, prompt string) (int, error) {
-	var seq int
-	err := tx.QueryRow(`SELECT IFNULL(MAX(seq), 0) FROM followup_queue WHERE session_id=?`, sessionID).Scan(&seq)
+	seq, err := nextFollowUpSeqTx(tx, sessionID)
 	if err != nil {
 		return 0, err
 	}
-	seq++
 	_, err = tx.Exec(`INSERT INTO followup_queue (session_id, seq, prompt, consumed) VALUES (?,?,?,0)`, sessionID, seq, prompt)
 	return seq, err
+}
+
+func nextFollowUpSeqTx(tx *sql.Tx, sessionID int64) (int, error) {
+	var seq int
+	err := tx.QueryRow(`SELECT IFNULL(MAX(seq), 0) FROM (
+  SELECT seq FROM followup_queue WHERE session_id=?
+  UNION ALL
+  SELECT followup_seq AS seq FROM turn_steers WHERE session_id=? AND followup_seq>0
+)`, sessionID, sessionID).Scan(&seq)
+	return seq + 1, err
+}
+
+func insertFollowUpAtTx(tx *sql.Tx, sessionID int64, seq int, prompt string) error {
+	_, err := tx.Exec(`INSERT INTO followup_queue (session_id, seq, prompt, consumed) VALUES (?,?,?,0)`, sessionID, seq, prompt)
+	return err
 }
 
 func NextFollowUpTx(tx *sql.Tx, sessionID int64) (seq int, prompt string, ok bool, err error) {

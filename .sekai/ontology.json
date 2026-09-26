@@ -98,6 +98,12 @@
       "properties": []
     },
     {
+      "name": "RusuiTurnSteer",
+      "description": "Operator-supplied prompt targeted at a live Turn lease generation. Delivery cancels the active ACP prompt and continues the same guest session; an unacknowledged steer is promoted to a FIFO follow-up when its lease ends.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiUnattendedSession",
       "description": "Rusui Session kind whose execution is mediated by leased Turns, including review, run, and scheduled work. The experimental local kind is excluded.",
       "superclasses": ["RusuiSession"],
@@ -482,6 +488,14 @@
       "transitive": false
     },
     {
+      "name": "rusui_turn_receives_steer",
+      "description": "An unattended Turn may receive operator prompts targeted at its current lease generation without advancing its claimed revision.",
+      "domain": "RusuiTurn",
+      "range": "RusuiTurnSteer",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
       "name": "sumika_process_has_local_attach",
       "description": "A Sumika Process has at most one current exclusive local Attach; a new Attach steals the previous one.",
       "domain": "SumikaProcess",
@@ -671,6 +685,24 @@
       "subject": "RusuiTurn",
       "source": "docs/decisions/0016-local-interactive-runtime.md",
       "locator": "docs/decisions/0016-local-interactive-runtime.md#d2-a-separate-local-session-kind",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiTurnSteer",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#follow-up",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiTurnSteer",
+      "source": "docs/decisions/0011-unattended-session-contract.md",
+      "locator": "docs/decisions/0011-unattended-session-contract.md#d2-follow-up-ordering",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_turn_receives_steer",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#follow-up",
       "confidence": 1.0
     },
     {

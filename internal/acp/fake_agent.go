@@ -21,17 +21,26 @@ type FakeAgent struct {
 	ToolCall json.RawMessage
 	// PermissionOption receives the option the client selected.
 	PermissionOption func(string)
+	PermissionResult func(PermissionOutcome)
 	// SessionCwd receives the cwd of session/new.
 	SessionCwd func(string)
+	// PromptStarted and CancelReceived let conformance tests observe the ACP boundary.
+	PromptStarted       chan<- PromptParams
+	PermissionRequested chan<- struct{}
+	CancelReceived      chan<- SessionCancelParams
+	// PromptHandler replaces the default fast response for lifecycle tests.
+	PromptHandler func(PromptParams, <-chan struct{}, func(string, any) error) (PromptResult, error)
 
-	mu      sync.Mutex
-	pending map[string]chan rpcMessage
-	seq     atomic.Int64
-	writes  sync.Mutex
+	mu            sync.Mutex
+	pending       map[string]chan rpcMessage
+	activePrompts map[string]chan struct{}
+	seq           atomic.Int64
+	writes        sync.Mutex
 }
 
 func (a *FakeAgent) Run() error {
 	a.pending = map[string]chan rpcMessage{}
+	a.activePrompts = map[string]chan struct{}{}
 	sc := bufio.NewScanner(a.In)
 	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for sc.Scan() {
@@ -86,7 +95,30 @@ func (a *FakeAgent) handle(msg rpcMessage) error {
 		}
 		return a.reply(msg.ID, map[string]any{})
 	case MethodSessionPrompt:
-		go a.promptTurn(msg.ID)
+		var p PromptParams
+		_ = json.Unmarshal(msg.Params, &p)
+		cancel := make(chan struct{})
+		a.mu.Lock()
+		a.activePrompts[p.SessionID] = cancel
+		a.mu.Unlock()
+		go a.runPrompt(msg.ID, p, cancel)
+		return nil
+	case MethodSessionCancel:
+		var p SessionCancelParams
+		_ = json.Unmarshal(msg.Params, &p)
+		a.mu.Lock()
+		cancel := a.activePrompts[p.SessionID]
+		delete(a.activePrompts, p.SessionID)
+		if cancel != nil {
+			close(cancel)
+		}
+		a.mu.Unlock()
+		if a.CancelReceived != nil {
+			select {
+			case a.CancelReceived <- p:
+			default:
+			}
+		}
 		return nil
 	default:
 		if len(msg.ID) > 0 {
@@ -98,6 +130,30 @@ func (a *FakeAgent) handle(msg rpcMessage) error {
 		}
 		return nil
 	}
+}
+
+func (a *FakeAgent) runPrompt(id json.RawMessage, p PromptParams, cancel chan struct{}) {
+	defer func() {
+		a.mu.Lock()
+		if a.activePrompts[p.SessionID] == cancel {
+			delete(a.activePrompts, p.SessionID)
+		}
+		a.mu.Unlock()
+	}()
+	if a.PromptStarted != nil {
+		select {
+		case a.PromptStarted <- p:
+		default:
+		}
+	}
+	if a.PromptHandler != nil {
+		pr, err := a.PromptHandler(p, cancel, a.roundTrip)
+		if err == nil {
+			_ = a.reply(id, pr)
+		}
+		return
+	}
+	a.promptTurn(id)
 }
 
 func (a *FakeAgent) promptTurn(id json.RawMessage) {
@@ -158,6 +214,12 @@ func (a *FakeAgent) roundTrip(method string, params any) error {
 	if err := a.write(rpcMessage{JSONRPC: "2.0", ID: id, Method: method, Params: raw}); err != nil {
 		return err
 	}
+	if method == MethodRequestPermission && a.PermissionRequested != nil {
+		select {
+		case a.PermissionRequested <- struct{}{}:
+		default:
+		}
+	}
 	msg := <-ch
 	if string(msg.ID) != string(id) {
 		return fmt.Errorf("fake agent: expected id %s got %s", id, msg.ID)
@@ -165,7 +227,17 @@ func (a *FakeAgent) roundTrip(method string, params any) error {
 	if method == MethodRequestPermission && a.PermissionOption != nil {
 		var out PermissionOutcome
 		if json.Unmarshal(msg.Result, &out) == nil {
-			a.PermissionOption(out.Outcome.OptionID)
+			if a.PermissionResult != nil {
+				a.PermissionResult(out)
+			}
+			if out.Outcome.Outcome == "selected" {
+				a.PermissionOption(out.Outcome.OptionID)
+			}
+		}
+	} else if method == MethodRequestPermission && a.PermissionResult != nil {
+		var out PermissionOutcome
+		if json.Unmarshal(msg.Result, &out) == nil {
+			a.PermissionResult(out)
 		}
 	}
 	return nil

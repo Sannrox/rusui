@@ -184,18 +184,30 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Prompt string `json:"prompt"`
+		Steer  bool   `json:"steer"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	turnID, pending, err := s.Eng.PromptFollowUp(id, req.Prompt)
+	var turnID int64
+	var pending int
+	delivery := "follow_up"
+	if req.Steer {
+		var live bool
+		turnID, pending, live, err = s.Eng.PromptSteer(id, req.Prompt)
+		if live {
+			delivery = "steer"
+		}
+	} else {
+		turnID, pending, err = s.Eng.PromptFollowUp(id, req.Prompt)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"turn_id": turnID, "pending_revision": pending})
+	_ = json.NewEncoder(w).Encode(map[string]any{"turn_id": turnID, "pending_revision": pending, "delivery": delivery})
 }
 
 func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {

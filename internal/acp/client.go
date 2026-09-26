@@ -22,12 +22,15 @@ type Client struct {
 	Wait UnmatchedWaiter
 	Ctx  context.Context
 
-	mu      sync.Mutex
-	pending map[string]chan rpcMessage
-	seq     atomic.Int64
-	once    sync.Once
-	writes  sync.Mutex
-	err     atomic.Value
+	mu           sync.Mutex
+	pending      map[string]chan rpcMessage
+	seq          atomic.Int64
+	once         sync.Once
+	writes       sync.Mutex
+	promptMu     sync.Mutex
+	promptCtx    context.Context
+	promptCancel context.CancelFunc
+	err          atomic.Value
 }
 
 // UnmatchedWaiter waits on a live unmatched permission RPC.
@@ -119,14 +122,16 @@ func (c *Client) answerPermission(msg rpcMessage) {
 		gate = DenyUnmatched{}
 	}
 	d := gate.Decide(p)
+	cancelled := false
 	if !d.Matched {
 		_ = c.record(Receipt{Type: ActionApproval, Reason: ReasonUnmatched, Body: p})
 		if c.Wait != nil {
-			ctx := c.Ctx
-			if ctx == nil {
-				ctx = context.Background()
+			waitCtx := c.permissionWaitContext()
+			d = c.Wait(waitCtx, p)
+			cancelled = waitCtx.Err() != nil
+			if cancelled {
+				d = Decision{}
 			}
-			d = c.Wait(ctx, p)
 		}
 	} else if !d.Allow {
 		_ = c.record(Receipt{Type: ActionApproval, Reason: ReasonDenied, Body: p})
@@ -136,10 +141,11 @@ func (c *Client) answerPermission(msg rpcMessage) {
 	if allow && strings.Contains(strings.ToLower(option), "always") {
 		option = "allow-once"
 	}
-	out := PermissionOutcome{Outcome: PermissionSelected{
-		Outcome:  "selected",
-		OptionID: option,
-	}}
+	permissionResult := PermissionOutcomeValue{Outcome: "selected", OptionID: option}
+	if cancelled || c.permissionWaitContext().Err() != nil {
+		permissionResult = PermissionOutcomeValue{Outcome: "cancelled"}
+	}
+	out := PermissionOutcome{Outcome: permissionResult}
 	raw, _ := json.Marshal(out)
 	_ = c.write(rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})
 }
@@ -204,6 +210,10 @@ func (c *Client) record(r Receipt) error {
 }
 
 func (c *Client) Call(ctx context.Context, method string, params, result any) error {
+	return c.call(ctx, method, params, result, nil)
+}
+
+func (c *Client) call(ctx context.Context, method string, params, result any, submitted func()) error {
 	c.start()
 	idNum := c.seq.Add(1)
 	id, _ := json.Marshal(idNum)
@@ -222,6 +232,9 @@ func (c *Client) Call(ctx context.Context, method string, params, result any) er
 	}()
 	if err := c.write(rpcMessage{JSONRPC: "2.0", ID: id, Method: method, Params: raw}); err != nil {
 		return err
+	}
+	if submitted != nil {
+		submitted()
 	}
 	select {
 	case <-ctx.Done():
@@ -261,12 +274,77 @@ func (c *Client) SessionLoad(ctx context.Context, sessionID, cwd string) error {
 }
 
 func (c *Client) SessionPrompt(ctx context.Context, sessionID, text string) (*PromptResult, error) {
+	return c.SessionPromptSubmitted(ctx, sessionID, text, nil)
+}
+
+// SessionPromptSubmitted closes submitted after the session/prompt request is written.
+func (c *Client) SessionPromptSubmitted(ctx context.Context, sessionID, text string, submitted chan<- struct{}) (*PromptResult, error) {
+	permissionParent := c.Ctx
+	if permissionParent == nil {
+		permissionParent = ctx
+	}
+	permissionCtx, cancel := context.WithCancel(permissionParent)
+	stopOuter := context.AfterFunc(ctx, cancel)
+	c.promptMu.Lock()
+	previousCancel := c.promptCancel
+	c.promptCtx = permissionCtx
+	c.promptCancel = cancel
+	c.promptMu.Unlock()
+	if previousCancel != nil {
+		previousCancel()
+	}
+	defer func() {
+		stopOuter()
+		cancel()
+		c.promptMu.Lock()
+		if c.promptCtx == permissionCtx {
+			c.promptCtx = nil
+			c.promptCancel = nil
+		}
+		c.promptMu.Unlock()
+	}()
 	var out PromptResult
-	err := c.Call(ctx, MethodSessionPrompt, PromptParams{
+	var signal func()
+	if submitted != nil {
+		signal = func() { close(submitted) }
+	}
+	err := c.call(ctx, MethodSessionPrompt, PromptParams{
 		SessionID: sessionID,
 		Prompt:    []PromptBlock{{Type: "text", Text: text}},
-	}, &out)
+	}, &out, signal)
 	return &out, err
+}
+
+func (c *Client) SessionCancel(sessionID string) error {
+	c.promptMu.Lock()
+	cancel := c.promptCancel
+	c.promptMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	return c.Notify(MethodSessionCancel, SessionCancelParams{SessionID: sessionID})
+}
+
+func (c *Client) permissionWaitContext() context.Context {
+	c.promptMu.Lock()
+	ctx := c.promptCtx
+	c.promptMu.Unlock()
+	if ctx == nil {
+		ctx = c.Ctx
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return ctx
+}
+
+func (c *Client) Notify(method string, params any) error {
+	c.start()
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return err
+	}
+	return c.write(rpcMessage{JSONRPC: "2.0", Method: method, Params: raw})
 }
 
 func (c *Client) write(msg rpcMessage) error {

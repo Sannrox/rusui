@@ -222,7 +222,7 @@ func TestEditorAgentPermissionDecision(t *testing.T) {
 			continue
 		}
 		if msg.Method == MethodRequestPermission && len(msg.ID) > 0 {
-			res, _ := json.Marshal(PermissionOutcome{Outcome: PermissionSelected{Outcome: "selected", OptionID: "deny"}})
+			res, _ := json.Marshal(PermissionOutcome{Outcome: PermissionOutcomeValue{Outcome: "selected", OptionID: "deny"}})
 			rb, _ := json.Marshal(rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: res})
 			_, _ = inW.Write(append(rb, '\n'))
 			break

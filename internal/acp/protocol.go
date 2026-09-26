@@ -95,6 +95,10 @@ type PromptParams struct {
 	Prompt    []PromptBlock `json:"prompt"`
 }
 
+type SessionCancelParams struct {
+	SessionID string `json:"sessionId"`
+}
+
 type PromptBlock struct {
 	Type string `json:"type"`
 	Text string `json:"text,omitempty"`
@@ -117,12 +121,12 @@ type PermOption struct {
 }
 
 type PermissionOutcome struct {
-	Outcome PermissionSelected `json:"outcome"`
+	Outcome PermissionOutcomeValue `json:"outcome"`
 }
 
-type PermissionSelected struct {
+type PermissionOutcomeValue struct {
 	Outcome  string `json:"outcome"`
-	OptionID string `json:"optionId"`
+	OptionID string `json:"optionId,omitempty"`
 }
 
 type FSReadParams struct {
