@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -35,12 +36,10 @@ func TestRunnerReachesAnHTTPSPlaneWithTheCA(t *testing.T) {
 				repos = []string{request.Repo}
 			}
 			claimed <- repos
-			for _, repo := range repos {
-				if repo == "bad/r" {
-					w.WriteHeader(http.StatusConflict)
-					_, _ = fmt.Fprintln(w, "policy")
-					return
-				}
+			if slices.Contains(repos, "bad/r") {
+				w.WriteHeader(http.StatusConflict)
+				_, _ = fmt.Fprintln(w, "policy")
+				return
 			}
 			w.WriteHeader(http.StatusNoContent)
 			return
