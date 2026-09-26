@@ -50,20 +50,20 @@ type Engine struct {
 	HookIDs map[string]string
 	Notify  func(string)
 
-	FetchTimeout time.Duration
-	OwnerTTL     time.Duration
-	ExecDeadline time.Duration
-	Env          env.Driver
-	Container    env.Driver
-	EnvTTL       time.Duration
-	EnvIdleSleep time.Duration
-	Tree         TreeSource
-	SnapshotRoot string
-	refreshMu    sync.Mutex
-	policyMu     sync.RWMutex
-	sumikaMu     sync.Mutex
-	envLockMu    sync.Mutex
-	envLocks     map[int64]*environmentOperationLock
+	FetchTimeout   time.Duration
+	OwnerTTL       time.Duration
+	ExecDeadline   time.Duration
+	Env            env.Driver
+	Container      env.Driver
+	EnvTTL         time.Duration
+	EnvIdleSleep   time.Duration
+	Tree           TreeSource
+	SnapshotRoot   string
+	refreshMu      sync.Mutex
+	policyMu       sync.RWMutex
+	sumikaMu       sync.Mutex
+	envOperationMu sync.Mutex
+	envOperations  map[int64]struct{}
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {
@@ -583,6 +583,7 @@ func anySlice(xs []string) []any {
 
 func (e *Engine) Claim(repo string) (*Claim, error) {
 	var c *Claim
+	reviewCountDay := ""
 	activePolicy := e.PolicySnapshot()
 	err := e.Store.Tx(func(tx *sql.Tx) error {
 		paused, err := e.repoPaused(tx, repo)
@@ -643,17 +644,38 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		if err := e.expireDeadLeasesTx(tx, repo, "scheduled"); err != nil {
 			return err
 		}
+		rows, err := tx.Query(`SELECT t.id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo=? AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) ORDER BY t.id`,
+			append([]any{repo}, anySlice(lanes)...)...)
+		if err != nil {
+			return err
+		}
 		var id int64
-		err = tx.QueryRow(`SELECT id FROM jobs WHERE repo=? AND state='queued' AND lane IN (`+placeholders(len(lanes))+`) ORDER BY id LIMIT 1`,
-			append([]any{repo}, anySlice(lanes)...)...).Scan(&id)
-		if err == sql.ErrNoRows {
-			if budgetOut {
+		queued, eligible := false, false
+		for rows.Next() {
+			queued = true
+			var candidateID, environmentID int64
+			if err := rows.Scan(&candidateID, &environmentID); err != nil {
+				_ = rows.Close()
+				return err
+			}
+			if e.environmentOperationInProgress(environmentID) {
+				continue
+			}
+			id, eligible = candidateID, true
+			break
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		if !eligible {
+			if budgetOut && !queued {
 				return errBudget
 			}
 			return nil
-		}
-		if err != nil {
-			return err
 		}
 		j, err := store.GetJobByIDTx(tx, id)
 		if err != nil {
@@ -679,7 +701,8 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 			return err
 		}
 		if j.Lane == "review" {
-			if err := store.IncrReviewsToday(tx, repo, e.now().Format("2006-01-02")); err != nil {
+			reviewCountDay = e.now().Format("2006-01-02")
+			if err := store.IncrReviewsToday(tx, repo, reviewCountDay); err != nil {
 				return err
 			}
 		}
@@ -687,13 +710,19 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		if err != nil {
 			return err
 		}
-		c = &Claim{Job: j, Snapshot: snap, ItemHash: snapshot.ItemHash(snap)}
+		c = &Claim{Job: j, Snapshot: snap, ItemHash: snapshot.ItemHash(snap), reviewCountDay: reviewCountDay}
 		return nil
 	})
 	if err != nil || c == nil {
 		return c, err
 	}
 	if err := e.EnsureSessionEnvironment(c.Job.ID, c.Snapshot); err != nil {
+		if errors.Is(err, store.ErrEnvironmentBusy) {
+			if requeueErr := e.requeueBusyEnvironmentClaim(c); requeueErr != nil {
+				return nil, fmt.Errorf("environment operation is busy: requeue claim: %w", requeueErr)
+			}
+			return nil, nil
+		}
 		_, failErr := e.Fail(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision)
 		turn, _ := store.GetTurn(e.Store, c.Job.ID)
 		state := "unknown"
@@ -710,10 +739,32 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 	return c, nil
 }
 
+func (e *Engine) requeueBusyEnvironmentClaim(c *Claim) error {
+	return e.Store.Tx(func(tx *sql.Tx) error {
+		j, err := store.GetJobByIDTx(tx, c.Job.ID)
+		if err != nil {
+			return err
+		}
+		if j.State != "leased" || j.LeaseGeneration != c.Job.LeaseGeneration || j.ClaimedRevision != c.Job.ClaimedRevision {
+			return errReject
+		}
+		j.State = "queued"
+		j.LeaseExpiresAt = nil
+		j.ExecutionDeadlineAt = nil
+		if c.reviewCountDay != "" {
+			if err := store.DecrReviewsToday(tx, j.Repo, c.reviewCountDay); err != nil {
+				return fmt.Errorf("restore daily review budget: %w", err)
+			}
+		}
+		return store.UpdateJobTx(tx, j)
+	})
+}
+
 type Claim struct {
-	Job      *store.Job
-	Snapshot snapshot.Item
-	ItemHash string
+	Job            *store.Job
+	Snapshot       snapshot.Item
+	ItemHash       string
+	reviewCountDay string
 }
 
 var (

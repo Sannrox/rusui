@@ -7,7 +7,7 @@ import (
 )
 
 var ErrEnvironmentUnavailable = errors.New("environment is not ready")
-var ErrEnvironmentBusy = errors.New("environment is not eligible for sleep")
+var ErrEnvironmentBusy = errors.New("environment is busy")
 
 func ListIdleContainerEnvironments(s *Store, now time.Time, ttl, idle time.Duration) ([]Environment, error) {
 	if idle <= 0 || ttl <= idle {
