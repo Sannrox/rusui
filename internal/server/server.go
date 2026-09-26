@@ -364,23 +364,47 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Repo string `json:"repo"`
+		Repo  string   `json:"repo"`
+		Repos []string `json:"repos"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
-	c, err := s.Eng.Claim(req.Repo)
-	if err != nil {
-		if errors.Is(err, engine.ErrBudget) {
-			w.Header().Set("X-Rusui-Claim-Blocked", "budget")
-		} else if errors.Is(err, engine.ErrPaused) {
-			w.Header().Set("X-Rusui-Claim-Blocked", "paused")
+	repos := append([]string(nil), req.Repos...)
+	if req.Repo != "" {
+		if len(repos) > 0 {
+			http.Error(w, "claim: repo and repos", http.StatusBadRequest)
+			return
 		}
-		http.Error(w, err.Error(), 409)
+		repos = []string{req.Repo}
+	}
+	if len(repos) == 0 {
+		http.Error(w, "claim: repository required", http.StatusBadRequest)
 		return
 	}
-	if c == nil {
+	var last *engine.Claim
+	for _, repo := range repos {
+		c, err := s.Eng.Claim(repo)
+		if err != nil {
+			if (errors.Is(err, engine.ErrBudget) || errors.Is(err, engine.ErrPaused)) && len(repos) > 1 {
+				continue
+			}
+			if errors.Is(err, engine.ErrBudget) {
+				w.Header().Set("X-Rusui-Claim-Blocked", "budget")
+			} else if errors.Is(err, engine.ErrPaused) {
+				w.Header().Set("X-Rusui-Claim-Blocked", "paused")
+			}
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if c != nil {
+			last = c
+			break
+		}
+	}
+	if last == nil {
 		w.WriteHeader(204)
 		return
 	}
+	c := last
 	tok, exp, err := issueTurnToken(s.Eng.Store, c.Job.ID, c.Job.LeaseGeneration, s.Eng.Clock.Now())
 	if err != nil {
 		http.Error(w, err.Error(), 500)
