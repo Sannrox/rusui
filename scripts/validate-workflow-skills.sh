@@ -17,16 +17,22 @@ require_file() {
 }
 
 require_line() {
-  grep -Fqx "$2" "$1" || fail "$1 is missing canonical line: $2"
+  grep -Fqx -- "$2" "$1" || fail "$1 is missing canonical line: $2"
 }
 
 require_fragment() {
-  grep -Fq "$2" "$1" || fail "$1 is missing required metadata: $2"
+  grep -Fq -- "$2" "$1" || fail "$1 is missing required metadata: $2"
 }
 
 forbid_fragment() {
-  if grep -Fq "$2" "$1"; then
+  if grep -Fq -- "$2" "$1"; then
     fail "$1 must not contain: $2"
+  fi
+}
+
+forbid_pattern() {
+  if grep -Eiq "$2" "$1"; then
+    fail "$1 must not match forbidden pattern: $2"
   fi
 }
 
@@ -86,6 +92,27 @@ require_line "AGENTS.md" "## Parallel delivery lanes"
 require_fragment "$PARALLEL_REFERENCE" "AGENTS.md"
 require_fragment "AGENTS.md" "issue-lane.sh claim"
 grep -Fq "/.worktrees/" .gitignore || fail ".gitignore does not ignore the /.worktrees/ lane directory"
+
+# Public lane briefs must not regress to publishing host identity or local paths.
+for public_brief_file in \
+  "AGENTS.md" \
+  "$SKILLS_ROOT/deliver-ready-issue/SKILL.md" \
+  "$PARALLEL_REFERENCE"
+do
+  forbid_fragment "$public_brief_file" "lane brief: agent, machine"
+  forbid_pattern "$public_brief_file" '^[[:space:]]*[-*][[:space:]]*(machine|hostname|host)[[:space:]]*:'
+done
+for safe_field in \
+  "- agent role: <role or opaque agent ID>" \
+  "- claim branch: <type>/<issue>" \
+  "- base SHA: <base>" \
+  "- authority ceiling: <Implement | Publish | Land>" \
+  "- worktree: <.worktrees/issue-<issue> or fresh clone>" \
+  "- verification: <commands and results>"
+do
+  require_fragment "$PARALLEL_REFERENCE" "$safe_field"
+done
+forbid_pattern "$PARALLEL_REFERENCE" '^[[:space:]]*[-*][[:space:]]*(lane[[:space:]]+)?worktree:[[:space:]]*.*(absolute[[:space:]]+path|/Users/|/home/|~/)'
 
 forbid_fragment "$PARALLEL_REFERENCE" "docs/project-operating-system.md"
 forbid_fragment "$SKILLS_ROOT/deliver-ready-issue/SKILL.md" "gh-verified-push.sh"

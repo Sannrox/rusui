@@ -179,8 +179,12 @@ parallel.
 A lane publishes its first commit to the claim branch with
 `git push -u origin HEAD` (or `git push` if upstream is already set) unless
 the user asked otherwise, as a draft pull request that closes the issue and
-carries the lane brief: agent, machine, base SHA, and authority ceiling. It
-marks the pull request ready when verification and review are complete.
+includes a scrubbed public lane brief: agent role or opaque agent ID, claim
+branch, base SHA, authority ceiling, relative worktree path (or `fresh clone`),
+and verification evidence. Do not include hostnames, home paths, or absolute
+worktree paths in GitHub content. Keep machine and checkout identity in the
+private lead ledger; never copy it into a public issue, pull request, or
+comment. Mark the pull request ready when verification and review are complete.
 Immediately before publishing, the lane fetches and confirms that the default
 branch is an ancestor of its head; it refreshes onto `main` only for a
 conflict, a failing gate, an explicit request, or a sibling landing on a
@@ -191,10 +195,12 @@ the remaining lanes recheck `mergeable` against the new `main`. A failed or
 timed-out merge response may still have merged; reconcile the remote state
 before retrying.
 
-The lead of a parallel run keeps a ledger per lane: issue, branch, machine and
-checkout, base SHA, owner, state, pull request, evidence, blockers, and
-cleanup. Report verified outcomes, not launched work. The executable lead
-procedure is `.agents/skills/deliver-ready-issue/references/parallel-delivery.md`.
+The lead of a parallel run keeps a private ledger per lane: issue, branch,
+machine and checkout, base SHA, owner, state, pull request, evidence, blockers,
+and cleanup. Keep that ledger private; GitHub content uses only the scrubbed
+public lane brief above. Report verified outcomes, not launched work. The
+executable lead procedure is
+`.agents/skills/deliver-ready-issue/references/parallel-delivery.md`.
 
 ## Security
 
