@@ -6,6 +6,9 @@
   stacks and reachability). The API-first and Slack-as-adapter
   decisions stand.
 - Resolves: [#7](https://github.com/Sannrox/rusui/issues/7)
+- Amended by: [ADR 0024](0024-session-surface.md). The CLI and the
+  embedded console open a session. The terminal is a further view, not
+  the transcript.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context
