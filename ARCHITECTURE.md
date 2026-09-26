@@ -558,15 +558,24 @@ heartbeat, execution deadline 12 minutes from claim, retry limit 3.
 
 ## Process boundary
 
-v1 is **trusted local execution** on the operator's machine. The model
-child runs as the same OS user. An ephemeral cwd and stripped
-environment are defense in depth. They do **not** prevent reading
-SQLite, `policy.yaml`, or other repos by absolute path. Public-context
-confidentiality in v1 is therefore `PublicContext` plus "do not put
-secrets in the workspace," not a filesystem jail.
+Public-repository unattended sessions use the **container** driver as
+machine isolation
+([ADR 0022](docs/decisions/0022-public-repo-isolation.md)). The guest
+sees the workspace and image, not the operator home directory, SQLite,
+`policy.yaml`, or other local repositories. Trusted egress is plane
+proxies only. `rusui diagnose` and `GET /readyz` fail closed when the
+container runtime is missing; that report is not a process fallback.
 
-A separate OS identity or CLI sandbox is v2. OS network jail is also
-deferred.
+The **process** driver is explicit test/dev (`-driver`). It runs as the
+same OS user. An ephemeral cwd and stripped environment are defense in
+depth. They do **not** prevent reading SQLite, `policy.yaml`, or other
+repos by absolute path. Sumika **local** sessions are a human-driven
+experimental kind and are not this unattended boundary
+([ADR 0016](docs/decisions/0016-local-interactive-runtime.md)).
+
+A separate OS identity, a tool jail inside the guest, or a microVM
+default is out of this profile. Stronger runtimes stay optional
+([#125](https://github.com/Sannrox/rusui/issues/125)).
 
 What v1 does enforce:
 
@@ -608,9 +617,11 @@ is recorded as an `actions` row. Permission requests with no matching
 rule are denied and stored as approvals. The process driver is still
 the review lane; the runner does not spawn this client yet.
 
-P1 isolation is two fences ([ADR 0008](docs/decisions/0008-p1-isolation-split.md)).
+P1 isolation is two fences ([ADR 0008](docs/decisions/0008-p1-isolation-split.md),
+[ADR 0022](docs/decisions/0022-public-repo-isolation.md)).
 **Machine isolation** is the container environment (process driver is
-test/dev only). **Tool fence** is the guest's default permission mode
+test/dev only; public-repository unattended sessions do not fall back
+to it). **Tool fence** is the guest's default permission mode
 plus those permission receipts. Rusui does not jail tools inside the
 guest; shikigami’s tool sandbox is out of P1. `--always-approve` is
 not the unattended spawn.

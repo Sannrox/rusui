@@ -25,6 +25,7 @@ Decisions that must outlive a single pull request.
 | [0019](0019-rusui-attach-client.md) | One Rusui attach command selects the runtime-owned transport | Accepted |
 | [0020](0020-turn-scoped-github-publication.md) | Turn-scoped GitHub publication stays behind the plane | Accepted |
 | [0021](0021-gitlab-intake.md) | First GitLab intake is GitLab.com project issues only | Accepted |
+| [0022](0022-public-repo-isolation.md) | Public-repository unattended sessions default to the container driver | Accepted |
 
 ## When to write an ADR
 

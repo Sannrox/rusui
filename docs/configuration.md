@@ -18,7 +18,10 @@ Subcommand `rusui diagnose [-policy PATH] [-addr ADDR] [-url URL]` prints a
 JSON topology report (`ready` / `misconfigured` / `unavailable`) and exits
 0 only when every blocking check is ready. It checks the configured model
 provider with an authenticated no-op `GET /v1/models` request; it does not
-generate a response or print secret values.
+generate a response or print secret values. Unattended work on a public
+repository uses the container driver; a missing Docker or Podman CLI makes
+the `runtime` check `unavailable` and the report not ready
+([ADR 0022](decisions/0022-public-repo-isolation.md)).
 
 Policy tools run locally and do not start the server:
 
