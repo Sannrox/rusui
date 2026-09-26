@@ -2,6 +2,7 @@ package ops
 
 import (
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,11 +44,22 @@ func SecretValues(getenv func(string) string) []string {
 		"RUSUI_GITHUB_TOKEN", "GITHUB_TOKEN", "XAI_API_KEY", "RUSUI_XAI_API_KEY",
 		"RUSUI_SLACK_BOT_TOKEN", "RUSUI_AGENT_GITHUB_TOKEN",
 		"ANTHROPIC_API_KEY", "RUSUI_ANTHROPIC_API_KEY",
+		"RUSUI_OPERATOR_TOKEN",
 	}
 	var out []string
 	for _, k := range keys {
 		if v := getenv(k); v != "" {
 			out = append(out, v)
+		}
+	}
+	if raw := getenv("RUSUI_MODEL_UPSTREAM"); raw != "" {
+		if u, err := url.Parse(raw); err == nil && u.User != nil {
+			if info := u.User.String(); info != "" {
+				out = append(out, info)
+			}
+			if p, ok := u.User.Password(); ok && p != "" {
+				out = append(out, p)
+			}
 		}
 	}
 	return out
