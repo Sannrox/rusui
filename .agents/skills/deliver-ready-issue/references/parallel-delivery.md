@@ -68,34 +68,27 @@ On a machine without a checkout, such as a cloud agent, the worker clones the
 repository and checks out `<type>/<issue>`; that clone is its lane worktree
 and must show the same base SHA before work starts.
 
-Give every worker a lane brief with real values. Pasting an issue number is
-context, not the brief.
+Give every worker a private handoff with the issue, claim, base, authority,
+worktree, reserved surfaces, and procedure. Do not copy private handoff details
+to GitHub. The lane brief in a public pull request contains only the fields
+shown below; keep hostnames, home paths, and absolute worktree paths out of
+public GitHub content.
+
+### Public PR lane brief
 
 ```text
-Lane brief
-- repository: <owner/name>
-- Issue: <url> — <title>
-- authority ceiling: <Implement | Publish | Land>
-- claim branch: <type>/<issue> (already exists on GitHub; you are assigned)
+Delivery lane
+- agent role: <role or opaque agent ID>
+- claim branch: <type>/<issue>
 - base SHA: <base>
-- lane worktree: <absolute path>/.worktrees/issue-<issue>, or a fresh clone
-  of the repository on the claim branch
-- reserved by sibling lanes, do not touch: <surfaces or paths, or none>
-- procedure: run deliver-ready-issue from "3. Bound the implementation"
-  onward inside the worktree; readiness, claim, and isolation are done.
-- publish only to the claim branch with `git push -u origin HEAD` (or
-  `git push` if upstream is already set) unless the user asked for a
-  different publish path; open the pull request as a draft with
-  "Closes #<issue>" and this brief, and mark it ready when verified.
-- on a shared machine, fetch --prune, worktree add/remove, branch delete, and
-  merge are lead-only; commit and publish only your own branch from your own
-  worktree. Never enter the primary checkout or another lane's worktree.
-- stop and report instead of continuing when: a dependency turns out to be
-  open, the issue needs a split, you need a reserved surface, verification
-  needs a service that is unavailable, or the ceiling would be exceeded.
-- report: the deliver-ready-issue "Report completion" contract, plus the
-  final HEAD SHA and the exact verification commands you ran.
+- authority ceiling: <Implement | Publish | Land>
+- worktree: <.worktrees/issue-<issue> or fresh clone>
+- verification: <commands and results>
 ```
+
+Send additional worker instructions through the private lead channel. A public
+PR should include this brief alongside its separate summary and `Closes #<issue>`
+line.
 
 ## 3. Run and monitor
 
@@ -145,7 +138,7 @@ Lane brief
 
 Keep one ledger for the run and return it with the final report:
 
-| Issue | Branch | Machine / checkout | Base SHA | Owner | State | PR | Evidence | Blockers | Cleanup |
+| Issue | Branch | Private checkout identity | Base SHA | Owner | State | PR | Evidence | Blockers | Cleanup |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
 States are `claimed`, `implementing`, `verified`, `published`, `landed`,

@@ -148,7 +148,11 @@ mark the issue unless documented maintainer policy requires it.
    it ready once verification and review are complete and `mergeable` is no
    longer `UNKNOWN` (`gh pr ready <pr>`). The pull request:
    - closes the issue with a visible `Closes #<issue>` line;
-   - carries the lane brief: agent, machine, base SHA, authority ceiling;
+   - carries the scrubbed public lane brief: agent role or opaque agent ID,
+     claim branch, base SHA, authority ceiling, relative worktree path (or
+     `fresh clone`), and verification evidence. Never include hostnames, home
+     paths, or absolute worktree paths in GitHub content; keep machine and
+     checkout identity in a private lead ledger;
    - summarizes behavior rather than file operations;
    - lists verification evidence and skipped checks;
    - calls out policy, GitHub-client, apply, Slack, persistence, configuration,
@@ -198,8 +202,9 @@ authority ceiling.
 Return:
 
 - issue and authority ceiling;
-- claim state (claimed, unclaimed under Implement, or taken over), machine and
-  worktree, branch, base SHA, final commit, and pull request when created;
+- claim state (claimed, unclaimed under Implement, or taken over), relative
+  worktree path (or fresh clone), branch, base SHA, final commit, and pull
+  request when created;
 - implemented outcome;
 - verification and review evidence;
 - merge state and newly available follow-up work when applicable;
