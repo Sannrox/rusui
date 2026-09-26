@@ -120,6 +120,34 @@ FROM environment_receipts WHERE session_id=? ORDER BY id`, sessionID)
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
+	return scanEnvironmentReceipts(rows)
+}
+
+func ListEnvironmentReceiptPage(s *Store, sessionID, afterID int64, limit int) ([]EnvironmentReceipt, bool, error) {
+	if afterID < 0 || limit <= 0 {
+		return nil, false, errors.New("invalid environment receipt page")
+	}
+	rows, err := s.DB.Query(`SELECT id, environment_id, session_id, kind, state, detail, created_at
+FROM environment_receipts WHERE session_id=? AND id>? ORDER BY id LIMIT ?`, sessionID, afterID, limit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = rows.Close() }()
+	receipts, err := scanEnvironmentReceipts(rows)
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(receipts) > limit
+	if hasMore {
+		receipts = receipts[:limit]
+	}
+	if receipts == nil {
+		receipts = []EnvironmentReceipt{}
+	}
+	return receipts, hasMore, nil
+}
+
+func scanEnvironmentReceipts(rows *sql.Rows) ([]EnvironmentReceipt, error) {
 	var out []EnvironmentReceipt
 	for rows.Next() {
 		var receipt EnvironmentReceipt
