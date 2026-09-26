@@ -16,6 +16,7 @@ the runbook.
 | --- | --- |
 | First look | [README](../README.md) |
 | First session | [tutorial.md](tutorial.md) |
+| Sample receipt without GitHub | [tutorial.md](tutorial.md#sample-demo-no-github-no-model) |
 | Operator | [operator.md](operator.md) |
 | Install as a user service | [user-service.md](user-service.md) |
 | Flags, env, HTTP, policy | [configuration.md](configuration.md) |

@@ -83,6 +83,7 @@ Contributor gate before a PR: `make all && make test && make validate`.
 | I want to… | Read |
 | --- | --- |
 | Walk through a first loopback session | [docs/tutorial.md](docs/tutorial.md) |
+| See a sample session and receipt without GitHub | [docs/tutorial.md](docs/tutorial.md#sample-demo-no-github-no-model) |
 | Run it against a real repository | [docs/operator.md](docs/operator.md) |
 | Drain, upgrade, diagnostics | [docs/upgrade.md](docs/upgrade.md) |
 | Look up flags, env, HTTP, policy | [docs/configuration.md](docs/configuration.md) |
