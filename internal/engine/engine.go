@@ -503,11 +503,24 @@ func (e *Engine) expireLeaseTx(tx *sql.Tx, j *store.Job) error {
 	if !expired && !dead {
 		return nil
 	}
+	previousGeneration := j.LeaseGeneration
+	steers, err := store.PromoteSteersTx(tx, j.ID, previousGeneration)
+	if err != nil {
+		return err
+	}
 	if j.ClaimedRevision == j.PendingRevision {
 		j.RetryCount++
 	}
 	j.LeaseGeneration++
-	if j.ClaimedRevision == j.PendingRevision && j.RetryCount >= RetryLimit {
+	if steers > 0 {
+		j.RetryCount = 0
+		j.State = "queued"
+		if j.ClaimedRevision == j.PendingRevision {
+			if err := applyNextFollowUpTx(tx, j); err != nil {
+				return err
+			}
+		}
+	} else if j.ClaimedRevision == j.PendingRevision && j.RetryCount >= RetryLimit {
 		j.State = "failed"
 		e.exception(fmt.Sprintf("review retry_limit exhausted %s#%d until operator retry", j.Repo, j.Item))
 	} else {
@@ -712,7 +725,17 @@ var (
 )
 
 func (e *Engine) Heartbeat(jobID int64, gen, claimed int) error {
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	_, err := e.HeartbeatSteer(jobID, gen, claimed)
+	return err
+}
+
+func (e *Engine) HeartbeatSteer(jobID int64, gen, claimed int) (*Steer, error) {
+	return e.HeartbeatSteerReceived(jobID, gen, claimed, nil)
+}
+
+func (e *Engine) HeartbeatSteerReceived(jobID int64, gen, claimed int, receivedSteerIDs []int64) (*Steer, error) {
+	var next *Steer
+	err := e.Store.Tx(func(tx *sql.Tx) error {
 		j, err := store.GetJobByIDTx(tx, jobID)
 		if err != nil {
 			return err
@@ -727,6 +750,11 @@ func (e *Engine) Heartbeat(jobID int64, gen, claimed int) error {
 		if j.ExecutionDeadlineAt != nil && !now.Before(*j.ExecutionDeadlineAt) {
 			return errReject
 		}
+		for _, steerID := range receivedSteerIDs {
+			if err := store.ReceiveSteerTx(tx, j.ID, gen, steerID); err != nil {
+				return errReject
+			}
+		}
 		exp := now.Add(Liveness)
 		j.LeaseExpiresAt = &exp
 		if err := store.UpdateJobTx(tx, j); err != nil {
@@ -736,8 +764,21 @@ func (e *Engine) Heartbeat(jobID int64, gen, claimed int) error {
 		if err := store.RenewTurnCredentialTx(tx, jobID, gen, expAt); err != nil {
 			return err
 		}
-		return store.RenewGrantTx(tx, jobID, expAt)
+		if err := store.RenewGrantTx(tx, jobID, expAt); err != nil {
+			return err
+		}
+		turn, err := store.GetTurnTx(tx, jobID)
+		if err != nil {
+			return err
+		}
+		steer, err := store.NextSteerTx(tx, turn.ID, gen)
+		if err != nil || steer == nil {
+			return err
+		}
+		next = &Steer{ID: steer.ID, Prompt: steer.Prompt}
+		return nil
 	})
+	return next, err
 }
 
 var errReject = fmt.Errorf("reject")
@@ -777,6 +818,10 @@ type Evidence struct {
 }
 
 func (e *Engine) Complete(jobID int64, gen, claimed int, art Artifact) (map[string]any, error) {
+	return e.CompleteWithSteers(jobID, gen, claimed, art, nil)
+}
+
+func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact, acknowledgedSteers []int64) (map[string]any, error) {
 	// Outside the transaction: it may call GitHub. The transaction still
 	// checks that art.Repo is the job's repository.
 	e.observeResult(&art)
@@ -814,6 +859,11 @@ func (e *Engine) Complete(jobID int64, gen, claimed int, art Artifact) (map[stri
 		if err := ValidateResult(art); err != nil {
 			return e.finalizeFailureTx(tx, j, gen, claimed)
 		}
+		for _, steerID := range acknowledgedSteers {
+			if err := store.AckSteerTx(tx, j.ID, gen, steerID); err != nil {
+				return errReject
+			}
+		}
 		turn, err := store.GetTurnTx(tx, j.ID)
 		if err != nil {
 			return err
@@ -834,6 +884,9 @@ func (e *Engine) Complete(jobID int64, gen, claimed int, art Artifact) (map[stri
 		receipt := map[string]any{"kind": "complete", "review_revision_id": revID}
 		rb, _ := json.Marshal(receipt)
 		if err := store.InsertReceiptTx(tx, j.ID, gen, claimed, "complete", string(rb)); err != nil {
+			return err
+		}
+		if _, err := store.PromoteSteersTx(tx, j.ID, gen); err != nil {
 			return err
 		}
 		out = receipt
@@ -921,12 +974,22 @@ func (e *Engine) finalizeFailureTx(tx *sql.Tx, j *store.Job, gen, claimed int) e
 	if err := store.InsertReceiptTx(tx, j.ID, gen, claimed, "fail", string(rb)); err != nil {
 		return err
 	}
+	steers, err := store.PromoteSteersTx(tx, j.ID, gen)
+	if err != nil {
+		return err
+	}
 	if j.ClaimedRevision < j.PendingRevision {
 		j.State = "queued"
 		return store.UpdateJobTx(tx, j)
 	}
 	j.RetryCount++
-	if j.RetryCount >= RetryLimit {
+	if steers > 0 {
+		j.RetryCount = 0
+		j.State = "queued"
+		if err := applyNextFollowUpTx(tx, j); err != nil {
+			return err
+		}
+	} else if j.RetryCount >= RetryLimit {
 		j.State = "failed"
 		e.exception(fmt.Sprintf("review retry_limit exhausted %s#%d until operator retry", j.Repo, j.Item))
 	} else {

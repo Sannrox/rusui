@@ -86,6 +86,17 @@ turn runs to complete, fail, cancel, or expire on its
 unqueued follow-up. Pause still refuses new claims, including
 follow-up enqueue when the project is paused.
 
+An operator may explicitly **steer** a live turn. The runner sends ACP
+`session/cancel`, waits for the active prompt to settle, and then sends
+the steer with `session/prompt` on the same guest ACP session. The steer
+does not advance the claimed revision or change lease generation. It is
+recorded as operator input and cannot approve a pending permission; an
+interrupted permission wait receives the ACP `cancelled` outcome. When no
+live lease exists, or a steer is not acknowledged before the lease ends,
+the prompt is persisted as an ordinary FIFO follow-up. Guest support for
+`session/cancel` remains an explicit conformance question; tests with the
+fake agent do not prove live Grok or Claude Code behavior.
+
 ### D3. Human approval: wait on the live RPC
 
 Choose **waiting**, not checkpoint/retry, for an in-flight
@@ -123,6 +134,7 @@ finish. Pause is not cancellation.
   process tree inside the container;
 - fail the claimed turn as `cancelled` without consuming another
   automatic retry of that revision;
+- preserve any unacknowledged steer as a FIFO follow-up for a new revision;
 - release the budget reserve;
 - leave the environment until idle expiry unless the operator also
   expires it;
@@ -219,8 +231,9 @@ Validation of the contract is D2–D5 plus a later live Grok
 `session/load` and deferred-permission probe under
 `RUSUI_ACP_LIVE=1`. Those live claims remain unproven here.
 
-Reverse by superseding this ADR. No schema migration ships with this
-proposal.
+Reverse by superseding this ADR. The original proposal required no
+schema migration; the live-steer implementation adds migrations 21–23
+for durable steer delivery state and FIFO ordering.
 
 Unresolved, and not hidden:
 

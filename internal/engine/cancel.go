@@ -35,8 +35,18 @@ func (e *Engine) CancelSession(sessionID int64) error {
 			if err := store.InsertReceiptTx(tx, j.ID, j.LeaseGeneration, j.ClaimedRevision, "cancelled", string(rb)); err != nil {
 				return err
 			}
+			steers, err := store.PromoteSteersTx(tx, j.ID, j.LeaseGeneration)
+			if err != nil {
+				return err
+			}
 			if j.ClaimedRevision < j.PendingRevision {
 				j.State = "queued"
+			} else if steers > 0 {
+				j.State = "queued"
+				j.RetryCount = 0
+				if err := applyNextFollowUpTx(tx, j); err != nil {
+					return err
+				}
 			} else {
 				j.State = "failed"
 			}

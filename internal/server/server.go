@@ -84,6 +84,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /console/logout", s.consoleLogout)
 	mux.HandleFunc("GET /console/sessions", s.consoleSessions)
 	mux.HandleFunc("GET /console/sessions/{id}", s.consoleSession)
+	mux.HandleFunc("POST /console/sessions/{id}/prompt", s.consolePrompt)
 	mux.HandleFunc("GET /console/sessions/{id}/events", s.consoleEvents)
 	mux.HandleFunc("GET /console/sessions/{id}/files", s.consoleFile)
 	mux.HandleFunc("GET /console/approvals", s.consoleApprovals)
@@ -496,15 +497,21 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		LeaseGeneration int `json:"lease_generation"`
-		ClaimedRevision int `json:"claimed_revision"`
+		LeaseGeneration int     `json:"lease_generation"`
+		ClaimedRevision int     `json:"claimed_revision"`
+		AckSteerIDs     []int64 `json:"ack_steer_ids,omitempty"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
-	if err := s.Eng.Heartbeat(id, req.LeaseGeneration, req.ClaimedRevision); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	steer, err := s.Eng.HeartbeatSteerReceived(id, req.LeaseGeneration, req.ClaimedRevision, req.AckSteerIDs)
+	if err != nil {
 		http.Error(w, err.Error(), 409)
 		return
 	}
-	w.WriteHeader(200)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"steer": steer})
 }
 
 func (s *Server) complete(w http.ResponseWriter, r *http.Request) {
@@ -517,12 +524,13 @@ func (s *Server) complete(w http.ResponseWriter, r *http.Request) {
 		LeaseGeneration int             `json:"lease_generation"`
 		ClaimedRevision int             `json:"claimed_revision"`
 		Artifact        engine.Artifact `json:"artifact"`
+		AckSteerIDs     []int64         `json:"ack_steer_ids,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-	out, err := s.Eng.Complete(id, req.LeaseGeneration, req.ClaimedRevision, req.Artifact)
+	out, err := s.Eng.CompleteWithSteers(id, req.LeaseGeneration, req.ClaimedRevision, req.Artifact, req.AckSteerIDs)
 	if err != nil {
 		http.Error(w, err.Error(), 409)
 		return

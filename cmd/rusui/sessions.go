@@ -58,9 +58,10 @@ func promptCLI(args []string) {
 	fs := flag.NewFlagSet("prompt", flag.ExitOnError)
 	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
 	token := fs.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "operator/worker token")
+	steer := fs.Bool("steer", false, "interrupt a running turn with this prompt")
 	_ = fs.Parse(args)
 	if fs.NArg() < 2 {
-		fmt.Fprintln(os.Stderr, "usage: rusui prompt [-url URL] [-token TOKEN] SESSION_ID TEXT")
+		fmt.Fprintln(os.Stderr, "usage: rusui prompt [-steer] [-url URL] [-token TOKEN] SESSION_ID TEXT")
 		os.Exit(2)
 	}
 	id := fs.Arg(0)
@@ -69,15 +70,10 @@ func promptCLI(args []string) {
 		os.Exit(2)
 	}
 	prompt := strings.TrimSpace(strings.Join(fs.Args()[1:], " "))
-	body, _ := json.Marshal(map[string]string{"prompt": prompt})
-	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(*url, "/")+"/sessions/"+id+"/turns", bytes.NewReader(body))
+	req, err := newPromptRequest(*url, *token, id, prompt, *steer)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if *token != "" {
-		req.Header.Set("Authorization", "Bearer "+*token)
 	}
 	client, err := planeHTTP(*url)
 	if err != nil {
@@ -99,4 +95,20 @@ func promptCLI(args []string) {
 	if len(b) == 0 || b[len(b)-1] != '\n' {
 		fmt.Println()
 	}
+}
+
+func newPromptRequest(planeURL, token, id, prompt string, steer bool) (*http.Request, error) {
+	body, err := json.Marshal(map[string]any{"prompt": prompt, "steer": steer})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(planeURL, "/")+"/sessions/"+id+"/turns", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	return req, nil
 }

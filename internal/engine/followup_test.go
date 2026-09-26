@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -92,6 +93,191 @@ func TestPromptFollowUpLeasedKeepsLease(t *testing.T) {
 	}
 	if state != "leased" {
 		t.Fatalf("state %s", state)
+	}
+}
+
+func TestPromptSteerLiveUsesFencedHeartbeat(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.e.Claim("example/test-repo")
+	if err != nil || c == nil {
+		t.Fatal(err)
+	}
+	turnID, pending, live, err := h.e.PromptSteer(sid, "take the smaller fix")
+	if err != nil || !live || turnID != c.Job.ID || pending != c.Job.ClaimedRevision {
+		t.Fatalf("turn %d pending %d live %t err %v", turnID, pending, live, err)
+	}
+	secondID, _, secondLive, err := h.e.PromptSteer(sid, "also handle the edge case")
+	if err != nil || !secondLive || secondID != turnID {
+		t.Fatalf("second steer turn %d live %t err %v", secondID, secondLive, err)
+	}
+	steer, err := h.e.HeartbeatSteer(c.Job.ID, c.Job.LeaseGeneration+1, c.Job.ClaimedRevision)
+	if err == nil || steer != nil {
+		t.Fatalf("stale heartbeat returned steer %+v, err %v", steer, err)
+	}
+	steer, err = h.e.HeartbeatSteerReceived(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, nil)
+	if err != nil || steer == nil || steer.Prompt != "take the smaller fix" {
+		t.Fatalf("heartbeat steer %+v, err %v", steer, err)
+	}
+	retry, err := h.e.HeartbeatSteerReceived(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, nil)
+	if err != nil || retry == nil || retry.ID != steer.ID {
+		t.Fatalf("unconfirmed steer was not redelivered: %+v %v", retry, err)
+	}
+	second, err := h.e.HeartbeatSteerReceived(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, []int64{steer.ID})
+	if err != nil || second == nil || second.ID == steer.ID || second.Prompt != "also handle the edge case" {
+		t.Fatalf("second pending steer was not offered: %+v %v", second, err)
+	}
+	secondRetry, err := h.e.HeartbeatSteerReceived(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, []int64{steer.ID})
+	if err != nil || secondRetry == nil || secondRetry.ID != second.ID {
+		t.Fatalf("unconfirmed second steer was not redelivered: %+v %v", secondRetry, err)
+	}
+	third, err := h.e.HeartbeatSteerReceived(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, []int64{steer.ID, second.ID})
+	if err != nil || third != nil {
+		t.Fatalf("already offered steers repeated: %+v %v", third, err)
+	}
+	if _, err := h.e.CompleteWithSteers(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c), []int64{steer.ID, second.ID}); err != nil {
+		t.Fatal(err)
+	}
+	var generation, revision int
+	var state string
+	var firstAck, firstPromoted, secondAck, secondPromoted int
+	err = h.st.DB.QueryRow(`SELECT j.lease_generation, j.pending_revision, j.state,
+ (SELECT acknowledged FROM turn_steers WHERE id=?), (SELECT promoted FROM turn_steers WHERE id=?),
+ (SELECT acknowledged FROM turn_steers WHERE id=?), (SELECT promoted FROM turn_steers WHERE id=?)
+ FROM jobs j WHERE j.id=?`, steer.ID, steer.ID, second.ID, second.ID, c.Job.ID).Scan(
+		&generation, &revision, &state, &firstAck, &firstPromoted, &secondAck, &secondPromoted)
+	if err != nil || generation != c.Job.LeaseGeneration || revision != c.Job.ClaimedRevision || state != "completed" || firstAck != 1 || firstPromoted != 0 || secondAck != 1 || secondPromoted != 0 {
+		t.Fatalf("steer progress changed turn lease/revision: generation=%d revision=%d state=%s first=(%d,%d) second=(%d,%d) err=%v", generation, revision, state, firstAck, firstPromoted, secondAck, secondPromoted, err)
+	}
+}
+
+func TestPromptSteerWithoutLiveTurnBecomesFollowUp(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, pending, live, err := h.e.PromptSteer(sid, "continue with the correction")
+	if err != nil || live || pending != 2 {
+		t.Fatalf("pending %d live %t err %v", pending, live, err)
+	}
+	c, err := h.e.Claim("example/test-repo")
+	if err != nil || c == nil || c.Snapshot.Body != "continue with the correction" {
+		t.Fatalf("claim %+v err %v", c, err)
+	}
+	actions, err := store.ListActionsForSession(h.st, sid)
+	if err != nil || len(actions) != 1 || actions[0].Type != "operator.steer" || !strings.Contains(actions[0].Body, `"actor":"operator"`) || !strings.Contains(actions[0].Body, `"delivery":"follow_up"`) {
+		t.Fatalf("operator steer receipt %+v err %v", actions, err)
+	}
+}
+
+func TestUnacknowledgedSteerActivatesAfterLeaseFails(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.e.Claim("example/test-repo")
+	if err != nil || c == nil {
+		t.Fatal(err)
+	}
+	if _, _, live, err := h.e.PromptSteer(sid, "recover this steer"); err != nil || !live {
+		t.Fatalf("live %t err %v", live, err)
+	}
+	if _, err := h.e.Fail(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision); err != nil {
+		t.Fatal(err)
+	}
+	c2, err := h.e.Claim("example/test-repo")
+	if err != nil || c2 == nil || c2.Snapshot.Body != "recover this steer" {
+		t.Fatalf("promoted follow-up claim %+v %v", c2, err)
+	}
+}
+
+func TestUnacknowledgedSteerActivatesAfterLeaseExpires(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.e.Claim("example/test-repo")
+	if err != nil || c == nil {
+		t.Fatal(err)
+	}
+	if _, _, live, err := h.e.PromptSteer(sid, "recover after expiry"); err != nil || !live {
+		t.Fatalf("live %t err %v", live, err)
+	}
+	h.clk.T = c.Job.LeaseExpiresAt.Add(time.Second)
+	c2, err := h.e.Claim("example/test-repo")
+	if err != nil || c2 == nil || c2.Snapshot.Body != "recover after expiry" {
+		t.Fatalf("expired lease follow-up claim %+v %v", c2, err)
+	}
+}
+
+func TestUnacknowledgedSteerFollowsExistingPendingRevision(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.e.Claim("example/test-repo")
+	if err != nil || c == nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.e.PromptFollowUp(sid, "existing follow-up"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, live, err := h.e.PromptSteer(sid, "later steer"); err != nil || !live {
+		t.Fatalf("live %t err %v", live, err)
+	}
+	if _, err := h.e.Fail(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision); err != nil {
+		t.Fatal(err)
+	}
+	c2, err := h.e.Claim("example/test-repo")
+	if err != nil || c2 == nil || c2.Snapshot.Body != "existing follow-up" {
+		t.Fatalf("existing pending revision was not preserved: %+v %v", c2, err)
+	}
+	if _, err := h.e.Complete(c2.Job.ID, c2.Job.LeaseGeneration, c2.Job.ClaimedRevision, runArt(c2)); err != nil {
+		t.Fatal(err)
+	}
+	c3, err := h.e.Claim("example/test-repo")
+	if err != nil || c3 == nil || c3.Snapshot.Body != "later steer" {
+		t.Fatalf("promoted steer did not follow the existing revision: %+v %v", c3, err)
+	}
+}
+
+func TestUnacknowledgedSteerStaysAheadOfLaterFollowUp(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.e.Claim("example/test-repo")
+	if err != nil || c == nil {
+		t.Fatal(err)
+	}
+	if _, _, live, err := h.e.PromptSteer(sid, "earlier live steer"); err != nil || !live {
+		t.Fatalf("live %t err %v", live, err)
+	}
+	_, pending, err := h.e.PromptFollowUp(sid, "later ordinary follow-up")
+	if err != nil || pending != c.Job.ClaimedRevision {
+		t.Fatalf("later follow-up advanced ahead of unacknowledged steer: pending %d err %v", pending, err)
+	}
+	if _, err := h.e.Fail(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision); err != nil {
+		t.Fatal(err)
+	}
+	c2, err := h.e.Claim("example/test-repo")
+	if err != nil || c2 == nil || c2.Snapshot.Body != "earlier live steer" {
+		t.Fatalf("earlier steer was not claimed first: %+v %v", c2, err)
+	}
+	if _, err := h.e.Complete(c2.Job.ID, c2.Job.LeaseGeneration, c2.Job.ClaimedRevision, runArt(c2)); err != nil {
+		t.Fatal(err)
+	}
+	c3, err := h.e.Claim("example/test-repo")
+	if err != nil || c3 == nil || c3.Snapshot.Body != "later ordinary follow-up" {
+		t.Fatalf("later follow-up was not claimed second: %+v %v", c3, err)
 	}
 }
 

@@ -162,6 +162,37 @@ curl -fsS http://127.0.0.1:8080/readyz
 `run` creates a `run` session through the public API. Container turns still
 need the guest image, plane TLS, and a runner.
 
+List sessions and send prompts with the CLI:
+
+```bash
+"$BIN/rusui" sessions -url http://127.0.0.1:8080 -token "$RUSUI_WORKER_SECRET"
+"$BIN/rusui" prompt -url http://127.0.0.1:8080 -token "$RUSUI_WORKER_SECRET" SESSION_ID "continue with this change"
+"$BIN/rusui" prompt -steer -url http://127.0.0.1:8080 -token "$RUSUI_WORKER_SECRET" SESSION_ID "use the narrower fix"
+```
+
+The session console offers the same queued follow-up and **Steer running
+turn** actions. A steer without a live turn becomes a queued follow-up. For a
+live turn, Rusui asks the guest to cancel its current prompt before sending the
+operator prompt on the same ACP session. A pending permission wait is
+cancelled; steering never approves it. If the live turn ends before the steer
+completes, Rusui preserves the prompt as a queued follow-up, including when
+the turn is explicitly cancelled.
+
+Guest cancellation status:
+
+| Guest | `session/cancel` status | Evidence |
+| --- | --- | --- |
+| In-tree fake ACP agent | Verified for the steer integration path | `TestSteerInterruptsLiveRunnerAndKeepsGuestSession` |
+| Grok | Not verified | The live Grok test does not exercise `session/cancel` |
+| Claude Code via `claude-agent-acp` | Not verified | The live Claude test does not exercise `session/cancel` |
+
+The fake-agent result proves rusui's host behavior only. Validate the guest
+before relying on it to stop at a safe point.
+
+Live interruption requires the ACP runner. A process-driver turn has no guest
+ACP session, so a steer targeted at it stays durable and runs as a follow-up
+after the live lease ends.
+
 ## Local interactive profile
 
 The experimental local profile runs a policy-configured command through

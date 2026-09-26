@@ -7,7 +7,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 20
+const CurrentSchema = 23
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -337,8 +337,166 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 20); err != nil {
 			return err
 		}
+		ver = 20
+	}
+	if ver < 21 {
+		if err := migrateV21(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 21); err != nil {
+			return err
+		}
+	}
+	if ver < 22 {
+		if err := migrateV22(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 22); err != nil {
+			return err
+		}
+		ver = 22
+	}
+	if ver < 23 {
+		if err := migrateV23(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 23); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func migrateV23(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	rows, err := tx.Query(`PRAGMA table_info(turn_steers)`)
+	if err != nil {
+		return err
+	}
+	hasFollowUpSeq := false
+	for rows.Next() {
+		var cid, notnull, primaryKey int
+		var name, columnType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notnull, &defaultValue, &primaryKey); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if name == "followup_seq" {
+			hasFollowUpSeq = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if !hasFollowUpSeq {
+		if _, err := tx.Exec(`ALTER TABLE turn_steers ADD COLUMN followup_seq INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+
+	rows, err = tx.Query(`SELECT id, session_id FROM turn_steers
+WHERE followup_seq=0 AND acknowledged=0 AND promoted=0 ORDER BY id`)
+	if err != nil {
+		return err
+	}
+	type pendingSteer struct {
+		id        int64
+		sessionID int64
+	}
+	var pending []pendingSteer
+	for rows.Next() {
+		var steer pendingSteer
+		if err := rows.Scan(&steer.id, &steer.sessionID); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		pending = append(pending, steer)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, steer := range pending {
+		seq, err := nextFollowUpSeqTx(tx, steer.sessionID)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE turn_steers SET followup_seq=? WHERE id=?`, seq, steer.id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func migrateV22(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(turn_steers)`)
+	if err != nil {
+		return err
+	}
+	hasOffered, hasReceived := false, false
+	for rows.Next() {
+		var cid, notnull, primaryKey int
+		var name, columnType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notnull, &defaultValue, &primaryKey); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if name == "offered" {
+			hasOffered = true
+		}
+		if name == "received" {
+			hasReceived = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if !hasOffered {
+		if _, err := db.Exec(`ALTER TABLE turn_steers ADD COLUMN offered INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if !hasReceived {
+		if _, err := db.Exec(`ALTER TABLE turn_steers ADD COLUMN received INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS turn_steers_unreceived ON turn_steers(turn_id, lease_generation, acknowledged, promoted, received, id)`)
+	return err
+}
+
+func migrateV21(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS turn_steers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  turn_id INTEGER NOT NULL,
+  lease_generation INTEGER NOT NULL,
+  prompt TEXT NOT NULL,
+  acknowledged INTEGER NOT NULL DEFAULT 0,
+  promoted INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS turn_steers_pending ON turn_steers(turn_id, lease_generation, acknowledged, promoted, id);
+`)
+	return err
 }
 
 func migrateV20(db *sql.DB) error {

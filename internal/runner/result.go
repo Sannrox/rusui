@@ -43,6 +43,17 @@ func PrepareResult(x StdioExec, a *Assignment) (func(), error) {
 	return func() { _ = os.RemoveAll(dir) }, nil
 }
 
+func clearResult(x StdioExec, a *Assignment, cwd string) error {
+	if a.ResultPath == "" {
+		return nil
+	}
+	if a.Driver == "container" && a.Handle != "" {
+		_, err := guestOutput(x, a, cwd, "rm", "-f", a.ResultPath)
+		return err
+	}
+	return os.WriteFile(a.ResultPath, nil, 0o600)
+}
+
 // collectResult builds a run result from the agent's structured report and
 // the workspace HEAD the runner observes itself. Without a report it
 // returns nil, and the turn fails closed. The plane checks any claimed pull

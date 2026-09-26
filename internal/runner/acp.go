@@ -85,11 +85,11 @@ func (r *HTTPRecorder) Wait(ctx context.Context, p acp.PermissionParams) acp.Dec
 	for {
 		id := r.lastApprovalID()
 		if id != "" {
-			d := r.poll(id)
+			d := r.poll(ctx, id)
 			if d.Matched || d.Allow {
 				return d
 			}
-			if r.denied(id) {
+			if r.denied(ctx, id) {
 				return acp.Decision{}
 			}
 		}
@@ -101,8 +101,8 @@ func (r *HTTPRecorder) Wait(ctx context.Context, p acp.PermissionParams) acp.Dec
 	}
 }
 
-func (r *HTTPRecorder) denied(id string) bool {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/approvals/%s", r.Base, id), nil)
+func (r *HTTPRecorder) denied(ctx context.Context, id string) bool {
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/approvals/%s", r.Base, id), nil)
 	if err != nil {
 		return false
 	}
@@ -120,8 +120,8 @@ func (r *HTTPRecorder) denied(id string) bool {
 	return out.Decision == "deny" || (out.Decision == "allow" && !out.Valid)
 }
 
-func (r *HTTPRecorder) poll(id string) acp.Decision {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/approvals/%s", r.Base, id), nil)
+func (r *HTTPRecorder) poll(ctx context.Context, id string) acp.Decision {
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/approvals/%s", r.Base, id), nil)
 	if err != nil {
 		return acp.Decision{}
 	}
@@ -258,20 +258,10 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 		runCtx, cancel = context.WithDeadline(ctx, a.ExecutionDeadline.UTC())
 	}
 	defer cancel()
+	steers := make(chan engine.Steer, 1)
 	stopHB := make(chan struct{})
 	defer close(stopHB)
-	go func() {
-		t := time.NewTicker(200 * time.Millisecond)
-		defer t.Stop()
-		for {
-			select {
-			case <-stopHB:
-				return
-			case <-t.C:
-				_ = c.Heartbeat(a)
-			}
-		}
-	}()
+	go c.heartbeatSteers(runCtx, a, steers, stopHB)
 	ac, stop, err := host(a, dir)
 	if err != nil {
 		_ = c.Fail(a)
@@ -282,7 +272,7 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 	if cwd == "" && a.Driver == "container" && a.Handle != "" {
 		cwd = env.WorkspaceDir // the guest runs in the container, not on the host
 	}
-	art, err := HostACP(runCtx, a, ac, cwd)
+	art, steerIDs, err := hostACP(runCtx, a, ac, cwd, steers, c.Exec)
 	if err != nil {
 		_ = c.Fail(a)
 		return err
@@ -290,13 +280,48 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 	if a.ItemKind == "run" {
 		art.Result = collectResult(c.Exec, a, cwd, art.SnapshotHash)
 	}
-	return c.Complete(a, art)
+	return c.CompleteWithSteers(a, art, steerIDs)
 }
 
 func HostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string) (engine.Artifact, error) {
+	art, _, err := hostACP(ctx, a, host, cwd, nil, nil)
+	return art, err
+}
+
+func (c *Client) heartbeatSteers(ctx context.Context, a *Assignment, steers chan<- engine.Steer, stop <-chan struct{}) {
+	tick := time.NewTicker(200 * time.Millisecond)
+	defer tick.Stop()
+	var queued []engine.Steer
+	for {
+		var send chan<- engine.Steer
+		var value engine.Steer
+		if len(queued) > 0 {
+			send = steers
+			value = queued[0]
+		}
+		select {
+		case <-stop:
+			return
+		case <-ctx.Done():
+			return
+		case send <- value:
+			queued = queued[1:]
+		case <-tick.C:
+			steer, err := c.PollHeartbeat(a)
+			if err != nil {
+				continue
+			}
+			if steer != nil {
+				queued = append(queued, *steer)
+			}
+		}
+	}
+}
+
+func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, steers <-chan engine.Steer, exec StdioExec) (engine.Artifact, []int64, error) {
 	host.Ctx = ctx
 	if _, err := host.Initialize(ctx); err != nil {
-		return engine.Artifact{}, err
+		return engine.Artifact{}, nil, err
 	}
 	sid := a.GuestSessionID
 	if sid != "" {
@@ -308,20 +333,78 @@ func HostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string) (
 		var err error
 		sid, err = host.SessionNew(ctx, cwd)
 		if err != nil {
-			return engine.Artifact{}, err
+			return engine.Artifact{}, nil, err
 		}
 	}
 	prompt := promptFromInput(a.Input)
 	if a.ResultPath != "" {
 		prompt += resultInstructions
 	}
-	pr, err := host.SessionPrompt(ctx, sid, prompt)
-	if err != nil {
-		return engine.Artifact{}, err
+	var currentSteerID int64
+	var deliveredSteerIDs []int64
+	type promptResponse struct {
+		prompt *acp.PromptResult
+		err    error
 	}
-	art := artifactFromAssignment(a, pr)
-	art.GuestSessionID = sid
-	return art, nil
+	finish := func(res promptResponse) (engine.Artifact, []int64, error) {
+		if res.err != nil {
+			return engine.Artifact{}, nil, res.err
+		}
+		art := artifactFromAssignment(a, res.prompt)
+		art.GuestSessionID = sid
+		completedSteers := append([]int64(nil), deliveredSteerIDs...)
+		if currentSteerID > 0 {
+			completedSteers = append(completedSteers, currentSteerID)
+		}
+		return art, completedSteers, nil
+	}
+	for {
+		result := make(chan promptResponse, 1)
+		submitted := make(chan struct{})
+		go func(text string) {
+			pr, err := host.SessionPromptSubmitted(ctx, sid, text, submitted)
+			result <- promptResponse{prompt: pr, err: err}
+		}(prompt)
+		select {
+		case <-submitted:
+			if currentSteerID > 0 {
+				deliveredSteerIDs = append(deliveredSteerIDs, currentSteerID)
+				currentSteerID = 0
+			}
+		case res := <-result:
+			return finish(res)
+		case <-ctx.Done():
+			return engine.Artifact{}, nil, ctx.Err()
+		}
+		select {
+		case res := <-result:
+			return finish(res)
+		default:
+		}
+		select {
+		case res := <-result:
+			return finish(res)
+		case steer := <-steers:
+			if err := host.SessionCancel(sid); err != nil {
+				return engine.Artifact{}, nil, err
+			}
+			res := <-result
+			if ctx.Err() != nil {
+				return engine.Artifact{}, nil, ctx.Err()
+			}
+			if res.err != nil {
+				return engine.Artifact{}, nil, res.err
+			}
+			if err := clearResult(exec, a, cwd); err != nil {
+				return engine.Artifact{}, nil, err
+			}
+			prompt = steer.Prompt
+			if a.ResultPath != "" {
+				prompt += resultInstructions
+			}
+			currentSteerID = steer.ID
+		}
+	}
 }
 
 func promptFromInput(raw json.RawMessage) string {

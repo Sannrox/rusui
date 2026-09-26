@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -66,6 +68,23 @@ type Assignment struct {
 	ExecutionDeadline *time.Time      `json:"execution_deadline"`
 	Input             json.RawMessage `json:"input"`
 	GuestSessionID    string          `json:"guest_session_id,omitempty"`
+	steerReceipts     *steerReceiptState
+}
+
+type steerReceiptState struct {
+	mu  sync.Mutex
+	ids []int64
+}
+
+var steerReceiptInitMu sync.Mutex
+
+func (a *Assignment) steerReceiptState() *steerReceiptState {
+	steerReceiptInitMu.Lock()
+	defer steerReceiptInitMu.Unlock()
+	if a.steerReceipts == nil {
+		a.steerReceipts = &steerReceiptState{}
+	}
+	return a.steerReceipts
 }
 
 func (c *Client) http() *http.Client {
@@ -211,17 +230,74 @@ func (c *Client) turnReq(method, path string, a *Assignment, payload any) error 
 }
 
 func (c *Client) Heartbeat(a *Assignment) error {
-	return c.turnReq("POST", fmt.Sprintf("/jobs/%d/heartbeat", a.TurnID), a, map[string]int{
+	_, err := c.PollHeartbeat(a)
+	return err
+}
+
+func (c *Client) PollHeartbeat(a *Assignment) (*engine.Steer, error) {
+	state := a.steerReceiptState()
+	state.mu.Lock()
+	steerAcks := append([]int64(nil), state.ids...)
+	state.mu.Unlock()
+	body, err := json.Marshal(map[string]any{
 		"lease_generation": a.LeaseGeneration,
 		"claimed_revision": a.ClaimedRevision,
+		"ack_steer_ids":    steerAcks,
 	})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/jobs/%d/heartbeat", c.Base, a.TurnID), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+a.TurnToken)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := c.http().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("/jobs/%d/heartbeat: %s %s", a.TurnID, res.Status, b)
+	}
+	var out struct {
+		Steer *engine.Steer `json:"steer"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	state.mu.Lock()
+	if len(steerAcks) > 0 {
+		remaining := state.ids[:0]
+		for _, pendingID := range state.ids {
+			if !slices.Contains(steerAcks, pendingID) {
+				remaining = append(remaining, pendingID)
+			}
+		}
+		state.ids = remaining
+	}
+	if out.Steer != nil {
+		if !slices.Contains(state.ids, out.Steer.ID) {
+			state.ids = append(state.ids, out.Steer.ID)
+		}
+	}
+	state.mu.Unlock()
+	return out.Steer, nil
 }
 
 func (c *Client) Complete(a *Assignment, art engine.Artifact) error {
+	return c.CompleteWithSteers(a, art, nil)
+}
+
+// CompleteWithSteers persists the result and steer acknowledgements together.
+func (c *Client) CompleteWithSteers(a *Assignment, art engine.Artifact, steerIDs []int64) error {
 	return c.turnReq("POST", fmt.Sprintf("/jobs/%d/complete", a.TurnID), a, map[string]any{
 		"lease_generation": a.LeaseGeneration,
 		"claimed_revision": a.ClaimedRevision,
 		"artifact":         art,
+		"ack_steer_ids":    steerIDs,
 	})
 }
 

@@ -263,13 +263,29 @@ It sends `session/cancel` if a guest is live, kills the guest process
 tree, fails the claimed turn as `cancelled` without another automatic
 retry of that revision, and releases the concurrent-lease reserve.
 Receipts and the session row remain. The environment stays until idle
-expiry. HTTP/CLI shape lands with D2/D3.
+expiry. Any unacknowledged steer is preserved as a FIFO follow-up, so
+cancellation does not retry the claimed revision but may queue the next
+operator-supplied revision.
 
 ### Follow-up
 
-Each follow-up prompt is a durable FIFO turn on the same session. A
-second queued follow-up must not overwrite the first. A follow-up during
+Each ordinary follow-up prompt is a durable FIFO turn on the same session.
+A second queued follow-up must not overwrite the first. A follow-up during
 a live lease does not steal that lease.
+
+An operator may instead **steer** a live turn. Rusui records the operator
+prompt against the current lease generation and delivers it over heartbeat.
+The runner sends ACP `session/cancel`, waits for the active prompt to settle,
+then calls `session/prompt` with the steer on the same guest session. Steering
+does not change the claimed revision or lease generation, and it cannot grant
+a pending permission. If there is no live lease, or the runner has not
+acknowledged delivery before that lease ends, the prompt becomes an ordinary
+FIFO follow-up.
+
+ACP `session/cancel` support is guest-specific. The in-tree fake agent is
+covered by integration tests; live Grok and Claude Code adapter behavior has
+not been verified. Do not assume a guest honors a steer until its cancellation
+behavior has been tested.
 
 ### Guest ACP session
 
