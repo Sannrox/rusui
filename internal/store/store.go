@@ -331,6 +331,21 @@ func IncrReviewsToday(tx *sql.Tx, repo, day string) error {
 	return err
 }
 
+func DecrReviewsToday(tx *sql.Tx, repo, day string) error {
+	res, err := tx.Exec(`UPDATE daily_review_counts SET count=count-1 WHERE repo=? AND day=? AND count>0`, repo, day)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("daily review count missing for %s on %s", repo, day)
+	}
+	return nil
+}
+
 func EnsureRefreshQueuedTx(tx *sql.Tx, repo string, item int, kind string, force bool) error {
 	var owner int
 	var needs int

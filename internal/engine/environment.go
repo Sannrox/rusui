@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/sannrox/rusui/internal/env"
@@ -117,8 +116,11 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 }
 
 func (e *Engine) SleepEnvironment(id int64) (*store.Environment, error) {
-	unlock := e.lockEnvironment(id)
-	defer unlock()
+	release, ok := e.beginEnvironmentOperation(id)
+	if !ok {
+		return nil, store.ErrEnvironmentBusy
+	}
+	defer release()
 	envRow, err := store.GetEnvironment(e.Store, id)
 	if err != nil {
 		return nil, err
@@ -198,8 +200,11 @@ func (e *Engine) failSleep(envRow *store.Environment, cause, recoveryErr error) 
 }
 
 func (e *Engine) WakeEnvironment(id int64) (*store.Environment, error) {
-	unlock := e.lockEnvironment(id)
-	defer unlock()
+	release, ok := e.beginEnvironmentOperation(id)
+	if !ok {
+		return nil, store.ErrEnvironmentBusy
+	}
+	defer release()
 	envRow, err := store.GetEnvironment(e.Store, id)
 	if err != nil {
 		return nil, err
@@ -271,13 +276,7 @@ func (e *Engine) SleepIdleEnvironments() error {
 	}
 	var errs []error
 	for i := range rows {
-		id := rows[i].ID
-		unlock := e.lockEnvironment(id)
-		reserved, err := store.ReserveIdleEnvironmentSleep(e.Store, id, e.now(), e.envTTL(), e.EnvIdleSleep)
-		if err == nil && reserved {
-			_, err = e.sleepReservedEnvironment(&rows[i])
-		}
-		unlock()
+		err := e.sleepIdleEnvironment(&rows[i])
 		if err != nil && !errors.Is(err, store.ErrEnvironmentBusy) {
 			errs = append(errs, err)
 		}
@@ -285,33 +284,48 @@ func (e *Engine) SleepIdleEnvironments() error {
 	return errors.Join(errs...)
 }
 
-type environmentOperationLock struct {
-	mu   sync.Mutex
-	refs int
+func (e *Engine) sleepIdleEnvironment(envRow *store.Environment) error {
+	release, ok := e.beginEnvironmentOperation(envRow.ID)
+	if !ok {
+		return store.ErrEnvironmentBusy
+	}
+	defer release()
+	reserved, err := store.ReserveIdleEnvironmentSleep(e.Store, envRow.ID, e.now(), e.envTTL(), e.EnvIdleSleep)
+	if err != nil {
+		return err
+	}
+	if !reserved {
+		return store.ErrEnvironmentBusy
+	}
+	_, err = e.sleepReservedEnvironment(envRow)
+	return err
 }
 
-func (e *Engine) lockEnvironment(id int64) func() {
-	e.envLockMu.Lock()
-	if e.envLocks == nil {
-		e.envLocks = make(map[int64]*environmentOperationLock)
+// The per-environment entry is an in-progress marker, not a mutex held over
+// runtime I/O. Competing operations fail fast and callers retry on a later poll.
+func (e *Engine) beginEnvironmentOperation(id int64) (func(), bool) {
+	e.envOperationMu.Lock()
+	if e.envOperations == nil {
+		e.envOperations = make(map[int64]struct{})
 	}
-	lock := e.envLocks[id]
-	if lock == nil {
-		lock = &environmentOperationLock{}
-		e.envLocks[id] = lock
+	if _, ok := e.envOperations[id]; ok {
+		e.envOperationMu.Unlock()
+		return nil, false
 	}
-	lock.refs++
-	e.envLockMu.Unlock()
-	lock.mu.Lock()
+	e.envOperations[id] = struct{}{}
+	e.envOperationMu.Unlock()
 	return func() {
-		lock.mu.Unlock()
-		e.envLockMu.Lock()
-		lock.refs--
-		if lock.refs == 0 {
-			delete(e.envLocks, id)
-		}
-		e.envLockMu.Unlock()
-	}
+		e.envOperationMu.Lock()
+		delete(e.envOperations, id)
+		e.envOperationMu.Unlock()
+	}, true
+}
+
+func (e *Engine) environmentOperationInProgress(id int64) bool {
+	e.envOperationMu.Lock()
+	defer e.envOperationMu.Unlock()
+	_, ok := e.envOperations[id]
+	return ok
 }
 
 func (e *Engine) ReapEnvironments() error {
