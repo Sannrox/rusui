@@ -24,7 +24,9 @@ func TestLiveContainerProcessIdentity(t *testing.T) {
 	id, err := d.Create(name)
 	if err != nil {
 		message := strings.ToLower(err.Error())
-		if strings.Contains(message, "cannot connect to the docker daemon") || strings.Contains(message, "cannot connect to podman") {
+		if strings.Contains(message, "cannot connect to the docker daemon") ||
+			strings.Contains(message, "cannot connect to podman") ||
+			strings.Contains(message, "failed to connect to the docker api") {
 			t.Skipf("container runtime is installed but unavailable: %v", err)
 		}
 		t.Fatal(err)
