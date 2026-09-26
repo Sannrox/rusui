@@ -39,6 +39,15 @@ queued or whether another turn holds the project lease cap. If the database
 path does not exist, the explanation reports an empty pause and count state;
 pass the server's actual `-db` path to include durable state.
 
+`rusui demo [-dir DIR] [-keep]` runs a disposable sample session and prints
+a labeled sample receipt. It uses an isolated state directory, a fixture
+issue, and a deterministic process driver. It does not read GitHub, Slack,
+or model credentials, and it does not use the operator's working
+repository. Default state is a unique temp directory. `-dir PATH` creates
+a unique `rusui-sample-demo-*` child under PATH and never deletes PATH.
+The owned directory is removed unless `-keep`. Walkthrough:
+[tutorial.md](tutorial.md#sample-demo-no-github-no-model).
+
 `rusui drain -url URL -token TOKEN` POSTs `/drain` (worker auth), pauses new
 claims, and lists leased turns. Do not open `rusui.db` while the plane holds it.
 `rusui diagnostics` writes a redacted bundle (`diagnostics.json`).

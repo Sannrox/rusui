@@ -68,6 +68,9 @@ func main() {
 		case "setup":
 			setupCLI(os.Args[2:])
 			return
+		case "demo":
+			demoCLI(os.Args[2:])
+			return
 		case "drain":
 			drainCLI(os.Args[2:])
 			return

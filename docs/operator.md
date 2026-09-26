@@ -4,6 +4,8 @@ Run a self-hosted rusui installation on your own machine. Apply is dry-run:
 nothing is commented, closed, or merged on GitHub.
 
 First loopback session: [tutorial.md](tutorial.md).
+Sample session and receipt without GitHub or a model:
+[tutorial.md](tutorial.md#sample-demo-no-github-no-model).
 Flags, env, HTTP, and policy: [configuration.md](configuration.md).
 Upgrade, drain, diagnostics: [upgrade.md](upgrade.md).
 Nouns: [CONTEXT.md](../CONTEXT.md).

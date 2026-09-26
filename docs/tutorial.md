@@ -3,6 +3,10 @@
 This is a learning path. At the end you have a rusui process on loopback
 that answers `/healthz`. You have not connected GitHub or Slack yet.
 
+To see a labeled sample session and receipt without GitHub, a model, or
+Go, run `rusui demo` from a release binary or `_output/.../rusui`. That
+path is [Sample demo](#sample-demo-no-github-no-model).
+
 How-to for a real repository: [operator.md](operator.md).
 Flags and env: [configuration.md](configuration.md).
 
@@ -111,6 +115,29 @@ a real item is [operator.md](operator.md).
 You did **not** open a port, comment on GitHub, or run live apply. Those
 are later milestones. Dry-run apply is the current contract:
 [ARCHITECTURE.md](../ARCHITECTURE.md).
+
+## Sample demo (no GitHub, no model)
+
+`rusui demo` is a disposable sample of the normal session and receipt
+path. It does not use your working repository, GitHub credentials, a
+webhook tunnel, Slack, or an external model. Output is labeled `SAMPLE`.
+
+You need the `rusui` binary. A GitHub Release asset or a host binary from
+`make all` is enough; this command does not invoke a Go toolchain.
+
+```bash
+rusui demo
+```
+
+It writes isolated sample state, admits a fixture issue, runs a
+deterministic process driver, prints the stored receipt, and deletes the
+sample directory. Pass `-keep` to leave that directory, or `-dir PATH` to
+create a unique `rusui-sample-demo-*` child under PATH. The command never
+deletes PATH itself.
+
+Reset is `rm -rf` on the owned sample directory (the default temp
+directory is removed unless `-keep`). This is not a real review and cannot
+comment, close, or open a pull request.
 
 ## Next
 
