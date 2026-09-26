@@ -17,7 +17,7 @@ Decisions that must outlive a single pull request.
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
 | [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted |
 | [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
-| [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Proposed |
+| [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Superseded by 0023 |
 | [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted |
 | [0016](0016-local-interactive-runtime.md) | Local interactive runtime boundary with Sumika | Accepted |
 | [0017](0017-claude-guest-and-model-upstream.md) | Claude Code guest, operator model upstream, and a fenced self-test | Accepted |
@@ -26,6 +26,7 @@ Decisions that must outlive a single pull request.
 | [0020](0020-turn-scoped-github-publication.md) | Turn-scoped GitHub publication stays behind the plane | Accepted |
 | [0021](0021-gitlab-intake.md) | First GitLab intake is GitLab.com project issues only | Accepted |
 | [0022](0022-public-repo-isolation.md) | Public-repository unattended sessions default to the container driver | Accepted |
+| [0023](0023-p8-pilot-narrow.md) | P8 ten-task live pilot is narrow | Accepted |
 
 ## When to write an ADR
 

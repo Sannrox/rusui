@@ -40,6 +40,8 @@ the runbook.
 | [user-service.md](user-service.md) | how-to | install, update, and remove the per-user host service |
 | [upgrade.md](upgrade.md) | how-to | drain, packaged upgrade, redacted diagnostics |
 | [proofs/d6-session-workflow.md](proofs/d6-session-workflow.md) | explanation | D6 twenty-run matrix and supported claim |
+| [proofs/p8-pilot-cohort.md](proofs/p8-pilot-cohort.md) | explanation | P8 ten-task cohort, predeclared before the live run |
+| [proofs/p8-pilot-results.md](proofs/p8-pilot-results.md) | explanation | P8 live outcomes; [ADR 0023](decisions/0023-p8-pilot-narrow.md) |
 | [proofs/u8-operator-journey.md](proofs/u8-operator-journey.md) | explanation | U8 self-hosting journey (narrowed; not external-user evidence) |
 | [acp-editor.md](acp-editor.md) | reference | ACP protocolVersion 1 editor shim (`rusui acp`) |
 | [configuration.md](configuration.md) | reference | flags, env, HTTP, policy, Slack verbs |
