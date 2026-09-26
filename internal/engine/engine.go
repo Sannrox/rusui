@@ -413,7 +413,9 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int, enfo
 	if err == nil && curGen != gen {
 		return nil
 	}
-	if repoPolicy, ok := e.PolicySnapshot().Repo(it.Repo); !ok || !repoPolicy.Review {
+	activePolicy := e.PolicySnapshot()
+	access := activePolicy.ReviewAccess(it.Repo, false)
+	if !access.Allowed {
 		return nil
 	}
 	consumeInvalidations := false
@@ -458,15 +460,11 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int, enfo
 		}
 	}
 	if enforceReviewBudget {
-		repoPolicy, ok := e.PolicySnapshot().Repo(it.Repo)
-		if !ok || !repoPolicy.Review {
-			return nil
-		}
 		n, err := store.CountReviewsToday(tx, it.Repo, e.now().Format("2006-01-02"))
 		if err != nil {
 			return err
 		}
-		if n >= repoPolicy.MaxReviewsPerRepoPerUTCDay {
+		if decision := policy.DecideReview(activePolicy, it.Repo, false, n); !decision.Allowed {
 			return ErrReviewBudget
 		}
 	}
@@ -578,8 +576,12 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		if err != nil {
 			return err
 		}
-		if paused {
+		access := activePolicy.ReviewAccess(repo, paused)
+		if access.Reason == policy.ReviewReasonPaused {
 			return errPaused
+		}
+		if access.Reason == policy.ReviewReasonInvalidRepo || access.Reason == policy.ReviewReasonUnboundRepo || access.Reason == policy.ReviewReasonMissingProject {
+			return errPolicy
 		}
 		repoPolicy, ok := activePolicy.Repo(repo)
 		if !ok {
@@ -599,11 +601,12 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 			if err != nil {
 				return err
 			}
-			if n >= repoPolicy.MaxReviewsPerRepoPerUTCDay {
+			decision := policy.DecideReview(activePolicy, repo, false, n)
+			if !decision.Allowed && decision.Reason == policy.ReviewReasonDailyBudget {
 				// Reviews stop; run and scheduled work may still be claimed.
 				budgetOut = true
 				e.exception(fmt.Sprintf("daily review budget exhausted for %s", repo))
-			} else {
+			} else if decision.Allowed {
 				lanes = append(lanes, "review")
 			}
 		}
