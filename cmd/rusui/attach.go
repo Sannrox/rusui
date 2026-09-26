@@ -332,16 +332,15 @@ func attachLocal(dbPath string, sessionID int64, detail attachDetail, stdin io.R
 		return fmt.Errorf("parse active policy revision: %w", err)
 	}
 	eng := engine.New(st, pol, gh.NewAPI("", nil), clock.Real{})
-	attach, stream, err := eng.AttachLocalSession(sessionID)
+	process := latestAttachProcess(detail.Processes)
+	if process == nil {
+		return errors.New("authenticated session detail has no local process identity")
+	}
+	attach, stream, err := eng.AttachLocalSessionWithIdentity(detail.Session, process)
 	if err != nil {
 		return fmt.Errorf("local process is not attachable: %w", err)
 	}
 	defer func() { _ = stream.Close() }()
-	process, err := store.LatestSumikaProcess(st, sessionID)
-	if err != nil {
-		return fmt.Errorf("read local process identity: %w", err)
-	}
-	detail.Processes = []store.Process{*process}
 	if err := reportAttachIdentity(stderr, detail); err != nil {
 		return fmt.Errorf("write session identity: %w", err)
 	}

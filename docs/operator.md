@@ -343,8 +343,10 @@ rusui attach [-url http://127.0.0.1:8080] [-db rusui.db] SESSION_ID
 The CLI reports the Session, Environment, runtime, current Process, and Turn
 before connecting. For a local Session, run it on the Sumika host as the same
 OS user and point `-db` at the server's SQLite database if it is not
-`rusui.db`. It attaches directly to Sumika; `Ctrl+]` detaches and terminal
-resizes follow the local terminal. For a managed Session, input remains
+`rusui.db`. Rusui checks that the local Session and Process match the
+authenticated session detail before opening the PTY, and refuses a mismatch.
+It attaches directly to Sumika; `Ctrl+]` detaches and terminal resizes follow
+the local terminal. For a managed Session, input remains
 line-oriented and the CLI acquires an audited write lease when available. If a
 browser or another CLI already holds that lease, this CLI connects read-only.
 It releases only the lease generation it acquired. Typing renews the lease; after

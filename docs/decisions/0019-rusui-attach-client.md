@@ -28,9 +28,12 @@ operator select runtime details that Session metadata already identifies.
   current Turn (or none).
 - For a local Session, the command must run as the Sumika daemon's OS user on
   the same host. It reads the active policy revision and opens the existing
-  SQLite store, then uses `Engine.AttachLocalSession` to validate the current
-  Process and policy, record the Attach generation, and connect directly to
-  Sumika's same-user Unix socket. PTY bytes never pass through Rusui HTTP.
+  SQLite store, then matches the local Session and latest Process identity
+  against the authenticated Session detail in
+  `Engine.AttachLocalSessionWithIdentity` before it records the Attach
+  generation and connects directly to Sumika's same-user Unix socket.
+  Identity mismatch fails before Sumika's Attach operation. PTY bytes never
+  pass through Rusui HTTP.
   The local terminal is raw, terminal-size changes use Sumika's existing
   Resize operation, and `Ctrl+]` detaches without sending that byte to the
   Process.
