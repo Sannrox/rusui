@@ -20,20 +20,27 @@ func TestRunnerReachesAnHTTPSPlaneWithTheCA(t *testing.T) {
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
-	claimed := make(chan string, 4)
+	claimed := make(chan []string, 4)
 	hs := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/jobs/claim" {
 			var request struct {
-				Repo string `json:"repo"`
+				Repo  string   `json:"repo"`
+				Repos []string `json:"repos"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 				t.Errorf("decode claim request: %v", err)
 			}
-			claimed <- request.Repo
-			if request.Repo == "bad/r" {
-				w.WriteHeader(http.StatusConflict)
-				_, _ = fmt.Fprintln(w, "policy")
-				return
+			repos := request.Repos
+			if request.Repo != "" {
+				repos = []string{request.Repo}
+			}
+			claimed <- repos
+			for _, repo := range repos {
+				if repo == "bad/r" {
+					w.WriteHeader(http.StatusConflict)
+					_, _ = fmt.Fprintln(w, "policy")
+					return
+				}
 			}
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -56,9 +63,9 @@ func TestRunnerReachesAnHTTPSPlaneWithTheCA(t *testing.T) {
 		t.Fatalf("runner did not explain the empty queue:\n%s", out)
 	}
 	select {
-	case repo := <-claimed:
-		if repo != "o/r" {
-			t.Fatalf("single -repo claim %q, want o/r", repo)
+	case repos := <-claimed:
+		if len(repos) != 1 || repos[0] != "o/r" {
+			t.Fatalf("single -repo claim %q, want [o/r]", repos)
 		}
 	default:
 		t.Fatalf("runner never reached claim over TLS:\n%s", out)
@@ -70,15 +77,13 @@ func TestRunnerReachesAnHTTPSPlaneWithTheCA(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runner with repeated -repo: %v\n%s", err, out)
 	}
-	for _, want := range []string{"o/r1", "o/r2"} {
-		select {
-		case repo := <-claimed:
-			if repo != want {
-				t.Fatalf("repeated -repo claim %q, want %q", repo, want)
-			}
-		default:
-			t.Fatalf("runner did not claim %s over TLS:\n%s", want, out)
+	select {
+	case repos := <-claimed:
+		if strings.Join(repos, ",") != "o/r1,o/r2" {
+			t.Fatalf("repeated -repo claim %q, want [o/r1 o/r2]", repos)
 		}
+	default:
+		t.Fatalf("runner did not claim o/r1,o/r2 over TLS:\n%s", out)
 	}
 
 	cmd = exec.Command(bin, "-url", hs.URL, "-repo", "bad/r", "-acp", "-once", "-token", "wsec", "-ca", ca)
