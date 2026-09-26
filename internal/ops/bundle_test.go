@@ -42,6 +42,46 @@ func TestWriteBundleRedactsSecretsAndRecordsIdentity(t *testing.T) {
 	}
 }
 
+func TestWriteBundleRedactsOperatorTokenAndModelUpstreamUserinfo(t *testing.T) {
+	dir := t.TempDir()
+	operator := "operator-token-value"
+	userinfo := "gateway-user:gateway-pass"
+	upstream := "https://" + userinfo + "@example.invalid/v1"
+	getenv := func(k string) string {
+		switch k {
+		case "RUSUI_OPERATOR_TOKEN":
+			return operator
+		case "RUSUI_MODEL_UPSTREAM":
+			return upstream
+		default:
+			return ""
+		}
+	}
+	b := Bundle{
+		Identity: ArtifactIdentity{Binary: "rusui", Commit: "abc1234", Schema: store.CurrentSchema, Topology: Topology},
+		Diagnose: Report{
+			Topology: Topology,
+			Checks: []Check{{
+				Name:   "model_upstream",
+				Detail: "origin " + upstream + " token " + operator,
+			}},
+		},
+	}
+	if err := WriteBundle(dir, b, SecretValues(getenv)); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "diagnostics.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(raw)
+	for _, secret := range []string{operator, userinfo, "gateway-pass"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("secret %q leaked: %s", secret, got)
+		}
+	}
+}
+
 func TestRedactLeavesShortValues(t *testing.T) {
 	if Redact("x=ab", []string{"ab"}) != "x=ab" {
 		t.Fatal("short secret should not redact")
