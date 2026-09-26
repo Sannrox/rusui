@@ -496,7 +496,24 @@ func (c *trackedAttach) end() {
 	})
 }
 
-// AttachLocalSession opens Sumika's raw PTY stream and records its Attach generation.
+func sameLocalAttachSession(expected, actual *store.Session) bool {
+	return expected != nil && actual != nil &&
+		expected.ID == actual.ID &&
+		expected.Kind == store.SessionKindLocal && actual.Kind == expected.Kind &&
+		expected.Project == actual.Project &&
+		expected.EnvironmentID == actual.EnvironmentID &&
+		expected.Repo == actual.Repo && expected.Item == actual.Item && expected.ItemKind == actual.ItemKind &&
+		expected.CreatedAt.Equal(actual.CreatedAt)
+}
+
+func sameLocalAttachProcess(expected, actual *store.Process) bool {
+	return expected != nil && actual != nil &&
+		expected.ID == actual.ID && expected.SessionID == actual.SessionID &&
+		expected.Generation == actual.Generation && expected.Runtime == actual.Runtime &&
+		expected.Name == actual.Name && expected.CreatedAt.Equal(actual.CreatedAt)
+}
+
+// AttachLocalSession opens the current local Session's Sumika PTY stream.
 func (e *Engine) AttachLocalSession(sessionID int64) (*store.Attach, io.ReadWriteCloser, error) {
 	sess, err := store.GetSession(e.Store, sessionID)
 	if err != nil {
@@ -511,6 +528,33 @@ func (e *Engine) AttachLocalSession(sessionID int64) (*store.Attach, io.ReadWrit
 	}
 	if err != nil {
 		return nil, nil, err
+	}
+	return e.AttachLocalSessionWithIdentity(*sess, process)
+}
+
+// AttachLocalSessionWithIdentity opens Sumika's raw PTY stream only while the
+// local records still match the identities returned by authenticated detail.
+func (e *Engine) AttachLocalSessionWithIdentity(expectedSession store.Session, expectedProcess *store.Process) (*store.Attach, io.ReadWriteCloser, error) {
+	sessionID := expectedSession.ID
+	sess, err := store.GetSession(e.Store, sessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !sameLocalAttachSession(&expectedSession, sess) {
+		return nil, nil, fmt.Errorf("local session identity does not match authenticated detail")
+	}
+	process, err := store.LatestSumikaProcess(e.Store, sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		if expectedProcess != nil {
+			return nil, nil, fmt.Errorf("local process identity does not match authenticated detail")
+		}
+		return nil, nil, store.ErrProcessNotAttachable
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if !sameLocalAttachProcess(expectedProcess, process) {
+		return nil, nil, fmt.Errorf("local process identity does not match authenticated detail")
 	}
 	if process.State == store.ProcessUnknown {
 		// Reconciliation owns its lock; all attach preconditions are rechecked after the lock below.
@@ -529,7 +573,10 @@ func (e *Engine) AttachLocalSession(sessionID int64) (*store.Attach, io.ReadWrit
 	if err != nil {
 		return nil, nil, err
 	}
-	if sess.Kind != store.SessionKindLocal || sess.State != "open" {
+	if !sameLocalAttachSession(&expectedSession, sess) {
+		return nil, nil, fmt.Errorf("local session identity does not match authenticated detail")
+	}
+	if sess.State != "open" {
 		return nil, nil, store.ErrProcessNotAttachable
 	}
 	pol := e.PolicySnapshot()
@@ -546,6 +593,9 @@ func (e *Engine) AttachLocalSession(sessionID int64) (*store.Attach, io.ReadWrit
 	}
 	if err != nil {
 		return nil, nil, err
+	}
+	if !sameLocalAttachProcess(expectedProcess, process) {
+		return nil, nil, fmt.Errorf("local process identity does not match authenticated detail")
 	}
 	if (process.State != store.ProcessRunning && process.State != store.ProcessIdle && process.State != store.ProcessBlocked) || process.CancelRequestedAt != nil {
 		return nil, nil, store.ErrProcessNotAttachable

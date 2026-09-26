@@ -379,12 +379,137 @@ projects:
 	if err != nil {
 		t.Fatal(err)
 	}
+	if want := "Project: local-test | Session: " + strconv.FormatInt(created.Session.ID, 10); !strings.Contains(stderr.String(), want) {
+		t.Fatalf("local identity banner %q, want %q", stderr.String(), want)
+	}
+	if want := "Process: " + strconv.FormatInt(process.ID, 10) + " generation " + strconv.FormatInt(process.Generation, 10); !strings.Contains(stderr.String(), want) {
+		t.Fatalf("local process banner %q, want %q", stderr.String(), want)
+	}
 	attaches, err := store.ListSumikaAttaches(st, process.ID)
 	if err != nil || len(attaches) != 1 || attaches[0].State != store.AttachDetached {
 		t.Fatalf("local attach lifecycle: %+v err=%v", attaches, err)
 	}
 	if err := runAttach(attachOptions{URL: hs.URL, Token: "worker-token", DB: dbPath}, created.Session.ID, strings.NewReader(""), io.Discard, io.Discard); err == nil {
 		t.Fatal("worker token opened a local attach")
+	}
+}
+
+func TestRunAttachLocalRejectsDifferentDatabaseSession(t *testing.T) {
+	_, planeURL, _, sessionID, input, _ := localAttachFixture(t)
+
+	dir := t.TempDir()
+	cwd := filepath.Join(dir, "workspace")
+	if err := os.Mkdir(cwd, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dbPath := filepath.Join(dir, "other.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	pol, err := policy.Parse([]byte(`version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+  session_kinds: [review, run, scheduled]
+projects:
+  other-test:
+    repos: {}
+    session_kinds: [local]
+    local_runtime:
+      argv: ["/bin/sh", "-i"]
+      cwd: "` + cwd + `"
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := engine.New(st, pol, gh.NewFake(), clock.Real{})
+	e.ReloadPolicy(pol)
+	local, err := e.StartLocalSession("other-test", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if local.Session.ID != sessionID {
+		t.Fatalf("local session id=%d, want colliding id %d", local.Session.ID, sessionID)
+	}
+
+	var stderr bytes.Buffer
+	err = runAttach(attachOptions{URL: planeURL, Token: "op-token", DB: dbPath}, sessionID, strings.NewReader("wrong session\n"), io.Discard, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "identity") {
+		select {
+		case got := <-input:
+			t.Fatalf("attached the other database's PTY with input %q; err=%v", got, err)
+		default:
+			t.Fatalf("attach returned %v, want a local session identity error", err)
+		}
+	}
+	assertNoLocalAttach(t, st, sessionID, input)
+	if strings.Contains(stderr.String(), "Project:") {
+		t.Fatalf("reported an identity banner for a mismatched local session: %s", stderr.String())
+	}
+}
+
+func TestRunAttachLocalRejectsDifferentDatabaseProcessGeneration(t *testing.T) {
+	planeStore, planeURL, _, sessionID, input, _ := localAttachFixture(t)
+	payload, err := store.LatestPolicyPayload(planeStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pol, err := policy.Parse(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbPath := filepath.Join(t.TempDir(), "other.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	e := engine.New(st, pol, gh.NewFake(), clock.Real{})
+	e.ReloadPolicy(pol)
+	local, err := e.StartLocalSession("local-test", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if local.Session.ID != sessionID {
+		t.Fatalf("local session id=%d, want colliding id %d", local.Session.ID, sessionID)
+	}
+	remoteProcess, err := store.LatestSumikaProcess(planeStore, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	localProcess, err := store.LatestSumikaProcess(st, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sessionCreatedAt, processCreatedAt string
+	if err := planeStore.DB.QueryRow(`SELECT created_at FROM sessions WHERE id=?`, sessionID).Scan(&sessionCreatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if err := planeStore.DB.QueryRow(`SELECT created_at FROM session_processes WHERE id=?`, remoteProcess.ID).Scan(&processCreatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`UPDATE sessions SET created_at=? WHERE id=?`, sessionCreatedAt, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`UPDATE session_processes SET generation=?, created_at=? WHERE id=?`, remoteProcess.Generation+1, processCreatedAt, localProcess.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	var stderr bytes.Buffer
+	err = runAttach(attachOptions{URL: planeURL, Token: "op-token", DB: dbPath}, sessionID, strings.NewReader("wrong generation\n"), io.Discard, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "identity") {
+		select {
+		case got := <-input:
+			t.Fatalf("attached a different process generation with input %q; err=%v", got, err)
+		default:
+			t.Fatalf("attach returned %v, want a local process identity error", err)
+		}
+	}
+	assertNoLocalAttach(t, st, sessionID, input)
+	if strings.Contains(stderr.String(), "Project:") {
+		t.Fatalf("reported a process identity from a different generation: %s", stderr.String())
 	}
 }
 
