@@ -27,6 +27,7 @@ Decisions that must outlive a single pull request.
 | [0021](0021-gitlab-intake.md) | First GitLab intake is GitLab.com project issues only | Accepted |
 | [0022](0022-public-repo-isolation.md) | Public-repository unattended sessions default to the container driver | Accepted |
 | [0023](0023-p8-pilot-narrow.md) | P8 ten-task live pilot is narrow | Accepted |
+| [0024](0024-session-surface.md) | The CLI and the console open a session | Accepted |
 
 ## When to write an ADR
 

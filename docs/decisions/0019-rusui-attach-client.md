@@ -7,6 +7,8 @@
   decision stays inside the accepted ADR 0016 boundary.
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0016](0016-local-interactive-runtime.md)
+- Narrowed by: [ADR 0024](0024-session-surface.md). `rusui attach` remains
+  the runtime-owned terminal transport. It is not how a session is read.
 
 ## Context
 

@@ -4,6 +4,8 @@
 - Date: 2026-09-23
 - Resolves: [#182](https://github.com/Sannrox/rusui/issues/182)
 - Narrows: [#183](https://github.com/Sannrox/rusui/issues/183)
+- Narrowed by: [ADR 0024](0024-session-surface.md). D7 does not make
+  Sumika attach the session list or the way a managed session is read.
 - Related: [ADR 0001](0001-environment-plane.md) (environment plane),
   [ADR 0003](0003-operator-surface.md) (one object API),
   [ADR 0011](0011-unattended-session-contract.md) (unattended session and
@@ -197,7 +199,10 @@ The managed terminal ([ADR 0012](0012-operator-access.md), #114) and ACP
 editor shim (#116) remain managed-environment features. Local terminal input
 uses Sumika Attach; Rusui does not proxy it through the browser or console.
 Rusui may later show local Session metadata and the last observed status
-read-only, but it does not expose local PTY bytes.
+read-only, but it does not expose local PTY bytes. [ADR 0024](0024-session-surface.md)
+narrows this section: Sumika attach is that process's own attach. It is
+not the session list, and it is not how a managed session is read. The CLI
+and the embedded console open the session.
 
 ### D8. Scope
 
