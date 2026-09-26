@@ -87,6 +87,11 @@ func (a *Assignment) steerReceiptState() *steerReceiptState {
 	return a.steerReceipts
 }
 
+type ClaimOutcome struct {
+	Assignment    *Assignment
+	NoWorkReasons []string
+}
+
 func (c *Client) http() *http.Client {
 	if c.HTTP != nil {
 		return c.HTTP
@@ -115,30 +120,55 @@ func (c *Client) Hello() error {
 }
 
 func (c *Client) Claim() (*Assignment, error) {
+	outcome, err := c.ClaimWithOutcome()
+	return outcome.Assignment, err
+}
+
+func (c *Client) ClaimWithOutcome() (ClaimOutcome, error) {
+	var outcome ClaimOutcome
 	repos, err := c.claimRepos()
 	if err != nil {
-		return nil, err
+		return outcome, err
 	}
 	if len(repos) == 1 {
-		a, _, err := c.claimRepo(repos[0])
-		return a, err
+		a, reason, err := c.claimRepo(repos[0])
+		outcome.Assignment = a
+		if a == nil && reason != "" {
+			outcome.NoWorkReasons = append(outcome.NoWorkReasons, reason)
+		}
+		return outcome, err
 	}
 	start := c.nextRepo % len(repos)
 	c.nextRepo = (start + 1) % len(repos)
 	for offset := range len(repos) {
 		repo := repos[(start+offset)%len(repos)]
-		a, blocked, err := c.claimRepo(repo)
+		a, reason, err := c.claimRepo(repo)
 		if err != nil {
-			if blocked {
+			if reason == "lease cap or review budget" || reason == "paused" {
+				outcome.NoWorkReasons = appendReason(outcome.NoWorkReasons, reason)
 				continue
 			}
-			return nil, err
+			if reason != "" {
+				outcome.NoWorkReasons = appendReason(outcome.NoWorkReasons, reason)
+			}
+			return outcome, err
 		}
 		if a != nil {
-			return a, nil
+			outcome.Assignment = a
+			return outcome, nil
+		}
+		if reason != "" {
+			outcome.NoWorkReasons = appendReason(outcome.NoWorkReasons, reason)
 		}
 	}
-	return nil, nil
+	return outcome, nil
+}
+
+func appendReason(reasons []string, reason string) []string {
+	if slices.Contains(reasons, reason) {
+		return reasons
+	}
+	return append(reasons, reason)
 }
 
 func (c *Client) claimRepos() ([]string, error) {
@@ -168,38 +198,54 @@ func (c *Client) claimRepos() ([]string, error) {
 	return repos, nil
 }
 
-func (c *Client) claimRepo(repo string) (*Assignment, bool, error) {
+func (c *Client) claimRepo(repo string) (*Assignment, string, error) {
 	body, _ := json.Marshal(map[string]string{"repo": repo})
 	req, err := http.NewRequest("POST", c.Base+"/jobs/claim", bytes.NewReader(body))
 	if err != nil {
-		return nil, false, err
+		return nil, "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Bootstrap)
 	req.Header.Set("Content-Type", "application/json")
 	res, err := c.http().Do(req)
 	if err != nil {
-		return nil, false, err
+		return nil, "", err
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode == 204 {
-		return nil, false, nil
+		return nil, "no queued turn", nil
 	}
 	if res.StatusCode != 200 {
-		b, _ := io.ReadAll(res.Body)
-		blocked := res.Header.Get("X-Rusui-Claim-Blocked")
-		return nil, blocked == "budget" || blocked == "paused", fmt.Errorf("claim: %s %s", res.Status, b)
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 4<<10))
+		detail := strings.TrimSpace(string(body))
+		reason := fmt.Sprintf("claim failed (HTTP %d)", res.StatusCode)
+		switch res.Header.Get("X-Rusui-Claim-Blocked") {
+		case "budget":
+			reason = "lease cap or review budget"
+		case "paused":
+			reason = "paused"
+		case "":
+			// Engine.Claim uses this exact body for policy denials; other
+			// claim failures can also be 409 and stay generic.
+			if res.StatusCode == http.StatusConflict && detail == "policy" {
+				reason = "policy or lane disabled"
+			}
+		}
+		if detail == "" {
+			return nil, reason, fmt.Errorf("claim: %s", res.Status)
+		}
+		return nil, reason, fmt.Errorf("claim: %s %s", res.Status, detail)
 	}
 	var a Assignment
 	if err := json.NewDecoder(res.Body).Decode(&a); err != nil {
-		return nil, false, err
+		return nil, "", err
 	}
 	if a.TurnID == 0 {
 		a.TurnID = a.JobID
 	}
 	if !strings.EqualFold(a.Repo, repo) {
-		return nil, false, fmt.Errorf("claim: plane returned repository %q for configured repository %q", a.Repo, repo)
+		return nil, "", fmt.Errorf("claim: plane returned repository %q for configured repository %q", a.Repo, repo)
 	}
-	return &a, false, nil
+	return &a, "", nil
 }
 
 func (c *Client) turnReq(method, path string, a *Assignment, payload any) error {
@@ -419,31 +465,38 @@ func RunProcess(ctx context.Context, command []string, env []string, dir string)
 }
 
 func OneTurn(ctx context.Context, c *Client, command []string) error {
+	_, err := OneTurnWithOutcome(ctx, c, command)
+	return err
+}
+
+func OneTurnWithOutcome(ctx context.Context, c *Client, command []string) (ClaimOutcome, error) {
+	var outcome ClaimOutcome
 	if err := c.Hello(); err != nil {
-		return err
+		return outcome, err
 	}
-	a, err := c.Claim()
+	outcome, err := c.ClaimWithOutcome()
 	if err != nil {
-		return err
+		return outcome, err
 	}
+	a := outcome.Assignment
 	if a == nil {
-		return nil
+		return outcome, nil
 	}
 	dir, err := os.MkdirTemp("", "rusui-turn-*")
 	if err != nil {
-		return err
+		return outcome, err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	unhook, err := PrepareCommitHooks(c.Exec, a)
 	if err != nil {
 		_ = c.Fail(a)
-		return err
+		return outcome, err
 	}
 	defer unhook()
 	env := DriverEnv(a, dir, os.Getenv("PATH"))
 	for _, e := range env {
 		if strings.HasPrefix(e, "RUSUI_WORKER_SECRET=") || strings.HasPrefix(e, "RUSUI_SLACK_SECRET=") || strings.HasPrefix(e, "RUSUI_WEBHOOK_SECRET=") {
-			return fmt.Errorf("plane secret leaked into driver env")
+			return outcome, fmt.Errorf("plane secret leaked into driver env")
 		}
 	}
 	runCtx := ctx
@@ -469,14 +522,14 @@ func OneTurn(ctx context.Context, c *Client, command []string) error {
 	out, err := RunProcess(runCtx, command, env, dir)
 	if err != nil {
 		_ = c.Fail(a)
-		return err
+		return outcome, err
 	}
 	var art engine.Artifact
 	if err := json.Unmarshal(out, &art); err != nil {
 		_ = c.Fail(a)
-		return fmt.Errorf("driver artifact: %w", err)
+		return outcome, fmt.Errorf("driver artifact: %w", err)
 	}
-	return c.Complete(a, art)
+	return outcome, c.Complete(a, art)
 }
 
 func DriverScript(dir, artifactJSON string) (string, error) {

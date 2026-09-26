@@ -214,28 +214,35 @@ func WorkspaceFor(a *Assignment) (dir string, tmp bool, err error) {
 }
 
 func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
+	_, err := OneACPTurnWithOutcome(ctx, c, host)
+	return err
+}
+
+func OneACPTurnWithOutcome(ctx context.Context, c *Client, host ACPHost) (ClaimOutcome, error) {
+	var outcome ClaimOutcome
 	if host == nil {
-		return fmt.Errorf("acp host required")
+		return outcome, fmt.Errorf("acp host required")
 	}
 	if err := c.Hello(); err != nil {
-		return err
+		return outcome, err
 	}
-	a, err := c.Claim()
+	outcome, err := c.ClaimWithOutcome()
 	if err != nil {
-		return err
+		return outcome, err
 	}
+	a := outcome.Assignment
 	if a == nil {
-		return nil
+		return outcome, nil
 	}
 	dir, tmp, err := WorkspaceFor(a)
 	if err != nil {
-		return err
+		return outcome, err
 	}
 	cleanup := func() {}
 	if tmp {
 		dir, err = os.MkdirTemp("", "rusui-acp-*")
 		if err != nil {
-			return err
+			return outcome, err
 		}
 		cleanup = func() { _ = os.RemoveAll(dir) }
 	}
@@ -243,13 +250,13 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 	unhook, err := PrepareCommitHooks(c.Exec, a)
 	if err != nil {
 		_ = c.Fail(a)
-		return err
+		return outcome, err
 	}
 	defer unhook()
 	unresult, err := PrepareResult(c.Exec, a)
 	if err != nil {
 		_ = c.Fail(a)
-		return err
+		return outcome, err
 	}
 	defer unresult()
 	runCtx := ctx
@@ -265,7 +272,7 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 	ac, stop, err := host(a, dir)
 	if err != nil {
 		_ = c.Fail(a)
-		return err
+		return outcome, err
 	}
 	defer stop()
 	cwd := dir
@@ -275,12 +282,12 @@ func OneACPTurn(ctx context.Context, c *Client, host ACPHost) error {
 	art, steerIDs, err := hostACP(runCtx, a, ac, cwd, steers, c.Exec)
 	if err != nil {
 		_ = c.Fail(a)
-		return err
+		return outcome, err
 	}
 	if a.ItemKind == "run" {
 		art.Result = collectResult(c.Exec, a, cwd, art.SnapshotHash)
 	}
-	return c.CompleteWithSteers(a, art, steerIDs)
+	return outcome, c.CompleteWithSteers(a, art, steerIDs)
 }
 
 func HostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string) (engine.Artifact, error) {

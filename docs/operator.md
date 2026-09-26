@@ -29,10 +29,14 @@ BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
 "$BIN/rusui" diagnose -policy policy.yaml -addr 127.0.0.1:8080
 ```
 
-`diagnose` (and `GET /readyz`) report each check as `ready`,
-`misconfigured`, or `unavailable`. They do not print secret values.
+`rusui diagnose` and `GET /readyz` report topology checks as `ready`,
+`misconfigured`, or `unavailable`; `rusui diagnose` also probes the model
+upstream. Neither prints secret values.
 Exit status 0 means the topology is ready; do not start unattended work
-otherwise. `GET /healthz` only proves the process is listening.
+otherwise. The `model_upstream` check sends a bounded `GET /v1/models` request
+using the configured provider credential or upstream authentication and does
+not generate a model response. `GET /healthz` only proves the process is
+listening.
 
 Process-driver review (`-driver`) is test/dev. It is not this topology.
 
@@ -84,6 +88,90 @@ the user service and checks readiness. Linux setup enables account-wide user
 lingering so the service starts at boot and continues after logout. See
 [user-service.md](user-service.md) for service behavior and removal. The
 sections below describe the same setup steps by hand.
+
+### First pinned implement task
+
+For the `Sannrox/rusui` example, setup must leave `implement: true` on that
+repository and `run` in project `rusui`'s `session_kinds`. Add a narrowly
+scoped `RUSUI_AGENT_GITHUB_TOKEN` and one model credential or logged-in model
+proxy to `rusui.env`, then apply setup and confirm its embedded `diagnose`
+report shows `model_upstream: ready`. Do not put either credential in the
+shell command.
+
+The task below pins the source commit before admission and allows only the
+operator guide to change. Replace the prompt with one bounded task for your
+own repository, and match `-project`, `-repo`, `-ref`, and `-paths` to its
+policy and task. `run` prints the session and task IDs; the runner prints the
+session and turn IDs it claims.
+
+```bash
+BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
+STATE="$HOME/Library/Application Support/rusui" # Linux: use setup's state directory
+export RUSUI_WORKER_SECRET="$(sed -n 's/^RUSUI_WORKER_SECRET=//p' "$STATE/rusui.env")"
+export RUSUI_PLANE_CA="$(sed -n 's/^RUSUI_PLANE_CA=//p' "$STATE/rusui.env")"
+PLANE_URL="https://127.0.0.1:8080"
+BASE_SHA="$(git ls-remote https://github.com/Sannrox/rusui.git refs/heads/main | cut -f1)"
+EFFORT_KEY="first-run-$(date -u +%Y%m%dT%H%M%SZ)"
+STARTED="$("$BIN/rusui" run -url "$PLANE_URL" \
+  -project rusui -effort "$EFFORT_KEY" -repo Sannrox/rusui -ref main \
+  -base-sha "$BASE_SHA" -paths docs/operator.md \
+  'Add one concise operator troubleshooting entry for a documented setup failure.')"
+SESSION_ID="$(printf '%s\n' "$STARTED" | jq -r '.session_id')"
+TASK_ID="$(printf '%s\n' "$STARTED" | jq -r '.task_id')"
+printf 'session_id=%s task_id=%s\n' "$SESSION_ID" "$TASK_ID"
+
+"$BIN/rusui-runner" -url "$PLANE_URL" -repo Sannrox/rusui \
+  -ca "$RUSUI_PLANE_CA" -acp -once
+```
+
+The runner logs a `claimed session=… turn=…` line after the turn ends. While
+it runs, inspect the session and turn IDs with the operator token:
+
+```bash
+curl --cacert "$RUSUI_PLANE_CA" -fsS -H "Authorization: Bearer $RUSUI_WORKER_SECRET" \
+  "$PLANE_URL/sessions/$SESSION_ID" | jq '{session: .session.ID, turns: [.turns[] | {id: .ID, state: .State}]}'
+```
+
+After the turn is complete, stop the setup-managed service before reading its
+SQLite file. This removes the user-service entry but preserves the state;
+rerun `setup apply` to install it again.
+
+```bash
+"$BIN/rusui" setup remove-service -state "$STATE"
+```
+
+Use the turn ID from the runner log to confirm the plane's observed outcome;
+the guest's claim alone is not publication evidence:
+
+```bash
+TURN_ID=123 # replace with the runner's logged turn ID
+sqlite3 -readonly "$STATE/rusui.db" \
+  "SELECT json_extract(payload, '$.result.outcome') AS plane_outcome, json_extract(payload, '$.result.pull_request') AS pull_request, json_extract(payload, '$.result.candidate_sha') AS candidate_sha, json_extract(payload, '$.result.published_sha') AS published_sha FROM review_revisions WHERE job_id = $TURN_ID ORDER BY id DESC LIMIT 1;"
+```
+
+`published` means the plane saw the pull request at the candidate SHA. A
+missing row, `unconfirmed`, or `blocked` is not a published PR. Merging stays
+with a human maintainer.
+
+### Timed macOS walkthrough record
+
+Record each duration on a clean macOS user account; exclude guest image
+download time. Keep the account, credentials, repository, guest version, and
+policy revision with the private run notes, not in this public guide.
+
+| Step | Duration |
+| --- | --- |
+| `make all` and `rusui setup plan` | Not measured on a clean account |
+| Fill model and scoped GitHub credentials; set the bound repo's implement policy | Not measured on a clean account |
+| `rusui setup apply` and readiness check | Not measured on a clean account |
+| Start pinned task and record session/turn IDs | Not measured on a clean account |
+| Wait for the plane outcome and confirm the PR SHA | Not measured on a clean account |
+| Total, excluding image download | Unverified; the clean-account run was unavailable in this environment |
+
+The current evidence is the earlier live run recorded on #181, not a timed
+clean-account walkthrough. This leaves the fifteen-minute target unverified;
+no isolated clean account or model/write credentials were available here, so
+the gap starts before `make all` and no later step was timed.
 
 ## 1. Build and policy
 
