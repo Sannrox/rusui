@@ -12,6 +12,8 @@ import (
 	"github.com/sannrox/rusui/internal/store"
 )
 
+const environmentReceiptPageSize = 100
+
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
@@ -39,6 +41,20 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "id", 400)
 		return
+	}
+	if r.URL.Query().Get("view") == "review-status" {
+		s.getSessionReviewStatus(w, r, id)
+		return
+	}
+	includeReceipts := r.URL.Query().Get("include") == "receipts"
+	var receiptAfterID int64
+	query := r.URL.Query()
+	if includeReceipts && query.Has("receipt_after_id") {
+		receiptAfterID, err = strconv.ParseInt(query.Get("receipt_after_id"), 10, 64)
+		if err != nil || receiptAfterID < 0 {
+			http.Error(w, "receipt_after_id", http.StatusBadRequest)
+			return
+		}
 	}
 	sess, err := store.GetSession(s.Eng.Store, id)
 	if err != nil {
@@ -95,20 +111,55 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 			"revision_id": revisionID, "artifact": artifact, "dry_run_actions": dryRun,
 		}
 	}
-	receipts, err := store.ListEnvironmentReceipts(s.Eng.Store, id)
+	response := map[string]any{
+		"session": sess, "turns": turns, "processes": processes,
+		"environment_state": envState,
+	}
+	if reviewResult != nil {
+		response["review_result"] = reviewResult
+	}
+	if includeReceipts {
+		receipts, hasMore, err := store.ListEnvironmentReceiptPage(s.Eng.Store, id, receiptAfterID, environmentReceiptPageSize)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		response["environment_receipts"] = receipts
+		if hasMore {
+			response["environment_receipts_next_after_id"] = receipts[len(receipts)-1].ID
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+type reviewStatusResponse struct {
+	TurnID          int64  `json:"turn_id"`
+	TurnState       string `json:"turn_state"`
+	PendingRevision int    `json:"pending_revision"`
+	ClaimedRevision int    `json:"claimed_revision"`
+}
+
+func (s *Server) getSessionReviewStatus(w http.ResponseWriter, r *http.Request, sessionID int64) {
+	turnID, err := strconv.ParseInt(r.URL.Query().Get("turn_id"), 10, 64)
+	if err != nil || turnID <= 0 {
+		http.Error(w, "turn_id", http.StatusBadRequest)
+		return
+	}
+	turn, err := store.GetTurn(s.Eng.Store, turnID)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && turn.SessionID != sessionID) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	response := map[string]any{
-		"session": sess, "turns": turns, "processes": processes,
-		"environment_state": envState, "environment_receipts": receipts,
-	}
-	if reviewResult != nil {
-		response["review_result"] = reviewResult
-	}
-	_ = json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(reviewStatusResponse{
+		TurnID: turn.ID, TurnState: turn.State,
+		PendingRevision: turn.PendingRevision, ClaimedRevision: turn.ClaimedRevision,
+	})
 }
 
 func (s *Server) attachSession(w http.ResponseWriter, r *http.Request) {

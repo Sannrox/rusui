@@ -13,6 +13,10 @@
   core delivery).
 - Discussion: none. GitHub Discussions are disabled. The maintainer chose
   this model directly; merging with this status is the acceptance act.
+- Accepted target amendment: [ADR 0020](0020-turn-scoped-github-publication.md)
+  sets a plane-owned, turn-scoped publication route for future implementation
+  of D1 and D4. This ADR and [ARCHITECTURE.md](../../ARCHITECTURE.md) continue
+  to describe current behavior until the implementation follow-up lands.
 
 ## Context
 

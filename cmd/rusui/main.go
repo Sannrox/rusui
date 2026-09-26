@@ -62,6 +62,9 @@ func main() {
 		case "diagnose":
 			diagnoseCLI(os.Args[2:])
 			return
+		case "policy":
+			policyCLI(os.Args[2:])
+			return
 		case "setup":
 			setupCLI(os.Args[2:])
 			return
