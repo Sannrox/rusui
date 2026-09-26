@@ -126,7 +126,7 @@ func (c *Client) Claim() (*Assignment, error) {
 
 func (c *Client) ClaimWithOutcome() (ClaimOutcome, error) {
 	var outcome ClaimOutcome
-	repos, err := c.claimRepos()
+	repos, err := c.configuredRepos()
 	if err != nil {
 		return outcome, err
 	}
@@ -140,28 +140,16 @@ func (c *Client) ClaimWithOutcome() (ClaimOutcome, error) {
 	}
 	start := c.nextRepo % len(repos)
 	c.nextRepo = (start + 1) % len(repos)
-	for offset := range len(repos) {
-		repo := repos[(start+offset)%len(repos)]
-		a, reason, err := c.claimRepo(repo)
-		if err != nil {
-			if reason == "lease cap or review budget" || reason == "paused" {
-				outcome.NoWorkReasons = appendReason(outcome.NoWorkReasons, reason)
-				continue
-			}
-			if reason != "" {
-				outcome.NoWorkReasons = appendReason(outcome.NoWorkReasons, reason)
-			}
-			return outcome, err
-		}
-		if a != nil {
-			outcome.Assignment = a
-			return outcome, nil
-		}
-		if reason != "" {
-			outcome.NoWorkReasons = appendReason(outcome.NoWorkReasons, reason)
-		}
+	ordered := make([]string, len(repos))
+	for i := range repos {
+		ordered[i] = repos[(start+i)%len(repos)]
 	}
-	return outcome, nil
+	a, reason, err := c.postClaimRepos(ordered)
+	outcome.Assignment = a
+	if reason != "" {
+		outcome.NoWorkReasons = appendReason(outcome.NoWorkReasons, reason)
+	}
+	return outcome, err
 }
 
 func appendReason(reasons []string, reason string) []string {
@@ -171,7 +159,7 @@ func appendReason(reasons []string, reason string) []string {
 	return append(reasons, reason)
 }
 
-func (c *Client) claimRepos() ([]string, error) {
+func (c *Client) configuredRepos() ([]string, error) {
 	if c.Repo != "" && len(c.Repos) != 0 {
 		return nil, fmt.Errorf("claim: configure Repo or Repos, not both")
 	}
@@ -198,8 +186,17 @@ func (c *Client) claimRepos() ([]string, error) {
 	return repos, nil
 }
 
+func (c *Client) postClaimRepos(repos []string) (*Assignment, string, error) {
+	body, _ := json.Marshal(map[string]any{"repos": repos})
+	return c.decodeClaim(body, repos)
+}
+
 func (c *Client) claimRepo(repo string) (*Assignment, string, error) {
 	body, _ := json.Marshal(map[string]string{"repo": repo})
+	return c.decodeClaim(body, []string{repo})
+}
+
+func (c *Client) decodeClaim(body []byte, allowed []string) (*Assignment, string, error) {
 	req, err := http.NewRequest("POST", c.Base+"/jobs/claim", bytes.NewReader(body))
 	if err != nil {
 		return nil, "", err
@@ -242,8 +239,15 @@ func (c *Client) claimRepo(repo string) (*Assignment, string, error) {
 	if a.TurnID == 0 {
 		a.TurnID = a.JobID
 	}
-	if !strings.EqualFold(a.Repo, repo) {
-		return nil, "", fmt.Errorf("claim: plane returned repository %q for configured repository %q", a.Repo, repo)
+	ok := false
+	for _, repo := range allowed {
+		if strings.EqualFold(a.Repo, repo) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return nil, "", fmt.Errorf("claim: plane returned repository %q outside configured set", a.Repo)
 	}
 	return &a, "", nil
 }

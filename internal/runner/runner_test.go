@@ -201,6 +201,68 @@ func TestMultiRepoClaimSkipsPausedProject(t *testing.T) {
 	}
 }
 
+func TestIdleMultiRepoClaimUsesOneRoundTrip(t *testing.T) {
+	var n int
+	var gotRepos []string
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n++
+		var req struct {
+			Repo  string   `json:"repo"`
+			Repos []string `json:"repos"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode: %v", err)
+		}
+		gotRepos = req.Repos
+		if r.URL.Path != "/jobs/claim" || req.Repo != "" || len(req.Repos) != 3 {
+			t.Errorf("path=%s repo=%q repos=%v", r.URL.Path, req.Repo, req.Repos)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(hs.Close)
+	cli := &runner.Client{
+		Base: hs.URL, Bootstrap: "wsec",
+		Repos: []string{"example/one", "example/two", "example/three"},
+	}
+	assignment, err := cli.Claim()
+	if err != nil || assignment != nil {
+		t.Fatalf("idle claim assignment=%+v err=%v", assignment, err)
+	}
+	if n != 1 {
+		t.Fatalf("idle multi-repo claim round-trips=%d", n)
+	}
+	if len(gotRepos) != 3 {
+		t.Fatalf("repos payload %v", gotRepos)
+	}
+	assignment, err = cli.Claim()
+	if err != nil || assignment != nil || n != 2 {
+		t.Fatalf("second idle poll round-trips=%d assignment=%+v err=%v", n, assignment, err)
+	}
+}
+
+func TestSingleRepoClaimKeepsRepoField(t *testing.T) {
+	var n int
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n++
+		var req struct {
+			Repo  string   `json:"repo"`
+			Repos []string `json:"repos"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode: %v", err)
+		}
+		if req.Repo != "example/test-repo" || len(req.Repos) != 0 {
+			t.Errorf("single-repo body repo=%q repos=%v", req.Repo, req.Repos)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(hs.Close)
+	cli := &runner.Client{Base: hs.URL, Bootstrap: "wsec", Repo: "example/test-repo"}
+	if assignment, err := cli.Claim(); err != nil || assignment != nil || n != 1 {
+		t.Fatalf("single-repo idle n=%d assignment=%+v err=%v", n, assignment, err)
+	}
+}
+
 func TestClaimWithOutcomeClassifiesNoWorkReasons(t *testing.T) {
 	cases := []struct {
 		name       string
