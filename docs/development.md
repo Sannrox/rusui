@@ -11,7 +11,9 @@ The Makefile is a thin façade over `scripts/make-targets/`. Image internals:
 | `.go-version` | `1.26.6` — `make` sets `GOTOOLCHAIN` unless `FORCE_HOST_GO` is set |
 | CI | `.github/workflows/build.yml` uses `go-version-file: .go-version` |
 
-Docker is optional for host `make all`.
+Docker is optional for host `make all`. Unattended public-repository
+sessions require the container topology
+([ADR 0022](decisions/0022-public-repo-isolation.md)).
 
 ## Targets
 

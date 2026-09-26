@@ -41,6 +41,10 @@ not generate a model response. `GET /healthz` only proves the process is
 listening.
 
 Process-driver review (`-driver`) is test/dev. It is not this topology.
+Public-repository unattended sessions (review, run, scheduled, implement
+on `visibility: public`) use this container topology. They do not fall
+back to the process driver or the experimental local profile when Docker
+or Podman is missing ([ADR 0022](decisions/0022-public-repo-isolation.md)).
 
 ## Prerequisites
 
