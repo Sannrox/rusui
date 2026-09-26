@@ -42,6 +42,30 @@ func TestWriteBundleRedactsSecretsAndRecordsIdentity(t *testing.T) {
 	}
 }
 
+func TestSecretValuesRedactsOperatorToken(t *testing.T) {
+	operator := "operator-token-value"
+	getenv := func(k string) string {
+		if k == "RUSUI_OPERATOR_TOKEN" {
+			return operator
+		}
+		return ""
+	}
+	secrets := SecretValues(getenv)
+	found := false
+	for _, s := range secrets {
+		if s == operator {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("SecretValues omitted RUSUI_OPERATOR_TOKEN")
+	}
+	if got := Redact("token="+operator, secrets); strings.Contains(got, operator) {
+		t.Fatalf("operator token not redacted: %s", got)
+	}
+}
+
 func TestWriteBundleRedactsOperatorTokenAndModelUpstreamUserinfo(t *testing.T) {
 	dir := t.TempDir()
 	operator := "operator-token-value"
