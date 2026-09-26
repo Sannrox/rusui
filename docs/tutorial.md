@@ -8,6 +8,7 @@ Go, run `rusui demo` from a release binary or `_output/.../rusui`. That
 path is [Sample demo](#sample-demo-no-github-no-model).
 
 How-to for a real repository: [operator.md](operator.md).
+Review-only GitHub App on a test repository: [github-app-pilot.md](github-app-pilot.md).
 Flags and env: [configuration.md](configuration.md).
 
 ## What you need

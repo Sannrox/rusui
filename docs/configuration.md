@@ -81,7 +81,10 @@ reported and exits successfully.
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `RUSUI_GITHUB_TOKEN` or `GITHUB_TOKEN` | **Yes** | Server exits if both empty |
+| `RUSUI_GITHUB_TOKEN` or `GITHUB_TOKEN` | **Yes** unless App env is set | Server exits if both empty and App id is unset |
+| `RUSUI_GITHUB_APP_ID` | GitHub App intake | Installation tokens instead of a PAT |
+| `RUSUI_GITHUB_APP_PRIVATE_KEY` or `RUSUI_GITHUB_APP_PRIVATE_KEY_FILE` | GitHub App intake | PEM; never commit |
+| `RUSUI_GITHUB_APP_INSTALLATION_ID` | GitHub App intake | Installation on the bound repository |
 | `RUSUI_WEBHOOK_SECRET` | **Yes** unless `-allow-insecure` | GitHub + generic event HMAC |
 | `RUSUI_WORKER_SECRET` | **Yes** unless `-allow-insecure` | Runner / job bearer |
 | `RUSUI_OPERATOR_TOKEN` | operator console and `rusui attach` | Distinct from worker; unset keeps console HTML and attachment disabled ([ADR 0012](decisions/0012-operator-access.md)) |

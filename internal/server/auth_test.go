@@ -69,6 +69,39 @@ func TestEmptyWebhookSecretRejectsUnsigned(t *testing.T) {
 	}
 }
 
+func TestWrongWebhookSignatureRejectsGitHubHook(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	p, err := policy.Parse([]byte(slackPol))
+	if err != nil {
+		t.Fatal(err)
+	}
+	clk := &clock.Fake{T: time.Unix(1_700_000_000, 0).UTC()}
+	e := engine.New(st, p, gh.NewFake(), clk)
+	e.ReloadPolicy(p)
+	s := &Server{Eng: e, WebhookSec: "whsec"}
+	hs := httptest.NewServer(s.Handler())
+	t.Cleanup(hs.Close)
+	body := `{"repository":{"full_name":"example/test-repo"},"issue":{"number":1}}`
+	req, err := http.NewRequest("POST", hs.URL+"/hooks/github", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Hub-Signature-256", "sha256=deadbeef")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != 401 {
+		t.Fatalf("wrong github hmac %d", res.StatusCode)
+	}
+}
+
 func TestEmptySlackSecretRejectsUnsigned(t *testing.T) {
 	hs := emptySecretServer(t)
 	req, err := http.NewRequest("POST", hs.URL+"/hooks/slack", strings.NewReader("user_id=U1&text=status"))

@@ -18,6 +18,7 @@ the runbook.
 | First session | [tutorial.md](tutorial.md) |
 | Sample receipt without GitHub | [tutorial.md](tutorial.md#sample-demo-no-github-no-model) |
 | Operator | [operator.md](operator.md) |
+| Review-only GitHub App | [github-app-pilot.md](github-app-pilot.md) |
 | Install as a user service | [user-service.md](user-service.md) |
 | Flags, env, HTTP, policy | [configuration.md](configuration.md) |
 | Contributor | [CONTRIBUTING.md](../CONTRIBUTING.md), [development.md](development.md) |
@@ -35,6 +36,7 @@ the runbook.
 | [../VISION.md](../VISION.md) | explanation | accepted direction; not the runbook |
 | [../ROADMAP.md](../ROADMAP.md) | explanation | published M1–M6 sequence ([ADR 0010](decisions/0010-hybrid-roadmap-sequence.md) Accepted) |
 | [operator.md](operator.md) | how-to | run, webhook, Slack, troubleshoot |
+| [github-app-pilot.md](github-app-pilot.md) | how-to | review-only GitHub App, tunnel, receipt |
 | [user-service.md](user-service.md) | how-to | install, update, and remove the per-user host service |
 | [upgrade.md](upgrade.md) | how-to | drain, packaged upgrade, redacted diagnostics |
 | [proofs/d6-session-workflow.md](proofs/d6-session-workflow.md) | explanation | D6 twenty-run matrix and supported claim |
