@@ -54,11 +54,13 @@ func TestModelUpstreamNoOpProbeUsesProviderAuth(t *testing.T) {
 		keyName    string
 		provider   string
 		headerName string
+		keyless    bool
 		status     int
 		wantStatus string
 	}{
 		{name: "xAI ready", guest: "grok", keyName: "XAI_API_KEY", provider: "xAI", headerName: "Authorization", status: http.StatusOK, wantStatus: "ready"},
 		{name: "Anthropic rejects key", guest: "claude", keyName: "RUSUI_ANTHROPIC_API_KEY", provider: "Anthropic", headerName: "x-api-key", status: http.StatusUnauthorized, wantStatus: "misconfigured"},
+		{name: "Anthropic gateway auth", guest: "claude", provider: "Anthropic", keyless: true, status: http.StatusOK, wantStatus: "ready"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,15 +68,20 @@ func TestModelUpstreamNoOpProbeUsesProviderAuth(t *testing.T) {
 				if r.URL.Path != "/v1/models" {
 					t.Errorf("request path = %q", r.URL.Path)
 				}
-				wantKey := secret
-				if tc.headerName == "Authorization" {
-					wantKey = "Bearer " + secret
-				}
-				if got := r.Header.Get(tc.headerName); got != wantKey {
-					t.Errorf("%s = %q, want configured provider credential", tc.headerName, got)
+				if tc.headerName != "" {
+					wantKey := secret
+					if tc.headerName == "Authorization" {
+						wantKey = "Bearer " + secret
+					}
+					if got := r.Header.Get(tc.headerName); got != wantKey {
+						t.Errorf("%s = %q, want configured provider credential", tc.headerName, got)
+					}
 				}
 				if tc.provider == "Anthropic" && r.Header.Get("anthropic-version") != "2023-06-01" {
 					t.Errorf("anthropic-version = %q", r.Header.Get("anthropic-version"))
+				}
+				if tc.keyless && r.Header.Get("x-api-key") != "" {
+					t.Errorf("keyless gateway received local key %q", r.Header.Get("x-api-key"))
 				}
 				w.WriteHeader(tc.status)
 				_, _ = fmt.Fprintln(w, secret)
@@ -83,7 +90,9 @@ func TestModelUpstreamNoOpProbeUsesProviderAuth(t *testing.T) {
 			values := map[string]string{
 				"RUSUI_GUEST":          tc.guest,
 				"RUSUI_MODEL_UPSTREAM": hs.URL,
-				tc.keyName:             secret,
+			}
+			if tc.keyName != "" {
+				values[tc.keyName] = secret
 			}
 			check := checkModelUpstream(func(key string) string { return values[key] })
 			if check.Status != tc.wantStatus || !strings.Contains(check.Detail, tc.provider) {

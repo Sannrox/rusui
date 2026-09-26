@@ -110,13 +110,14 @@ func checkModelUpstream(getenv func(string) string) ops.Check {
 		check.Detail = provider + " upstream URL is invalid"
 		return check
 	}
-	if model.Key != "" {
-		if model.Provider == server.ProviderAnthropic {
+	// Anthropic gateways still require the version header when they auth locally.
+	if model.Provider == server.ProviderAnthropic {
+		req.Header.Set("anthropic-version", "2023-06-01")
+		if model.Key != "" {
 			req.Header.Set("x-api-key", model.Key)
-			req.Header.Set("anthropic-version", "2023-06-01")
-		} else {
-			req.Header.Set("Authorization", "Bearer "+model.Key)
 		}
+	} else if model.Key != "" {
+		req.Header.Set("Authorization", "Bearer "+model.Key)
 	}
 
 	// Never forward provider credentials to a redirect target.
