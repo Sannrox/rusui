@@ -6,6 +6,8 @@ nothing is commented, closed, or merged on GitHub.
 First loopback session: [tutorial.md](tutorial.md).
 Sample session and receipt without GitHub or a model:
 [tutorial.md](tutorial.md#sample-demo-no-github-no-model).
+Review-only GitHub App on a test repository:
+[github-app-pilot.md](github-app-pilot.md).
 Flags, env, HTTP, and policy: [configuration.md](configuration.md).
 Upgrade, drain, diagnostics: [upgrade.md](upgrade.md).
 Nouns: [CONTEXT.md](../CONTEXT.md).
@@ -480,6 +482,10 @@ rules are workflow control, not a security boundary.
 
 Merging stays yours. Commits carry `Co-authored-by: rusui` and
 `Rusui-Session` trailers ([configuration](configuration.md)).
+
+A review-only App on a public test repository, including permissions,
+tunnel verify/cleanup, a receipt check, and signature failures:
+[github-app-pilot.md](github-app-pilot.md).
 
 ## 4. GitHub webhook
 
