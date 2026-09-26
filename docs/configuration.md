@@ -16,7 +16,9 @@ and `internal/server`. Intent: [ARCHITECTURE.md](../ARCHITECTURE.md).
 
 Subcommand `rusui diagnose [-policy PATH] [-addr ADDR] [-url URL]` prints a
 JSON topology report (`ready` / `misconfigured` / `unavailable`) and exits
-0 only when every blocking check is ready. It does not print secret values.
+0 only when every blocking check is ready. It checks the configured model
+provider with an authenticated no-op `GET /v1/models` request; it does not
+generate a response or print secret values.
 
 Policy tools run locally and do not start the server:
 
@@ -57,6 +59,11 @@ Upgrade procedure: [upgrade.md](upgrade.md).
 | `-version` | false | Print version and exit. |
 
 Need `-repo` and `-driver`, or `-repo` and `-acp`.
+
+The runner logs claimed session/turn IDs and, when there is no assignment,
+reports `no queued turn`, a policy/lane restriction, pause, or lease/review
+budget. With `-once`, claim and turn errors exit non-zero; an empty queue is
+reported and exits successfully.
 
 ## Environment variables
 

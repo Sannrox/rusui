@@ -201,6 +201,46 @@ func TestMultiRepoClaimSkipsPausedProject(t *testing.T) {
 	}
 }
 
+func TestClaimWithOutcomeClassifiesNoWorkReasons(t *testing.T) {
+	cases := []struct {
+		name       string
+		status     int
+		blocked    string
+		body       string
+		wantReason string
+		wantError  bool
+	}{
+		{name: "empty queue", status: http.StatusNoContent, wantReason: "no queued turn"},
+		{name: "policy", status: http.StatusConflict, body: "policy\n", wantReason: "policy or lane disabled", wantError: true},
+		{name: "lease cap", status: http.StatusConflict, blocked: "budget", body: "budget\n", wantReason: "lease cap or review budget", wantError: true},
+		{name: "paused", status: http.StatusConflict, blocked: "paused", body: "paused\n", wantReason: "paused", wantError: true},
+		{name: "other conflict", status: http.StatusConflict, body: "environment setup failed", wantReason: "claim failed (HTTP 409)", wantError: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.blocked != "" {
+					w.Header().Set("X-Rusui-Claim-Blocked", tc.blocked)
+				}
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer hs.Close()
+			cli := &runner.Client{Base: hs.URL, Bootstrap: "worker", Repo: "example/repo"}
+			outcome, err := cli.ClaimWithOutcome()
+			if (err != nil) != tc.wantError {
+				t.Fatalf("claim error = %v, want error %v", err, tc.wantError)
+			}
+			if tc.body != "" && (err == nil || !strings.Contains(err.Error(), strings.TrimSpace(tc.body))) {
+				t.Fatalf("claim error lost response detail: %v", err)
+			}
+			if outcome.Assignment != nil || len(outcome.NoWorkReasons) != 1 || outcome.NoWorkReasons[0] != tc.wantReason {
+				t.Fatalf("claim outcome = %+v, want no-work reason %q", outcome, tc.wantReason)
+			}
+		})
+	}
+}
+
 func TestClientRejectsAssignmentOutsideConfiguredRepositories(t *testing.T) {
 	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/jobs/claim" {

@@ -90,7 +90,7 @@ func setupMain(args []string, out io.Writer, getenv func(string) string, look fu
 		}
 		return ""
 	}
-	rep := ops.Diagnose(ops.Options{PolicyPath: p.Policy, Addr: *addr, Env: fileEnv, LookRuntime: look})
+	rep := diagnoseWithModel(ops.Options{PolicyPath: p.Policy, Addr: *addr, Env: fileEnv, LookRuntime: look}, fileEnv)
 	if !*asJSON {
 		_, _ = fmt.Fprintf(out, "\ndiagnose ready=%v\n", rep.Ready)
 		for _, c := range rep.Checks {

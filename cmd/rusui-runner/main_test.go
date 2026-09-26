@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -29,6 +30,11 @@ func TestRunnerReachesAnHTTPSPlaneWithTheCA(t *testing.T) {
 				t.Errorf("decode claim request: %v", err)
 			}
 			claimed <- request.Repo
+			if request.Repo == "bad/r" {
+				w.WriteHeader(http.StatusConflict)
+				_, _ = fmt.Fprintln(w, "policy")
+				return
+			}
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -45,6 +51,9 @@ func TestRunnerReachesAnHTTPSPlaneWithTheCA(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("runner: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "runner: no work: no queued turn") {
+		t.Fatalf("runner did not explain the empty queue:\n%s", out)
 	}
 	select {
 	case repo := <-claimed:
@@ -72,6 +81,13 @@ func TestRunnerReachesAnHTTPSPlaneWithTheCA(t *testing.T) {
 		}
 	}
 
+	cmd = exec.Command(bin, "-url", hs.URL, "-repo", "bad/r", "-acp", "-once", "-token", "wsec", "-ca", ca)
+	cmd.Env = append(os.Environ(), "RUSUI_PLANE_CA=")
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "policy or lane disabled") {
+		t.Fatalf("runner did not report a policy claim error with non-zero exit: %v\n%s", err, out)
+	}
+
 	cmd = exec.Command(bin, "-url", hs.URL, "-repo", "o/r", "-repo", "O/R", "-acp", "-once", "-token", "wsec", "-ca", ca)
 	cmd.Env = append(os.Environ(), "RUSUI_PLANE_CA=")
 	out, err = cmd.CombinedOutput()
@@ -84,5 +100,27 @@ func TestRunnerReachesAnHTTPSPlaneWithTheCA(t *testing.T) {
 	out, err = cmd.CombinedOutput()
 	if err == nil || !strings.Contains(string(out), "RUSUI_PLANE_CA") {
 		t.Fatalf("runner started without a CA: %v\n%s", err, out)
+	}
+}
+
+func TestRunnerOnceExitsNonZeroWhenClaimFails(t *testing.T) {
+	bin := t.TempDir() + "/rusui-runner"
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/jobs/claim" {
+			w.WriteHeader(http.StatusConflict)
+			_, _ = fmt.Fprintln(w, "policy")
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer hs.Close()
+
+	cmd := exec.Command(bin, "-url", hs.URL, "-repo", "o/r", "-acp", "-once", "-token", "wsec")
+	out, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "policy or lane disabled") {
+		t.Fatalf("claim error did not produce a reason and non-zero exit: %v\n%s", err, out)
 	}
 }

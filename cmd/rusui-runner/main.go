@@ -78,16 +78,26 @@ func main() {
 	}
 	cmd := strings.Fields(*driver)
 	for {
+		var outcome runner.ClaimOutcome
 		var err error
 		if *acpHost {
-			err = runner.OneACPTurn(context.Background(), c, runner.GuestHost(c))
+			outcome, err = runner.OneACPTurnWithOutcome(context.Background(), c, runner.GuestHost(c))
 		} else {
-			err = runner.OneTurn(context.Background(), c, cmd)
+			outcome, err = runner.OneTurnWithOutcome(context.Background(), c, cmd)
+		}
+		if outcome.Assignment != nil {
+			a := outcome.Assignment
+			fmt.Fprintf(os.Stderr, "runner: claimed session=%d turn=%d repo=%s\n", a.SessionID, a.TurnID, a.Repo)
+		} else if len(outcome.NoWorkReasons) > 0 {
+			fmt.Fprintf(os.Stderr, "runner: no work: %s\n", strings.Join(outcome.NoWorkReasons, "; "))
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "turn: %v\n", err)
 		}
 		if *once {
+			if err != nil {
+				os.Exit(1)
+			}
 			return
 		}
 		time.Sleep(2 * time.Second)
