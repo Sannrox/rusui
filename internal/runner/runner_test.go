@@ -509,8 +509,11 @@ func TestClaudeGuestEnvHoldsOnlyTheGrant(t *testing.T) {
 	if strings.Contains(joined, "sk-ant-operator") || strings.Contains(joined, "/Users/op/.claude") {
 		t.Fatalf("operator claude credential or login leaked:\n%s", joined)
 	}
-	if strings.Contains(joined, "ANTHROPIC_MODEL=") {
+	if strings.Contains(joined, "ANTHROPIC_MODEL=") || strings.Contains(joined, "ANTHROPIC_DEFAULT_") {
 		t.Fatalf("unnamed guest must not invent a model:\n%s", joined)
+	}
+	if !strings.Contains(joined, "ANTHROPIC_API_KEY=\n") && !strings.HasSuffix(joined, "ANTHROPIC_API_KEY=") {
+		t.Fatalf("claude guest must clear ANTHROPIC_API_KEY:\n%s", joined)
 	}
 }
 
@@ -520,8 +523,31 @@ func TestClaudeGuestEnvCarriesConfiguredModel(t *testing.T) {
 		ModelBaseURL: "http://127.0.0.1:8080/model-proxy", GuestModel: "grok-4.6",
 	}
 	joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
-	if !strings.Contains(joined, "ANTHROPIC_MODEL=grok-4.6") || !strings.Contains(joined, "ANTHROPIC_AUTH_TOKEN=grant") {
-		t.Fatal(joined)
+	for _, key := range []string{
+		"ANTHROPIC_MODEL=grok-4.6",
+		"ANTHROPIC_DEFAULT_OPUS_MODEL=grok-4.6",
+		"ANTHROPIC_DEFAULT_SONNET_MODEL=grok-4.6",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL=grok-4.6",
+		"ANTHROPIC_AUTH_TOKEN=grant",
+	} {
+		if !strings.Contains(joined, key) {
+			t.Fatalf("missing %s in\n%s", key, joined)
+		}
+	}
+	grok := &runner.Assignment{
+		TurnID: 3, TurnToken: "grant", Guest: acp.GuestGrok,
+		ModelBaseURL: "http://127.0.0.1:9/model-proxy", GuestModel: "grok-4.6",
+	}
+	grokEnv := strings.Join(runner.DriverEnv(grok, "/tmp/home", "/bin"), "\n")
+	if strings.Contains(grokEnv, "ANTHROPIC_") {
+		t.Fatalf("grok guest received claude model env:\n%s", grokEnv)
+	}
+	if !strings.Contains(grokEnv, "XAI_API_KEY=grant") || !strings.Contains(grokEnv, "GROK_XAI_API_BASE_URL=http://127.0.0.1:9/model-proxy") {
+		t.Fatalf("grok env:\n%s", grokEnv)
+	}
+	argv, err := acp.SpawnArgsFor(acp.GuestGrok)
+	if err != nil || strings.Join(argv, " ") != acp.GrokStdio {
+		t.Fatalf("grok spawn %v %v", argv, err)
 	}
 	a.GuestModel = "claude opus"
 	joined = strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")

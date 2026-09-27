@@ -29,6 +29,7 @@ Decisions that must outlive a single pull request.
 | [0023](0023-p8-pilot-narrow.md) | P8 ten-task live pilot is narrow | Accepted |
 | [0024](0024-session-surface.md) | The CLI and the console open a session | Accepted |
 | [0025](0025-provider-boundary.md) | One Go provider boundary for Grok, Claude, and Codex | Accepted |
+| [0026](0026-harness-model-upstream.md) | Harness, model, and upstream are independent | Accepted |
 
 ## When to write an ADR
 

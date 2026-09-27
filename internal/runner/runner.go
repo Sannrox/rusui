@@ -383,10 +383,19 @@ func DriverEnv(a *Assignment, home, path string) []string {
 		if a.ModelBaseURL != "" {
 			env = append(env, "ANTHROPIC_BASE_URL="+a.ModelBaseURL)
 		}
-		// The id is the operator's name for this turn. DriverEnv copies it;
-		// it does not choose a model of its own.
+		// An empty key keeps a cached login in the config dir from beating
+		// the per-turn grant. The config dir itself is already fresh.
+		env = append(env, "ANTHROPIC_API_KEY=")
+		// The id is the operator's name for this turn. DriverEnv copies it
+		// into the request and into Claude's internal tiers. It does not
+		// choose a model of its own.
 		if acp.ValidGuestModel(a.GuestModel) {
-			env = append(env, "ANTHROPIC_MODEL="+a.GuestModel)
+			env = append(env,
+				"ANTHROPIC_MODEL="+a.GuestModel,
+				"ANTHROPIC_DEFAULT_OPUS_MODEL="+a.GuestModel,
+				"ANTHROPIC_DEFAULT_SONNET_MODEL="+a.GuestModel,
+				"ANTHROPIC_DEFAULT_HAIKU_MODEL="+a.GuestModel,
+			)
 		}
 	} else {
 		env = append(env, "XAI_API_KEY="+a.TurnToken)
