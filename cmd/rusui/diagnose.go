@@ -90,6 +90,7 @@ func checkModelUpstream(getenv func(string) string) ops.Check {
 		defaultOrigin := map[string]string{
 			server.ProviderXAI:       "https://api.x.ai",
 			server.ProviderAnthropic: "https://api.anthropic.com",
+			server.ProviderOpenAI:    "https://api.openai.com",
 		}[model.Provider]
 		if defaultOrigin == "" {
 			check.Status = ops.StatusMisconfigured
@@ -187,7 +188,7 @@ func checkModelGuest(getenv func(string) string) ops.Check {
 	if model.Guest != acp.GuestClaude {
 		if model.GuestModel != "" {
 			check.Status = ops.StatusMisconfigured
-			check.Detail = "RUSUI_GUEST_MODEL is sent by the Claude guest; leave it unset for Grok"
+			check.Detail = "RUSUI_GUEST_MODEL is sent by the Claude guest; leave it unset for Grok and Codex"
 			return check
 		}
 		check.Status = ops.StatusReady
@@ -273,6 +274,7 @@ func modelProbeOrigin(model server.ModelConfig) (*url.URL, string, bool) {
 	defaultOrigin := map[string]string{
 		server.ProviderXAI:       "https://api.x.ai",
 		server.ProviderAnthropic: "https://api.anthropic.com",
+		server.ProviderOpenAI:    "https://api.openai.com",
 	}[model.Provider]
 	if defaultOrigin == "" {
 		return nil, "model provider has no upstream", false
@@ -299,6 +301,8 @@ func modelProviderName(provider string) string {
 		return "xAI"
 	case server.ProviderAnthropic:
 		return "Anthropic"
+	case server.ProviderOpenAI:
+		return "OpenAI"
 	default:
 		return "model provider"
 	}

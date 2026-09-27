@@ -273,7 +273,7 @@ func TestModelConfigFromEnv(t *testing.T) {
 		t.Fatalf("invalid model: %v", err)
 	}
 	for _, bad := range []map[string]string{
-		{"RUSUI_GUEST": "codex"},
+		{"RUSUI_GUEST": "cursor"},
 		{"RUSUI_MODEL_UPSTREAM": "127.0.0.1:8317"},
 		{"RUSUI_MODEL_UPSTREAM": "file:///etc/passwd"},
 	} {

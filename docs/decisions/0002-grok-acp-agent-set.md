@@ -6,6 +6,8 @@
   how tool calls become receipts). D2's "ACP is the only agent interface"
   stands.
 - Resolves: [#6](https://github.com/Sannrox/rusui/issues/6)
+- Amended by: [ADR 0025](0025-provider-boundary.md). Grok, Claude, and
+  Codex share one Go provider boundary. Grok stays ACP protocolVersion 1.
 - Unblocks: [#10](https://github.com/Sannrox/rusui/issues/10)
 - Discussion: none. GitHub Discussions are disabled; the pull request that
   adds this file is the review venue. Merging with status Accepted is the

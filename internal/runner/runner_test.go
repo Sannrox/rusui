@@ -531,7 +531,7 @@ func TestClaudeGuestEnvCarriesConfiguredModel(t *testing.T) {
 }
 
 func TestUnknownGuestFailsClosed(t *testing.T) {
-	if _, err := acp.SpawnArgsFor("codex"); err == nil {
+	if _, err := acp.SpawnArgsFor("cursor"); err == nil {
 		t.Fatal("unknown guest accepted")
 	}
 	if argv, err := acp.SpawnArgsFor(""); err != nil || strings.Join(argv, " ") != acp.GrokStdio {

@@ -13,13 +13,9 @@ const (
 	GuestClaude = "claude"
 )
 
-// ClaudeStdio is the Claude Code ACP adapter,
-// @agentclientprotocol/claude-agent-acp pinned at ClaudeACPVersion in the
-// guest image.
-const (
-	ClaudeStdio      = "claude-agent-acp"
-	ClaudeACPVersion = "0.81.1"
-)
+// ClaudeStdio is the pinned Claude Code CLI session (ADR 0025). The
+// npm package claude-agent-acp is not the guest.
+const ClaudeStdio = "claude --input-format stream-json --output-format stream-json --verbose --permission-mode default"
 
 // GrokCommand builds the ADR 0002 spawn. PATH must contain `agent`.
 func GrokCommand() (*exec.Cmd, error) {
@@ -46,13 +42,16 @@ func SpawnArgs() []string {
 }
 
 // SpawnArgsFor is the stdio argv for a guest. Empty means Grok; an unknown
-// guest fails closed.
+// guest fails closed. Claude and Codex use their own CLIs (ADR 0025).
 func SpawnArgsFor(guest string) ([]string, error) {
 	switch guest {
 	case "", GuestGrok:
 		return SpawnArgs(), nil
 	case GuestClaude:
-		return []string{ClaudeStdio}, nil
+		return strings.Fields(ClaudeStdio), nil
+	case "codex":
+		return []string{"codex", "app-server", "--listen", "stdio://"}, nil
+	default:
+		return nil, fmt.Errorf("acp: unknown guest %q", guest)
 	}
-	return nil, fmt.Errorf("acp: unknown guest %q", guest)
 }

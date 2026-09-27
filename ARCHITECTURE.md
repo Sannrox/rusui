@@ -607,11 +607,15 @@ client shows pull request N in the turn's repository at that candidate
 SHA, `unconfirmed` for any other claimed pull request, `blocked` for a
 reported reason. The outcome is a record, not a proof or a merge gate.
 
-`internal/acp` is the host-side Agent Client Protocol client. The plane
-names the guest per turn (`RUSUI_GUEST`,
-[ADR 0017](docs/decisions/0017-claude-guest-and-model-upstream.md)): Grok
-(default) spawns `agent --permission-mode default agent stdio`; Claude
-Code spawns the `claude-agent-acp` adapter (pinned 0.81.1).
+`internal/provider` is the guest boundary
+([ADR 0025](docs/decisions/0025-provider-boundary.md)). The plane names
+the guest per turn (`RUSUI_GUEST`): Grok (default) spawns
+`agent --permission-mode default agent stdio` at ACP protocolVersion 1;
+Claude Code spawns the `claude` CLI at stream-json with
+`@anthropic-ai/claude-code` 2.1.283; Codex spawns
+`codex app-server --listen stdio://` at protocol `app-server-2026-04-15`.
+`claude-agent-acp` is not spawned. `internal/acp` remains the Grok ACP
+client and the editor shim.
 Every inbound `fs/*`, `terminal/*`, and `session/request_permission`
 is recorded as an `actions` row. Permission requests with no matching
 rule are denied and stored as approvals. The process driver is still
