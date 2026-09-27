@@ -53,7 +53,10 @@ func (e *Engine) cancelTurnTx(tx *sql.Tx, turnID int64) error {
 	// path, including requeue when a follow-up or steer is still owed.
 	if j.State == "queued" {
 		j.State = "failed"
-		return store.UpdateJobTx(tx, j)
+		if err := store.UpdateJobTx(tx, j); err != nil {
+			return err
+		}
+		return e.finishMeasurementTx(tx, j.ID, j.State, Artifact{}, e.now())
 	}
 	if j.State != "leased" {
 		return nil
@@ -81,11 +84,16 @@ func (e *Engine) cancelTurnTx(tx *sql.Tx, turnID int64) error {
 	if err := store.UpdateJobTx(tx, j); err != nil {
 		return err
 	}
+	now := e.now()
+	if j.State == "failed" {
+		if err := e.finishMeasurementTx(tx, j.ID, j.State, Artifact{}, now); err != nil {
+			return err
+		}
+	}
 	turn, err := store.GetTurnTx(tx, j.ID)
 	if err != nil {
 		return err
 	}
-	now := e.now()
 	return store.TouchSessionEnvironmentTx(tx, turn.SessionID, now, now.Add(e.envTTL()))
 }
 

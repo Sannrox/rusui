@@ -588,6 +588,15 @@ container CLI if any are left.
 Uninstall: stop the process, delete the database and snapshot directory,
 unset the env vars listed in [configuration.md](configuration.md).
 
+## Turn measurements
+
+`GET /projects/{slug}/measurements` with the operator token returns Turn
+counts, terminal states, the median duration, permission denies, and how
+many Turns omitted token counts. The row names the session id. It does
+not include the prompt, tool arguments, diffs, terminal bytes, file
+contents, or credentials. Export stays off unless `RUSUI_OTEL_ENDPOINT`
+points at a collector you run.
+
 ## Troubleshooting
 
 | Symptom | Check |

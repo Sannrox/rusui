@@ -185,6 +185,8 @@ func main() {
 		PolicyPath:        *pol,
 		Addr:              *addr,
 		Guest:             model.Guest,
+		GuestVersion:      os.Getenv("RUSUI_GUEST_VERSION"),
+		OTelEndpoint:      os.Getenv("RUSUI_OTEL_ENDPOINT"),
 		GuestModel:        model.GuestModel,
 		ModelProvider:     model.Provider,
 		ModelKey:          model.Key,

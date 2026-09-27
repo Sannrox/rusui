@@ -174,7 +174,7 @@ func (e *Engine) IngestTurnAction(turnID int64, typ, reason string, body any) (s
 	if err != nil {
 		return "", err
 	}
-	return id, store.InsertAction(e.Store, store.Action{
+	if err := store.InsertAction(e.Store, store.Action{
 		ID:            id,
 		SessionID:     &sid,
 		TurnID:        &tid,
@@ -185,7 +185,24 @@ func (e *Engine) IngestTurnAction(turnID int64, typ, reason string, body any) (s
 		EvidenceClass: "plane_observed",
 		LimitSentence: "ACP client recorded the request; no request bypasses stdio dispatch.",
 		Body:          string(payload),
-	})
+	}); err != nil {
+		return "", err
+	}
+	_ = store.NoteFirstEvent(e.Store, turnID, e.now())
+	if typ == "resume" && (reason == "succeeded" || reason == "refused") {
+		_ = store.NoteResume(e.Store, turnID, reason)
+	}
+	switch reason {
+	case "denied":
+		if typ == "acp.approval" {
+			_ = store.NotePermission(e.Store, turnID, "deny")
+		}
+	case "allowed":
+		if typ == "acp.approval" {
+			_ = store.NotePermission(e.Store, turnID, "allow")
+		}
+	}
+	return id, nil
 }
 
 func newActionID() (string, error) {
@@ -205,10 +222,24 @@ func (e *Engine) IngestGuestEvent(sessionID int64, deliveryID, kind string) erro
 	if err != nil {
 		return err
 	}
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	if err := e.Store.Tx(func(tx *sql.Tx) error {
 		_, err := store.InsertEventTx(tx, deliveryID, "guest", sess.Repo, sess.Item, sess.ItemKind, e.now())
 		return err
-	})
+	}); err != nil {
+		return err
+	}
+	turns, err := store.ListTurnsForSession(e.Store, sessionID)
+	if err != nil || len(turns) == 0 {
+		return err
+	}
+	turnID := turns[len(turns)-1].ID
+	for _, turn := range turns {
+		if turn.State == "leased" {
+			turnID = turn.ID
+			break
+		}
+	}
+	return store.NoteFirstEvent(e.Store, turnID, e.now())
 }
 
 func (e *Engine) CatchUpItem(repo string, item int, kind string) error {
@@ -534,6 +565,11 @@ func (e *Engine) expireLeaseTx(tx *sql.Tx, j *store.Job) error {
 	if err := store.UpdateJobTx(tx, j); err != nil {
 		return err
 	}
+	if j.State == "failed" {
+		if err := e.finishMeasurementTx(tx, j.ID, j.State, Artifact{}, now); err != nil {
+			return err
+		}
+	}
 	turn, err := store.GetTurnTx(tx, j.ID)
 	if err != nil {
 		return err
@@ -703,6 +739,9 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		if j.Lane == policy.KindRun {
 			dead = now.Add(RunExecDeadline)
 		}
+		if err := store.BeginMeasurementTx(tx, id, now); err != nil {
+			return err
+		}
 		j.LeaseGeneration++
 		j.ClaimedRevision = j.PendingRevision
 		j.State = "leased"
@@ -858,8 +897,8 @@ type Artifact struct {
 	Confidence      string           `json:"confidence"`
 	ProposedActions []ProposedAction `json:"proposed_actions"`
 	Publishable     map[string]any   `json:"publishable"`
-	InputTokens     int              `json:"input_tokens"`
-	OutputTokens    int              `json:"output_tokens"`
+	InputTokens     *int             `json:"input_tokens,omitempty"`
+	OutputTokens    *int             `json:"output_tokens,omitempty"`
 	GuestSessionID  string           `json:"guest_session_id,omitempty"`
 	Result          *TaskResult      `json:"result,omitempty"`
 }
@@ -970,6 +1009,9 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 			if err := store.UpdateJobTx(tx, j); err != nil {
 				return err
 			}
+			if err := e.finishMeasurementTx(tx, j.ID, j.State, art, now); err != nil {
+				return err
+			}
 			return e.maybeEnqueueApplyTx(tx, j, snap, revID, art)
 		}
 		j.State = "queued"
@@ -1058,7 +1100,13 @@ func (e *Engine) finalizeFailureTx(tx *sql.Tx, j *store.Job, gen, claimed int) e
 	} else {
 		j.State = "queued"
 	}
-	return store.UpdateJobTx(tx, j)
+	if err := store.UpdateJobTx(tx, j); err != nil {
+		return err
+	}
+	if j.State == "failed" {
+		return e.finishMeasurementTx(tx, j.ID, j.State, Artifact{}, now)
+	}
+	return nil
 }
 
 func (e *Engine) maybeEnqueueApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Item, revID int64, art Artifact) error {

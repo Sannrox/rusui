@@ -140,5 +140,8 @@ func (s *Server) decideApproval(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
+	if act, err := store.GetAction(s.Eng.Store, r.PathValue("id")); err == nil && act.TurnID != nil {
+		_ = store.NotePermission(s.Eng.Store, *act.TurnID, req.Decision)
+	}
 	w.WriteHeader(http.StatusNoContent)
 }

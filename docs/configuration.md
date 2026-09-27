@@ -100,6 +100,8 @@ reported and exits successfully.
 | `XAI_API_KEY` or `RUSUI_XAI_API_KEY` | model proxy (Grok) | Plane secret; never copied into the guest. |
 | `RUSUI_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY` | model proxy (Claude Code) | Plane secret, sent upstream as `x-api-key`; never copied into the guest. |
 | `RUSUI_GUEST` | no | `grok` (default), `claude`, or `codex` ([ADR 0025](decisions/0025-provider-boundary.md)). |
+| `RUSUI_GUEST_VERSION` | no | Pinned guest version recorded on a Turn measurement when set. Unset stays unknown. |
+| `RUSUI_OTEL_ENDPOINT` | no | Optional collector URL. Unset: measurements stay on the plane and nothing is exported. A collector that is down does not fail the Turn. |
 | `RUSUI_GUEST_MODEL` | Claude guest | Model id the Claude guest sends as `ANTHROPIC_MODEL`. Unset, `model_guest` is misconfigured. A model list does not prove this id can prompt. The Grok harness does not take this id. |
 | `RUSUI_MODEL_UPSTREAM` | no | http(s) URL replacing the provider API, e.g. a gateway or a CLI proxy on the plane host. With it set, the provider key may be empty. |
 | `RUSUI_AGENT_GITHUB_TOKEN` | `implement` sessions | Your GitHub credential for agent publication ([ADR 0015](decisions/0015-agent-publication.md)). Given only to implement sessions — `run` sessions started for an open pinned task (`rusui run -effort …`) on repositories with `implement: true` — as `GH_TOKEN` and git's credential for `https://github.com`. Unset: no session can push. |
