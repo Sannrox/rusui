@@ -242,7 +242,17 @@ func (e *Engine) IngestGuestEvent(sessionID int64, deliveryID, kind string) erro
 	return store.NoteFirstEvent(e.Store, turnID, e.now())
 }
 
+func githubIntakeItem(kind string, item int) bool {
+	if item <= 0 {
+		return false
+	}
+	return kind == "issue" || kind == "pull"
+}
+
 func (e *Engine) CatchUpItem(repo string, item int, kind string) error {
+	if !githubIntakeItem(kind, item) {
+		return nil
+	}
 	return e.Store.Tx(func(tx *sql.Tx) error {
 		return store.EnsureRefreshQueuedTx(tx, repo, item, kind, false)
 	})
