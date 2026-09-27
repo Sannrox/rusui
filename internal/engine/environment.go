@@ -411,8 +411,13 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	hash := SourceHash(e.imageIdentity(), pin, nil)
 	if envRow.Handle != "" && envRow.SourceHash == hash {
 		if envRow.State == store.EnvSleeping {
+			started := e.now()
 			_, err := e.WakeEnvironment(envRow.ID)
-			return err
+			if err != nil {
+				return err
+			}
+			wake := e.now().Sub(started)
+			return store.NoteWake(e.Store, turnID, wake)
 		}
 		if envRow.State != store.EnvReady {
 			return fmt.Errorf("env: session environment %d is %s", envRow.ID, envRow.State)

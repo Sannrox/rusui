@@ -1,0 +1,29 @@
+package engine
+
+import (
+	"database/sql"
+	"time"
+
+	"github.com/sannrox/rusui/internal/store"
+)
+
+func measurementPublication(r *TaskResult) string {
+	if r == nil {
+		return ""
+	}
+	switch r.Outcome {
+	case OutcomePublished:
+		return "succeeded"
+	case OutcomeUnconfirmed:
+		return "uncertain"
+	case OutcomeBlocked:
+		if r.PullRequest > 0 {
+			return "failed"
+		}
+	}
+	return ""
+}
+
+func (e *Engine) finishMeasurementTx(tx *sql.Tx, turnID int64, terminal string, art Artifact, ended time.Time) error {
+	return store.FinishMeasurementTx(tx, turnID, terminal, ended, measurementPublication(art.Result), art.InputTokens, art.OutputTokens)
+}

@@ -35,7 +35,9 @@ type Server struct {
 	SlackUsers          map[string]bool
 	PolicyPath          string
 	Guest               string // acp.GuestGrok (default) or acp.GuestClaude
+	GuestVersion        string // set only when the operator names a pinned guest version
 	GuestModel          string // RUSUI_GUEST_MODEL; copied into the Claude guest
+	OTelEndpoint        string // unset: no export; a dead collector must not fail a turn
 	ModelProvider       string // ProviderXAI (default) or ProviderAnthropic
 	ModelKey            string
 	ModelOrigin         *url.URL // operator model upstream; keyless forwarding allowed
@@ -106,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /sessions/{id}/turns", s.followUpTurn)
 	mux.HandleFunc("POST /sessions/{id}/cancel", s.cancelSession)
 	mux.HandleFunc("POST /sessions/{id}/restart", s.restartLocalSession)
+	mux.HandleFunc("GET /projects/{slug}/measurements", s.projectMeasurements)
 	mux.HandleFunc("POST /projects/{slug}/sessions", s.createSession)
 	mux.HandleFunc("POST /projects/{slug}/schedules", s.createSchedule)
 	mux.HandleFunc("POST /jobs/{id}/heartbeat", s.heartbeat)
@@ -407,6 +410,7 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := last
+	s.noteClaimedProvider(c.Job.ID)
 	tok, exp, err := issueTurnToken(s.Eng.Store, c.Job.ID, c.Job.LeaseGeneration, s.Eng.Clock.Now())
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -564,6 +568,7 @@ func (s *Server) complete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 409)
 		return
 	}
+	s.exportMeasurement(id)
 	json.NewEncoder(w).Encode(out)
 }
 
@@ -583,6 +588,7 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 409)
 		return
 	}
+	s.exportMeasurement(id)
 	json.NewEncoder(w).Encode(out)
 }
 

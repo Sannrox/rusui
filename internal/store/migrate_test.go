@@ -135,7 +135,7 @@ CREATE INDEX turn_steers_pending ON turn_steers(turn_id, lease_generation, ackno
 CREATE INDEX turn_steers_unreceived ON turn_steers(turn_id, lease_generation, acknowledged, promoted, received, id);
 INSERT INTO followup_queue (session_id, seq, prompt) VALUES (77, 1, 'already queued');
 INSERT INTO turn_steers (session_id, turn_id, lease_generation, prompt) VALUES (77, 9, 2, 'pending steer');
-DELETE FROM schema_migrations WHERE version=23;`); err != nil {
+DELETE FROM schema_migrations WHERE version>=23;`); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Close(); err != nil {
