@@ -85,7 +85,7 @@ func TestBlackBoxReadShowsGuestTranscriptOnce(t *testing.T) {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 	}()
-	result, err := Run(t.Context(), KindGrok, Instance{Kind: KindGrok, ID: "box", Dir: t.TempDir()}, stdio{Reader: stdout, WriteCloser: stdin}, Turn{Prompt: "start", Workspace: t.TempDir()}, func([]Option) (string, bool) {
+	result, err := Run(t.Context(), KindGrok, Instance{Kind: KindGrok, ID: "box", Dir: t.TempDir()}, stdio{Reader: stdout, WriteCloser: stdin}, Turn{Prompt: "start", Workspace: t.TempDir()}, func([]Option, json.RawMessage) (string, bool) {
 		return "allow-once", true
 	})
 	if err != nil {

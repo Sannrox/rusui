@@ -154,7 +154,7 @@ func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide
 			}
 			var options []Option
 			_ = json.Unmarshal(raw, &options)
-			optionID, allow := rejectMissing(options, decide)
+			optionID, allow := rejectMissing(options, decide, line)
 			replyID := fmt.Sprint(msg["id"])
 			if !allow {
 				optionID = "deny"

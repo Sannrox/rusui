@@ -119,9 +119,9 @@ type Option struct {
 	ID string `json:"id"`
 }
 
-// Decide answers a permission or question. allow is ignored when the
-// provider omitted a reject id: the adapter still refuses.
-type Decide func(options []Option) (optionID string, allow bool)
+// Decide answers a permission or question. raw is the provider message.
+// allow is ignored when the provider omitted a reject id: the adapter still refuses.
+type Decide func(options []Option, raw json.RawMessage) (optionID string, allow bool)
 
 // Instance is one account and one configuration of one provider kind.
 type Instance struct {
@@ -236,7 +236,7 @@ func Run(ctx context.Context, kind string, inst Instance, rw io.ReadWriteCloser,
 	}
 }
 
-func rejectMissing(options []Option, decide Decide) (string, bool) {
+func rejectMissing(options []Option, decide Decide, raw json.RawMessage) (string, bool) {
 	hasReject := false
 	for _, opt := range options {
 		id := strings.ToLower(opt.ID)
@@ -247,7 +247,7 @@ func rejectMissing(options []Option, decide Decide) (string, bool) {
 	}
 	optionID, allow := "", false
 	if decide != nil {
-		optionID, allow = decide(options)
+		optionID, allow = decide(options, raw)
 	}
 	if !hasReject {
 		return "", false
