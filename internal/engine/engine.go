@@ -29,15 +29,20 @@ const (
 	HeartbeatEvery    = time.Minute
 	Liveness          = 3 * time.Minute
 	ExecDeadline      = 12 * time.Minute
-	GrantTTL          = 10 * time.Minute
-	OwnerTTL          = 2 * time.Minute
-	FetchTimeout      = 30 * time.Second
-	StaleAge          = 60 * 24 * time.Hour
-	RefreshTick       = time.Second
-	ReconcileEvery    = 5 * time.Minute
-	CatchUpEvery      = 15 * time.Minute
-	ApplyRetryEvery   = time.Minute
-	EventMaxAge       = 24 * time.Hour
+	// RunExecDeadline is the hard cap for a pinned implement turn: long
+	// enough for one package change, its tests, and opening the pull
+	// request. Heartbeats do not extend it. Review and scheduled turns
+	// stay on ExecDeadline.
+	RunExecDeadline = 45 * time.Minute
+	GrantTTL        = 10 * time.Minute
+	OwnerTTL        = 2 * time.Minute
+	FetchTimeout    = 30 * time.Second
+	StaleAge        = 60 * 24 * time.Hour
+	RefreshTick     = time.Second
+	ReconcileEvery  = 5 * time.Minute
+	CatchUpEvery    = 15 * time.Minute
+	ApplyRetryEvery = time.Minute
+	EventMaxAge     = 24 * time.Hour
 )
 
 type Engine struct {
@@ -695,6 +700,9 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		now := e.now()
 		exp := now.Add(Liveness)
 		dead := now.Add(e.execDeadline())
+		if j.Lane == policy.KindRun {
+			dead = now.Add(RunExecDeadline)
+		}
 		j.LeaseGeneration++
 		j.ClaimedRevision = j.PendingRevision
 		j.State = "leased"

@@ -45,7 +45,7 @@ from isolated tests, not a live Grok conversation:
 | Pause | Stops new claims and apply. Leased turns may heartbeat, complete, or fail. Does not kill the guest | [ARCHITECTURE.md](../../ARCHITECTURE.md) Pause |
 | Cancel | No session-cancel operation. `session/cancel` is a protocol constant only | `internal/acp/protocol.go` |
 | Budget | `max_reviews_per_repo_per_utc_day` is enforced at claim. Project `budgets:` is parsed and never consulted. Token/dollar meters do not exist | `Engine.Claim`; `policy.Project.Budgets` assigned only |
-| Fencing | Turn lease generation, 3-minute liveness, 12-minute execution deadline, 10-minute grant TTL renewed on heartbeat. Steal of a live generation is denied | `Liveness`, `ExecDeadline`, `GrantTTL`; `TestTurnGrantExpiresWithoutHeartbeat` |
+| Fencing | Turn lease generation, 3-minute liveness, 12-minute review and scheduled execution deadline, 45-minute run execution deadline, 10-minute grant TTL renewed on heartbeat. Steal of a live generation is denied | `Liveness`, `ExecDeadline`, `RunExecDeadline`, `GrantTTL`; `TestTurnGrantExpiresWithoutHeartbeat` |
 | Environment | Container sleep/wake; idle 72h expire destroys the container; session row remains; dirt is gone; rematerialize from snapshot | `TestEnvironmentCreateSleepWakeExpire`; ADR 0007 |
 | Live Grok | Binary `grok 0.2.112` is present on this machine. `RUSUI_ACP_LIVE` was unset, so `TestLiveGrokConformance` did not run. This investigation does **not** claim that Grok preserves conversations or waits on a deferred permission | skipped live test |
 
@@ -104,8 +104,8 @@ Choose **waiting**, not checkpoint/retry, for an in-flight
 
 1. Keep the JSON-RPC request open.
 2. Heartbeat the turn so the lease and grant stay alive.
-3. Bound the wait by the remaining execution deadline (default 12
-   minutes). On timeout, answer `reject-once`, park `acp.approval`,
+3. Bound the wait by the remaining execution deadline. On timeout,
+   answer `reject-once`, park `acp.approval`,
    and let the guest continue or stop as it will.
 4. Immediately before `allow-once`, re-read **current** policy and
    overlay in the same way apply rechecks policy. If pause is set, the
@@ -153,9 +153,12 @@ Supported meters, per project per UTC day except (1):
 1. **`max_concurrent_leases`** (default 1). Reserve at claim, hold
    while `state=leased`, release on complete, fail, cancel, or lease
    expiry. This is the first runaway brake.
-2. **Turn wall-clock** (`ExecDeadline`, 12 minutes). Heartbeat after
-   the deadline is refused; the lease expires; the turn is requeued or
-   failed per existing retry limits.
+2. **Turn wall-clock**. Review and scheduled turns use `ExecDeadline`
+   (12 minutes). A run turn uses `RunExecDeadline` (45 minutes), long
+   enough for one package change, its tests, and opening a pull request.
+   Heartbeat after the deadline is refused; the lease expires; the turn
+   is requeued or failed per existing retry limits. Heartbeats do not
+   extend either cap.
 3. Existing **`max_reviews_per_repo_per_utc_day`** for review admits.
 
 Maximum overshoot: one already-leased turn may continue until liveness

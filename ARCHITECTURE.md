@@ -458,7 +458,7 @@ lease on session A cannot block claiming session B.
 | `claimed_revision` | snapshot the live runner is executing |
 | `lease_generation` | monotonic; increments on every claim, expire, or steal-deny |
 | `lease_expires_at` | liveness timeout; heartbeat may extend only while leased and unexpired |
-| `execution_deadline_at` | hard cap from claim; heartbeats do not extend it |
+| `execution_deadline_at` | hard cap from claim; heartbeats do not extend it. Review and scheduled turns use 12 minutes. A run turn uses 45 minutes |
 | `retry_count` | failed or expired attempts of the **current** `pending_revision` |
 | `state` | `queued` / `leased` / `completed` / `failed` |
 

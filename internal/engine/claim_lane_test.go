@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/policy"
@@ -41,6 +42,33 @@ func laneHarness(t *testing.T, pol string) *harn {
 	}
 	h.e.ReloadPolicy(p)
 	return h
+}
+
+func TestRunClaimOutlivesTheReviewDeadline(t *testing.T) {
+	h := setup(t)
+	h.putRefresh(issue(1))
+	review := h.claim()
+	if review.Job.Lane != "review" || review.Job.ExecutionDeadlineAt == nil {
+		t.Fatalf("review claim %+v", review)
+	}
+	reviewFor := review.Job.ExecutionDeadlineAt.Sub(h.clk.T)
+	if reviewFor < 11*time.Minute || reviewFor > 13*time.Minute {
+		t.Fatalf("review deadline %s", reviewFor)
+	}
+	if _, err := h.e.Fail(review.Job.ID, review.Job.LeaseGeneration, review.Job.ClaimedRevision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.StartRun("test", "implement the package", ""); err != nil {
+		t.Fatal(err)
+	}
+	run := h.claim()
+	if run.Job.Lane != "run" || run.Job.ExecutionDeadlineAt == nil {
+		t.Fatalf("run claim %+v", run)
+	}
+	runFor := run.Job.ExecutionDeadlineAt.Sub(h.clk.T)
+	if runFor <= 12*time.Minute || runFor < 44*time.Minute || runFor > 46*time.Minute {
+		t.Fatalf("run deadline %s", runFor)
+	}
 }
 
 func TestClaimPrefersLaterRunOverQueuedReviews(t *testing.T) {
