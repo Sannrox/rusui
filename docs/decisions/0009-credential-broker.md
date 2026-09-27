@@ -3,6 +3,8 @@
 - Status: Accepted; [ADR 0015](0015-agent-publication.md) records the
   implemented `implement` publication path; [ADR 0020](0020-turn-scoped-github-publication.md)
   accepts its future target. The model proxy and read-only grants stand.
+  [ADR 0027](0027-guest-reachability-ask.md) does not move that grant
+  into the guest image.
 - Date: 2026-09-15
 - Amends: [ADR 0001](0001-environment-plane.md) D5 (how the plane
   redeems secrets). D3’s per-turn credential (32 bytes, ten-minute

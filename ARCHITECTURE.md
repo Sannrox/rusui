@@ -639,6 +639,10 @@ pointed at the plane model proxy (`GROK_XAI_API_BASE_URL` or
 Claude Code runs with a fresh `CLAUDE_CONFIG_DIR`, never the operator's
 login. Guest egress
 `trusted` is plane proxies only. GitHub REST stays on the plane.
+The guest image does not declare a reachability ask
+([ADR 0027](docs/decisions/0027-guest-reachability-ask.md)). A missing
+image descriptor keeps this implicit ask. An ask wider than the grant
+is a refusal, not a prompt.
 Missing App key or xAI key fails closed. A plane CA lives in the guest
 image. Snapshot prepare uses a read-only grant through the same git
 proxy.

@@ -1,6 +1,8 @@
 # Reference rusui guest (ADR 0018 D4, ADR 0025): git, gh, Node.js, and the
-# pinned Claude Code CLI. claude-agent-acp is not installed. The plane CA
-# is mounted at run time at /usr/local/share/ca-certificates/rusui-plane.crt.
+# pinned Claude Code CLI. claude-agent-acp is not installed. The image does
+# not declare a reachability ask (ADR 0027); policy and the trusted network
+# are the grant. The plane CA is mounted at run time at
+# /usr/local/share/ca-certificates/rusui-plane.crt.
 FROM node:22-bookworm-slim@sha256:48e4b67d85f87bd551df43704e24d252f56cc5f8e9718841aace50f19948f0f9
 
 ARG GH_VERSION=2.101.0

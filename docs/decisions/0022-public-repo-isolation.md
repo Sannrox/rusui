@@ -17,6 +17,8 @@
   runtime; not required by this threat model),
   [#126](https://github.com/Sannrox/rusui/issues/126) (does not replace
   the container backend by default).
+  [ADR 0027](0027-guest-reachability-ask.md) does not add an image
+  reachability ask.
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
 
