@@ -2,7 +2,8 @@
 
 - Status: Accepted; [ADR 0022](0022-public-repo-isolation.md) names the
   public-repository default and diagnose fail-closed when the container
-  topology is missing.
+  topology is missing. [ADR 0027](0027-guest-reachability-ask.md) keeps
+  the reachability grant in policy until a final image ask exists.
 - Date: 2026-09-15
 - Amends: [ADR 0001](0001-environment-plane.md) (OS sandbox assignment
   that was a working assumption before Phase 1). [ADR 0002](0002-grok-acp-agent-set.md)

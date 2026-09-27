@@ -404,6 +404,10 @@ cross-host combinations.
 
 Container guests may reach only `rusui.plane` (git and model HTTPS proxies).
 Direct addresses, IPv6, host loopback, and other proxy names are denied.
+The guest image does not declare that ask. Policy and the trusted network
+are the grant
+([ADR 0027](decisions/0027-guest-reachability-ask.md)). An image that
+asked for more would be refused, not prompted.
 The guest image must trust the plane CA at
 `/usr/local/share/ca-certificates/rusui-plane.crt`. Provision that file as
 part of the guest image identity (`source_hash`) or mount it with
