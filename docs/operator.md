@@ -40,11 +40,17 @@ Exit status 0 means the topology is ready; do not start unattended work
 otherwise. The `model_upstream` check sends a bounded `GET /v1/models` request
 using the configured provider credential or upstream authentication and does
 not generate a model response. That list is not proof the guest can prompt.
-For `RUSUI_GUEST=claude`, set `RUSUI_GUEST_MODEL` to the id the guest will
-send. The plane copies it to `ANTHROPIC_MODEL`. The `model_guest` check then
-sends one bounded `POST /v1/messages` (`max_tokens` 1) for that id. HTTP 429
-is `unavailable`: the catalog can be ready while the model is in quota
-cooldown. `GET /healthz` only proves the process is listening.
+The harness, the model, and the upstream are three settings.
+`RUSUI_GUEST` selects the harness process. `RUSUI_MODEL_UPSTREAM` selects
+where the plane model proxy forwards the body. `RUSUI_GUEST_MODEL` is the
+id that process puts in the body. For Claude, the plane also copies that
+id into `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`,
+and `ANTHROPIC_DEFAULT_HAIKU_MODEL`, so compaction and subagents do not
+call a different model on the gateway. The `model_guest` check sends one
+bounded `POST /v1/messages` (`max_tokens` 1) for that id. HTTP 429 is
+`unavailable`: the catalog can be ready while the model is in quota
+cooldown. `GET /v1/models` is not proof the guest can prompt. `GET /healthz`
+only proves the process is listening.
 
 Process-driver review (`-driver`) is test/dev. It is not this topology.
 Public-repository unattended sessions (review, run, scheduled, implement

@@ -141,12 +141,19 @@ directory copied from another home is refused. The pinned CLIs are Grok
 `agent` at ACP protocolVersion 1, Claude Code 2.1.283 over `stream-json`,
 and `codex app-server` at `app-server-2026-04-15`.
 
-`RUSUI_GUEST` names the provider. `RUSUI_GUEST_MODEL`
-names the model id. `RUSUI_MODEL_UPSTREAM` names where the plane forwards
-the body. `rusui diagnose` can report `model_upstream: ready` from
-`GET /v1/models` while `model_guest` is `unavailable` because that id
-returned HTTP 429. Do not start unattended Claude work until `model_guest`
-is ready.
+`RUSUI_GUEST` names the harness (the guest process and the proxy
+protocol). `RUSUI_GUEST_MODEL` names the model id. `RUSUI_MODEL_UPSTREAM`
+names where the plane forwards the body. Those three are independent:
+naming a model does not change the harness, and changing the harness
+does not invent a model id. For Claude, the plane copies the id into
+`ANTHROPIC_MODEL` and into `ANTHROPIC_DEFAULT_OPUS_MODEL`,
+`ANTHROPIC_DEFAULT_SONNET_MODEL`, and `ANTHROPIC_DEFAULT_HAIKU_MODEL`.
+Without the tier variables, Claude's own compaction and subagent calls
+pick a default model on the gateway. `rusui diagnose` can report
+`model_upstream: ready` from `GET /v1/models` while `model_guest` is
+`unavailable` because that id returned HTTP 429. A model list is not
+proof the guest can prompt. Do not start unattended Claude work until
+`model_guest` is ready.
 
 Run a CLI proxy on loopback with its own client key; rusui does not ship
 or manage it. Whether a subscription may be used this way for automated
