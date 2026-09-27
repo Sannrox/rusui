@@ -182,6 +182,7 @@ func main() {
 		PolicyPath:        *pol,
 		Addr:              *addr,
 		Guest:             model.Guest,
+		GuestModel:        model.GuestModel,
 		ModelProvider:     model.Provider,
 		ModelKey:          model.Key,
 		ModelOrigin:       model.Origin,

@@ -509,6 +509,25 @@ func TestClaudeGuestEnvHoldsOnlyTheGrant(t *testing.T) {
 	if strings.Contains(joined, "sk-ant-operator") || strings.Contains(joined, "/Users/op/.claude") {
 		t.Fatalf("operator claude credential or login leaked:\n%s", joined)
 	}
+	if strings.Contains(joined, "ANTHROPIC_MODEL=") {
+		t.Fatalf("unnamed guest must not invent a model:\n%s", joined)
+	}
+}
+
+func TestClaudeGuestEnvCarriesConfiguredModel(t *testing.T) {
+	a := &runner.Assignment{
+		TurnID: 9, TurnToken: "grant", Guest: acp.GuestClaude,
+		ModelBaseURL: "http://127.0.0.1:8080/model-proxy", GuestModel: "grok-4.6",
+	}
+	joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
+	if !strings.Contains(joined, "ANTHROPIC_MODEL=grok-4.6") || !strings.Contains(joined, "ANTHROPIC_AUTH_TOKEN=grant") {
+		t.Fatal(joined)
+	}
+	a.GuestModel = "claude opus"
+	joined = strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
+	if strings.Contains(joined, "ANTHROPIC_MODEL=") {
+		t.Fatalf("invalid model id copied into the guest:\n%s", joined)
+	}
 }
 
 func TestUnknownGuestFailsClosed(t *testing.T) {

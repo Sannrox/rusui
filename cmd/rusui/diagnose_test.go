@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -130,5 +132,109 @@ func TestModelUpstreamProbeDoesNotFollowRedirect(t *testing.T) {
 	case got := <-forwarded:
 		t.Fatalf("redirect target received provider credential: %v", got)
 	default:
+	}
+}
+
+func TestModelGuestQuotaIsUnavailableWhenCatalogIsReady(t *testing.T) {
+	secret := "provider-key-must-not-appear"
+	const modelID = "grok-4.6"
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			if r.Method != http.MethodGet {
+				t.Errorf("models method %s", r.Method)
+			}
+			w.WriteHeader(http.StatusOK)
+		case "/v1/messages":
+			if r.Method != http.MethodPost {
+				t.Errorf("messages method %s", r.Method)
+			}
+			if r.Header.Get("x-api-key") != secret {
+				t.Errorf("x-api-key = %q", r.Header.Get("x-api-key"))
+			}
+			if r.Header.Get("anthropic-version") != "2023-06-01" {
+				t.Errorf("anthropic-version = %q", r.Header.Get("anthropic-version"))
+			}
+			var body struct {
+				Model     string `json:"model"`
+				MaxTokens int    `json:"max_tokens"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body); err != nil {
+				t.Errorf("body: %v", err)
+			}
+			if body.Model != modelID || body.MaxTokens != 1 {
+				t.Errorf("probe body model=%q max_tokens=%d", body.Model, body.MaxTokens)
+			}
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = fmt.Fprint(w, secret)
+		default:
+			t.Errorf("path %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer hs.Close()
+	getenv := func(key string) string {
+		return map[string]string{
+			"RUSUI_GUEST":             "claude",
+			"RUSUI_MODEL_UPSTREAM":    hs.URL,
+			"RUSUI_ANTHROPIC_API_KEY": secret,
+			"RUSUI_GUEST_MODEL":       modelID,
+		}[key]
+	}
+	list := checkModelUpstream(getenv)
+	guest := checkModelGuest(getenv)
+	if list.Status != "ready" {
+		t.Fatalf("catalog check %+v", list)
+	}
+	if guest.Status != "unavailable" || !guest.Blocker || !strings.Contains(guest.Detail, modelID) || !strings.Contains(guest.Detail, "429") {
+		t.Fatalf("guest check %+v", guest)
+	}
+	if strings.Contains(guest.Detail, secret) || strings.Contains(list.Detail, secret) {
+		t.Fatalf("credential leaked: list=%+v guest=%+v", list, guest)
+	}
+}
+
+func TestModelGuestUnsetIsMisconfiguredForClaude(t *testing.T) {
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			t.Errorf("unexpected %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer hs.Close()
+	getenv := func(key string) string {
+		return map[string]string{
+			"RUSUI_GUEST":          "claude",
+			"RUSUI_MODEL_UPSTREAM": hs.URL,
+		}[key]
+	}
+	list := checkModelUpstream(getenv)
+	guest := checkModelGuest(getenv)
+	if list.Status != "ready" || guest.Status != "misconfigured" || !guest.Blocker {
+		t.Fatalf("list %+v guest %+v", list, guest)
+	}
+	if !strings.Contains(guest.Detail, "RUSUI_GUEST_MODEL") || !strings.Contains(guest.Detail, "model list") {
+		t.Fatalf("detail %q", guest.Detail)
+	}
+}
+
+func TestModelGuestAcceptsBoundedMessagesCall(t *testing.T) {
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/messages" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer hs.Close()
+	guest := checkModelGuest(func(key string) string {
+		return map[string]string{
+			"RUSUI_GUEST":          "claude",
+			"RUSUI_MODEL_UPSTREAM": hs.URL,
+			"RUSUI_GUEST_MODEL":    "glm-5.3",
+		}[key]
+	})
+	if guest.Status != "ready" || !strings.Contains(guest.Detail, "glm-5.3") {
+		t.Fatalf("guest %+v", guest)
 	}
 }

@@ -54,6 +54,7 @@ type Assignment struct {
 	Handle          string   `json:"handle"`
 	Workspace       string   `json:"workspace"`
 	ModelBaseURL    string   `json:"model_base_url"`
+	GuestModel      string   `json:"guest_model,omitempty"`
 	GitProxyURL     string   `json:"git_proxy_url"`
 	GitHubToken     string   `json:"github_token,omitempty"`
 	Guest           string   `json:"guest,omitempty"`
@@ -381,6 +382,11 @@ func DriverEnv(a *Assignment, home, path string) []string {
 		)
 		if a.ModelBaseURL != "" {
 			env = append(env, "ANTHROPIC_BASE_URL="+a.ModelBaseURL)
+		}
+		// The id is the operator's name for this turn. DriverEnv copies it;
+		// it does not choose a model of its own.
+		if acp.ValidGuestModel(a.GuestModel) {
+			env = append(env, "ANTHROPIC_MODEL="+a.GuestModel)
 		}
 	} else {
 		env = append(env, "XAI_API_KEY="+a.TurnToken)

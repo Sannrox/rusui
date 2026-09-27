@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -8,8 +9,14 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/store"
 )
+
+// ErrInvalidGuestModel is returned when RUSUI_GUEST_MODEL is set but cannot
+// be copied into one environment entry. The error text never includes the
+// value.
+var ErrInvalidGuestModel = errors.New("RUSUI_GUEST_MODEL is invalid")
 
 func modelBaseURL(r *http.Request, driver string) string {
 	scheme := "http"
@@ -44,14 +51,16 @@ var defaultModelOrigins = map[string]string{
 // ModelConfig is the plane side of the model proxy: which provider the
 // guest speaks, the upstream to forward to, and the key sent upstream.
 type ModelConfig struct {
-	Guest    string
-	Provider string
-	Key      string
-	Origin   *url.URL // operator upstream (gateway or CLI proxy); nil uses the provider default
+	Guest      string
+	GuestModel string // operator-named id; empty means unset
+	Provider   string
+	Key        string
+	Origin     *url.URL // operator upstream (gateway or CLI proxy); nil uses the provider default
 }
 
-// ModelConfigFromEnv reads RUSUI_GUEST, RUSUI_MODEL_UPSTREAM, and the
-// provider key. An unknown guest or a malformed upstream is an error.
+// ModelConfigFromEnv reads RUSUI_GUEST, RUSUI_GUEST_MODEL,
+// RUSUI_MODEL_UPSTREAM, and the provider key. An unknown guest, an invalid
+// model id, or a malformed upstream is an error.
 func ModelConfigFromEnv(getenv func(string) string) (ModelConfig, error) {
 	var c ModelConfig
 	switch g := getenv("RUSUI_GUEST"); g {
@@ -63,6 +72,12 @@ func ModelConfigFromEnv(getenv func(string) string) (ModelConfig, error) {
 		c.Key = firstNonEmpty(getenv("RUSUI_ANTHROPIC_API_KEY"), getenv("ANTHROPIC_API_KEY"))
 	default:
 		return c, fmt.Errorf("RUSUI_GUEST %q: want grok or claude", g)
+	}
+	if id := strings.TrimSpace(getenv("RUSUI_GUEST_MODEL")); id != "" {
+		if !acp.ValidGuestModel(id) {
+			return c, ErrInvalidGuestModel
+		}
+		c.GuestModel = id
 	}
 	if raw := getenv("RUSUI_MODEL_UPSTREAM"); raw != "" {
 		// The URL may carry a gateway credential; errors end up in service

@@ -100,7 +100,7 @@ var generatedSecrets = []string{"RUSUI_WORKER_SECRET", "RUSUI_WEBHOOK_SECRET", "
 // externalKeys are secrets or settings only the operator can supply.
 var externalKeys = []string{
 	"RUSUI_GITHUB_TOKEN", "RUSUI_AGENT_GITHUB_TOKEN", "RUSUI_GUEST", "RUSUI_GUEST_IMAGE",
-	"RUSUI_MODEL_UPSTREAM", "RUSUI_ANTHROPIC_API_KEY", "RUSUI_XAI_API_KEY",
+	"RUSUI_MODEL_UPSTREAM", "RUSUI_GUEST_MODEL", "RUSUI_ANTHROPIC_API_KEY", "RUSUI_XAI_API_KEY",
 }
 
 // Plan reports what Apply would do and changes nothing.

@@ -99,7 +99,8 @@ reported and exits successfully.
 | `RUSUI_GUEST_IMAGE` | container guests | Guest image identity. Empty fails closed. |
 | `XAI_API_KEY` or `RUSUI_XAI_API_KEY` | model proxy (Grok) | Plane secret; never copied into the guest. |
 | `RUSUI_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY` | model proxy (Claude Code) | Plane secret, sent upstream as `x-api-key`; never copied into the guest. |
-| `RUSUI_GUEST` | no | `grok` (default) or `claude`; picks the model provider ([ADR 0017](decisions/0017-claude-guest-and-model-upstream.md)). |
+| `RUSUI_GUEST` | no | `grok` (default) or `claude`; picks the harness and the proxy protocol ([ADR 0017](decisions/0017-claude-guest-and-model-upstream.md)). |
+| `RUSUI_GUEST_MODEL` | Claude guest | Model id the Claude guest sends as `ANTHROPIC_MODEL`. Unset, `model_guest` is misconfigured. A model list does not prove this id can prompt. The Grok harness does not take this id. |
 | `RUSUI_MODEL_UPSTREAM` | no | http(s) URL replacing the provider API, e.g. a gateway or a CLI proxy on the plane host. With it set, the provider key may be empty. |
 | `RUSUI_AGENT_GITHUB_TOKEN` | `implement` sessions | Your GitHub credential for agent publication ([ADR 0015](decisions/0015-agent-publication.md)). Given only to implement sessions — `run` sessions started for an open pinned task (`rusui run -effort …`) on repositories with `implement: true` — as `GH_TOKEN` and git's credential for `https://github.com`. Unset: no session can push. |
 | `RUSUI_DISABLE_COAUTHOR_TRAILER` | no | `1` drops `Co-authored-by: rusui <noreply@rusui.invalid>` from agent commits. |
@@ -125,9 +126,17 @@ credential.
 
 ```bash
 RUSUI_GUEST=claude
+RUSUI_GUEST_MODEL=grok-4.6                     # id the guest puts in the body
 RUSUI_MODEL_UPSTREAM=http://127.0.0.1:8317     # CLI proxy on the plane host
 RUSUI_ANTHROPIC_API_KEY=<the proxy's client key>
 ```
+
+`RUSUI_GUEST` names the harness (`claude` or `grok`). `RUSUI_GUEST_MODEL`
+names the model id. `RUSUI_MODEL_UPSTREAM` names where the plane forwards
+the body. `rusui diagnose` can report `model_upstream: ready` from
+`GET /v1/models` while `model_guest` is `unavailable` because that id
+returned HTTP 429. Do not start unattended Claude work until `model_guest`
+is ready.
 
 Run a CLI proxy on loopback with its own client key; rusui does not ship
 or manage it. Whether a subscription may be used this way for automated
