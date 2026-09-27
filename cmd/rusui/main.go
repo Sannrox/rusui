@@ -229,6 +229,9 @@ func runScheduler(eng *engine.Engine) {
 			if err := eng.ExpireRefreshOwners(); err != nil {
 				eng.Notify("expire owners: " + err.Error())
 			}
+			if err := eng.ExpireOverdueLeases(); err != nil {
+				eng.Notify("expire leases: " + err.Error())
+			}
 			if _, err := eng.StepRefresh(); err != nil {
 				eng.Notify("step refresh: " + err.Error())
 			}

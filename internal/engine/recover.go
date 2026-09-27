@@ -9,7 +9,7 @@ import (
 
 // Recover runs the startup recovery paths ARCHITECTURE.md requires:
 // mark local runtime observations unknown, expire in-flight refresh owners,
-// reconcile hook deliveries, catch up
+// fail or requeue overdue leases, reconcile hook deliveries, catch up
 // open and locally tracked items, retry unpublished apply attempts, and
 // retry in-flight or uncertain publications.
 // Periodic callers use the same ReconcileConfigured, CatchUpConfigured,
@@ -25,6 +25,10 @@ func (e *Engine) Recover() error {
 	}
 	if err := e.StartupExpireOwners(); err != nil {
 		e.exception("startup expire owners: " + err.Error())
+		return err
+	}
+	if err := e.ExpireOverdueLeases(); err != nil {
+		e.exception("expire overdue leases: " + err.Error())
 		return err
 	}
 	_ = e.ReconcileConfigured()

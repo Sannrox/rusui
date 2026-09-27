@@ -540,6 +540,9 @@ func (e *Engine) expireLeaseTx(tx *sql.Tx, j *store.Job) error {
 		return nil
 	}
 	previousGeneration := j.LeaseGeneration
+	if dead {
+		return e.failClosedTx(tx, j, previousGeneration, j.ClaimedRevision, true)
+	}
 	steers, err := store.PromoteSteersTx(tx, j.ID, previousGeneration)
 	if err != nil {
 		return err
@@ -575,6 +578,45 @@ func (e *Engine) expireLeaseTx(tx *sql.Tx, j *store.Job) error {
 		return err
 	}
 	return store.TouchSessionEnvironmentTx(tx, turn.SessionID, now, now.Add(e.envTTL()))
+}
+
+// ExpireOverdueLeases fails turns whose execution deadline has passed and
+// requeues lost-heartbeat leases. Claim also runs this per repo; Recover
+// and the scheduler run it so a deadline-exhausted turn does not wait for
+// the next claim.
+func (e *Engine) ExpireOverdueLeases() error {
+	return e.Store.Tx(func(tx *sql.Tx) error {
+		rows, err := tx.Query(`SELECT id FROM jobs WHERE state='leased'`)
+		if err != nil {
+			return err
+		}
+		var ids []int64
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				_ = rows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		for _, id := range ids {
+			j, err := store.GetJobByIDTx(tx, id)
+			if err != nil {
+				return err
+			}
+			if err := e.expireLeaseTx(tx, j); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (e *Engine) expireDeadLeasesTx(tx *sql.Tx, repo, lane string) error {
@@ -1035,11 +1077,21 @@ func (e *Engine) Fail(jobID int64, gen, claimed int) (map[string]any, error) {
 		if err != nil {
 			return err
 		}
-		if err := e.acceptLease(tx, j, gen, claimed); err != nil {
+		if err := e.acceptLeaseIdentity(j, gen, claimed); err != nil {
 			return err
 		}
-		if err := e.finalizeFailureTx(tx, j, gen, claimed); err != nil {
-			return err
+		now := e.now()
+		if j.ExecutionDeadlineAt != nil && !now.Before(*j.ExecutionDeadlineAt) {
+			if err := e.failClosedTx(tx, j, gen, claimed, false); err != nil {
+				return err
+			}
+		} else {
+			if j.LeaseExpiresAt != nil && !now.Before(*j.LeaseExpiresAt) {
+				return errReject
+			}
+			if err := e.finalizeFailureTx(tx, j, gen, claimed); err != nil {
+				return err
+			}
 		}
 		_, payload, _, err = store.GetReceiptTx(tx, jobID, gen, claimed)
 		if err != nil {
@@ -1051,11 +1103,18 @@ func (e *Engine) Fail(jobID int64, gen, claimed int) (map[string]any, error) {
 	return out, err
 }
 
-func (e *Engine) acceptLease(tx *sql.Tx, j *store.Job, gen, claimed int) error {
-	now := e.now()
+func (e *Engine) acceptLeaseIdentity(j *store.Job, gen, claimed int) error {
 	if j.State != "leased" || j.LeaseGeneration != gen || j.ClaimedRevision != claimed {
 		return errReject
 	}
+	return nil
+}
+
+func (e *Engine) acceptLease(tx *sql.Tx, j *store.Job, gen, claimed int) error {
+	if err := e.acceptLeaseIdentity(j, gen, claimed); err != nil {
+		return err
+	}
+	now := e.now()
 	if j.LeaseExpiresAt != nil && !now.Before(*j.LeaseExpiresAt) {
 		return errReject
 	}
@@ -1063,6 +1122,60 @@ func (e *Engine) acceptLease(tx *sql.Tx, j *store.Job, gen, claimed int) error {
 		return errReject
 	}
 	return nil
+}
+
+// failClosedTx records a fail receipt for the holding generation. The
+// exhausted revision is not retried. A pending follow-up or promoted
+// steer is queued as the next revision. bumpGeneration matches
+// expireLeaseTx so a later Claim cannot steal the same generation.
+func (e *Engine) failClosedTx(tx *sql.Tx, j *store.Job, gen, claimed int, bumpGeneration bool) error {
+	kind, _, ok, err := store.GetReceiptTx(tx, j.ID, gen, claimed)
+	if err != nil {
+		return err
+	}
+	if ok && kind != "fail" {
+		return errReject
+	}
+	if !ok {
+		receipt := map[string]any{"kind": "fail"}
+		rb, _ := json.Marshal(receipt)
+		if err := store.InsertReceiptTx(tx, j.ID, gen, claimed, "fail", string(rb)); err != nil {
+			return err
+		}
+	}
+	if _, err := store.PromoteSteersTx(tx, j.ID, gen); err != nil {
+		return err
+	}
+	now := e.now()
+	turn, err := store.GetTurnTx(tx, j.ID)
+	if err != nil {
+		return err
+	}
+	if err := store.TouchSessionEnvironmentTx(tx, turn.SessionID, now, now.Add(e.envTTL())); err != nil {
+		return err
+	}
+	if bumpGeneration {
+		j.LeaseGeneration++
+	}
+	if j.ClaimedRevision < j.PendingRevision {
+		j.State = "queued"
+		return store.UpdateJobTx(tx, j)
+	}
+	pending := j.PendingRevision
+	if err := applyNextFollowUpTx(tx, j); err != nil {
+		return err
+	}
+	if j.PendingRevision > pending {
+		j.RetryCount = 0
+		j.State = "queued"
+		return store.UpdateJobTx(tx, j)
+	}
+	j.State = "failed"
+	if err := store.UpdateJobTx(tx, j); err != nil {
+		return err
+	}
+	e.exception(fmt.Sprintf("execution deadline exhausted %s#%d", j.Repo, j.Item))
+	return e.finishMeasurementTx(tx, j.ID, j.State, Artifact{}, now)
 }
 
 func (e *Engine) finalizeFailureTx(tx *sql.Tx, j *store.Job, gen, claimed int) error {
