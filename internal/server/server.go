@@ -76,6 +76,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /reviews", s.requestReview)
 	mux.HandleFunc("GET /sessions/{id}/attach", s.attachSession)
 	mux.HandleFunc("GET /sessions/{id}/logs", s.sessionLogs)
+	mux.HandleFunc("GET /sessions/{id}/read", s.readSession)
 	mux.HandleFunc("GET /approvals", s.listApprovals)
 	mux.HandleFunc("GET /approvals/{id}", s.getApproval)
 	mux.HandleFunc("GET /proofs/{id}", s.getProof)

@@ -175,6 +175,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/healthz` | none; body `ok` |
 | `GET` | `/readyz` | none; JSON topology report; 200 ready / 503 not ready |
 | `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history |
+| `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
 | `GET` | `/sessions/{id}?include=receipts[&receipt_after_id={id}]` | operator or worker token; up to 100 receipts in ID order; follow `environment_receipts_next_after_id` when present |
 | `GET` | `/sessions/{id}?view=review-status&turn_id={turn}` | operator or worker token; compact turn state and revisions for polling |
 | `POST` | `/reviews` | operator or worker token; request one bound pull-request review (`rusui review`) |
