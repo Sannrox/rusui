@@ -1,6 +1,8 @@
 # ADR 0007: P1 environment snapshot identity
 
-- Status: Accepted
+- Status: Accepted; [ADR 0028](0028-container-isolation-profile.md)
+  keeps this snapshot as the prepared tree. A hypervisor memory image
+  is not the snapshot noun.
 - Date: 2026-09-15
 - Amends: [ADR 0006](0006-session-start.md) (workspace of a session
   environment). [ADR 0001](0001-environment-plane.md) D4 (setup once

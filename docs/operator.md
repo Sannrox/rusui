@@ -57,6 +57,8 @@ Public-repository unattended sessions (review, run, scheduled, implement
 on `visibility: public`) use this container topology. They do not fall
 back to the process driver or the experimental local profile when Docker
 or Podman is missing ([ADR 0022](decisions/0022-public-repo-isolation.md)).
+A second isolation runtime is not part of the supported topology
+([ADR 0028](decisions/0028-container-isolation-profile.md)).
 
 ## Prerequisites
 

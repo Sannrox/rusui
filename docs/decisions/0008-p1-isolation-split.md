@@ -4,6 +4,8 @@
   public-repository default and diagnose fail-closed when the container
   topology is missing. [ADR 0027](0027-guest-reachability-ask.md) keeps
   the reachability grant in policy until a final image ask exists.
+  [ADR 0028](0028-container-isolation-profile.md) retains the container
+  as the only supported isolation profile.
 - Date: 2026-09-15
 - Amends: [ADR 0001](0001-environment-plane.md) (OS sandbox assignment
   that was a working assumption before Phase 1). [ADR 0002](0002-grok-acp-agent-set.md)
