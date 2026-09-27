@@ -644,7 +644,10 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		if err := e.expireDeadLeasesTx(tx, repo, "scheduled"); err != nil {
 			return err
 		}
-		rows, err := tx.Query(`SELECT t.id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo=? AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) ORDER BY t.id`,
+		// A queued run is leased before older review or scheduled turns.
+		// Turns in the same class stay in id order, so catch-up reviews
+		// are still claimed once no run is waiting.
+		rows, err := tx.Query(`SELECT t.id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo=? AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
 			append([]any{repo}, anySlice(lanes)...)...)
 		if err != nil {
 			return err
