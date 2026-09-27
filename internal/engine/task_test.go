@@ -39,7 +39,60 @@ func TestStartTaskRecordsPinAndReusesSpec(t *testing.T) {
 	}
 }
 
-func TestStartTaskNewRevisionOnPinChange(t *testing.T) {
+func TestStartTaskReusesEffortWhenPromptChanges(t *testing.T) {
+	h := setup(t)
+	a, err := h.e.StartTask("test", pin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := pin()
+	spec.Prompt = "a different prompt"
+	b, err := h.e.StartTask("test", spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.ID != a.ID || b.SessionID != a.SessionID || b.Revision != 1 {
+		t.Fatalf("prompt change minted %+v, want %+v", b, a)
+	}
+	var sessions int
+	if err := h.st.DB.QueryRow(`SELECT COUNT(*) FROM sessions WHERE kind=?`, store.SessionKindRun).Scan(&sessions); err != nil {
+		t.Fatal(err)
+	}
+	if sessions != 1 {
+		t.Fatalf("run sessions %d", sessions)
+	}
+	got, err := store.GetTask(h.st, a.ID)
+	if err != nil || got.Revision != 1 || got.State != "open" {
+		t.Fatalf("task %+v %v", got, err)
+	}
+}
+
+func TestAbandonEffortAllowsNewRevision(t *testing.T) {
+	h := setup(t)
+	a, err := h.e.StartTask("test", pin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.e.AbandonEffort(a.EffortKey); err != nil {
+		t.Fatal(err)
+	}
+	b, err := h.e.StartTask("test", pin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Revision != 2 || b.SessionID == a.SessionID || b.State != "open" {
+		t.Fatalf("after abandon %+v", b)
+	}
+	var sessions int
+	if err := h.st.DB.QueryRow(`SELECT COUNT(*) FROM sessions WHERE kind=?`, store.SessionKindRun).Scan(&sessions); err != nil {
+		t.Fatal(err)
+	}
+	if sessions != 2 {
+		t.Fatalf("run sessions %d", sessions)
+	}
+}
+
+func TestStartTaskKeepsTheSessionWhenThePinChanges(t *testing.T) {
 	h := setup(t)
 	a, err := h.e.StartTask("test", pin())
 	if err != nil {
@@ -47,8 +100,6 @@ func TestStartTaskNewRevisionOnPinChange(t *testing.T) {
 	}
 	spec := pin()
 	spec.BaseSHA = "bbb"
-	h.f.Put(issue(1)) // DefaultSHA still aaa from empty items... Fake returns aaa unless items have MainSHA
-	// Override by putting an item with MainSHA bbb so stale check passes.
 	it := issue(1)
 	it.MainSHA = "bbb"
 	h.f.Put(it)
@@ -56,12 +107,8 @@ func TestStartTaskNewRevisionOnPinChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b.Revision != 2 || b.SessionID == a.SessionID {
-		t.Fatalf("revision %+v vs %+v", b, a)
-	}
-	old, err := store.GetTask(h.st, a.ID)
-	if err != nil || old.State != "superseded" {
-		t.Fatalf("old %+v %v", old, err)
+	if b.ID != a.ID || b.SessionID != a.SessionID || b.Revision != 1 {
+		t.Fatalf("pin change minted %+v, want %+v", b, a)
 	}
 }
 

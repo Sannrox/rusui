@@ -87,7 +87,7 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 		}
 		if existing, ok, err := store.LookupTaskBySpecHashTx(tx, hash); err != nil {
 			return err
-		} else if ok {
+		} else if ok && taskStillBound(existing.State) {
 			out = existing
 			return nil
 		}
@@ -95,8 +95,18 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 		if err != nil {
 			return err
 		}
+		// An effort names one implement session until the operator
+		// abandons or cancels it. A different prompt or pin returns
+		// that session instead of starting another.
+		if ok && taskStillBound(latest.State) {
+			out = latest
+			return nil
+		}
 		rev := 1
 		if ok {
+			if err := store.ReleaseTaskSpecTx(tx, latest.ID); err != nil {
+				return err
+			}
 			if err := store.SupersedeTaskTx(tx, latest.ID); err != nil {
 				return err
 			}
@@ -134,6 +144,10 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+func taskStillBound(state string) bool {
+	return state != "abandoned" && state != "cancelled"
 }
 
 func pathAllowed(p string, allowed []string) bool {

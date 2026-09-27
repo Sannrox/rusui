@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -57,6 +58,13 @@ func InsertTaskTx(tx *sql.Tx, t Task) (int64, error) {
 
 func SupersedeTaskTx(tx *sql.Tx, id int64) error {
 	_, err := tx.Exec(`UPDATE tasks SET state='superseded' WHERE id=?`, id)
+	return err
+}
+
+// ReleaseTaskSpecTx frees a closed task's spec hash so the same pin can
+// start another revision. The hash of a live task stays unique.
+func ReleaseTaskSpecTx(tx *sql.Tx, id int64) error {
+	_, err := tx.Exec(`UPDATE tasks SET spec_hash=? WHERE id=?`, fmt.Sprintf("released-%d", id), id)
 	return err
 }
 
