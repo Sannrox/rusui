@@ -22,7 +22,7 @@ combinations are not claimed:
 | Host OS | Linux or macOS |
 | Runner | one `rusui-runner` on the same host as the plane |
 | Runtime | Docker or Podman CLI (`docker`/`podman` on `PATH`) |
-| Guest | `$RUSUI_GUEST_IMAGE` (Grok, or Claude Code via `claude-agent-acp`, over container stdio) |
+| Guest | `$RUSUI_GUEST_IMAGE` (Grok ACP, Claude Code CLI 2.1.283, or Codex app-server) |
 | Egress | `trusted`: HTTPS to `rusui.plane` only |
 | Listen | loopback `127.0.0.1` |
 
@@ -63,9 +63,9 @@ or Podman is missing ([ADR 0022](decisions/0022-public-repo-isolation.md)).
   image must provide `gh`.
 - A tunnel or webhook relay if GitHub or Slack must reach the process.
 - For review turns: `-acp` (the plane's guest: Grok by default; for
-  `RUSUI_GUEST=claude` the image or `PATH` needs
-  `@agentclientprotocol/claude-agent-acp@0.81.1`, which requires Node.js) or a process driver
-  command (`-driver`) that prints review JSON on stdout. There is no
+  `RUSUI_GUEST=claude` the image or `PATH` needs the Claude Code CLI
+  2.1.283; for `codex`, the `codex` CLI) or a process driver command
+  (`-driver`) that prints review JSON on stdout. There is no
   in-tree `review-driver` binary.
 
 ## Set up with `rusui setup`
@@ -84,7 +84,7 @@ platform default), plane TLS (a local CA and a certificate for
 generated worker, webhook, Slack, and operator secrets, a policy skeleton
 when none exists, and, when Docker or Podman is installed, the
 `rusui-trusted` network and the reference guest image. The image
-(`build/guest-image`: git, `gh`, Node.js 22, `claude-agent-acp` 0.81.1) is
+(`build/guest-image`: git, `gh`, Node.js 22, Claude Code CLI 2.1.283) is
 tagged by its image ID, so the tag names the bits the guest runs (the
 Dockerfile hash is only the build cache key); `-rebuild-image` rebuilds it
 with `--pull --no-cache`. Setup records the tag as `RUSUI_GUEST_IMAGE`
@@ -286,7 +286,7 @@ Guest cancellation status:
 | --- | --- | --- |
 | In-tree fake ACP agent | Verified for the steer integration path | `TestSteerInterruptsLiveRunnerAndKeepsGuestSession` |
 | Grok | Not verified | The live Grok test does not exercise `session/cancel` |
-| Claude Code via `claude-agent-acp` | Not verified | The live Claude test does not exercise `session/cancel` |
+| Claude Code CLI 2.1.283 | Not verified | The live Claude test does not exercise cancel |
 
 The fake-agent result proves rusui's host behavior only. Validate the guest
 before relying on it to stop at a safe point.

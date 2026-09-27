@@ -1,19 +1,16 @@
 package setup
 
 import (
-	"context"
 	"os"
 	"testing"
 	"time"
 
 	guestimage "github.com/sannrox/rusui/build/guest-image"
-	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/env"
 )
 
 // TestLiveReferenceGuestImage builds the reference image with the real
-// container CLI, starts it on the trusted network, and speaks ACP to the
-// Claude Code adapter inside it. Needs Docker or Podman.
+// container CLI and checks the pinned Claude Code CLI. Needs Docker or Podman.
 func TestLiveReferenceGuestImage(t *testing.T) {
 	if os.Getenv("RUSUI_LIVE_DOCKER") == "" {
 		t.Skip("set RUSUI_LIVE_DOCKER=1 to build and run the reference guest image")
@@ -48,20 +45,7 @@ func TestLiveReferenceGuestImage(t *testing.T) {
 			t.Fatalf("%v: %v", tool, err)
 		}
 	}
-	in, out, stop, err := d.ExecStdio(cid, []string{acp.ClaudeStdio}, nil)
-	if err != nil {
+	if err := d.Exec(cid, []string{"claude", "--version"}); err != nil {
 		t.Fatal(err)
-	}
-	t.Cleanup(stop)
-	c := &acp.Client{In: out, Out: in, Perm: acp.DenyUnmatched{}}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	res, err := c.Initialize(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("initialize agent=%v protocol=%d", res.AgentInfo, res.ProtocolVersion)
-	if res.ProtocolVersion != 1 {
-		t.Fatalf("protocol %d", res.ProtocolVersion)
 	}
 }

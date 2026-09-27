@@ -10,6 +10,8 @@
 - Resolves: [#119](https://github.com/Sannrox/rusui/issues/119) by
   maintainer selection. Its dependency on the pilot (#103) is waived: the
   pilot cannot run while the only supported guest is unavailable.
+- Amended by: [ADR 0025](0025-provider-boundary.md). Claude Code is the
+  pinned CLI over stream-json. `claude-agent-acp` is not the guest.
 - Related: [ADR 0015](0015-agent-publication.md) (implement sessions),
   [#181](https://github.com/Sannrox/rusui/issues/181),
   [#103](https://github.com/Sannrox/rusui/issues/103).

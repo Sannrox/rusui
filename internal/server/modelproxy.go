@@ -41,11 +41,13 @@ func modelBaseURL(r *http.Request, driver string) string {
 const (
 	ProviderXAI       = "xai"
 	ProviderAnthropic = "anthropic"
+	ProviderOpenAI    = "openai"
 )
 
 var defaultModelOrigins = map[string]string{
 	ProviderXAI:       "https://api.x.ai",
 	ProviderAnthropic: "https://api.anthropic.com",
+	ProviderOpenAI:    "https://api.openai.com",
 }
 
 // ModelConfig is the plane side of the model proxy: which provider the
@@ -70,8 +72,11 @@ func ModelConfigFromEnv(getenv func(string) string) (ModelConfig, error) {
 	case "claude":
 		c.Guest, c.Provider = "claude", ProviderAnthropic
 		c.Key = firstNonEmpty(getenv("RUSUI_ANTHROPIC_API_KEY"), getenv("ANTHROPIC_API_KEY"))
+	case "codex":
+		c.Guest, c.Provider = "codex", ProviderOpenAI
+		c.Key = firstNonEmpty(getenv("RUSUI_OPENAI_API_KEY"), getenv("OPENAI_API_KEY"))
 	default:
-		return c, fmt.Errorf("RUSUI_GUEST %q: want grok or claude", g)
+		return c, fmt.Errorf("RUSUI_GUEST %q: want grok, claude, or codex", g)
 	}
 	if id := strings.TrimSpace(getenv("RUSUI_GUEST_MODEL")); id != "" {
 		if !acp.ValidGuestModel(id) {
