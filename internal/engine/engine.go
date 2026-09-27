@@ -879,6 +879,7 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 	// Outside the transaction: it may call GitHub. The transaction still
 	// checks that art.Repo is the job's repository.
 	e.observeResult(&art)
+	e.observeFollowUpPublication(jobID, &art)
 	var out map[string]any
 	err := e.Store.Tx(func(tx *sql.Tx) error {
 		kind, payload, ok, err := store.GetReceiptTx(tx, jobID, gen, claimed)
@@ -1439,7 +1440,7 @@ func (e *Engine) BuildInput(c *Claim) map[string]any {
 		body = body[:64*1024]
 		trunc = true
 	}
-	return map[string]any{
+	in := map[string]any{
 		"schema_version":         1,
 		"repo":                   c.Job.Repo,
 		"item":                   c.Job.Item,
@@ -1457,6 +1458,11 @@ func (e *Engine) BuildInput(c *Claim) map[string]any {
 		"state":                  c.Snapshot.State,
 		"linked_same_repo_items": c.Snapshot.LinkedSameRepoItems,
 	}
+	if pr, sha, ok := priorPublication(e.Store, c.Job.ID); ok {
+		in["published_pull_request"] = pr
+		in["published_sha"] = sha
+	}
+	return in
 }
 
 func (e *Engine) ReconcileDeliveries(repo string) error {
