@@ -22,7 +22,9 @@ GitHub write credential only in `implement` sessions (ADR 0015). Schema changes 
 
 ## Milestones
 
-**Current contract:** one repository profile, one model CLI, signed GitHub
+**Current contract:** one repository profile, one model CLI, one runner on
+the plane host
+([ADR 0029](docs/decisions/0029-single-host-runner.md)), signed GitHub
 intake, claim/lease on a **turn**, immutable review artifacts in SQLite,
 deterministic **dry-run** apply for comment and close, pause/status/retry/cancel,
 daily review budget, a per-project concurrent-lease meter

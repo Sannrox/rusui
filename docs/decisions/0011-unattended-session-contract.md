@@ -1,6 +1,7 @@
 # ADR 0011: Recoverable unattended-session contract
 
-- Status: Accepted
+- Status: Accepted; [ADR 0029](0029-single-host-runner.md) retains the
+  one-runner topology.
 - Date: 2026-09-20
 - Resolves: [#88](https://github.com/Sannrox/rusui/issues/88)
 - Narrows: [#89](https://github.com/Sannrox/rusui/issues/89) (D2),

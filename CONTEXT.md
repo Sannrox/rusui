@@ -35,6 +35,12 @@ the experimental local profile, this identifies the operator's host and does
 not imply isolation; multiple local sessions may share that physical host.
 _Avoid_: project, runner, snapshot (the prepared tree)
 
+**Runner**:
+One outbound-only `rusui-runner` on the same host as the plane. Schema seeds a
+single `runners` row named `local`. Snapshot bytes stay on this host
+([ADR 0029](docs/decisions/0029-single-host-runner.md)).
+_Avoid_: fleet, Kubernetes, additional placement hosts
+
 **Snapshot**:
 The prepared, reusable tree identified by `source_hash` (base image digest, git pin, `.agents/setup` bytes). Two sessions may share a snapshot; they never share an environment.
 _Avoid_: environment, GitHub item snapshot hash, image tag
