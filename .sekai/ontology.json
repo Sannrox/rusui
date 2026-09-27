@@ -75,7 +75,13 @@
     },
     {
       "name": "RusuiEnvironment",
-      "description": "The machine a session runs on. One session, one Rusui Environment record. Managed environments are created from a snapshot, sleep after a configurable idle period, wake on the same handle before a follow-up turn, and expire after 72h idle; the experimental local profile identifies the operator's host and provides no isolation. P1 dogfood machine isolation is a container; the process driver and immortal local environment are not dogfood.",
+      "description": "The machine a session runs on. One session, one Rusui Environment record. Managed environments are created from a snapshot, sleep after a configurable idle period, wake on the same handle before a follow-up turn, and expire after 72h idle; the experimental local profile identifies the operator's host and provides no isolation. The supported IsolationProfile is container; the process driver and immortal local environment are not dogfood. A stronger runtime is not selected.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiIsolationProfile",
+      "description": "The machine fence of a Rusui Environment. The supported value is container. Process is explicit test/dev. Create, sleep, wake, and destroy against a hypervisor or other second backend are unauthorized until a named isolation or cost gap is recorded and a superseding ADR selects one bounded backend.",
       "superclasses": [],
       "properties": []
     },
@@ -129,7 +135,7 @@
     },
     {
       "name": "RusuiSnapshot",
-      "description": "Prepared reusable tree identified by source_hash (base image digest, git pin, .agents/setup bytes). Cached on the runner. Two sessions may share a snapshot; they never share an environment.",
+      "description": "Prepared reusable tree identified by source_hash (base image digest, git pin, .agents/setup bytes). Cached on the runner. Two sessions may share a snapshot; they never share an environment. This is not a hypervisor memory-plus-disk image and is not restored across hosts.",
       "superclasses": [],
       "properties": []
     },
@@ -432,6 +438,14 @@
       "description": "An environment is created from a snapshot identified by source_hash. Two environments may share a snapshot.",
       "domain": "RusuiEnvironment",
       "range": "RusuiSnapshot",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_environment_uses_isolation_profile",
+      "description": "An unattended environment uses one isolation profile. The supported profile is container.",
+      "domain": "RusuiEnvironment",
+      "range": "RusuiIsolationProfile",
       "cardinality": { "min": 1, "max": 1 },
       "transitive": false
     },
@@ -899,6 +913,30 @@
       "subject": "rusui_targets_turn_scoped_publication",
       "source": "docs/decisions/0020-turn-scoped-github-publication.md",
       "locator": "docs/decisions/0020-turn-scoped-github-publication.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiIsolationProfile",
+      "source": "docs/decisions/0028-container-isolation-profile.md",
+      "locator": "docs/decisions/0028-container-isolation-profile.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_environment_uses_isolation_profile",
+      "source": "docs/decisions/0028-container-isolation-profile.md",
+      "locator": "docs/decisions/0028-container-isolation-profile.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiEnvironment",
+      "source": "docs/decisions/0028-container-isolation-profile.md",
+      "locator": "docs/decisions/0028-container-isolation-profile.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiSnapshot",
+      "source": "docs/decisions/0028-container-isolation-profile.md",
+      "locator": "docs/decisions/0028-container-isolation-profile.md#decision",
       "confidence": 1.0
     }
   ]

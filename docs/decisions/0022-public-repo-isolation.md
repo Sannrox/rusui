@@ -13,8 +13,8 @@
   [ADR 0007](0007-environment-snapshot.md),
   [#91](https://github.com/Sannrox/rusui/issues/91) (delivered container
   and credential boundary),
-  [#125](https://github.com/Sannrox/rusui/issues/125) (optional stronger
-  runtime; not required by this threat model),
+  [#125](https://github.com/Sannrox/rusui/issues/125) (resolved by
+  [ADR 0028](0028-container-isolation-profile.md): retain container),
   [#126](https://github.com/Sannrox/rusui/issues/126) (does not replace
   the container backend by default).
   [ADR 0027](0027-guest-reachability-ask.md) does not add an image
@@ -72,9 +72,8 @@ repository onto trusted-local execution.
 ready. Unattended public-repository work must not start from that
 report. Missing plane TLS or `RUSUI_GUEST_IMAGE` disables the container
 driver; that is also not a process fallback for a public repository.
-A stronger runtime (microVM / Firecracker) is evaluated only by
-[#125](https://github.com/Sannrox/rusui/issues/125) after a named gap
-the container path cannot meet.
+A stronger runtime (microVM / Firecracker) is not selected
+([ADR 0028](0028-container-isolation-profile.md)).
 
 ## Consequences
 
@@ -86,7 +85,7 @@ unattended session as supported. Process-driver fixtures remain valid
 for tests and for operator-owned trusted work that opts in with `-driver`.
 
 Irreversible: none. No schema or policy field is added. [#125](https://github.com/Sannrox/rusui/issues/125)
-stays optional.
+is resolved by [ADR 0028](0028-container-isolation-profile.md).
 
 Limitations recorded inside the five-day investigation window:
 
@@ -95,7 +94,8 @@ Limitations recorded inside the five-day investigation window:
   process driver is configured. Diagnose is the fail-closed startup
   operators must consult before dispatch; claim-time refusal of that
   no-op is a later enforcement, not a new jail.
-- Wake latency and snapshot restore of a hypervisor remain #125.
+- Wake latency and snapshot restore of a hypervisor remain unauthorized
+  ([ADR 0028](0028-container-isolation-profile.md)).
 
 ## Rejected alternatives
 
@@ -103,9 +103,10 @@ Limitations recorded inside the five-day investigation window:
   exposes operator home, SQLite, and credentials to untrusted source.
 - **Silent process fallback when Docker is missing.** Turns an
   unavailable topology into a weaker one without an operator choice.
-- **Require a microVM before public-repository sessions.** #125 is
-  optional; #126's non-goal is replacing the supported backend by
-  default. Container plus plane proxies meets the named threats.
+- **Require a microVM before public-repository sessions.**
+  [ADR 0028](0028-container-isolation-profile.md) retains the container;
+  #126's non-goal is replacing the supported backend by default.
+  Container plus plane proxies meets the named threats.
 - **Treat Sumika local as the unattended public profile.** Local
   sessions have no turns, grants, or machine isolation (ADR 0016).
 

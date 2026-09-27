@@ -6,9 +6,10 @@
   [ADR 0009](0009-credential-broker.md) (the grant), and
   [ADR 0022](0022-public-repo-isolation.md) (public-repository egress).
 - Resolves: [#303](https://github.com/Sannrox/rusui/issues/303)
-- Related: [#125](https://github.com/Sannrox/rusui/issues/125) and
-  [#126](https://github.com/Sannrox/rusui/issues/126) stay open and do
-  not choose a new machine. [#91](https://github.com/Sannrox/rusui/issues/91)
+- Related: [#125](https://github.com/Sannrox/rusui/issues/125) is
+  resolved by [ADR 0028](0028-container-isolation-profile.md) (retain
+  container). [#126](https://github.com/Sannrox/rusui/issues/126) stays
+  unauthorized. [#91](https://github.com/Sannrox/rusui/issues/91)
   delivered the container and credential boundary.
 - Discussion: none. Merging with this status is the acceptance act.
 

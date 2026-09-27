@@ -44,8 +44,8 @@ A named trigger on a project with a UTC cadence and a prompt. Each fire may star
 _Avoid_: review fan-out, cron in policy.yaml
 
 **Machine isolation**:
-Rusui’s OS boundary for an unattended session. The default for public-repository sessions is a container ([ADR 0022](docs/decisions/0022-public-repo-isolation.md)). The process driver is explicit test/dev opt-in; a missing runtime fails closed (`rusui diagnose` / `GET /readyz`).
-_Avoid_: tool fence, shikigami sandbox, Sumika local session
+Rusui’s OS boundary for an unattended session. The default for public-repository sessions is a container ([ADR 0022](docs/decisions/0022-public-repo-isolation.md)). The process driver is explicit test/dev opt-in; a missing runtime fails closed (`rusui diagnose` / `GET /readyz`). The supported isolation profile remains that container; a stronger runtime is not selected ([ADR 0028](docs/decisions/0028-container-isolation-profile.md)). Snapshot is the prepared tree, not a hypervisor memory image.
+_Avoid_: tool fence, shikigami sandbox, Sumika local session, microVM
 
 **Tool fence**:
 The guest's default permission mode plus policy-mapped `session/request_permission`. A live unmatched request waits on the RPC with a current-policy recheck; inbox history is not a grant.

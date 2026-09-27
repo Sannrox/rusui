@@ -31,6 +31,7 @@ Decisions that must outlive a single pull request.
 | [0025](0025-provider-boundary.md) | One Go provider boundary for Grok, Claude, and Codex | Accepted |
 | [0026](0026-harness-model-upstream.md) | Harness, model, and upstream are independent | Accepted |
 | [0027](0027-guest-reachability-ask.md) | The guest image does not declare reachability yet | Accepted |
+| [0028](0028-container-isolation-profile.md) | The supported machine isolation profile remains the container | Accepted |
 
 ## When to write an ADR
 

@@ -574,8 +574,9 @@ experimental kind and are not this unattended boundary
 ([ADR 0016](docs/decisions/0016-local-interactive-runtime.md)).
 
 A separate OS identity, a tool jail inside the guest, or a microVM
-default is out of this profile. Stronger runtimes stay optional
-([#125](https://github.com/Sannrox/rusui/issues/125)).
+default is out of this profile. The supported isolation profile remains
+the container; a stronger runtime is not selected
+([ADR 0028](docs/decisions/0028-container-isolation-profile.md)).
 
 What v1 does enforce:
 
