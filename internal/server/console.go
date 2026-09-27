@@ -19,6 +19,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -599,44 +601,72 @@ func (s *Server) consoleFile(w http.ResponseWriter, r *http.Request) {
 	}
 	page := consolePage{Title: clean, View: "file", Authed: true, CSRF: s.consoleCSRF(), Sess: sess, FileName: clean}
 	envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID)
-	if err != nil || envRow.Handle == "" || envRow.State == store.EnvExpired {
-		page.FileState = "missing or expired"
-		s.renderConsole(w, page)
-		return
+	handle, envState := "", ""
+	if err == nil {
+		handle, envState = envRow.Handle, envRow.State
 	}
-	full := filepath.Join(envRow.Handle, clean)
-	if !strings.HasPrefix(full, filepath.Clean(envRow.Handle)+string(os.PathSeparator)) && full != filepath.Clean(envRow.Handle) {
+	body, state := inspectWorkspaceFile(handle, envState, rel, r.URL.Query().Get("view") == "diff")
+	if state == "path" {
 		http.Error(w, "path", 400)
 		return
 	}
-	st, err := os.Stat(full)
-	if err != nil {
-		page.FileState = "missing"
-		s.renderConsole(w, page)
-		return
-	}
-	if st.Size() > consoleFileCap {
-		page.FileState = "oversized"
-		s.renderConsole(w, page)
-		return
-	}
-	b, err := os.ReadFile(full)
-	if err != nil {
-		page.FileState = "missing"
-		s.renderConsole(w, page)
-		return
-	}
-	if bytes.IndexByte(b, 0) >= 0 || !utf8.Valid(b) {
-		page.FileState = "binary"
-		s.renderConsole(w, page)
-		return
-	}
-	if r.URL.Query().Get("view") == "diff" {
-		page.FileBody = unifiedFromEmpty(clean, string(b))
+	if state != "" {
+		page.FileState = state
 	} else {
-		page.FileBody = string(b)
+		page.FileBody = body
 	}
 	s.renderConsole(w, page)
+}
+
+// inspectWorkspaceFile reads one workspace file the console can show.
+// fileState is empty when body is the text or the unified diff.
+func inspectWorkspaceFile(handle, envState, rel string, asDiff bool) (body, fileState string) {
+	if handle == "" || envState == store.EnvExpired {
+		return "", "missing or expired"
+	}
+	clean, ok := safeRel(rel)
+	if !ok {
+		return "", "path"
+	}
+	full := filepath.Join(handle, clean)
+	base := filepath.Clean(handle)
+	if full != base && !strings.HasPrefix(full, base+string(os.PathSeparator)) {
+		return "", "path"
+	}
+	lst, err := os.Lstat(full)
+	if err != nil {
+		return "", "missing"
+	}
+	if !lst.Mode().IsRegular() {
+		return "", "not a regular file"
+	}
+	fd, err := unix.Open(full, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return "", "not a regular file"
+	}
+	f := os.NewFile(uintptr(fd), clean)
+	defer func() { _ = f.Close() }()
+	st, err := f.Stat()
+	if err != nil || !st.Mode().IsRegular() {
+		return "", "not a regular file"
+	}
+	if st.Size() > consoleFileCap {
+		return "", "oversized"
+	}
+	b, err := io.ReadAll(io.LimitReader(f, consoleFileCap+1))
+	if err != nil {
+		return "", "missing"
+	}
+	if int64(len(b)) > consoleFileCap {
+		return "", "oversized"
+	}
+	if bytes.IndexByte(b, 0) >= 0 || !utf8.Valid(b) {
+		return "", "binary"
+	}
+	if asDiff {
+		return unifiedFromEmpty(clean, string(b)), ""
+	}
+	return string(b), ""
 }
 
 func safeRel(p string) (string, bool) {
