@@ -7,6 +7,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/policy"
+	"github.com/sannrox/rusui/internal/store"
 )
 
 const lanePolicy = `version: 2
@@ -40,6 +41,31 @@ func laneHarness(t *testing.T, pol string) *harn {
 	}
 	h.e.ReloadPolicy(p)
 	return h
+}
+
+func TestClaimPrefersLaterRunOverQueuedReviews(t *testing.T) {
+	h := setup(t)
+	const n = 8
+	for i := 1; i <= n; i++ {
+		h.putRefresh(issue(i))
+	}
+	const prompt = "implement the pinned task"
+	if _, err := h.e.StartRun("test", prompt, ""); err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.e.Claim("example/test-repo")
+	if err != nil || c == nil {
+		t.Fatalf("claim %v %v", c, err)
+	}
+	if c.Job.Lane != "run" || c.Snapshot.Body != prompt {
+		t.Fatalf("claimed lane %s item %d body %q", c.Job.Lane, c.Job.Item, c.Snapshot.Body)
+	}
+	for i := 1; i <= n; i++ {
+		j, err := store.JobState(h.st, "example/test-repo", i)
+		if err != nil || j == nil || j.Lane != "review" || j.State != "queued" {
+			t.Fatalf("review %d: %+v %v", i, j, err)
+		}
+	}
 }
 
 func TestRunClaimDoesNotNeedReviewPolicy(t *testing.T) {
