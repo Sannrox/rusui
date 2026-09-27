@@ -18,6 +18,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/provider"
 )
 
 func stallAfterSession(in io.Reader, out io.Writer) {
@@ -73,6 +74,80 @@ func TestHostACPReturnsWhenGuestStopsReading(t *testing.T) {
 	}
 	if time.Since(started) > time.Second {
 		t.Fatalf("deadline was not observed without an external signal: %s", time.Since(started))
+	}
+}
+
+func TestHostACPClaudeReadsStreamJSONInit(t *testing.T) {
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+		_ = agentOut.Close()
+	})
+	var (
+		mu   sync.Mutex
+		seen []map[string]any
+	)
+	go func() {
+		raw, _ := json.Marshal(map[string]any{
+			"type":                "system",
+			"subtype":             "init",
+			"protocol":            provider.ClaudeStreamProto,
+			"claude_code_version": provider.ClaudeCodeVersion,
+			"session_id":          "claude-sess",
+		})
+		_, _ = agentOut.Write(append(raw, '\n'))
+		sc := bufio.NewScanner(agentIn)
+		sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+		for sc.Scan() {
+			var msg map[string]any
+			if err := json.Unmarshal(sc.Bytes(), &msg); err != nil {
+				return
+			}
+			mu.Lock()
+			seen = append(seen, msg)
+			mu.Unlock()
+			if _, ok := msg["method"]; ok {
+				return
+			}
+			if msg["type"] == "user" {
+				raw, _ = json.Marshal(map[string]any{"type": "assistant", "text": "hello-claude"})
+				_, _ = agentOut.Write(append(raw, '\n'))
+				raw, _ = json.Marshal(map[string]any{"type": "result"})
+				_, _ = agentOut.Write(append(raw, '\n'))
+				return
+			}
+		}
+	}()
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+		return acp.Decision{}
+	}}
+	in, _ := json.Marshal(map[string]string{"body": "do the thing"})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	art, err := HostACP(ctx, &Assignment{Guest: acp.GuestClaude, Input: in, Repo: "example/test-repo", Item: 1, ItemKind: "run"}, host, t.TempDir())
+	if err != nil {
+		t.Fatalf("err %v", err)
+	}
+	if art.GuestSessionID != "claude-sess" {
+		t.Fatalf("session %q", art.GuestSessionID)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 1 {
+		t.Fatalf("writes %+v", seen)
+	}
+	if seen[0]["method"] != nil {
+		t.Fatalf("sent ACP method %+v", seen[0])
+	}
+	if seen[0]["type"] != "user" {
+		t.Fatalf("write %+v", seen[0])
+	}
+	msg, _ := seen[0]["message"].(map[string]any)
+	if msg["content"] != "do the thing" {
+		t.Fatalf("prompt %+v", seen[0])
 	}
 }
 

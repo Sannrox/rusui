@@ -1,6 +1,7 @@
 package runner_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/policy"
+	"github.com/sannrox/rusui/internal/provider"
 	"github.com/sannrox/rusui/internal/runner"
 	"github.com/sannrox/rusui/internal/server"
 	"github.com/sannrox/rusui/internal/snapshot"
@@ -470,7 +472,7 @@ func TestClaudeGuestExecsAdapterInContainer(t *testing.T) {
 	e, st, hs := setup(t, func(s *server.Server) { s.Guest = acp.GuestClaude })
 	rt := &env.FakeRuntime{}
 	rt.StdioHook = func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
-		return startFakeACPStdio(t)
+		return startFakeClaudeStdio(t)
 	}
 	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
 	cli := &runner.Client{Base: hs.URL, Bootstrap: "wsec", Repo: "example/test-repo", Name: "local", Exec: rt}
@@ -563,6 +565,45 @@ func TestUnknownGuestFailsClosed(t *testing.T) {
 	if argv, err := acp.SpawnArgsFor(""); err != nil || strings.Join(argv, " ") != acp.GrokStdio {
 		t.Fatalf("default %v %v", argv, err)
 	}
+}
+
+func startFakeClaudeStdio(t *testing.T) (io.WriteCloser, io.ReadCloser, func(), error) {
+	t.Helper()
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		raw, _ := json.Marshal(map[string]any{
+			"type":                "system",
+			"subtype":             "init",
+			"protocol":            provider.ClaudeStreamProto,
+			"claude_code_version": provider.ClaudeCodeVersion,
+			"session_id":          "claude-sess",
+		})
+		_, _ = agentOut.Write(append(raw, '\n'))
+		sc := bufio.NewScanner(agentIn)
+		sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+		if !sc.Scan() {
+			return
+		}
+		var msg map[string]any
+		if err := json.Unmarshal(sc.Bytes(), &msg); err != nil || msg["type"] != "user" {
+			return
+		}
+		raw, _ = json.Marshal(map[string]any{"type": "assistant", "text": "hello-claude"})
+		_, _ = agentOut.Write(append(raw, '\n'))
+		raw, _ = json.Marshal(map[string]any{"type": "result"})
+		_, _ = agentOut.Write(append(raw, '\n'))
+	}()
+	stop := func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+		_ = agentOut.Close()
+		<-done
+	}
+	return clientOut, clientIn, stop, nil
 }
 
 func startFakeACPStdio(t *testing.T) (io.WriteCloser, io.ReadCloser, func(), error) {

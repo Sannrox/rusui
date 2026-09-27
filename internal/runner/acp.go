@@ -14,6 +14,7 @@ import (
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/provider"
 )
 
 // ACPHost starts the ACP client for one claimed turn.
@@ -326,6 +327,10 @@ func (c *Client) heartbeatSteers(ctx context.Context, a *Assignment, steers chan
 }
 
 func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, steers <-chan engine.Steer, exec StdioExec) (engine.Artifact, []int64, error) {
+	if a != nil && a.Guest == acp.GuestClaude {
+		art, err := hostClaude(ctx, a, host, cwd)
+		return art, nil, err
+	}
 	host.Ctx = ctx
 	if _, err := host.Initialize(ctx); err != nil {
 		return engine.Artifact{}, nil, err
@@ -441,6 +446,102 @@ func promptFromInput(raw json.RawMessage) string {
 		text += ". Update that pull request by committing and pushing onto its head. Do not open a second pull request. If you do not produce a new commit, write a blocked_reason instead of the same pull request."
 	}
 	return text
+}
+
+// hostClaude speaks the stream-json handshake (ADR 0025). It reads the
+// Claude init event before writing a user message. ACP initialize is not sent.
+func hostClaude(ctx context.Context, a *Assignment, host *acp.Client, cwd string) (engine.Artifact, error) {
+	if ctx.Err() != nil {
+		return engine.Artifact{}, ctx.Err()
+	}
+	if host == nil {
+		return engine.Artifact{}, fmt.Errorf("acp host required")
+	}
+	host.Ctx = ctx
+	prompt := promptFromInput(a.Input)
+	if a.ResultPath != "" {
+		prompt += resultInstructions
+	}
+	rw := &stdioRWC{r: host.In, w: host.Out}
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = rw.Close()
+		case <-stop:
+		}
+	}()
+	res, err := provider.Run(ctx, provider.KindClaude, provider.Instance{}, rw, provider.Turn{
+		Prompt:    prompt,
+		Workspace: cwd,
+	}, claudeDecide(a, host))
+	if err != nil {
+		if ctx.Err() != nil {
+			return engine.Artifact{}, ctx.Err()
+		}
+		return engine.Artifact{}, err
+	}
+	art := artifactFromAssignment(a, nil)
+	art.GuestSessionID = res.Cursor
+	return art, nil
+}
+
+func claudeDecide(a *Assignment, host *acp.Client) provider.Decide {
+	return func(options []provider.Option, raw json.RawMessage) (string, bool) {
+		params := acp.PermissionParams{ToolCall: raw, Options: make([]acp.PermOption, 0, len(options))}
+		for _, o := range options {
+			params.Options = append(params.Options, acp.PermOption{OptionID: o.ID})
+		}
+		if host != nil && host.Rec != nil {
+			_ = host.Rec.Record(acp.Receipt{Type: acp.ActionPermission, Reason: acp.ReasonRecorded, Body: params})
+		}
+		d := permissionGate(a).Decide(params)
+		if !d.Matched {
+			if host != nil && host.Rec != nil {
+				_ = host.Rec.Record(acp.Receipt{Type: acp.ActionApproval, Reason: acp.ReasonUnmatched, Body: params})
+			}
+			if host != nil && host.Wait != nil {
+				d = host.Wait(ctxOrBackground(host.Ctx), params)
+			}
+		} else if !d.Allow && host != nil && host.Rec != nil {
+			_ = host.Rec.Record(acp.Receipt{Type: acp.ActionApproval, Reason: acp.ReasonDenied, Body: params})
+		}
+		if d.Matched && d.Allow && len(options) > 0 {
+			return options[0].ID, true
+		}
+		return "deny", false
+	}
+}
+
+func ctxOrBackground(ctx context.Context) context.Context {
+	if ctx != nil {
+		return ctx
+	}
+	return context.Background()
+}
+
+type stdioRWC struct {
+	r io.Reader
+	w io.Writer
+	c sync.Once
+}
+
+func (s *stdioRWC) Read(p []byte) (int, error)  { return s.r.Read(p) }
+func (s *stdioRWC) Write(p []byte) (int, error) { return s.w.Write(p) }
+func (s *stdioRWC) Close() error {
+	var err error
+	s.c.Do(func() {
+		if closer, ok := s.w.(io.Closer); ok {
+			err = closer.Close()
+		}
+		if closer, ok := s.r.(io.Closer); ok {
+			if e := closer.Close(); err == nil {
+				err = e
+			}
+		}
+	})
+	return err
 }
 
 func artifactFromAssignment(a *Assignment, pr *acp.PromptResult) engine.Artifact {

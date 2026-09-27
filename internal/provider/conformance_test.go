@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -187,7 +188,7 @@ func TestProcessKillEndsTheTurn(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := Run(context.Background(), KindGrok, Instance{Kind: KindGrok, ID: "k", Dir: t.TempDir()}, stdio{Reader: stdout, WriteCloser: stdin}, Turn{Prompt: "start", Workspace: t.TempDir()}, func([]Option) (string, bool) {
+		_, err := Run(context.Background(), KindGrok, Instance{Kind: KindGrok, ID: "k", Dir: t.TempDir()}, stdio{Reader: stdout, WriteCloser: stdin}, Turn{Prompt: "start", Workspace: t.TempDir()}, func([]Option, json.RawMessage) (string, bool) {
 			return "", false
 		})
 		done <- err
@@ -232,7 +233,7 @@ func drive(t *testing.T, kind string, turn Turn, wantDeny bool) Result {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 	}()
-	res, err := Run(context.Background(), kind, Instance{Kind: kind, ID: "t", Dir: t.TempDir()}, stdio{Reader: stdout, WriteCloser: stdin}, turn, func(options []Option) (string, bool) {
+	res, err := Run(context.Background(), kind, Instance{Kind: kind, ID: "t", Dir: t.TempDir()}, stdio{Reader: stdout, WriteCloser: stdin}, turn, func(options []Option, _ json.RawMessage) (string, bool) {
 		if len(options) == 0 {
 			return "", false
 		}
