@@ -17,6 +17,7 @@
   with live container identity),
   [#126](https://github.com/Sannrox/rusui/issues/126) (implementation of
   a second runtime stays unauthorized).
+  [ADR 0029](0029-single-host-runner.md) keeps that container on one host.
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
 

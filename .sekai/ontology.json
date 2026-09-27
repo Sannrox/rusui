@@ -21,7 +21,13 @@
     },
     {
       "name": "RusuiControlPlane",
-      "description": "Self-hosted environment plane for coding agents: admits work onto sessions and turns, owns policy, leases, environments, credentials, and receipts, and is the only durable store.",
+      "description": "Self-hosted environment plane for coding agents: admits work onto sessions and turns, owns policy, leases, environments, credentials, and receipts, and is the only durable store. The supported topology is one Runner on the same host.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
+      "name": "RusuiRunner",
+      "description": "Outbound-only rusui-runner on the plane host. Schema seeds one row named local. Hello records presence; it does not mint a second host. Snapshot bytes and environment containers stay on this host. Additional runners are unauthorized until measured single-host limits are recorded and a superseding ADR selects a topology.",
       "superclasses": [],
       "properties": []
     },
@@ -414,6 +420,14 @@
       "description": "A session runs on exactly one environment.",
       "domain": "RusuiSession",
       "range": "RusuiEnvironment",
+      "cardinality": { "min": 1, "max": 1 },
+      "transitive": false
+    },
+    {
+      "name": "rusui_plane_has_runner",
+      "description": "The plane has one supported runner on the same host. Hello records presence of that runner.",
+      "domain": "RusuiControlPlane",
+      "range": "RusuiRunner",
       "cardinality": { "min": 1, "max": 1 },
       "transitive": false
     },
@@ -937,6 +951,24 @@
       "subject": "RusuiSnapshot",
       "source": "docs/decisions/0028-container-isolation-profile.md",
       "locator": "docs/decisions/0028-container-isolation-profile.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiRunner",
+      "source": "docs/decisions/0029-single-host-runner.md",
+      "locator": "docs/decisions/0029-single-host-runner.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_plane_has_runner",
+      "source": "docs/decisions/0029-single-host-runner.md",
+      "locator": "docs/decisions/0029-single-host-runner.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiControlPlane",
+      "source": "docs/decisions/0029-single-host-runner.md",
+      "locator": "docs/decisions/0029-single-host-runner.md#decision",
       "confidence": 1.0
     }
   ]

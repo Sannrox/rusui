@@ -32,6 +32,7 @@ Decisions that must outlive a single pull request.
 | [0026](0026-harness-model-upstream.md) | Harness, model, and upstream are independent | Accepted |
 | [0027](0027-guest-reachability-ask.md) | The guest image does not declare reachability yet | Accepted |
 | [0028](0028-container-isolation-profile.md) | The supported machine isolation profile remains the container | Accepted |
+| [0029](0029-single-host-runner.md) | The supported runner topology remains one host | Accepted |
 
 ## When to write an ADR
 

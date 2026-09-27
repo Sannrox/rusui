@@ -20,7 +20,7 @@ combinations are not claimed:
 | Piece | Supported value |
 | --- | --- |
 | Host OS | Linux or macOS |
-| Runner | one `rusui-runner` on the same host as the plane |
+| Runner | one `rusui-runner` on the same host as the plane ([ADR 0029](decisions/0029-single-host-runner.md)) |
 | Runtime | Docker or Podman CLI (`docker`/`podman` on `PATH`) |
 | Guest | `$RUSUI_GUEST_IMAGE` (Grok ACP, Claude Code CLI 2.1.283, or Codex app-server) |
 | Egress | `trusted`: HTTPS to `rusui.plane` only |
