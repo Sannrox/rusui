@@ -584,20 +584,17 @@ func startFakeClaudeStdio(t *testing.T) (io.WriteCloser, io.ReadCloser, func(), 
 		_, _ = agentOut.Write(append(raw, '\n'))
 		sc := bufio.NewScanner(agentIn)
 		sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
-		for sc.Scan() {
-			var msg map[string]any
-			if err := json.Unmarshal(sc.Bytes(), &msg); err != nil {
-				return
-			}
-			if msg["type"] != "user" {
-				return
-			}
-			raw, _ = json.Marshal(map[string]any{"type": "assistant", "text": "hello-claude"})
-			_, _ = agentOut.Write(append(raw, '\n'))
-			raw, _ = json.Marshal(map[string]any{"type": "result"})
-			_, _ = agentOut.Write(append(raw, '\n'))
+		if !sc.Scan() {
 			return
 		}
+		var msg map[string]any
+		if err := json.Unmarshal(sc.Bytes(), &msg); err != nil || msg["type"] != "user" {
+			return
+		}
+		raw, _ = json.Marshal(map[string]any{"type": "assistant", "text": "hello-claude"})
+		_, _ = agentOut.Write(append(raw, '\n'))
+		raw, _ = json.Marshal(map[string]any{"type": "result"})
+		_, _ = agentOut.Write(append(raw, '\n'))
 	}()
 	stop := func() {
 		_ = clientIn.Close()
