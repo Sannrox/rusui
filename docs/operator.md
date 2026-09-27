@@ -39,8 +39,12 @@ upstream. Neither prints secret values.
 Exit status 0 means the topology is ready; do not start unattended work
 otherwise. The `model_upstream` check sends a bounded `GET /v1/models` request
 using the configured provider credential or upstream authentication and does
-not generate a model response. `GET /healthz` only proves the process is
-listening.
+not generate a model response. That list is not proof the guest can prompt.
+For `RUSUI_GUEST=claude`, set `RUSUI_GUEST_MODEL` to the id the guest will
+send. The plane copies it to `ANTHROPIC_MODEL`. The `model_guest` check then
+sends one bounded `POST /v1/messages` (`max_tokens` 1) for that id. HTTP 429
+is `unavailable`: the catalog can be ready while the model is in quota
+cooldown. `GET /healthz` only proves the process is listening.
 
 Process-driver review (`-driver`) is test/dev. It is not this topology.
 Public-repository unattended sessions (review, run, scheduled, implement
@@ -101,9 +105,11 @@ sections below describe the same setup steps by hand.
 
 For the `Sannrox/rusui` example, setup must leave `implement: true` on that
 repository and `run` in project `rusui`'s `session_kinds`. Add a narrowly
-scoped `RUSUI_AGENT_GITHUB_TOKEN` and one model credential or logged-in model
-proxy to `rusui.env`, then apply setup and confirm its embedded `diagnose`
-report shows `model_upstream: ready`. Do not put either credential in the
+scoped `RUSUI_AGENT_GITHUB_TOKEN`, one model credential or logged-in model
+proxy, and `RUSUI_GUEST_MODEL` when the guest is Claude. Put them in
+`rusui.env`, then apply setup and confirm its embedded `diagnose` report
+shows `model_upstream: ready` and, for Claude, `model_guest: ready`. A
+ready model list alone is not enough. Do not put a credential in the
 shell command.
 
 The task below pins the source commit before admission and allows only the

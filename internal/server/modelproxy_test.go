@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -259,8 +260,17 @@ func TestModelConfigFromEnv(t *testing.T) {
 		"RUSUI_GUEST": "claude", "ANTHROPIC_API_KEY": "a", "RUSUI_ANTHROPIC_API_KEY": "b",
 		"RUSUI_MODEL_UPSTREAM": "http://127.0.0.1:8317", "XAI_API_KEY": "x",
 	}))
-	if err != nil || c.Provider != ProviderAnthropic || c.Key != "b" || c.Origin.String() != "http://127.0.0.1:8317" {
+	if err != nil || c.Provider != ProviderAnthropic || c.Key != "b" || c.Origin.String() != "http://127.0.0.1:8317" || c.GuestModel != "" {
 		t.Fatalf("claude %+v %v", c, err)
+	}
+	c, err = ModelConfigFromEnv(env(map[string]string{
+		"RUSUI_GUEST": "claude", "RUSUI_GUEST_MODEL": "glm-5.3",
+	}))
+	if err != nil || c.GuestModel != "glm-5.3" {
+		t.Fatalf("guest model %+v %v", c, err)
+	}
+	if _, err := ModelConfigFromEnv(env(map[string]string{"RUSUI_GUEST_MODEL": "bad model"})); !errors.Is(err, ErrInvalidGuestModel) || (err != nil && strings.Contains(err.Error(), "bad model")) {
+		t.Fatalf("invalid model: %v", err)
 	}
 	for _, bad := range []map[string]string{
 		{"RUSUI_GUEST": "codex"},

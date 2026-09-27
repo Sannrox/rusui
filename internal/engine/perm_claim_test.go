@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/policy"
 )
 
@@ -41,5 +42,32 @@ func TestClaimIncludesPermissions(t *testing.T) {
 	var out map[string]any
 	if err := json.Unmarshal(b, &out); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestClaimCarriesNamedGuestModel(t *testing.T) {
+	h := setup(t)
+	h.srv.Guest = acp.GuestClaude
+	h.srv.GuestModel = "grok-4.6"
+	if _, err := h.e.StartRun("test", "hi", ""); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest("POST", h.http.URL+"/jobs/claim", strings.NewReader(`{"repo":"example/test-repo"}`))
+	req.Header.Set("Authorization", "Bearer wsec")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("%d %s", res.StatusCode, b)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["guest"] != acp.GuestClaude || out["guest_model"] != "grok-4.6" {
+		t.Fatalf("claim %s", b)
 	}
 }

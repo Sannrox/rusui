@@ -35,6 +35,7 @@ type Server struct {
 	SlackUsers          map[string]bool
 	PolicyPath          string
 	Guest               string // acp.GuestGrok (default) or acp.GuestClaude
+	GuestModel          string // RUSUI_GUEST_MODEL; copied into the Claude guest
 	ModelProvider       string // ProviderXAI (default) or ProviderAnthropic
 	ModelKey            string
 	ModelOrigin         *url.URL // operator model upstream; keyless forwarding allowed
@@ -425,6 +426,9 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		"turn_token_expires": exp.UTC().Format(time.RFC3339Nano),
 		"input":              s.Eng.BuildInput(c),
 		"guest":              s.guest(),
+	}
+	if acp.ValidGuestModel(s.GuestModel) {
+		out["guest_model"] = s.GuestModel
 	}
 	if turn, err := store.GetTurn(s.Eng.Store, c.Job.ID); err == nil {
 		out["session_id"] = turn.SessionID
