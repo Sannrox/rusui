@@ -1,10 +1,57 @@
 package engine_test
 
 import (
+	"io"
+	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/sannrox/rusui/internal/store"
 )
+
+func TestCancelQueuedTurnIsNotClaimable(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "queued work", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var turnID int64
+	var before string
+	if err := h.st.DB.QueryRow(`SELECT id, state FROM turns WHERE session_id=?`, sid).Scan(&turnID, &before); err != nil {
+		t.Fatal(err)
+	}
+	if before != "queued" {
+		t.Fatalf("before %s", before)
+	}
+	req, err := http.NewRequest(http.MethodPost, h.http.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/cancel", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer wsec")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("cancel %d %s", res.StatusCode, body)
+	}
+	var state string
+	if err := h.st.DB.QueryRow(`SELECT state FROM turns WHERE id=?`, turnID).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != "failed" {
+		t.Fatalf("state %s", state)
+	}
+	c, err := h.e.Claim("example/test-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c != nil {
+		t.Fatalf("cancelled queued turn was claimed: job %d", c.Job.ID)
+	}
+}
 
 func TestCancelSessionFailsLeasedWithoutRetry(t *testing.T) {
 	h := setup(t)
