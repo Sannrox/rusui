@@ -416,20 +416,31 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 
 func promptFromInput(raw json.RawMessage) string {
 	var in struct {
-		Title string `json:"title"`
-		Body  string `json:"body"`
+		Title                string `json:"title"`
+		Body                 string `json:"body"`
+		PublishedPullRequest int    `json:"published_pull_request"`
+		PublishedSHA         string `json:"published_sha"`
 	}
 	_ = json.Unmarshal(raw, &in)
-	if in.Title == "" && in.Body == "" {
-		return "review this item"
+	var text string
+	switch {
+	case in.Title == "" && in.Body == "":
+		text = "review this item"
+	case in.Body == "":
+		text = in.Title
+	case in.Title == "":
+		text = in.Body
+	default:
+		text = in.Title + "\n\n" + in.Body
 	}
-	if in.Body == "" {
-		return in.Title
+	if in.PublishedPullRequest > 0 {
+		text += fmt.Sprintf("\n\nThis session already published pull request #%d", in.PublishedPullRequest)
+		if in.PublishedSHA != "" {
+			text += " at " + in.PublishedSHA
+		}
+		text += ". Update that pull request by committing and pushing onto its head. Do not open a second pull request. If you do not produce a new commit, write a blocked_reason instead of the same pull request."
 	}
-	if in.Title == "" {
-		return in.Body
-	}
-	return in.Title + "\n\n" + in.Body
+	return text
 }
 
 func artifactFromAssignment(a *Assignment, pr *acp.PromptResult) engine.Artifact {

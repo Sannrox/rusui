@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
+	"github.com/sannrox/rusui/internal/store"
 )
 
 const ResultSchema = 1
@@ -100,4 +102,57 @@ func (e *Engine) observeResult(art *Artifact) {
 	default:
 		r.Outcome = OutcomeReported
 	}
+}
+
+const followUpUnchangedReason = "follow-up left the pull request head unchanged"
+
+// observeFollowUpPublication refuses to call a follow-up published when
+// GitHub still shows the previous head, or when the guest names a
+// different pull request. The guest pushes; the plane only records what
+// it can see.
+func (e *Engine) observeFollowUpPublication(jobID int64, art *Artifact) {
+	r := art.Result
+	if art.ItemKind != "run" || r == nil || r.PullRequest <= 0 {
+		return
+	}
+	prevPR, prevSHA, ok := priorPublication(e.Store, jobID)
+	if !ok {
+		return
+	}
+	if r.PullRequest != prevPR {
+		r.Outcome = OutcomeBlocked
+		r.BlockedReason = fmt.Sprintf("follow-up must update pull request #%d", prevPR)
+		return
+	}
+	if r.PublishedSHA == prevSHA || r.CandidateSHA == "" || r.CandidateSHA == prevSHA {
+		r.Outcome = OutcomeBlocked
+		r.BlockedReason = followUpUnchangedReason
+	}
+}
+
+// priorPublication is the newest result this turn actually published.
+// A later blocked or unconfirmed follow-up does not erase it.
+func priorPublication(s *store.Store, jobID int64) (pr int, sha string, ok bool) {
+	rows, err := s.DB.Query(`SELECT payload FROM review_revisions WHERE job_id=? ORDER BY id DESC`, jobID)
+	if err != nil {
+		return 0, "", false
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return 0, "", false
+		}
+		var prev Artifact
+		if json.Unmarshal([]byte(raw), &prev) != nil || prev.Result == nil {
+			continue
+		}
+		if prev.Result.Outcome == OutcomePublished && prev.Result.PullRequest > 0 && prev.Result.PublishedSHA != "" {
+			return prev.Result.PullRequest, prev.Result.PublishedSHA, true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, "", false
+	}
+	return 0, "", false
 }

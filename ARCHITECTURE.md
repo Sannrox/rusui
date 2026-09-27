@@ -930,6 +930,10 @@ receive the credential.
   `Rusui-Session: <session>`; operators may disable either with
   `RUSUI_DISABLE_COAUTHOR_TRAILER=1` or `RUSUI_DISABLE_SESSION_TRAILER=1`.
   Trailers are attribution, not authorization.
+- A follow-up on a session that already published a pull request updates
+  that same pull request. The plane records the turn as blocked when
+  GitHub still shows the previous head, or when the result names a
+  different pull request.
 - The pull request author is the operator. Human merge is required.
   Merge, close, label, protection, and release are unauthorized by
   contract. Use a fine-grained token limited to the bound repositories
