@@ -147,6 +147,29 @@ func TestPermissionMatchedAllowHasNoApproval(t *testing.T) {
 	}
 }
 
+func TestWriteLockWaitHonoursDeadline(t *testing.T) {
+	agentIn, clientOut := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+	})
+	c := &Client{Out: clientOut}
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		_ = c.write(context.Background(), rpcMessage{JSONRPC: "2.0", Method: MethodInitialize})
+	}()
+	<-started
+	time.Sleep(20 * time.Millisecond)
+	deadline := time.Now().Add(150 * time.Millisecond)
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	err := c.write(ctx, rpcMessage{JSONRPC: "2.0", Method: MethodSessionNew})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err %v", err)
+	}
+}
+
 type allowAll struct{}
 
 func (allowAll) Decide(PermissionParams) Decision {

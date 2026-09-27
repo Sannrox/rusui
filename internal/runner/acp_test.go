@@ -1,14 +1,17 @@
 package runner
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +19,140 @@ import (
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
 )
+
+func stallAfterSession(in io.Reader, out io.Writer) {
+	sc := bufio.NewScanner(in)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	reply := func(id any, result any) {
+		raw, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
+		_, _ = out.Write(append(raw, '\n'))
+	}
+	for sc.Scan() {
+		var msg struct {
+			ID     any    `json:"id"`
+			Method string `json:"method"`
+		}
+		if err := json.Unmarshal(sc.Bytes(), &msg); err != nil {
+			return
+		}
+		switch msg.Method {
+		case "initialize":
+			reply(msg.ID, map[string]any{
+				"protocolVersion":   1,
+				"agentInfo":         map[string]any{"name": "stall", "version": "0"},
+				"agentCapabilities": map[string]any{"loadSession": true},
+			})
+		case "session/new":
+			reply(msg.ID, map[string]any{"sessionId": "sess-stall"})
+			return
+		}
+	}
+}
+
+func TestHostACPReturnsWhenGuestStopsReading(t *testing.T) {
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+		_ = agentOut.Close()
+	})
+	go stallAfterSession(agentIn, agentOut)
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+		return acp.Decision{}
+	}}
+	deadline := time.Now().Add(200 * time.Millisecond)
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	started := time.Now()
+	in, _ := json.Marshal(map[string]string{"body": "do the thing"})
+	_, err := HostACP(ctx, &Assignment{Input: in, Repo: "example/test-repo", Item: 1, ItemKind: "issue"}, host, t.TempDir())
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err %v", err)
+	}
+	if time.Since(started) > time.Second {
+		t.Fatalf("deadline was not observed without an external signal: %s", time.Since(started))
+	}
+}
+
+func TestOneACPTurnFailsWhenGuestStopsReading(t *testing.T) {
+	var (
+		mu        sync.Mutex
+		failCount int
+		stopped   atomic.Bool
+	)
+	deadline := time.Now().UTC().Add(300 * time.Millisecond)
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/runners/hello":
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/jobs/claim":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"turn_id":            8,
+				"lease_generation":   1,
+				"claimed_revision":   1,
+				"repo":               "example/test-repo",
+				"item":               -8,
+				"item_kind":          "run",
+				"execution_deadline": deadline,
+				"turn_token":         "tok",
+				"input":              map[string]string{"body": "implement the package"},
+				"driver":             "container",
+				"handle":             "guest-8",
+			})
+		case strings.HasSuffix(r.URL.Path, "/fail"):
+			mu.Lock()
+			failCount++
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"kind": "fail"})
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	}))
+	t.Cleanup(hs.Close)
+
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+		_ = agentOut.Close()
+	})
+	go stallAfterSession(agentIn, agentOut)
+	hostFn := func(*Assignment, string) (*acp.Client, func(), error) {
+		stop := func() {
+			stopped.Store(true)
+			_ = clientOut.Close()
+			_ = agentIn.Close()
+		}
+		return &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+			return acp.Decision{}
+		}}, stop, nil
+	}
+	cli := &Client{Base: hs.URL, HTTP: hs.Client(), Bootstrap: "wsec", Repo: "example/test-repo"}
+	started := time.Now()
+	_, err := OneACPTurnWithOutcome(context.Background(), cli, hostFn)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err %v", err)
+	}
+	if time.Since(started) > time.Second {
+		t.Fatalf("deadline was not observed without an external signal: %s", time.Since(started))
+	}
+	mu.Lock()
+	n := failCount
+	mu.Unlock()
+	if n == 0 {
+		t.Fatal("expected fail receipt after deadline")
+	}
+	if !stopped.Load() {
+		t.Fatal("guest stop was not called")
+	}
+}
 
 func TestHostACPLoadsOrCreatesGuestSession(t *testing.T) {
 	t.Parallel()

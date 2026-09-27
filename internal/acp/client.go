@@ -92,7 +92,7 @@ func (c *Client) handleInbound(msg rpcMessage) {
 	default:
 		_ = c.record(Receipt{Type: ActionUnknown, Reason: ReasonRecorded, Body: map[string]any{"method": msg.Method, "params": jsonRaw(msg.Params)}})
 		if len(msg.ID) > 0 {
-			_ = c.write(rpcMessage{
+			_ = c.write(context.Background(), rpcMessage{
 				JSONRPC: "2.0",
 				ID:      msg.ID,
 				Error:   &rpcError{Code: -32601, Message: "method not handled by rusui ACP client"},
@@ -147,7 +147,7 @@ func (c *Client) answerPermission(msg rpcMessage) {
 	}
 	out := PermissionOutcome{Outcome: permissionResult}
 	raw, _ := json.Marshal(out)
-	_ = c.write(rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})
+	_ = c.write(context.Background(), rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})
 }
 
 func (c *Client) answerFSRead(msg rpcMessage) {
@@ -155,20 +155,20 @@ func (c *Client) answerFSRead(msg rpcMessage) {
 	_ = json.Unmarshal(msg.Params, &p)
 	_ = c.record(Receipt{Type: ActionFSRead, Reason: ReasonRecorded, Body: p})
 	raw, _ := json.Marshal(FSReadResult{Content: ""})
-	_ = c.write(rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})
+	_ = c.write(context.Background(), rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})
 }
 
 func (c *Client) answerFSWrite(msg rpcMessage) {
 	var p FSWriteParams
 	_ = json.Unmarshal(msg.Params, &p)
 	_ = c.record(Receipt{Type: ActionFSWrite, Reason: ReasonDenied, Body: p})
-	_ = c.write(rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: json.RawMessage(`{}`)})
+	_ = c.write(context.Background(), rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: json.RawMessage(`{}`)})
 }
 
 func (c *Client) answerTerminalCreate(msg rpcMessage) {
 	_ = c.record(Receipt{Type: ActionTerminalCreate, Reason: ReasonRecorded, Body: jsonRaw(msg.Params)})
 	raw, _ := json.Marshal(TerminalIDResult{TerminalID: "term-recorded"})
-	_ = c.write(rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})
+	_ = c.write(context.Background(), rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})
 }
 
 func (c *Client) answerTerminal(msg rpcMessage) {
@@ -184,7 +184,7 @@ func (c *Client) answerTerminal(msg rpcMessage) {
 		result = map[string]any{}
 	}
 	raw, _ := json.Marshal(result)
-	_ = c.write(rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})
+	_ = c.write(context.Background(), rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})
 }
 
 func terminalAction(method string) string {
@@ -230,7 +230,10 @@ func (c *Client) call(ctx context.Context, method string, params, result any, su
 		delete(c.pending, string(id))
 		c.mu.Unlock()
 	}()
-	if err := c.write(rpcMessage{JSONRPC: "2.0", ID: id, Method: method, Params: raw}); err != nil {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := c.write(ctx, rpcMessage{JSONRPC: "2.0", ID: id, Method: method, Params: raw}); err != nil {
 		return err
 	}
 	if submitted != nil {
@@ -344,18 +347,61 @@ func (c *Client) Notify(method string, params any) error {
 	if err != nil {
 		return err
 	}
-	return c.write(rpcMessage{JSONRPC: "2.0", Method: method, Params: raw})
+	ctx := c.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return c.write(ctx, rpcMessage{JSONRPC: "2.0", Method: method, Params: raw})
 }
 
-func (c *Client) write(msg rpcMessage) error {
+func (c *Client) lockWrites(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	got := make(chan struct{})
+	go func() {
+		c.writes.Lock()
+		close(got)
+	}()
+	select {
+	case <-got:
+		return nil
+	case <-ctx.Done():
+		go func() {
+			<-got
+			c.writes.Unlock()
+		}()
+		return ctx.Err()
+	}
+}
+
+func (c *Client) write(ctx context.Context, msg rpcMessage) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	b, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	c.writes.Lock()
+	if err := c.lockWrites(ctx); err != nil {
+		return err
+	}
 	defer c.writes.Unlock()
-	_, err = fmt.Fprintf(c.Out, "%s\n", b)
-	return err
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := fmt.Fprintf(c.Out, "%s\n", b)
+		errCh <- err
+	}()
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		if closer, ok := c.Out.(io.Closer); ok {
+			_ = closer.Close()
+		}
+		<-errCh
+		return ctx.Err()
+	}
 }
 
 func jsonRaw(b json.RawMessage) any {
