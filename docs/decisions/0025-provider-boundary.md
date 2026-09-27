@@ -37,7 +37,7 @@ provider turn ends.
 | Provider | Process | Protocol | Pin |
 | --- | --- | --- | --- |
 | Grok | `agent --permission-mode default agent stdio` | ACP JSON-RPC | `protocolVersion` 1 |
-| Claude | `claude --input-format stream-json --output-format stream-json --verbose --permission-mode default` | Claude Code stream-json | CLI `@anthropic-ai/claude-code` 2.1.283, protocol `stream-json` |
+| Claude | `claude --print --input-format stream-json --output-format stream-json --verbose --permission-mode default` | Claude Code stream-json | CLI `@anthropic-ai/claude-code` 2.1.283, protocol `stream-json` |
 | Codex | `codex app-server --listen stdio://` | app-server JSON-RPC, experimental | `app-server-2026-04-15` |
 
 An answer that names another version is refused before the turn starts.
@@ -94,5 +94,5 @@ process exit. Reverse by superseding this ADR.
 - [#283](https://github.com/Sannrox/rusui/issues/283)
 - [ADR 0002](0002-grok-acp-agent-set.md)
 - [ADR 0017](0017-claude-guest-and-model-upstream.md)
-- Claude Code stream-json: `claude --input-format stream-json --output-format stream-json`
+- Claude Code stream-json: `claude --print --input-format stream-json --output-format stream-json`
 - Codex app-server stdio: `codex app-server --listen stdio://`

@@ -15,6 +15,16 @@ import (
 	"github.com/sannrox/rusui/internal/acp"
 )
 
+func TestClaudeArgvRequiresPrint(t *testing.T) {
+	argv, err := Argv(KindClaude)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(argv) < 2 || argv[0] != "claude" || argv[1] != "--print" {
+		t.Fatalf("stream-json needs --print, got %q", argv)
+	}
+}
+
 func TestArgvMatchesRunnerSpawn(t *testing.T) {
 	for _, kind := range []string{KindGrok, KindClaude, KindCodex} {
 		want, err := Argv(kind)
