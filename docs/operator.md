@@ -478,6 +478,11 @@ It needs all of:
 Ordinary `rusui run PROMPT` sessions, scheduled sessions, and review
 sessions never receive the token.
 
+A run turn may execute for 45 minutes from claim (`RunExecDeadline`).
+Review and scheduled turns keep the 12-minute execution deadline.
+Heartbeats renew the grant and the lease liveness window. They do not
+move the execution deadline.
+
 rusui cannot stop a token from doing what its scope allows. Before you
 enable `implement`, set up:
 
