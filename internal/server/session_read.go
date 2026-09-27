@@ -76,7 +76,7 @@ func (s *Server) sessionRead(id int64) (sessionRead, error) {
 		out.TranscriptState = "unavailable"
 	} else {
 		for _, entry := range page.Entries {
-			out.Transcript = append(out.Transcript, sessionReadEntry{ID: entry.ID, Kind: entry.Kind, Body: entry.Body})
+			out.Transcript = append(out.Transcript, sessionReadEntry(entry))
 		}
 	}
 	if page.Sess.Kind == store.SessionKindLocal && out.TranscriptState == "" && len(out.Transcript) == 0 {

@@ -39,30 +39,30 @@ func readMain(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "usage: rusui read [-url URL] [-token TOKEN] SESSION_ID")
+		_, _ = fmt.Fprintln(stderr, "usage: rusui read [-url URL] [-token TOKEN] SESSION_ID")
 		return 2
 	}
 	if _, err := strconv.ParseInt(fs.Arg(0), 10, 64); err != nil {
-		fmt.Fprintln(stderr, "read: invalid session id")
+		_, _ = fmt.Fprintln(stderr, "read: invalid session id")
 		return 2
 	}
 	res, err := planeClient(*url, *token, "/sessions/"+fs.Arg(0)+"/read")
 	if err != nil {
-		fmt.Fprintln(stderr, err)
+		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	b, _ := io.ReadAll(res.Body)
 	if res.StatusCode >= 300 {
-		fmt.Fprintf(stderr, "read: %s %s\n", res.Status, bytesTrim(b))
+		_, _ = fmt.Fprintf(stderr, "read: %s %s\n", res.Status, bytesTrim(b))
 		return 1
 	}
 	var view sessionReadView
 	if err := json.Unmarshal(b, &view); err != nil {
-		fmt.Fprintln(stderr, "read: response")
+		_, _ = fmt.Fprintln(stderr, "read: response")
 		return 1
 	}
-	fmt.Fprint(stdout, formatSessionRead(view))
+	_, _ = fmt.Fprint(stdout, formatSessionRead(view))
 	return 0
 }
 
