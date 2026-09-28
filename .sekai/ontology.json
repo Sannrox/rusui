@@ -164,6 +164,12 @@
       "properties": []
     },
     {
+      "name": "RusuiPreviewGrant",
+      "description": "Operator-minted bearer grant for one session, environment handle, and port, presented to the preview proxy on a separate origin. Ten-minute TTL; token stored as a hash. Belongs to the operator; no grant is minted for a viewer who is not the operator.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiPerTurnGrant",
       "description": "Only plane-brokered credential in a P1 guest outside implement sessions. 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Redeems at plane git and model proxies. Not a GitHub token or xAI key. No plane-minted third-party identity is issued beside it; adoption needs a named task, a named audience, and a policy egress route in a superseding ADR.",
       "superclasses": [],
@@ -1055,6 +1061,18 @@
       "subject": "RusuiEnvironment",
       "source": "docs/decisions/0036-environment-desktop-deferred.md",
       "locator": "docs/decisions/0036-environment-desktop-deferred.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiPreviewGrant",
+      "source": "docs/decisions/0012-operator-access.md",
+      "locator": "docs/decisions/0012-operator-access.md#d5-preview-origin-isolation",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiPreviewGrant",
+      "source": "docs/decisions/0037-shared-preview-deferred.md",
+      "locator": "docs/decisions/0037-shared-preview-deferred.md#decision",
       "confidence": 1.0
     }
   ]
