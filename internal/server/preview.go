@@ -101,32 +101,21 @@ func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// previewComment turns a preview-page comment into a session follow-up.
+// It fails closed on origin: a POST must carry the preview origin, and
+// nothing posts while PreviewBase is unset.
 func (s *Server) previewComment(w http.ResponseWriter, r *http.Request) {
-	if s.consoleAuthed(r) || s.OperatorBrowserOK(r) {
-		http.Error(w, "operator cookie not valid on preview origin", http.StatusForbidden)
+	if s.PreviewBase == "" || !previewOriginOK(r.Header.Get("Origin"), s.PreviewBase) {
+		http.Error(w, "origin", http.StatusForbidden)
 		return
 	}
-	if origin := r.Header.Get("Origin"); origin != "" && s.PreviewBase != "" {
-		if !previewOriginOK(origin, s.PreviewBase) {
-			http.Error(w, "origin", http.StatusForbidden)
-			return
-		}
-	}
-	tok := r.URL.Query().Get("g")
-	if tok == "" {
-		tok = bearerToken(r)
-	}
-	if tok == "" {
-		http.Error(w, "grant required", http.StatusUnauthorized)
+	g, envRow, ok := s.previewGrant(w, r)
+	if !ok {
 		return
 	}
-	g, ok, err := store.GetPreviewGrant(s.Eng.Store, store.HashPreviewToken(tok))
-	if err != nil || !ok {
-		http.Error(w, "unknown grant", http.StatusUnauthorized)
-		return
-	}
-	if g.Revoked || time.Now().UTC().After(g.ExpiresAt) {
-		http.Error(w, "expired", http.StatusForbidden)
+	// Sleep keeps the grant's binding; a follow-up resumes the session.
+	if envRow.State != store.EnvReady && envRow.State != store.EnvSleeping {
+		http.Error(w, "unavailable", http.StatusConflict)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, previewCommentCap+1)
@@ -175,10 +164,15 @@ func previewOriginOK(got, base string) bool {
 	return strings.EqualFold(g.Scheme, b.Scheme) && strings.EqualFold(g.Host, b.Host)
 }
 
-func (s *Server) previewProxy(w http.ResponseWriter, r *http.Request) {
+// previewGrant resolves the request's preview grant and the environment it
+// is bound to. Every preview endpoint goes through it, so a grant acts
+// only while its session still holds the environment id and handle it
+// was minted for; expiry clears the handle and replacement changes the id.
+// On refusal it writes the response and returns false.
+func (s *Server) previewGrant(w http.ResponseWriter, r *http.Request) (*store.PreviewGrant, *store.Environment, bool) {
 	if s.consoleAuthed(r) || s.OperatorBrowserOK(r) {
 		http.Error(w, "operator cookie not valid on preview origin", http.StatusForbidden)
-		return
+		return nil, nil, false
 	}
 	tok := r.URL.Query().Get("g")
 	if tok == "" {
@@ -186,32 +180,40 @@ func (s *Server) previewProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	if tok == "" {
 		http.Error(w, "grant required", http.StatusUnauthorized)
-		return
+		return nil, nil, false
 	}
 	g, ok, err := store.GetPreviewGrant(s.Eng.Store, store.HashPreviewToken(tok))
 	if err != nil || !ok {
 		http.Error(w, "unknown grant", http.StatusUnauthorized)
-		return
+		return nil, nil, false
 	}
 	if g.Revoked || time.Now().UTC().After(g.ExpiresAt) {
 		http.Error(w, "expired", http.StatusForbidden)
-		return
+		return nil, nil, false
 	}
 	sess, err := store.GetSession(s.Eng.Store, g.SessionID)
 	if err != nil {
 		http.Error(w, "session gone", http.StatusConflict)
-		return
+		return nil, nil, false
 	}
 	envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID)
 	if err != nil || envRow.Handle != g.Handle || envRow.ID != g.EnvironmentID {
 		http.Error(w, "environment replaced", http.StatusConflict)
+		return nil, nil, false
+	}
+	return g, envRow, true
+}
+
+func (s *Server) previewProxy(w http.ResponseWriter, r *http.Request) {
+	g, envRow, ok := s.previewGrant(w, r)
+	if !ok {
 		return
 	}
-	// The grant names the environment id and handle; sleep keeps both, so
-	// a live grant wakes the same environment rather than needing a new mint.
+	// Sleep keeps the bound id and handle, so a live grant wakes the same
+	// environment rather than needing a new mint.
 	if envRow.State == store.EnvSleeping {
 		var ok bool
-		if envRow, ok = s.wakeForOperator(w, sess.ID, "preview grant"); !ok {
+		if envRow, ok = s.wakeForOperator(w, g.SessionID, "preview grant"); !ok {
 			return
 		}
 		if envRow.Handle != g.Handle || envRow.ID != g.EnvironmentID {
