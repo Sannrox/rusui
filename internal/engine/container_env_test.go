@@ -496,3 +496,43 @@ func TestGuestFilesystemOmitsProviderSecrets(t *testing.T) {
 		t.Fatal(joined)
 	}
 }
+
+func TestSessionEnvironmentStoresSetupOutputOnSuccessAndFailure(t *testing.T) {
+	h := setup(t)
+	out := "installing deps\n"
+	rt := &env.FakeRuntime{
+		DefaultFiles: map[string]bool{env.SetupPath: true},
+		OutputHook:   func(string, []string) []byte { return []byte(out) },
+	}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	h.putRefresh(issue(1))
+	c := h.claim()
+	turn, err := store.GetTurn(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caps, err := store.ListSessionCaptures(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caps) != 1 || caps[0].Kind != env.CaptureSetup || caps[0].Output != out || caps[0].Failed {
+		t.Fatalf("setup capture %+v", caps)
+	}
+
+	// A new pin re-provisions. Its setup fails; the session keeps naming
+	// the old environment, and the failed output replaces the old body.
+	out = "npm ERR! missing lockfile\n"
+	rt.ExecHook = func(string, []string) error { return fmt.Errorf("exit status 1") }
+	it := issue(1)
+	it.MainSHA = "bbb"
+	if err := h.e.EnsureSessionEnvironment(c.Job.ID, it); err == nil {
+		t.Fatal("expected setup failure")
+	}
+	caps, err = store.ListSessionCaptures(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caps) != 1 || caps[0].Output != out || !caps[0].Failed {
+		t.Fatalf("failed setup capture %+v", caps)
+	}
+}

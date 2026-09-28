@@ -87,13 +87,16 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 		_ = d.Destroy(handle)
 		return nil, err
 	}
-	if err := e.maybeSetup(d, handle, spec.SourceHash); err != nil {
+	var caps provisionCaptures
+	caps.setup, err = e.maybeSetup(d, handle, spec.SourceHash)
+	if err != nil {
 		_ = d.Destroy(handle)
-		return nil, err
+		return nil, &ProvisionError{Err: err, captures: caps}
 	}
-	if err := startServices(d, handle); err != nil {
+	caps.services, caps.started, err = startServices(d, handle)
+	if err != nil {
 		_ = d.Destroy(handle)
-		return nil, err
+		return nil, &ProvisionError{Err: err, captures: caps}
 	}
 	now := e.now()
 	exp := now.Add(e.envTTL())
@@ -112,7 +115,69 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 		_ = d.Destroy(handle)
 		return nil, err
 	}
+	e.recordProvision(id, caps)
 	return store.GetEnvironment(e.Store, id)
+}
+
+// ProvisionError is a failed provision. It carries the setup and service
+// output gathered before any environment row existed.
+type ProvisionError struct {
+	Err      error
+	captures provisionCaptures
+}
+
+func (p *ProvisionError) Error() string { return p.Err.Error() }
+func (p *ProvisionError) Unwrap() error { return p.Err }
+
+type provisionCaptures struct {
+	setup    *env.Capture
+	services []env.Capture
+	started  bool
+}
+
+func (e *Engine) recordProvision(envID int64, caps provisionCaptures) {
+	if caps.setup != nil {
+		e.recordCaptures(envID, env.CaptureSetup, []env.Capture{*caps.setup})
+	}
+	if caps.started {
+		e.recordCaptures(envID, env.CaptureService, caps.services)
+	}
+}
+
+// recordCaptures replaces the environment's stored output of kind (#334).
+// A capture that did not run clears the kind. A storage failure is
+// reported, not turned into a hook failure.
+func (e *Engine) recordCaptures(envID int64, kind string, caps []env.Capture) {
+	rows := make([]store.CaptureRow, 0, len(caps))
+	for _, c := range caps {
+		if c.Ran {
+			rows = append(rows, store.CaptureRow{Name: c.Name, Output: c.Output, Truncated: c.Truncated, Failed: c.Failed})
+		}
+	}
+	if err := store.ReplaceEnvironmentCaptures(e.Store, envID, kind, rows, e.now()); err != nil {
+		e.exception(fmt.Sprintf("env %d: store %s output: %v", envID, kind, err))
+	}
+}
+
+// resumeAndStart runs resume and the declared services after a wake and
+// stores their output.
+func (e *Engine) resumeAndStart(d env.Driver, envID int64, handle string) error {
+	if r, ok := d.(env.Resumer); ok {
+		c, err := r.Resume(handle)
+		e.recordCaptures(envID, env.CaptureResume, []env.Capture{c})
+		if err != nil {
+			return err
+		}
+	}
+	return e.startServicesFor(d, envID, handle)
+}
+
+func (e *Engine) startServicesFor(d env.Driver, envID int64, handle string) error {
+	caps, started, err := startServices(d, handle)
+	if started {
+		e.recordCaptures(envID, env.CaptureService, caps)
+	}
+	return err
 }
 
 func (e *Engine) SleepEnvironment(id int64) (*store.Environment, error) {
@@ -155,18 +220,13 @@ func (e *Engine) sleepReservedEnvironment(envRow *store.Environment) (*store.Env
 		return nil, e.failSleep(envRow, err, nil)
 	}
 	if err := stopServices(d, envRow.Handle); err != nil {
-		recoveryErr := startServices(d, envRow.Handle)
+		recoveryErr := e.startServicesFor(d, envRow.ID, envRow.Handle)
 		return nil, e.failSleep(envRow, err, recoveryErr)
 	}
 	if err := d.Sleep(envRow.Handle); err != nil {
 		recoveryErr := d.Wake(envRow.Handle)
 		if recoveryErr == nil {
-			if r, ok := d.(env.Resumer); ok {
-				recoveryErr = r.Resume(envRow.Handle)
-			}
-		}
-		if recoveryErr == nil {
-			recoveryErr = startServices(d, envRow.Handle)
+			recoveryErr = e.resumeAndStart(d, envRow.ID, envRow.Handle)
 		}
 		return nil, e.failSleep(envRow, err, recoveryErr)
 	}
@@ -225,12 +285,7 @@ func (e *Engine) WakeEnvironment(id int64) (*store.Environment, error) {
 	if err := d.Wake(envRow.Handle); err != nil {
 		return nil, e.failWake(envRow, withRollbackError(err, rollbackWake(d, envRow.Handle)))
 	}
-	if r, ok := d.(env.Resumer); ok {
-		if err := r.Resume(envRow.Handle); err != nil {
-			return nil, e.failWake(envRow, withRollbackError(err, rollbackWake(d, envRow.Handle)))
-		}
-	}
-	if err := startServices(d, envRow.Handle); err != nil {
+	if err := e.resumeAndStart(d, envRow.ID, envRow.Handle); err != nil {
 		return nil, e.failWake(envRow, withRollbackError(err, rollbackWake(d, envRow.Handle)))
 	}
 	now := e.now()
@@ -353,21 +408,24 @@ func (e *Engine) ReapEnvironments() error {
 	return nil
 }
 
-func (e *Engine) maybeSetup(d env.Driver, handle, hash string) error {
+// maybeSetup runs setup for a new source hash. The capture is nil when
+// setup was not attempted.
+func (e *Engine) maybeSetup(d env.Driver, handle, hash string) (*env.Capture, error) {
 	p, ok := d.(env.Preparer)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	if hash != "" {
 		prepared, err := store.HasPreparedSourceHash(e.Store, hash)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if prepared {
-			return nil
+			return nil, nil
 		}
 	}
-	return p.Setup(handle, hash)
+	c, err := p.Setup(handle, hash)
+	return &c, err
 }
 
 func (e *Engine) canProvision() bool {
@@ -445,6 +503,11 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 		}
 		created, err := e.ProvisionEnvironment(EnvSpec{Name: envRow.Name + "-" + suffix, Kind: kind, SourceHash: hash, Repo: item.Repo, Pin: pin})
 		if err != nil {
+			// The session still names the old environment; keep the
+			// failed setup output where the operator reads it.
+			if pe, ok := errors.AsType[*ProvisionError](err); ok {
+				e.recordProvision(envRow.ID, pe.captures)
+			}
 			return err
 		}
 		return store.SetSessionEnvironment(e.Store, sess.ID, created.ID)
@@ -466,11 +529,15 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 		_ = d.Destroy(handle)
 		return err
 	}
-	if err := e.maybeSetup(d, handle, hash); err != nil {
+	setup, err := e.maybeSetup(d, handle, hash)
+	if setup != nil {
+		e.recordCaptures(envRow.ID, env.CaptureSetup, []env.Capture{*setup})
+	}
+	if err != nil {
 		_ = d.Destroy(handle)
 		return err
 	}
-	if err := startServices(d, handle); err != nil {
+	if err := e.startServicesFor(d, envRow.ID, handle); err != nil {
 		_ = d.Destroy(handle)
 		return err
 	}
@@ -484,12 +551,14 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	return store.UpdateEnvironment(e.Store, *envRow)
 }
 
-func startServices(d env.Driver, handle string) error {
+// startServices reports started=false when the driver has no services.
+func startServices(d env.Driver, handle string) (caps []env.Capture, started bool, err error) {
 	s, ok := d.(env.ServiceCtl)
 	if !ok {
-		return nil
+		return nil, false, nil
 	}
-	return s.StartServices(handle)
+	caps, err = s.StartServices(handle)
+	return caps, true, err
 }
 
 func stopServices(d env.Driver, handle string) error {

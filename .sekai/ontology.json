@@ -110,6 +110,12 @@
       "properties": []
     },
     {
+      "name": "RusuiEnvironmentCapture",
+      "description": "Bounded combined stdout and stderr of the last setup, resume, or declared-service start of an environment. One per kind and service name; a new run replaces it, and a hook that did not run clears it. Keeps the last 1 MiB and marks truncation. Operator-only; read with rusui envlog. Distinct from action receipts and environment receipts.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiSchedule",
       "description": "Named project-owned trigger with a UTC cadence and a prompt. Each fire starts a new session and environment. Skip if a session from this schedule is still leased or running. A fire does not wake or prompt an existing session; continuation is follow-up on that session.",
       "superclasses": [],
@@ -492,6 +498,14 @@
       "transitive": false
     },
     {
+      "name": "rusui_environment_keeps_capture",
+      "description": "An environment keeps the last output of each setup, resume, and service run as a capture.",
+      "domain": "RusuiEnvironment",
+      "range": "RusuiEnvironmentCapture",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
       "name": "rusui_proof_judges_candidate",
       "description": "An isolated proof is valid only for the candidate SHA and source snapshot it names.",
       "domain": "RusuiProof",
@@ -735,6 +749,18 @@
       "subject": "RusuiEnvironmentReceipt",
       "source": "internal/store/environment.go",
       "locator": "internal/store/environment.go#InsertEnvironmentReceipt",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiEnvironmentCapture",
+      "source": "internal/store/capture.go",
+      "locator": "internal/store/capture.go#ReplaceEnvironmentCaptures",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_environment_keeps_capture",
+      "source": "internal/engine/environment.go",
+      "locator": "internal/engine/environment.go#recordCaptures",
       "confidence": 1.0
     },
     {

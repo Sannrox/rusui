@@ -7,7 +7,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 25
+const CurrentSchema = 26
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -380,8 +380,36 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 25); err != nil {
 			return err
 		}
+		ver = 25
+	}
+	if ver < 26 {
+		if err := migrateV26(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 26); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// migrateV26 stores the last setup, resume, and service output per
+// environment (#334). One row per kind and service name; a new run
+// replaces it.
+func migrateV26(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS environment_captures (
+  environment_id INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('setup', 'resume', 'service')),
+  name TEXT NOT NULL DEFAULT '',
+  output BLOB NOT NULL,
+  truncated INTEGER NOT NULL DEFAULT 0,
+  failed INTEGER NOT NULL DEFAULT 0,
+  recorded_at TEXT NOT NULL,
+  PRIMARY KEY (environment_id, kind, name)
+);
+`)
+	return err
 }
 
 func migrateV25(db *sql.DB) error {

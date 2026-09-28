@@ -56,6 +56,9 @@ func main() {
 		case "logs":
 			logsCLI(os.Args[2:])
 			return
+		case "envlog":
+			envlogCLI(os.Args[2:])
+			return
 		case "read":
 			readCLI(os.Args[2:])
 			return

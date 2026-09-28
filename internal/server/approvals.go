@@ -36,6 +36,33 @@ func (s *Server) sessionLogs(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(acts)
 }
 
+// sessionEnvlog returns the stored setup, resume, and service output of
+// the session's environment (#334). It is distinct from the action
+// receipts of /logs. Like the transcript, it is operator-only: hook output
+// may hold workspace secrets.
+func (s *Server) sessionEnvlog(w http.ResponseWriter, r *http.Request) {
+	if !s.OperatorBrowserOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "id", 400)
+		return
+	}
+	if _, err := store.GetSession(s.Eng.Store, id); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	caps, err := store.ListSessionCaptures(s.Eng.Store, id)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"captures": caps})
+}
+
 func (s *Server) listApprovals(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)

@@ -21,9 +21,10 @@ const (
 
 var serviceName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
-// ServiceCtl starts and stops declared services.yaml processes.
+// ServiceCtl starts and stops declared services.yaml processes. Start
+// returns one capture per service it ran, when the driver keeps output.
 type ServiceCtl interface {
-	StartServices(handle string) error
+	StartServices(handle string) ([]Capture, error)
 	StopServices(handle string) error
 }
 
@@ -86,23 +87,25 @@ func readWorkspaceFile(root, path string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(root, path))
 }
 
-func (p Process) StartServices(handle string) error {
+// StartServices starts detached processes. The process driver keeps no
+// service output.
+func (p Process) StartServices(handle string) ([]Capture, error) {
 	svcs, err := loadServices(func(path string) ([]byte, error) {
 		return readWorkspaceFile(handle, path)
 	})
 	if err != nil || len(svcs) == 0 {
-		return err
+		return nil, err
 	}
 	if err := os.MkdirAll(filepath.Join(handle, servicePIDDir), 0o700); err != nil {
-		return err
+		return nil, err
 	}
 	for _, svc := range svcs {
 		if err := startProcessService(handle, svc); err != nil {
 			_ = p.StopServices(handle)
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 func (p Process) StopServices(handle string) error {
@@ -172,23 +175,26 @@ func serviceEnv(extra map[string]string) []string {
 	return env
 }
 
-func (c Container) StartServices(handle string) error {
+func (c Container) StartServices(handle string) ([]Capture, error) {
 	svcs, err := loadServices(func(path string) ([]byte, error) {
 		return readRuntimeFile(c.RT, handle, path)
 	})
 	if err != nil || len(svcs) == 0 {
-		return err
+		return nil, err
 	}
+	var caps []Capture
 	for _, svc := range svcs {
 		cmd := []string{"/bin/sh", "-c", svc.Command}
 		if svc.Cwd != "" {
 			cmd = []string{"/bin/sh", "-c", "cd \"$1\" && shift && eval \"$1\"", "rusui-svc", svc.Cwd, svc.Command}
 		}
-		if err := c.RT.Exec(handle, cmd); err != nil {
-			return err
+		captured, err := c.capture(handle, CaptureService, svc.Name, cmd)
+		caps = append(caps, captured)
+		if err != nil {
+			return caps, err
 		}
 	}
-	return nil
+	return caps, nil
 }
 
 func (c Container) StopServices(string) error {

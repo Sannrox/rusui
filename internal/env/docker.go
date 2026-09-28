@@ -330,6 +330,22 @@ func (d DockerCLI) Exec(id string, cmd []string) error {
 	return err
 }
 
+// ExecOutput is Exec that returns the last CaptureLimit bytes of combined
+// stdout and stderr. The error names the exit status, not the output.
+func (d DockerCLI) ExecOutput(id string, cmd []string) ([]byte, bool, error) {
+	args := append([]string{"exec", "-w", workspaceDir, id}, cmd...)
+	c := exec.Command(d.bin(), args...)
+	buf := &tailBuffer{limit: CaptureLimit}
+	c.Stdout = buf
+	c.Stderr = buf
+	err := c.Run()
+	out, truncated := buf.result()
+	if err != nil {
+		err = fmt.Errorf("docker exec: %w", err)
+	}
+	return out, truncated, err
+}
+
 func (d DockerCLI) ExecStdio(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
 	// Values travel through the CLI's environment, never its argv, so
 	// credentials do not appear in the host process list.
