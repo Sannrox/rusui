@@ -41,6 +41,7 @@ Decisions that must outlive a single pull request.
 | [0035](0035-live-environment-fork-deferred.md) | Live environment fork is deferred | Accepted |
 | [0036](0036-environment-desktop-deferred.md) | A graphical desktop in the environment is deferred | Accepted |
 | [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Accepted |
+| [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
 
 ## When to write an ADR
 

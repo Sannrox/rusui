@@ -164,6 +164,12 @@
       "properties": []
     },
     {
+      "name": "RusuiMaintenanceProfile",
+      "description": "Versioned policy scope that decides which bound items get maintenance and which action classes may act. Action classes (advisory, comment, repair, close, merge) each have their own switch, measured promotion gate, and rollback threshold; enabling one grants no other. Advisory is the only class on by default.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiPreviewGrant",
       "description": "Operator-minted bearer grant for one session, environment handle, and port, presented to the preview proxy on a separate origin. Ten-minute TTL; token stored as a hash. Belongs to the operator; no grant is minted for a viewer who is not the operator.",
       "superclasses": [],
@@ -1073,6 +1079,12 @@
       "subject": "RusuiPreviewGrant",
       "source": "docs/decisions/0037-shared-preview-deferred.md",
       "locator": "docs/decisions/0037-shared-preview-deferred.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiMaintenanceProfile",
+      "source": "docs/decisions/0038-maintenance-eligibility-and-promotion.md",
+      "locator": "docs/decisions/0038-maintenance-eligibility-and-promotion.md#decision",
       "confidence": 1.0
     }
   ]
