@@ -107,25 +107,25 @@ func (c Container) PlaceTree(handle, srcDir string) error {
 
 // Setup runs `.agents/setup` when present. The engine calls this only
 // when the environment's source hash is new.
-func (c Container) Setup(handle, _ string) error {
+func (c Container) Setup(handle, _ string) (Capture, error) {
 	if !c.RT.HasFile(handle, SetupPath) {
-		return nil
+		return Capture{Kind: CaptureSetup}, nil
 	}
-	return c.RT.Exec(handle, []string{"/bin/sh", SetupPath})
+	return c.capture(handle, CaptureSetup, "", []string{"/bin/sh", SetupPath})
 }
 
 // Resume runs `.agents/resume` after wake when the file exists.
-func (c Container) Resume(handle string) error {
+func (c Container) Resume(handle string) (Capture, error) {
 	if !c.RT.HasFile(handle, ResumePath) {
-		return nil
+		return Capture{Kind: CaptureResume}, nil
 	}
-	return c.RT.Exec(handle, []string{"/bin/sh", ResumePath})
+	return c.capture(handle, CaptureResume, "", []string{"/bin/sh", ResumePath})
 }
 
 type Preparer interface {
-	Setup(handle, sourceHash string) error
+	Setup(handle, sourceHash string) (Capture, error)
 }
 
 type Resumer interface {
-	Resume(handle string) error
+	Resume(handle string) (Capture, error)
 }

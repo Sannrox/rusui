@@ -28,6 +28,7 @@ type FakeRuntime struct {
 	Stdio           []StdioCall
 	StdioHook       func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error)
 	ExecHook        func(id string, cmd []string) error
+	OutputHook      func(id string, cmd []string) []byte
 	StartHook       func(id string) error
 	StopHook        func(id string) error
 	GuestAddrs      map[string]string
@@ -150,6 +151,21 @@ func (f *FakeRuntime) Exec(id string, cmd []string) error {
 	return nil
 }
 
+// ExecOutput records the exec like Exec and returns OutputHook's bytes,
+// bounded the way DockerCLI bounds them.
+func (f *FakeRuntime) ExecOutput(id string, cmd []string) ([]byte, bool, error) {
+	err := f.Exec(id, cmd)
+	f.mu.Lock()
+	hook := f.OutputHook
+	f.mu.Unlock()
+	buf := &tailBuffer{limit: CaptureLimit}
+	if hook != nil {
+		_, _ = buf.Write(hook(id, cmd))
+	}
+	out, truncated := buf.result()
+	return out, truncated, err
+}
+
 func (f *FakeRuntime) GuestAddr(id string, port int) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -193,6 +209,14 @@ func (f *FakeRuntime) SetFile(id, path string) {
 		f.Files[id] = map[string]bool{}
 	}
 	f.Files[id][path] = true
+}
+
+// RemoveFile deletes a file from the fake container.
+func (f *FakeRuntime) RemoveFile(id, path string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.Files[id], path)
+	delete(f.Contents[id], path)
 }
 
 func (f *FakeRuntime) PlaceTree(id, srcDir string) error {

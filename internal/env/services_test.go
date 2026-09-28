@@ -82,7 +82,7 @@ func TestProcessStartStopServices(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(handle, ServicesRusuiPath), []byte("services:\n  sleeper:\n    command: sleep 30\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.StartServices(handle); err != nil {
+	if _, err := d.StartServices(handle); err != nil {
 		t.Fatal(err)
 	}
 	pidb, err := os.ReadFile(filepath.Join(handle, servicePIDDir, "sleeper.pid"))
@@ -115,7 +115,7 @@ func TestProcessStartServicesMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := d.StartServices(handle); err != nil {
+	if _, err := d.StartServices(handle); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.StopServices(handle); err != nil {
@@ -131,7 +131,7 @@ func TestContainerStartServicesExecsCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt.SetFileContent(id, ServicesRusuiPath, []byte("services:\n  web:\n    command: pnpm dev\n"))
-	if err := c.StartServices(id); err != nil {
+	if _, err := c.StartServices(id); err != nil {
 		t.Fatal(err)
 	}
 	if len(rt.Execs) != 1 || !strings.Contains(strings.Join(rt.Execs[0], " "), "pnpm dev") {

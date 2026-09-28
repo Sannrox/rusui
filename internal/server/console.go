@@ -82,6 +82,12 @@ nav a{margin-right:1rem}
 <p>Project {{.Sess.Project}} · {{.Sess.Kind}} · {{.Sess.State}} · environment {{.Sess.EnvironmentState}}{{if .TurnState}} · turn {{.TurnState}}{{end}}</p>
 {{if .Notice}}<p role="status">{{.Notice}}</p>{{end}}
 {{if .EnvironmentReceipts}}<h2>Environment activity</h2><ul>{{range .EnvironmentReceipts}}<li>{{.CreatedAt.Format "2006-01-02 15:04:05 MST"}} {{.Kind}} {{.State}}{{if .Detail}} — {{.Detail}}{{end}}</li>{{end}}</ul>{{end}}
+<h2>Environment output</h2>
+{{if not .Captures}}<p class="muted">No setup, resume, or service output.</p>{{end}}
+{{range .Captures}}<h3>{{.Kind}}{{if .Name}} {{.Name}}{{end}}</h3>
+<p>{{.RecordedAt.Format "2006-01-02 15:04:05 MST"}}{{if .Failed}} · failed{{end}}{{if .Truncated}} · truncated to the last 1 MiB{{end}}</p>
+<pre>{{.Output}}</pre>
+{{end}}
 <p>{{.Sess.Prompt}}</p>
 <form method="post" action="/console/sessions/{{.Sess.ID}}/prompt">
 <input type="hidden" name="csrf" value="{{.CSRF}}">
@@ -213,6 +219,7 @@ type consolePage struct {
 	Sessions            []consoleSess
 	Sess                *store.Session
 	EnvironmentReceipts []store.EnvironmentReceipt
+	Captures            []store.EnvironmentCapture
 	TurnState           string
 	Reason              string
 	Artifact            string
@@ -475,6 +482,10 @@ func (s *Server) sessionPage(id int64) (consolePage, error) {
 	}
 	page := consolePage{Title: fmt.Sprintf("Session %d", id), View: "session", Sess: sess}
 	page.EnvironmentReceipts, err = store.ListEnvironmentReceipts(s.Eng.Store, id)
+	if err != nil {
+		page.HistoryUnavailable = true
+	}
+	page.Captures, err = store.ListSessionCaptures(s.Eng.Store, id)
 	if err != nil {
 		page.HistoryUnavailable = true
 	}
