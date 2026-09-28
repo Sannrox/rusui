@@ -17,7 +17,7 @@ func AdvisoryEligible(it snapshot.Item) bool {
 	case "issue":
 		return it.State == "open"
 	case "pull":
-		if it.Draft {
+		if it.State != "open" || it.Draft {
 			return false
 		}
 		if it.BaseRef != "" && it.DefaultBranch != "" && it.BaseRef != it.DefaultBranch {

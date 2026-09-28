@@ -33,11 +33,14 @@ func TestAdvisoryEligible(t *testing.T) {
 	pr.Draft = false
 	pr.State = "closed"
 	pr.Merged = true
-	if !engine.AdvisoryEligible(pr) {
-		t.Fatal("merged default-branch PR")
+	if engine.AdvisoryEligible(pr) {
+		t.Fatal("closed merged default-branch PR")
+	}
+	pr.Merged = false
+	if engine.AdvisoryEligible(pr) {
+		t.Fatal("closed default-branch PR")
 	}
 	pr.State = "open"
-	pr.Merged = false
 	pr.BaseRef = "release-1"
 	if engine.AdvisoryEligible(pr) {
 		t.Fatal("other-base PR")
@@ -92,6 +95,28 @@ func TestAdmitSkipsDraftPullRequest(t *testing.T) {
 	j, _ := store.JobState(h.st, it.Repo, it.Item)
 	if j != nil {
 		t.Fatal("draft admitted")
+	}
+}
+
+func TestAdmitSkipsClosedPullRequest(t *testing.T) {
+	h := setup(t)
+	it := issue(8)
+	it.ItemKind = "pull"
+	it.State = "closed"
+	it.Merged = true
+	it.DefaultBranch = "main"
+	it.BaseRef = "main"
+	it.HeadSHA = "h"
+	h.f.Put(it)
+	if err := h.e.IngestWebhook("d-closed", it.Repo, it.Item, it.ItemKind); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.StepRefresh(); err != nil {
+		t.Fatal(err)
+	}
+	j, _ := store.JobState(h.st, it.Repo, it.Item)
+	if j != nil {
+		t.Fatal("closed PR admitted")
 	}
 }
 
