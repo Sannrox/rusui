@@ -190,11 +190,16 @@ func isContainerID(id string) bool {
 	return true
 }
 
-// dockerForwardJS pipes stdio to 127.0.0.1:port inside the guest.
-// `node -e SCRIPT PORT` puts PORT at process.argv[1].
-const dockerForwardJS = `const n=require("net");const s=n.connect({host:"127.0.0.1",port:+process.argv[1]});process.stdin.pipe(s);s.pipe(process.stdout,{end:false});let once=false;const done=()=>{if(once)return;once=true;process.stdout.end(()=>process.exit(0))};s.on("end",done);s.on("close",done);s.on("error",()=>process.exit(1));process.stdin.on("end",()=>s.end());`
+// sidecarForwardJS is a long-lived TCP proxy in a published sidecar.
+// argv: destHost destPort listenPort
+const sidecarForwardJS = `const n=require("net");const dest=process.argv[1];const dport=+process.argv[2];const lport=+process.argv[3];n.createServer(c=>{const s=n.connect({host:dest,port:dport});c.pipe(s);s.pipe(c);s.on("error",()=>c.destroy());c.on("error",()=>s.destroy());}).listen(lport,"0.0.0.0");`
 
-var dockerForwards sync.Map // id/port -> net.Listener
+type dockerFwd struct {
+	addr    string
+	sidecar string
+}
+
+var dockerForwards sync.Map // id/port -> dockerFwd
 
 func (d DockerCLI) GuestAddr(id string, port int) (string, error) {
 	if err := validGuestPort(port); err != nil {
@@ -205,63 +210,78 @@ func (d DockerCLI) GuestAddr(id string, port int) (string, error) {
 	}
 	key := id + "/" + strconv.Itoa(port)
 	if v, ok := dockerForwards.Load(key); ok {
-		return v.(net.Listener).Addr().String(), nil
+		return v.(dockerFwd).addr, nil
 	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	netw, ip, image, err := d.inspectForward(id)
 	if err != nil {
 		return "", err
 	}
-	if actual, loaded := dockerForwards.LoadOrStore(key, ln); loaded {
-		_ = ln.Close()
-		return actual.(net.Listener).Addr().String(), nil
+	short := id
+	if len(short) > 12 {
+		short = short[:12]
 	}
-	go d.serveForward(ln, id, port)
-	return ln.Addr().String(), nil
-}
-
-func (d DockerCLI) serveForward(ln net.Listener, id string, port int) {
-	for {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		go d.proxyConn(id, port, c)
+	sidecar := "rusui-fwd-" + short + "-" + strconv.Itoa(port)
+	ps := strconv.Itoa(port)
+	args := []string{
+		"run", "-d", "--rm", "--name", sidecar, "--network", netw,
+		"-p", "127.0.0.1:0:" + ps,
+		"--entrypoint", "node", image, "-e", sidecarForwardJS, ip, ps, ps,
 	}
-}
-
-func (d DockerCLI) proxyConn(id string, port int, c net.Conn) {
-	defer func() { _ = c.Close() }()
-	cmd := exec.Command(d.bin(), "exec", "-i", id, "node", "-e", dockerForwardJS, strconv.Itoa(port))
-	stdin, err := cmd.StdinPipe()
+	if _, err := d.run(args...); err != nil {
+		return "", err
+	}
+	out, err := d.run("port", sidecar, ps)
 	if err != nil {
-		return
+		_, _ = d.run("rm", "-f", sidecar)
+		return "", err
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return
+	addr := parseDockerPort(string(out))
+	if addr == "" {
+		_, _ = d.run("rm", "-f", sidecar)
+		return "", fmt.Errorf("env: no published port")
 	}
-	if err := cmd.Start(); err != nil {
-		return
+	fwd := dockerFwd{addr: addr, sidecar: sidecar}
+	if actual, loaded := dockerForwards.LoadOrStore(key, fwd); loaded {
+		_, _ = d.run("rm", "-f", sidecar)
+		return actual.(dockerFwd).addr, nil
 	}
-	go func() {
-		_, _ = io.Copy(stdin, c)
-		_ = stdin.Close()
-	}()
-	_, _ = io.Copy(c, stdout)
-	_ = c.Close()
-	if cmd.Process != nil {
-		_ = cmd.Process.Kill()
-	}
-	_ = cmd.Wait()
+	return addr, nil
 }
 
-func closeDockerForwards(id string) {
+func (d DockerCLI) inspectForward(id string) (network, ip, image string, err error) {
+	out, err := d.run("inspect", "-f", "{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{$v.IPAddress}} {{end}}{{.Config.Image}}", id)
+	if err != nil {
+		return "", "", "", err
+	}
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	if len(fields) < 3 {
+		return "", "", "", fmt.Errorf("env: no guest address")
+	}
+	network, ip, image = fields[0], fields[1], fields[len(fields)-1]
+	if net.ParseIP(ip) == nil || net.ParseIP(ip).IsLoopback() {
+		return "", "", "", fmt.Errorf("env: guest address %s denied", ip)
+	}
+	return network, ip, image, nil
+}
+
+func parseDockerPort(out string) string {
+	s := strings.TrimSpace(out)
+	if i := strings.LastIndex(s, "->"); i >= 0 {
+		s = strings.TrimSpace(s[i+2:])
+	}
+	if _, _, err := net.SplitHostPort(s); err != nil {
+		return ""
+	}
+	return s
+}
+
+func (d DockerCLI) closeForwards(id string) {
 	prefix := id + "/"
 	dockerForwards.Range(func(k, v any) bool {
 		key, _ := k.(string)
 		if id == "" || key == id || strings.HasPrefix(key, prefix) {
-			if ln, ok := v.(net.Listener); ok {
-				_ = ln.Close()
+			if fwd, ok := v.(dockerFwd); ok && fwd.sidecar != "" {
+				_, _ = d.run("rm", "-f", fwd.sidecar)
 			}
 			dockerForwards.Delete(k)
 		}
@@ -270,6 +290,7 @@ func closeDockerForwards(id string) {
 }
 
 func (d DockerCLI) Stop(id string) error {
+	d.closeForwards(id)
 	_, err := d.run("stop", id)
 	return err
 }
@@ -283,7 +304,7 @@ func (d DockerCLI) Remove(id string) error {
 	if id == "" {
 		return nil
 	}
-	closeDockerForwards(id)
+	d.closeForwards(id)
 	_, err := d.run("rm", "-f", id)
 	return err
 }
