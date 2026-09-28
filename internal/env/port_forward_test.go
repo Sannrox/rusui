@@ -4,7 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -45,26 +45,51 @@ func TestContainerPortForwardUsesGuestAddr(t *testing.T) {
 	}
 }
 
-func TestDockerCLIGuestAddrListensOnHostLoopback(t *testing.T) {
-	bin, _ := stubDocker(t)
+func TestDockerCLIGuestAddrReusesSidecar(t *testing.T) {
+	bin, logPath := stubDocker(t)
 	d := DockerCLI{Bin: bin}
 	addr, err := d.GuestAddr("0123456789abcdef", 3000)
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if host != "127.0.0.1" {
-		t.Fatalf("host %q", host)
-	}
-	if port == strconv.Itoa(3000) {
-		t.Fatal("must not publish the guest port on the host")
+	if addr != "127.0.0.1:54321" {
+		t.Fatalf("addr %q", addr)
 	}
 	again, err := d.GuestAddr("0123456789abcdef", 3000)
 	if err != nil || again != addr {
 		t.Fatalf("reuse %q %q %v", again, addr, err)
 	}
-	_ = d.Remove("0123456789abcdef")
+	logb, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runs := 0
+	for line := range strings.SplitSeq(string(logb), "\n") {
+		if strings.HasPrefix(line, "run ") {
+			runs++
+		}
+	}
+	if runs != 1 {
+		t.Fatalf("sidecar runs %d\n%s", runs, logb)
+	}
+	if err := d.Stop("0123456789abcdef"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.GuestAddr("0123456789abcdef", 3000); err != nil {
+		t.Fatal(err)
+	}
+	logb, _ = os.ReadFile(logPath)
+	runs = 0
+	rms := 0
+	for line := range strings.SplitSeq(string(logb), "\n") {
+		if strings.HasPrefix(line, "run ") {
+			runs++
+		}
+		if strings.HasPrefix(line, "rm -f rusui-fwd-") {
+			rms++
+		}
+	}
+	if runs != 2 || rms < 1 {
+		t.Fatalf("after stop runs=%d rms=%d\n%s", runs, rms, logb)
+	}
 }
