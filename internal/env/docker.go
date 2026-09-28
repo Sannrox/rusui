@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // WorkspaceDir is the session workspace inside a container guest.
@@ -188,6 +190,85 @@ func isContainerID(id string) bool {
 	return true
 }
 
+// dockerForwardJS pipes stdio to 127.0.0.1:port inside the guest.
+// `node -e SCRIPT PORT` puts PORT at process.argv[1].
+const dockerForwardJS = `const n=require("net");const s=n.connect({host:"127.0.0.1",port:+process.argv[1]});process.stdin.pipe(s);s.pipe(process.stdout,{end:false});let once=false;const done=()=>{if(once)return;once=true;process.stdout.end(()=>process.exit(0))};s.on("end",done);s.on("close",done);s.on("error",()=>process.exit(1));process.stdin.on("end",()=>s.end());`
+
+var dockerForwards sync.Map // id/port -> net.Listener
+
+func (d DockerCLI) GuestAddr(id string, port int) (string, error) {
+	if err := validGuestPort(port); err != nil {
+		return "", err
+	}
+	if id == "" {
+		return "", fmt.Errorf("env: empty handle")
+	}
+	key := id + "/" + strconv.Itoa(port)
+	if v, ok := dockerForwards.Load(key); ok {
+		return v.(net.Listener).Addr().String(), nil
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", err
+	}
+	if actual, loaded := dockerForwards.LoadOrStore(key, ln); loaded {
+		_ = ln.Close()
+		return actual.(net.Listener).Addr().String(), nil
+	}
+	go d.serveForward(ln, id, port)
+	return ln.Addr().String(), nil
+}
+
+func (d DockerCLI) serveForward(ln net.Listener, id string, port int) {
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go d.proxyConn(id, port, c)
+	}
+}
+
+func (d DockerCLI) proxyConn(id string, port int, c net.Conn) {
+	defer func() { _ = c.Close() }()
+	cmd := exec.Command(d.bin(), "exec", "-i", id, "node", "-e", dockerForwardJS, strconv.Itoa(port))
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		return
+	}
+	go func() {
+		_, _ = io.Copy(stdin, c)
+		_ = stdin.Close()
+	}()
+	_, _ = io.Copy(c, stdout)
+	_ = c.Close()
+	if cmd.Process != nil {
+		_ = cmd.Process.Kill()
+	}
+	_ = cmd.Wait()
+}
+
+func closeDockerForwards(id string) {
+	prefix := id + "/"
+	dockerForwards.Range(func(k, v any) bool {
+		key, _ := k.(string)
+		if id == "" || key == id || strings.HasPrefix(key, prefix) {
+			if ln, ok := v.(net.Listener); ok {
+				_ = ln.Close()
+			}
+			dockerForwards.Delete(k)
+		}
+		return true
+	})
+}
+
 func (d DockerCLI) Stop(id string) error {
 	_, err := d.run("stop", id)
 	return err
@@ -202,6 +283,7 @@ func (d DockerCLI) Remove(id string) error {
 	if id == "" {
 		return nil
 	}
+	closeDockerForwards(id)
 	_, err := d.run("rm", "-f", id)
 	return err
 }

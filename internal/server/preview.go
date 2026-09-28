@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -45,6 +47,10 @@ func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 	port, err := strconv.Atoi(r.FormValue("port"))
 	if err != nil || port < 1024 || port > 65535 {
 		http.Error(w, "port", 400)
+		return
+	}
+	if _, err := s.previewDial(envRow, port); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
 	if s.PreviewBase == "" {
@@ -129,7 +135,12 @@ func (s *Server) previewProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "port not authorized", http.StatusForbidden)
 		return
 	}
-	target, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", g.Port))
+	dial, err := s.previewDial(envRow, g.Port)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+	target, err := url.Parse("http://" + dial)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -140,6 +151,59 @@ func (s *Server) previewProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Host = target.Host
 	proxy.ServeHTTP(w, r)
+}
+
+func (s *Server) previewDial(envRow *store.Environment, port int) (string, error) {
+	var d env.Driver
+	if envRow.Driver == env.KindContainer {
+		d = s.Eng.Container
+	} else {
+		d = s.Eng.Env
+	}
+	pf, ok := d.(env.PortForwarder)
+	if !ok || d == nil {
+		return "", fmt.Errorf("port forward unavailable")
+	}
+	dial, err := pf.PortForward(envRow.Handle, port)
+	if err != nil {
+		return "", err
+	}
+	if err := s.denyPlaneDest(dial); err != nil {
+		return "", err
+	}
+	return dial, nil
+}
+
+func (s *Server) denyPlaneDest(dial string) error {
+	if s == nil || s.Addr == "" {
+		return nil
+	}
+	wantHost, wantPort, err := net.SplitHostPort(s.Addr)
+	if err != nil {
+		return nil
+	}
+	gotHost, gotPort, err := net.SplitHostPort(dial)
+	if err != nil {
+		return err
+	}
+	if gotPort != wantPort {
+		return nil
+	}
+	if planeLoopback(wantHost) && planeLoopback(gotHost) {
+		return fmt.Errorf("plane listener not a preview target")
+	}
+	if wantHost != "" && !planeLoopback(wantHost) && strings.EqualFold(gotHost, wantHost) {
+		return fmt.Errorf("plane listener not a preview target")
+	}
+	return nil
+}
+
+func planeLoopback(host string) bool {
+	if host == "" || host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func mustID(r *http.Request) int64 {
