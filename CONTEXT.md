@@ -44,7 +44,7 @@ single `runners` row named `local`. Snapshot bytes stay on this host
 _Avoid_: fleet, Kubernetes, additional placement hosts
 
 **Snapshot**:
-The prepared, reusable tree identified by `source_hash` (base image digest, git pin, `.agents/setup` bytes). Two sessions may share a snapshot; they never share an environment.
+The prepared, reusable tree identified by `source_hash` (base image digest, git pin, `.agents/setup` bytes). Two sessions may share a snapshot; they never share an environment. A second session starts from a snapshot, never from a live fork ([ADR 0035](docs/decisions/0035-live-environment-fork-deferred.md)).
 _Avoid_: environment, GitHub item snapshot hash, image tag
 
 **Schedule**:
