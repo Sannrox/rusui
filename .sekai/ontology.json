@@ -1044,6 +1044,12 @@
       "source": "docs/decisions/0034-operator-host-location-deferred.md",
       "locator": "docs/decisions/0034-operator-host-location-deferred.md#decision",
       "confidence": 1.0
+    },
+    {
+      "subject": "RusuiSnapshot",
+      "source": "docs/decisions/0035-live-environment-fork-deferred.md",
+      "locator": "docs/decisions/0035-live-environment-fork-deferred.md#decision",
+      "confidence": 1.0
     }
   ]
 }

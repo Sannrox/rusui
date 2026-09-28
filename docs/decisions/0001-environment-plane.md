@@ -15,7 +15,9 @@
   [ADR 0002](0002-grok-acp-agent-set.md) (amends D2's chosen agent set),
   [ADR 0003](0003-operator-surface.md) (amends D6 and D7),
   [ADR 0034](0034-operator-host-location-deferred.md) (D4 drivers have
-  no operator-chosen location)
+  no operator-chosen location),
+  [ADR 0035](0035-live-environment-fork-deferred.md) (D4 `Fork` is not
+  a driver operation)
 
 ## Context
 

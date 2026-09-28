@@ -4,6 +4,8 @@
   keeps this snapshot as the prepared tree. A hypervisor memory image
   is not the snapshot noun. [ADR 0029](0029-single-host-runner.md)
   keeps P1 as one runner on the plane host.
+  [ADR 0035](0035-live-environment-fork-deferred.md) keeps the snapshot
+  as the only clone source; live fork is deferred.
 - Date: 2026-09-15
 - Amends: [ADR 0006](0006-session-start.md) (workspace of a session
   environment). [ADR 0001](0001-environment-plane.md) D4 (setup once
