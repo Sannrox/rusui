@@ -450,6 +450,9 @@ func promptFromInput(raw json.RawMessage) string {
 
 // hostClaude speaks the stream-json handshake (ADR 0025). It reads the
 // Claude init event before writing a user message. ACP initialize is not sent.
+// Resume is deferred on this host: the spawn has no --resume, so no Cursor
+// is passed and every turn is a new conversation. The init session id is
+// still recorded as the cursor. Provider events are not forwarded.
 func hostClaude(ctx context.Context, a *Assignment, host *acp.Client, cwd string) (engine.Artifact, error) {
 	if ctx.Err() != nil {
 		return engine.Artifact{}, ctx.Err()

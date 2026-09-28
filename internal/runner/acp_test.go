@@ -151,6 +151,56 @@ func TestHostACPClaudeReadsStreamJSONInit(t *testing.T) {
 	}
 }
 
+// Resume is deferred on the Claude host (ADR 0025): a stored cursor does not
+// reach the provider, and the new conversation's id becomes the cursor.
+func TestHostACPClaudeFollowUpStartsNewConversation(t *testing.T) {
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+		_ = agentOut.Close()
+	})
+	go func() {
+		raw, _ := json.Marshal(map[string]any{
+			"type":                "system",
+			"subtype":             "init",
+			"protocol":            provider.ClaudeStreamProto,
+			"claude_code_version": provider.ClaudeCodeVersion,
+			"session_id":          "fresh-sess",
+		})
+		_, _ = agentOut.Write(append(raw, '\n'))
+		sc := bufio.NewScanner(agentIn)
+		if sc.Scan() {
+			raw, _ = json.Marshal(map[string]any{"type": "result"})
+			_, _ = agentOut.Write(append(raw, '\n'))
+		}
+	}()
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+		return acp.Decision{}
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	a := &Assignment{Guest: acp.GuestClaude, GuestSessionID: "prior-sess", Repo: "example/test-repo", Item: 1, ItemKind: "run"}
+	art, err := HostACP(ctx, a, host, t.TempDir())
+	if err != nil {
+		t.Fatalf("err %v", err)
+	}
+	if art.GuestSessionID != "fresh-sess" {
+		t.Fatalf("session %q", art.GuestSessionID)
+	}
+	argv, err := acp.SpawnArgsFor(acp.GuestClaude)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, arg := range argv {
+		if arg == "--resume" {
+			t.Fatalf("claude spawn resumes %v", argv)
+		}
+	}
+}
+
 func TestOneACPTurnFailsWhenGuestStopsReading(t *testing.T) {
 	var (
 		mu        sync.Mutex
