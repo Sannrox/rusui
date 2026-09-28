@@ -13,7 +13,9 @@
 - Related: [VISION.md](../../VISION.md), [ROADMAP.md](../../ROADMAP.md),
   [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0002](0002-grok-acp-agent-set.md) (amends D2's chosen agent set),
-  [ADR 0003](0003-operator-surface.md) (amends D6 and D7)
+  [ADR 0003](0003-operator-surface.md) (amends D6 and D7),
+  [ADR 0034](0034-operator-host-location-deferred.md) (D4 drivers have
+  no operator-chosen location)
 
 ## Context
 

@@ -1032,6 +1032,18 @@
       "source": "docs/decisions/0033-third-party-identity-deferred.md",
       "locator": "docs/decisions/0033-third-party-identity-deferred.md#decision",
       "confidence": 1.0
+    },
+    {
+      "subject": "RusuiEnvironment",
+      "source": "docs/decisions/0034-operator-host-location-deferred.md",
+      "locator": "docs/decisions/0034-operator-host-location-deferred.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiLocalSession",
+      "source": "docs/decisions/0034-operator-host-location-deferred.md",
+      "locator": "docs/decisions/0034-operator-host-location-deferred.md#decision",
+      "confidence": 1.0
     }
   ]
 }
