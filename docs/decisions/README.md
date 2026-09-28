@@ -37,6 +37,7 @@ Decisions that must outlive a single pull request.
 | [0031](0031-cli-command-tree.md) | The rusui CLI stays a flat verb list | Accepted |
 | [0032](0032-named-services.md) | Named services declare a port and a health path | Accepted |
 | [0033](0033-third-party-identity-deferred.md) | Plane-minted third-party identity is deferred | Accepted |
+| [0034](0034-operator-host-location-deferred.md) | A registered operator host is not a session location yet | Accepted |
 
 ## When to write an ADR
 

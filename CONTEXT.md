@@ -33,6 +33,8 @@ _Avoid_: session, job (as the product noun)
 The machine a session runs on. One session, one Rusui Environment record. For
 the experimental local profile, this identifies the operator's host and does
 not imply isolation; multiple local sessions may share that physical host.
+A managed session has no operator-chosen location; it runs on the plane host
+([ADR 0034](docs/decisions/0034-operator-host-location-deferred.md)).
 _Avoid_: project, runner, snapshot (the prepared tree)
 
 **Runner**:

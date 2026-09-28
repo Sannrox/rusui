@@ -7,6 +7,8 @@
   [ADR 0011](0011-unattended-session-contract.md) (first unattended
   proof uses one runner).
 - Resolves: [#123](https://github.com/Sannrox/rusui/issues/123)
+- Amended by: [ADR 0034](0034-operator-host-location-deferred.md) (a
+  registered operator host is not a session location either).
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0001](0001-environment-plane.md) D3,
   [ADR 0028](0028-container-isolation-profile.md) (container isolation
