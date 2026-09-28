@@ -132,6 +132,11 @@ func replayCase(e *engine.Engine, f *gh.Fake, st *store.Store, k Case) (CaseResu
 		return CaseResult{}, err
 	}
 	if cl == nil {
+		if !engine.AdvisoryEligible(k.Item) {
+			r := CaseResult{ID: k.ID, Tags: k.Tags, Judgment: k.Judgment.Write, System: WriteNone}
+			r.Agree = r.System == k.Judgment.Write
+			return r, nil
+		}
 		return CaseResult{}, fmt.Errorf("item not admitted")
 	}
 	r := CaseResult{ID: k.ID, Tags: k.Tags, Judgment: k.Judgment.Write}

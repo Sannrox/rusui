@@ -29,7 +29,8 @@ func (s *Server) requestReview(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusBadRequest
 		case errors.Is(err, engine.ErrReviewRepoUnbound), errors.Is(err, engine.ErrReviewDisabled),
 			errors.Is(err, engine.ErrReviewPaused), errors.Is(err, engine.ErrReviewBudget),
-			errors.Is(err, engine.ErrReviewRefreshBusy), errors.Is(err, engine.ErrReviewRefreshFailed):
+			errors.Is(err, engine.ErrReviewRefreshBusy), errors.Is(err, engine.ErrReviewRefreshFailed),
+			errors.Is(err, engine.ErrReviewIneligible):
 			status = http.StatusConflict
 		}
 		http.Error(w, err.Error(), status)

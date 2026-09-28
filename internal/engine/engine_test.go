@@ -582,23 +582,19 @@ func TestReleaseBranchPR(t *testing.T) {
 	it.ItemKind = "pull"
 	it.BaseRef = "release-1"
 	it.DefaultBranch = "main"
-	it.Merged = true
-	it.MergedIntoDefault = false
-	it.MergeCommitSHA = "deadbeef"
 	it.HeadSHA = "abc"
 	it.BaseSHA = "def"
 	it.MainSHA = "aaa"
-	h.putRefresh(it)
-	c := h.claim()
-	a := art(c, "propose_close", "close", "implemented_on_main")
-	a.ProposedActions[0].CommitSHA = "deadbeef"
-	a.HeadSHA = "abc"
-	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a); err != nil {
+	h.f.Put(it)
+	if err := h.e.CatchUpItem(it.Repo, it.Item, it.ItemKind); err != nil {
 		t.Fatal(err)
 	}
-	n, _ := store.CountIntended(h.st, it.Repo, it.Item)
-	if n != 0 {
-		t.Fatal("release branch should not qualify")
+	if _, err := h.e.StepRefresh(); err != nil {
+		t.Fatal(err)
+	}
+	j, _ := store.JobState(h.st, it.Repo, it.Item)
+	if j != nil {
+		t.Fatal("release branch PR must not enter the advisory queue")
 	}
 }
 

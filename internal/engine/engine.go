@@ -260,7 +260,7 @@ func (e *Engine) CatchUpItem(repo string, item int, kind string) error {
 
 func (e *Engine) CatchUpOpenAndLocal(open []snapshot.Item) error {
 	seen := map[string]bool{}
-	for _, it := range open {
+	for _, it := range CatchUpAdvisoryBatch(open, e.PolicySnapshot()) {
 		seen[fmt.Sprintf("%s#%d", it.Repo, it.Item)] = true
 		if err := e.CatchUpItem(it.Repo, it.Item, it.ItemKind); err != nil {
 			return err
@@ -395,6 +395,7 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 		ferr = fmt.Errorf("expected a pull request")
 	}
 	budgetDenied := false
+	ineligible := false
 	err = e.Store.Tx(func(tx *sql.Tx) error {
 		var curGen, owner, needs, f int
 		if err := tx.QueryRow(`SELECT generation, owner, needs_another, force FROM refresh_requests WHERE repo=? AND item=?`, repo, item).Scan(&curGen, &owner, &needs, &f); err != nil {
@@ -416,6 +417,11 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 			return err
 		}
 		if err := e.admitTx(tx, it, force || f == 1, gen, enforceReviewBudget); err != nil {
+			if errors.Is(err, ErrReviewIneligible) {
+				ineligible = true
+				_, err := tx.Exec(`UPDATE refresh_requests SET owner=0, needs_another=0, force=0, state='idle' WHERE repo=? AND item=?`, repo, item)
+				return err
+			}
 			if !errors.Is(err, ErrReviewBudget) {
 				return err
 			}
@@ -444,6 +450,9 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 	}
 	if budgetDenied {
 		return true, ErrReviewBudget
+	}
+	if ineligible {
+		return true, ErrReviewIneligible
 	}
 	return true, nil
 }
@@ -481,6 +490,12 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int, enfo
 	j, err := store.GetJobTx(tx, it.Repo, it.Item, "review")
 	if err != nil {
 		return err
+	}
+	if !AdvisoryEligible(it) && (j == nil || j.PendingRevision == 0) {
+		if enforceReviewBudget {
+			return ErrReviewIneligible
+		}
+		return nil
 	}
 	if j != nil && j.PendingRevision > 0 {
 		pend, err := store.LoadSnapshotTx(tx, it.Repo, it.Item, j.PendingRevision)
