@@ -1050,6 +1050,12 @@
       "source": "docs/decisions/0035-live-environment-fork-deferred.md",
       "locator": "docs/decisions/0035-live-environment-fork-deferred.md#decision",
       "confidence": 1.0
+    },
+    {
+      "subject": "RusuiEnvironment",
+      "source": "docs/decisions/0036-environment-desktop-deferred.md",
+      "locator": "docs/decisions/0036-environment-desktop-deferred.md#decision",
+      "confidence": 1.0
     }
   ]
 }

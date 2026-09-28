@@ -11,6 +11,8 @@
   [ADR 0011](0011-unattended-session-contract.md) (cancel vs pause).
 - Amended by: [ADR 0032](0032-named-services.md). A preview grant may
   name a declared service; the grant class is unchanged.
+  [ADR 0036](0036-environment-desktop-deferred.md) defers a graphical
+  desktop; terminal and preview remain the operator's views.
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
   Objects: operator credential, worker credential, turn grant, browser
