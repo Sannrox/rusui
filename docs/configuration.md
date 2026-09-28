@@ -191,7 +191,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | --- | --- | --- |
 | `GET` | `/healthz` | none; body `ok` |
 | `GET` | `/readyz` | none; JSON topology report; 200 ready / 503 not ready |
-| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history |
+| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`) |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
 | `GET` | `/sessions/{id}/envlog` | operator token; last setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB |
 | `POST` | `/sessions/{id}/workspace` | operator token; multipart `file` plus `path` query; 32 MiB cap; workspace-relative only |

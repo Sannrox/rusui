@@ -62,6 +62,9 @@ func main() {
 		case "read":
 			readCLI(os.Args[2:])
 			return
+		case "sync":
+			syncCLI(os.Args[2:])
+			return
 		case "put":
 			putCLI(os.Args[2:])
 			return
