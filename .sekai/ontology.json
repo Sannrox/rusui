@@ -99,7 +99,7 @@
     },
     {
       "name": "RusuiSchedule",
-      "description": "Named project-owned trigger with a UTC cadence and a prompt. Each fire may start one scheduled session; skip if a session from this schedule is still running.",
+      "description": "Named project-owned trigger with a UTC cadence and a prompt. Each fire starts a new session and environment. Skip if a session from this schedule is still leased or running. A fire does not wake or prompt an existing session; continuation is follow-up on that session.",
       "superclasses": [],
       "properties": []
     },
@@ -969,6 +969,12 @@
       "subject": "RusuiControlPlane",
       "source": "docs/decisions/0029-single-host-runner.md",
       "locator": "docs/decisions/0029-single-host-runner.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiSchedule",
+      "source": "docs/decisions/0030-schedule-new-session.md",
+      "locator": "docs/decisions/0030-schedule-new-session.md#decision",
       "confidence": 1.0
     }
   ]

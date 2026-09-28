@@ -1,6 +1,7 @@
 # ADR 0006: How review, run, and schedule sessions start
 
-- Status: Accepted
+- Status: Accepted; [ADR 0030](0030-schedule-new-session.md) retains
+  new session per fire and does not add schedule-owned continuation.
 - Date: 2026-09-15
 - Amends: [ADR 0003](0003-operator-surface.md) (dogfood start API;
   `sync` is not required for P1 dogfood). [ADR 0005](0005-policy-v2-project.md)

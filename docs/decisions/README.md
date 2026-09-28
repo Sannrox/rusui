@@ -33,6 +33,7 @@ Decisions that must outlive a single pull request.
 | [0027](0027-guest-reachability-ask.md) | The guest image does not declare reachability yet | Accepted |
 | [0028](0028-container-isolation-profile.md) | The supported machine isolation profile remains the container | Accepted |
 | [0029](0029-single-host-runner.md) | The supported runner topology remains one host | Accepted |
+| [0030](0030-schedule-new-session.md) | A schedule fire starts a new session | Accepted |
 
 ## When to write an ADR
 
