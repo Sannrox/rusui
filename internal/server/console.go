@@ -452,6 +452,11 @@ func (s *Server) consolePrompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prompt := strings.TrimSpace(r.FormValue("prompt"))
+	if prompt != "" {
+		if _, ok := s.wakeForOperator(w, id, "operator prompt"); !ok {
+			return
+		}
+	}
 	var notice string
 	switch r.FormValue("mode") {
 	case "follow_up":

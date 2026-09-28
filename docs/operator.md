@@ -414,6 +414,22 @@ not render it as HTML.
 rusui put [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -file ./shot.png SESSION_ID shot.png
 ```
 
+A managed environment sleeps after `-env-idle-sleep`. Opening the console
+terminal (observe or write), minting a preview, following a live preview
+grant, or sending `rusui prompt` or a console prompt wakes it first. The
+wake runs `.agents/resume` and the declared services once, then the
+action proceeds on the same environment id and handle. The wake receipt
+names its cause: `operator terminal`, `operator terminal write`,
+`operator preview`, `preview grant`, or `operator prompt`. A failed wake
+is an explicit error; no terminal lease or preview grant is created, and
+the environment stays asleep. An expired or replaced environment is
+never woken as a different handle.
+
+A preview grant survives sleep. Its identity is the environment id and
+handle ([ADR 0012](decisions/0012-operator-access.md)), and sleep keeps
+both, so the same grant URL works after wake without a new mint. In
+practice a live grant keeps the environment awake until the grant ends.
+
 Attach to either runtime with the same operator command:
 
 ```bash

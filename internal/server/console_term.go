@@ -33,9 +33,13 @@ func (s *Server) consoleTerminal(w http.ResponseWriter, r *http.Request) {
 	if !s.consoleRequire(w, r) {
 		return
 	}
-	sess, envRow, err := s.termSessionEnv(r)
+	sess, _, err := s.termSessionEnv(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	envRow, ok := s.wakeForOperator(w, sess.ID, "operator terminal")
+	if !ok {
 		return
 	}
 	notice := r.URL.Query().Get("notice")
@@ -72,9 +76,13 @@ func (s *Server) consoleTermLease(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "csrf", http.StatusForbidden)
 		return
 	}
-	sess, envRow, err := s.termSessionEnv(r)
+	sess, _, err := s.termSessionEnv(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	envRow, ok := s.wakeForOperator(w, sess.ID, "operator terminal write")
+	if !ok {
 		return
 	}
 	if envRow.Handle == "" || envRow.State != store.EnvReady {
@@ -214,9 +222,13 @@ func (s *Server) consoleTermOutput(w http.ResponseWriter, r *http.Request) {
 	if !s.consoleRequire(w, r) {
 		return
 	}
-	_, envRow, err := s.termSessionEnv(r)
+	sess, _, err := s.termSessionEnv(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	envRow, ok := s.wakeForOperator(w, sess.ID, "operator terminal")
+	if !ok {
 		return
 	}
 	if envRow.Handle == "" || envRow.State != store.EnvReady {
@@ -270,6 +282,18 @@ func (s *Server) consoleTermOutput(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// wakeForOperator wakes a sleeping session environment before an operator
+// action (#330). A failed wake is an explicit conflict, and the caller
+// creates no lease or grant.
+func (s *Server) wakeForOperator(w http.ResponseWriter, sessionID int64, cause string) (*store.Environment, bool) {
+	envRow, err := s.Eng.WakeSessionEnvironment(sessionID, cause)
+	if err != nil {
+		http.Error(w, "wake failed: "+err.Error(), http.StatusConflict)
+		return nil, false
+	}
+	return envRow, true
 }
 
 func (s *Server) termSessionEnv(r *http.Request) (*store.Session, *store.Environment, error) {

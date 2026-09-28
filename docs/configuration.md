@@ -10,7 +10,7 @@ and `internal/server`. Intent: [ARCHITECTURE.md](../ARCHITECTURE.md).
 | `-addr` | `127.0.0.1:8080` | Listen address. Not restricted to loopback. |
 | `-db` | `rusui.db` | SQLite path. |
 | `-policy` | `policy.yaml` | Policy file. Reloaded by Slack `reload` or process restart. |
-| `-env-idle-sleep` | `5m` | Sleep managed container environments after this idle period; `0` disables automatic sleep. |
+| `-env-idle-sleep` | `5m` | Sleep managed container environments after this idle period; `0` disables automatic sleep. A live terminal write lease, preview grant, or queued turn keeps the environment awake. Opening the terminal, minting or using a preview, or sending a prompt wakes the same environment. |
 | `-allow-insecure` | false | Start without webhook, worker, and Slack secrets (warns). |
 | `-version` | false | Print version and exit. |
 

@@ -42,8 +42,11 @@ func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", 404)
 		return
 	}
-	envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID)
-	if err != nil || envRow.Handle == "" || envRow.State != store.EnvReady {
+	envRow, ok := s.wakeForOperator(w, sess.ID, "operator preview")
+	if !ok {
+		return
+	}
+	if envRow.Handle == "" || envRow.State != store.EnvReady {
 		http.Error(w, "environment not ready", http.StatusConflict)
 		return
 	}
@@ -203,6 +206,18 @@ func (s *Server) previewProxy(w http.ResponseWriter, r *http.Request) {
 	if err != nil || envRow.Handle != g.Handle || envRow.ID != g.EnvironmentID {
 		http.Error(w, "environment replaced", http.StatusConflict)
 		return
+	}
+	// The grant names the environment id and handle; sleep keeps both, so
+	// a live grant wakes the same environment rather than needing a new mint.
+	if envRow.State == store.EnvSleeping {
+		var ok bool
+		if envRow, ok = s.wakeForOperator(w, sess.ID, "preview grant"); !ok {
+			return
+		}
+		if envRow.Handle != g.Handle || envRow.ID != g.EnvironmentID {
+			http.Error(w, "environment replaced", http.StatusConflict)
+			return
+		}
 	}
 	if envRow.State != store.EnvReady {
 		http.Error(w, "unavailable", http.StatusConflict)
