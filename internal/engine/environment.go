@@ -260,6 +260,52 @@ func (e *Engine) failSleep(envRow *store.Environment, cause, recoveryErr error) 
 }
 
 func (e *Engine) WakeEnvironment(id int64) (*store.Environment, error) {
+	return e.wakeEnvironment(id, "")
+}
+
+// operatorWakeWait bounds how long an operator action waits for another
+// wake or sleep of the same environment to finish.
+const operatorWakeWait = 2 * time.Minute
+
+// WakeSessionEnvironment wakes the session's sleeping environment before an
+// operator action (#330): terminal, preview, or prompt. The same environment
+// id and handle come back; cause is recorded on the wake receipt. A wake or
+// sleep already in flight is waited for rather than failed. Any other state
+// is returned unchanged for the caller to judge.
+func (e *Engine) WakeSessionEnvironment(sessionID int64, cause string) (*store.Environment, error) {
+	sess, err := store.GetSession(e.Store, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	deadline := time.Now().Add(operatorWakeWait)
+	for {
+		envRow, err := store.GetEnvironment(e.Store, sess.EnvironmentID)
+		if err != nil {
+			return nil, err
+		}
+		if envRow.State != store.EnvSleeping || envRow.Handle == "" {
+			return envRow, nil
+		}
+		woke, err := e.wakeEnvironment(envRow.ID, cause)
+		if err == nil {
+			return woke, nil
+		}
+		if !errors.Is(err, store.ErrEnvironmentBusy) {
+			// Another wake may have finished between the read above and
+			// taking the operation; rereading joins it.
+			if cur, gerr := store.GetEnvironment(e.Store, envRow.ID); gerr == nil && cur.State != store.EnvSleeping {
+				continue
+			}
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			return nil, err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func (e *Engine) wakeEnvironment(id int64, detail string) (*store.Environment, error) {
 	release, ok := e.beginEnvironmentOperation(id)
 	if !ok {
 		return nil, store.ErrEnvironmentBusy
@@ -296,7 +342,7 @@ func (e *Engine) WakeEnvironment(id int64) (*store.Environment, error) {
 	if err := store.UpdateEnvironment(e.Store, *envRow); err != nil {
 		return nil, e.failWake(envRow, withRollbackError(err, rollbackWake(d, envRow.Handle)))
 	}
-	if err := store.InsertEnvironmentReceipt(e.Store, envRow.ID, "wake", "succeeded", "", now); err != nil {
+	if err := store.InsertEnvironmentReceipt(e.Store, envRow.ID, "wake", "succeeded", detail, now); err != nil {
 		return nil, err
 	}
 	return envRow, nil

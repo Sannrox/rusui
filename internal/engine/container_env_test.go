@@ -536,3 +536,56 @@ func TestSessionEnvironmentStoresSetupOutputOnSuccessAndFailure(t *testing.T) {
 		t.Fatalf("failed setup capture %+v", caps)
 	}
 }
+
+func TestConcurrentOperatorWakesShareOneWake(t *testing.T) {
+	h := setup(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	rt := &env.FakeRuntime{DefaultFiles: map[string]bool{env.ResumePath: true}}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	created, err := h.e.ProvisionEnvironment(engine.EnvSpec{Name: "box-join", Kind: env.KindContainer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sid, err := h.e.StartRun("test", "join", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetSessionEnvironment(h.st, sid, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.st.DB.Exec(`UPDATE turns SET state='failed' WHERE session_id=?`, sid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.SleepEnvironment(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	rt.StartHook = func(string) error {
+		close(started)
+		<-release
+		return nil
+	}
+	errs := make(chan error, 2)
+	go func() {
+		_, err := h.e.WakeSessionEnvironment(sid, "operator terminal")
+		errs <- err
+	}()
+	<-started
+	go func() {
+		got, err := h.e.WakeSessionEnvironment(sid, "operator preview")
+		if err == nil && (got.State != store.EnvReady || got.Handle != created.Handle) {
+			err = fmt.Errorf("joined wake returned %+v", got)
+		}
+		errs <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	close(release)
+	for range 2 {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(rt.Started) != 1 {
+		t.Fatalf("starts %d, want one shared wake", len(rt.Started))
+	}
+}

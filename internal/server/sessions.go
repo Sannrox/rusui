@@ -255,6 +255,11 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if req.Prompt != "" {
+		if _, ok := s.wakeForOperator(w, id, "operator prompt"); !ok {
+			return
+		}
+	}
 	var turnID int64
 	var pending int
 	delivery := "follow_up"
