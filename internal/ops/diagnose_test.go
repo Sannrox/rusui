@@ -117,6 +117,26 @@ func TestDiagnoseDistinguishesReadyMisconfiguredUnavailable(t *testing.T) {
 	}
 }
 
+func TestDiagnoseFailsClosedWithoutContainerRuntime(t *testing.T) {
+	pol := filepath.Join(t.TempDir(), "policy.yaml")
+	if err := copyExamplePolicy(t, pol); err != nil {
+		t.Fatal(err)
+	}
+	rep := Diagnose(Options{
+		PolicyPath:  pol,
+		LookRuntime: func() (env.Runtime, error) { return nil, fmt.Errorf("none") },
+		Env:         func(string) string { return "" },
+	})
+	if rep.Ready {
+		t.Fatal("diagnose must not be ready without a container runtime")
+	}
+	for _, c := range rep.Checks {
+		if c.Name == "runtime" && (c.Status != StatusUnavailable || !c.Blocker) {
+			t.Fatalf("runtime check %+v", c)
+		}
+	}
+}
+
 func statusOf(r Report, name string) string {
 	for _, c := range r.Checks {
 		if c.Name == name {

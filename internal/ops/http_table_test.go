@@ -1,10 +1,20 @@
 package ops
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func readRepoFile(t *testing.T, root string, parts ...string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(append([]string{root}, parts...)...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
 
 func TestConfigurationHTTPTableDocumentsPostReviews(t *testing.T) {
 	cfg := readRepoFile(t, filepath.Join("..", ".."), "docs", "configuration.md")
