@@ -46,8 +46,8 @@ The prepared, reusable tree identified by `source_hash` (base image digest, git 
 _Avoid_: environment, GitHub item snapshot hash, image tag
 
 **Schedule**:
-A named trigger on a project with a UTC cadence and a prompt. Each fire may start one scheduled session.
-_Avoid_: review fan-out, cron in policy.yaml
+A named trigger on a project with a UTC cadence and a prompt. Each fire may start one scheduled session. A live session from that schedule skips the fire. Continuation of an existing session is follow-up, not a later fire ([ADR 0030](docs/decisions/0030-schedule-new-session.md)).
+_Avoid_: review fan-out, cron in policy.yaml, schedule-owned continuation
 
 **Machine isolation**:
 Rusui’s OS boundary for an unattended session. The default for public-repository sessions is a container ([ADR 0022](docs/decisions/0022-public-repo-isolation.md)). The process driver is explicit test/dev opt-in; a missing runtime fails closed (`rusui diagnose` / `GET /readyz`). The supported isolation profile remains that container; a stronger runtime is not selected ([ADR 0028](docs/decisions/0028-container-isolation-profile.md)). Snapshot is the prepared tree, not a hypervisor memory image.
