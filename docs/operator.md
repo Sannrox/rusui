@@ -365,6 +365,14 @@ the command leaves the session running.
 rusui read [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_ID
 ```
 
+Copy a local file into a live session workspace. The path is relative to the
+workspace. The cap is 32 MiB. The file is stored as bytes; the console does
+not render it as HTML.
+
+```bash
+rusui put [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -file ./shot.png SESSION_ID shot.png
+```
+
 Attach to either runtime with the same operator command:
 
 ```bash

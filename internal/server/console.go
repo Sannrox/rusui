@@ -105,6 +105,15 @@ nav a{margin-right:1rem}
 {{range .Entries}}<article id="e-{{.ID}}"><h3>{{.Kind}}</h3><pre>{{.Body}}</pre></article>{{end}}
 </div>
 <h2>Files</h2>
+<form method="post" action="/console/sessions/{{.Sess.ID}}/files" enctype="multipart/form-data">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+<label for="upload-path">Workspace path</label>
+<input id="upload-path" name="path" required>
+<label for="upload-file">File</label>
+<input id="upload-file" name="file" type="file" required>
+<button type="submit">Upload</button>
+</form>
+<p class="muted">32 MiB cap. Binary files are stored as bytes and are not rendered as HTML.</p>
 {{if .FilesErr}}<p>{{.FilesErr}}</p>{{else if not .Files}}<p class="muted">No files in workspace.</p>{{else}}
 <ul>{{range .Files}}<li><a href="/console/sessions/{{$.Sess.ID}}/files?path={{.Enc}}">{{.Name}}</a>
  · <a href="/console/sessions/{{$.Sess.ID}}/files?path={{.Enc}}&amp;view=diff">diff</a></li>{{end}}</ul>
