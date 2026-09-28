@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -316,6 +317,134 @@ func TestPreviewGrantDeniesPlaneListenPort(t *testing.T) {
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("mint plane port %d %s", rr.Code, rr.Body.String())
 	}
+}
+
+func TestPreviewCommentPostsFollowUp(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "app-ok")
+	}))
+	t.Cleanup(backend.Close)
+	_, bport, err := net.SplitHostPort(backend.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, hs, e := consoleEnv(t)
+	prev := httptest.NewServer(s.PreviewHandler())
+	t.Cleanup(prev.Close)
+	s.PreviewBase = prev.URL
+	sid, grant := mintPreviewGrant(t, s, hs, e, bport)
+
+	res, err := http.Post(prev.URL+"/comment?g="+grant, "application/x-www-form-urlencoded", strings.NewReader(url.Values{
+		"text":     {"save button"},
+		"url":      {prev.URL + "/settings"},
+		"selector": {"#save"},
+	}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("comment %d", res.StatusCode)
+	}
+	sess, err := store.GetSession(e.Store, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sess.Prompt, "preview comment") || !strings.Contains(sess.Prompt, "url: ") || !strings.Contains(sess.Prompt, "selector: #save") || !strings.Contains(sess.Prompt, "save button") {
+		t.Fatalf("follow-up %q", sess.Prompt)
+	}
+
+	readReq, err := http.NewRequest(http.MethodGet, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/read", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readReq.Header.Set("Authorization", "Bearer "+s.OperatorTok)
+	read, err := http.DefaultClient.Do(readReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(read.Body)
+	_ = read.Body.Close()
+	if read.StatusCode != 200 || !strings.Contains(string(body), "save button") {
+		t.Fatalf("read %d %s", read.StatusCode, body)
+	}
+
+	cookieReq, _ := http.NewRequest(http.MethodPost, prev.URL+"/comment?g="+grant, strings.NewReader(url.Values{"text": {"nope"}}.Encode()))
+	cookieReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	cookieReq.AddCookie(&http.Cookie{Name: consoleCookie, Value: s.consoleCookieValue(), Path: "/console"})
+	cookieRes, err := http.DefaultClient.Do(cookieReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = cookieRes.Body.Close()
+	if cookieRes.StatusCode != http.StatusForbidden {
+		t.Fatalf("operator cookie %d", cookieRes.StatusCode)
+	}
+
+	bad, err := http.Post(prev.URL+"/comment?g=deadbeef", "application/x-www-form-urlencoded", strings.NewReader(url.Values{"text": {"x"}}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = bad.Body.Close()
+	if bad.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unknown grant %d", bad.StatusCode)
+	}
+
+	big := strings.Repeat("a", previewCommentCap+1)
+	over, err := http.Post(prev.URL+"/comment?g="+grant, "application/x-www-form-urlencoded", strings.NewReader(url.Values{"text": {big}}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = over.Body.Close()
+	if over.StatusCode != http.StatusBadRequest {
+		t.Fatalf("oversized %d", over.StatusCode)
+	}
+}
+
+func mintPreviewGrant(t *testing.T, s *Server, hs *httptest.Server, e *engine.Engine, bport string) (int64, string) {
+	t.Helper()
+	port, _ := strconv.Atoi(bport)
+	sid, err := e.StartRun("test", "preview-comment", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, _ := store.GetSession(e.Store, sid)
+	envRow, _ := store.GetEnvironment(e.Store, sess.EnvironmentID)
+	p := e.Env.(env.Process)
+	ws := filepath.Join(p.Root, "sess")
+	if err := os.MkdirAll(ws, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	envRow.Handle = ws
+	envRow.Driver = env.KindProcess
+	envRow.State = store.EnvReady
+	_ = store.UpdateEnvironment(e.Store, *envRow)
+	c := operatorClient(t, hs)
+	res, err := c.Get(hs.URL + "/console/sessions/" + strconv.FormatInt(sid, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	csrf := csrfFrom(string(page))
+	req, _ := http.NewRequest("POST", "/console/sessions/"+strconv.FormatInt(sid, 10)+"/preview", strings.NewReader(url.Values{"csrf": {csrf}, "port": {strconv.Itoa(port)}}.Encode()))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	u, _ := url.Parse(hs.URL + "/console/sessions")
+	for _, ck := range c.Jar.Cookies(u) {
+		req.AddCookie(ck)
+	}
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("mint %d %s", rr.Code, rr.Body.String())
+	}
+	grant := grantFrom(rr.Body.String())
+	if grant == "" {
+		t.Fatal("no grant")
+	}
+	return sid, grant
 }
 
 func grantFrom(html string) string {

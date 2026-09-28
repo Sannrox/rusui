@@ -20,8 +20,11 @@ import (
 
 const previewTTL = engine.GrantTTL
 
+const previewCommentCap = 8 << 10
+
 func (s *Server) PreviewHandler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /comment", s.previewComment)
 	mux.HandleFunc("/", s.previewProxy)
 	return mux
 }
@@ -93,6 +96,80 @@ func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 		Notice: "grant is a separate secret; it is not the operator cookie",
 		Sess:   sess,
 	})
+}
+
+func (s *Server) previewComment(w http.ResponseWriter, r *http.Request) {
+	if s.consoleAuthed(r) || s.OperatorBrowserOK(r) {
+		http.Error(w, "operator cookie not valid on preview origin", http.StatusForbidden)
+		return
+	}
+	if origin := r.Header.Get("Origin"); origin != "" && s.PreviewBase != "" {
+		if !previewOriginOK(origin, s.PreviewBase) {
+			http.Error(w, "origin", http.StatusForbidden)
+			return
+		}
+	}
+	tok := r.URL.Query().Get("g")
+	if tok == "" {
+		tok = bearerToken(r)
+	}
+	if tok == "" {
+		http.Error(w, "grant required", http.StatusUnauthorized)
+		return
+	}
+	g, ok, err := store.GetPreviewGrant(s.Eng.Store, store.HashPreviewToken(tok))
+	if err != nil || !ok {
+		http.Error(w, "unknown grant", http.StatusUnauthorized)
+		return
+	}
+	if g.Revoked || time.Now().UTC().After(g.ExpiresAt) {
+		http.Error(w, "expired", http.StatusForbidden)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, previewCommentCap+1)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "oversized", http.StatusBadRequest)
+		return
+	}
+	text := strings.TrimSpace(r.FormValue("text"))
+	page := strings.TrimSpace(r.FormValue("url"))
+	sel := strings.TrimSpace(r.FormValue("selector"))
+	if text == "" && page == "" {
+		http.Error(w, "text", http.StatusBadRequest)
+		return
+	}
+	var b strings.Builder
+	b.WriteString("preview comment")
+	if page != "" {
+		b.WriteString("\nurl: ")
+		b.WriteString(page)
+	}
+	if sel != "" {
+		b.WriteString("\nselector: ")
+		b.WriteString(sel)
+	}
+	if text != "" {
+		b.WriteByte('\n')
+		b.WriteString(text)
+	}
+	if b.Len() > previewCommentCap {
+		http.Error(w, "oversized", http.StatusBadRequest)
+		return
+	}
+	if _, _, err := s.Eng.PromptFollowUp(g.SessionID, b.String()); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func previewOriginOK(got, base string) bool {
+	g, err1 := url.Parse(got)
+	b, err2 := url.Parse(base)
+	if err1 != nil || err2 != nil || g.Host == "" || b.Host == "" {
+		return false
+	}
+	return strings.EqualFold(g.Scheme, b.Scheme) && strings.EqualFold(g.Host, b.Host)
 }
 
 func (s *Server) previewProxy(w http.ResponseWriter, r *http.Request) {
