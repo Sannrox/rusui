@@ -66,9 +66,17 @@ func Replay(c *Corpus) ([]CaseResult, error) {
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
+	schema, err := migratedStore(dir)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]CaseResult, 0, len(c.Cases))
 	for i, k := range c.Cases {
-		r, err := replayIsolated(filepath.Join(dir, fmt.Sprintf("case-%d.db", i)), pol, c, k)
+		path := filepath.Join(dir, fmt.Sprintf("case-%d.db", i))
+		if err := os.WriteFile(path, schema, 0o600); err != nil {
+			return nil, err
+		}
+		r, err := replayIsolated(path, pol, c, k)
 		if err != nil {
 			if c.Split == SplitHeldOut {
 				// Engine errors can name the repository or item.
@@ -79,6 +87,21 @@ func Replay(c *Corpus) ([]CaseResult, error) {
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+// migratedStore returns the bytes of an empty, fully migrated store.
+// Copying it per case keeps cases isolated without rerunning every
+// migration each time.
+func migratedStore(dir string) ([]byte, error) {
+	path := filepath.Join(dir, "schema.db")
+	st, err := store.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := st.Close(); err != nil {
+		return nil, err
+	}
+	return os.ReadFile(path)
 }
 
 // replayIsolated gives each case its own store, engine, and fake GitHub,
