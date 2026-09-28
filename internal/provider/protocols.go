@@ -187,6 +187,9 @@ func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide
 				return res, nil
 			}
 		}
+		if kind == "claude" {
+			continue
+		}
 		text := string(line)
 		kindName := "transcript"
 		if strings.Contains(text, "tool_call") || strings.Contains(text, "tool_use") || msg["method"] == "item/tool" {
