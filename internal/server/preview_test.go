@@ -232,6 +232,49 @@ func TestPreviewGrantAllowsContainerPortMatchingPlaneNumber(t *testing.T) {
 	}
 }
 
+func TestPreviewGrantDeniesUnspecifiedPlaneAddr(t *testing.T) {
+	s, hs, e := consoleEnv(t)
+	s.Addr = "0.0.0.0:8080"
+	prev := httptest.NewServer(s.PreviewHandler())
+	t.Cleanup(prev.Close)
+	s.PreviewBase = prev.URL
+	sid, err := e.StartRun("test", "preview-unspec", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, _ := store.GetSession(e.Store, sid)
+	envRow, _ := store.GetEnvironment(e.Store, sess.EnvironmentID)
+	p := e.Env.(env.Process)
+	ws := filepath.Join(p.Root, "sess")
+	if err := os.MkdirAll(ws, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	envRow.Handle = ws
+	envRow.Driver = env.KindProcess
+	envRow.State = store.EnvReady
+	_ = store.UpdateEnvironment(e.Store, *envRow)
+	c := operatorClient(t, hs)
+	res, err := c.Get(hs.URL + "/console/sessions/" + strconv.FormatInt(sid, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	csrf := csrfFrom(string(page))
+	req, _ := http.NewRequest("POST", "/console/sessions/"+strconv.FormatInt(sid, 10)+"/preview", strings.NewReader(url.Values{"csrf": {csrf}, "port": {"8080"}}.Encode()))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	u, _ := url.Parse(hs.URL + "/console/sessions")
+	for _, ck := range c.Jar.Cookies(u) {
+		req.AddCookie(ck)
+	}
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("mint unspecified plane %d %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestPreviewGrantDeniesPlaneListenPort(t *testing.T) {
 	s, hs, e := consoleEnv(t)
 	s.Addr = "127.0.0.1:8080"
