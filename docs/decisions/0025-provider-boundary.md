@@ -32,6 +32,20 @@ process against the cursor stored for that Session. It does not import a
 conversation from the provider's home directory. The Turn ends when the
 provider turn ends.
 
+The provider adapters accept a cursor, and the conformance suite proves
+resume for all three pins. The live runner does not use it on every host
+yet:
+
+- The Grok host loads the stored cursor with `session/load`. When the load
+  fails, it starts a new session.
+- The Claude host records the cursor from the `init` event but does not
+  pass it. It spawns without `--resume`, so each Claude turn is a new
+  provider conversation. Continuity comes from the prompt the plane sends.
+  Claude resume is deferred until the runner can start a new conversation
+  when the stored transcript is gone.
+- The Claude host does not forward the provider's events. The session
+  transcript comes from plane receipts.
+
 ### Pinned protocols
 
 | Provider | Process | Protocol | Pin |
