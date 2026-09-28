@@ -92,6 +92,30 @@ func GetJobByIDTx(tx *sql.Tx, id int64) (*Job, error) {
 	return scanJob(row)
 }
 
+func ListDueLeasedJobsTx(tx *sql.Tx, now time.Time, repo, lane string) ([]*Job, error) {
+	stamp := now.UTC().Format(time.RFC3339Nano)
+	q := `SELECT id, repo, item, item_kind, lane, pending_revision, claimed_revision, lease_generation, lease_expires_at, execution_deadline_at, retry_count, state FROM jobs WHERE state='leased' AND ((lease_expires_at IS NOT NULL AND lease_expires_at<=?) OR (execution_deadline_at IS NOT NULL AND execution_deadline_at<=?))`
+	args := []any{stamp, stamp}
+	if repo != "" {
+		q += ` AND repo=? AND lane=?`
+		args = append(args, repo, lane)
+	}
+	rows, err := tx.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []*Job
+	for rows.Next() {
+		j, err := scanJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
+}
+
 func UpdateJobTx(tx *sql.Tx, j *Job) error {
 	var exp, dead any
 	if j.LeaseExpiresAt != nil {
