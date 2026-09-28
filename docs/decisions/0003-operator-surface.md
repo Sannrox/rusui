@@ -10,6 +10,8 @@
   embedded console open a session. The terminal is a further view, not
   the transcript. [ADR 0031](0031-cli-command-tree.md) keeps a flat
   verb list; `rusui logs` is receipts; hook output is `rusui envlog`.
+  [ADR 0036](0036-environment-desktop-deferred.md) adds no desktop view;
+  the ten views stand.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context
