@@ -596,65 +596,20 @@ func (e *Engine) expireLeaseTx(tx *sql.Tx, j *store.Job) error {
 // the next claim.
 func (e *Engine) ExpireOverdueLeases() error {
 	return e.Store.Tx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT id FROM jobs WHERE state='leased'`)
-		if err != nil {
-			return err
-		}
-		var ids []int64
-		for rows.Next() {
-			var id int64
-			if err := rows.Scan(&id); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			ids = append(ids, id)
-		}
-		if err := rows.Err(); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		if err := rows.Close(); err != nil {
-			return err
-		}
-		for _, id := range ids {
-			j, err := store.GetJobByIDTx(tx, id)
-			if err != nil {
-				return err
-			}
-			if err := e.expireLeaseTx(tx, j); err != nil {
-				return err
-			}
-		}
-		return nil
+		return e.expireDueLeasesTx(tx, "", "")
 	})
 }
 
 func (e *Engine) expireDeadLeasesTx(tx *sql.Tx, repo, lane string) error {
-	rows, err := tx.Query(`SELECT id FROM jobs WHERE repo=? AND lane=? AND state='leased'`, repo, lane)
+	return e.expireDueLeasesTx(tx, repo, lane)
+}
+
+func (e *Engine) expireDueLeasesTx(tx *sql.Tx, repo, lane string) error {
+	jobs, err := store.ListDueLeasedJobsTx(tx, e.now(), repo, lane)
 	if err != nil {
 		return err
 	}
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return err
-	}
-	if err := rows.Close(); err != nil {
-		return err
-	}
-	for _, id := range ids {
-		j, err := store.GetJobByIDTx(tx, id)
-		if err != nil {
-			return err
-		}
+	for _, j := range jobs {
 		if err := e.expireLeaseTx(tx, j); err != nil {
 			return err
 		}

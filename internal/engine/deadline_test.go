@@ -13,6 +13,24 @@ import (
 	"github.com/sannrox/rusui/internal/store"
 )
 
+func TestExpireOverdueLeasesSkipsLiveLeases(t *testing.T) {
+	h := setup(t)
+	if _, err := h.e.StartRun("test", "implement the package", ""); err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	if err := h.e.ExpireOverdueLeases(); err != nil {
+		t.Fatal(err)
+	}
+	turn, err := store.GetTurn(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.State != "leased" {
+		t.Fatalf("live lease walked to %s", turn.State)
+	}
+}
+
 func TestRunDeadlineFailsWithoutClaim(t *testing.T) {
 	h := setup(t)
 	if _, err := h.e.StartRun("test", "implement the package", ""); err != nil {
