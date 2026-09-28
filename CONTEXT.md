@@ -89,8 +89,8 @@ Project `budgets.max_concurrent_leases` (default 1). Unnamed budget keys fail cl
 _Avoid_: token or dollar limits (unavailable)
 
 **Per-turn grant**:
-The only credential in a P1 guest outside `implement` sessions (ADR 0015): D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets.
-_Avoid_: PAT, installation token, `auth.json`, xAI API key (in the guest)
+The only credential in a P1 guest outside `implement` sessions (ADR 0015): D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets. The plane mints no third-party identity beside it ([ADR 0033](docs/decisions/0033-third-party-identity-deferred.md)).
+_Avoid_: PAT, installation token, `auth.json`, xAI API key, registry or cloud key (in the guest)
 
 **Plane proxy**:
 Git smart-HTTP and model egress on the plane, which redeem a grant for the real token. GitHub REST stays plane-internal. The guest may reach only these endpoints under egress `trusted`. HTTPS to `rusui.plane`; plane CA at `/usr/local/share/ca-certificates/rusui-plane.crt`. Snapshot prepare uses a read-only grant on the same git proxy.

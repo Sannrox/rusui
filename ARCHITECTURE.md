@@ -646,6 +646,9 @@ The guest image does not declare a reachability ask
 ([ADR 0027](docs/decisions/0027-guest-reachability-ask.md)). A missing
 image descriptor keeps this implicit ask. An ask wider than the grant
 is a refusal, not a prompt.
+The plane mints no third-party identity (registry, object store, private
+network) for the guest
+([ADR 0033](docs/decisions/0033-third-party-identity-deferred.md)).
 Missing App key or xAI key fails closed. A plane CA lives in the guest
 image. Snapshot prepare uses a read-only grant through the same git
 proxy.

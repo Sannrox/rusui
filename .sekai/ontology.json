@@ -165,7 +165,7 @@
     },
     {
       "name": "RusuiPerTurnGrant",
-      "description": "Only plane-brokered credential in a P1 guest outside implement sessions. 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Redeems at plane git and model proxies. Not a GitHub token or xAI key.",
+      "description": "Only plane-brokered credential in a P1 guest outside implement sessions. 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Redeems at plane git and model proxies. Not a GitHub token or xAI key. No plane-minted third-party identity is issued beside it; adoption needs a named task, a named audience, and a policy egress route in a superseding ADR.",
       "superclasses": [],
       "properties": []
     },
@@ -1025,6 +1025,12 @@
       "subject": "RusuiCommand",
       "source": "docs/decisions/0031-cli-command-tree.md",
       "locator": "docs/decisions/0031-cli-command-tree.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiPerTurnGrant",
+      "source": "docs/decisions/0033-third-party-identity-deferred.md",
+      "locator": "docs/decisions/0033-third-party-identity-deferred.md#decision",
       "confidence": 1.0
     }
   ]
