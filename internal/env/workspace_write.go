@@ -1,9 +1,12 @@
 package env
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -70,7 +73,18 @@ func (p Process) WriteFile(handle, rel string, r io.Reader, max int64) error {
 }
 
 type workspaceFileRuntime interface {
-	WriteFile(id, rel string, data []byte) error
+	WriteFile(id, rel string, r io.Reader, max int64) error
+}
+
+type countReader struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
 }
 
 func (c Container) WriteFile(handle, rel string, r io.Reader, max int64) error {
@@ -84,43 +98,55 @@ func (c Container) WriteFile(handle, rel string, r io.Reader, max int64) error {
 	if max <= 0 {
 		max = WorkspaceUploadCap
 	}
-	data, err := io.ReadAll(io.LimitReader(r, max+1))
-	if err != nil {
-		return err
-	}
-	if int64(len(data)) > max {
-		return fmt.Errorf("env: oversized")
-	}
 	if w, ok := c.RT.(workspaceFileRuntime); ok {
-		return w.WriteFile(handle, clean, data)
+		return w.WriteFile(handle, clean, r, max)
 	}
 	d, ok := c.RT.(DockerCLI)
 	if !ok {
 		return fmt.Errorf("env: runtime cannot write files")
 	}
-	return d.WriteFile(handle, clean, data)
+	return d.WriteFile(handle, clean, r, max)
 }
 
-func (d DockerCLI) WriteFile(id, rel string, data []byte) error {
-	tmp, err := os.CreateTemp("", "rusui-upload-*")
+func (d DockerCLI) WriteFile(id, rel string, r io.Reader, max int64) error {
+	if max <= 0 {
+		max = WorkspaceUploadCap
+	}
+	dest := workspacePath(rel)
+	dir := path.Dir(dest)
+	if dir != "." && dir != workspaceDir {
+		if _, err := d.run("exec", id, "mkdir", "-p", dir); err != nil {
+			return err
+		}
+	}
+	cr := &countReader{r: io.LimitReader(r, max+1)}
+	cmd := exec.Command(d.bin(), "exec", "-i", id, "tee", dest)
+	cmd.Stdin = cr
+	cmd.Stdout = io.Discard
+	err := cmd.Run()
+	if cr.n > max {
+		_, _ = d.run("exec", id, "rm", "-f", dest)
+		return fmt.Errorf("env: oversized")
+	}
 	if err != nil {
 		return err
 	}
-	name := tmp.Name()
-	defer func() { _ = os.Remove(name) }()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	dest := id + ":" + workspacePath(rel)
-	_, err = d.run("cp", name, dest)
-	return err
+	return nil
 }
 
-func (f *FakeRuntime) WriteFile(id, rel string, data []byte) error {
+func (f *FakeRuntime) WriteFile(id, rel string, r io.Reader, max int64) error {
+	if max <= 0 {
+		max = WorkspaceUploadCap
+	}
+	var buf bytes.Buffer
+	n, err := io.Copy(&buf, io.LimitReader(r, max+1))
+	if err != nil {
+		return err
+	}
+	if n > max {
+		return fmt.Errorf("env: oversized")
+	}
+	data := buf.Bytes()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.Contents == nil {
@@ -135,7 +161,7 @@ func (f *FakeRuntime) WriteFile(id, rel string, data []byte) error {
 	if f.Files[id] == nil {
 		f.Files[id] = map[string]bool{}
 	}
-	f.Contents[id][rel] = append([]byte(nil), data...)
+	f.Contents[id][rel] = data
 	f.Files[id][rel] = true
 	return nil
 }
