@@ -54,7 +54,16 @@ func (s *Server) sessionEnvlog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	caps, err := store.ListSessionCaptures(s.Eng.Store, id)
+	kind := r.URL.Query().Get("kind")
+	if kind != "" && kind != "setup" && kind != "resume" && kind != "service" {
+		http.Error(w, "kind", http.StatusBadRequest)
+		return
+	}
+	caps, err := store.ListSessionCaptures(s.Eng.Store, id, store.CaptureListFilter{
+		Kind:     kind,
+		Name:     r.URL.Query().Get("name"),
+		OmitBody: r.URL.Query().Get("omit-body") == "1",
+	})
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return

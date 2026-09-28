@@ -511,7 +511,7 @@ func TestSessionEnvironmentStoresSetupOutputOnSuccessAndFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	caps, err := store.ListSessionCaptures(h.st, turn.SessionID)
+	caps, err := store.ListSessionCaptures(h.st, turn.SessionID, store.CaptureListFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,7 +528,7 @@ func TestSessionEnvironmentStoresSetupOutputOnSuccessAndFailure(t *testing.T) {
 	if err := h.e.EnsureSessionEnvironment(c.Job.ID, it); err == nil {
 		t.Fatal("expected setup failure")
 	}
-	caps, err = store.ListSessionCaptures(h.st, turn.SessionID)
+	caps, err = store.ListSessionCaptures(h.st, turn.SessionID, store.CaptureListFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}

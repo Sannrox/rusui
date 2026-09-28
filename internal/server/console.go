@@ -85,8 +85,8 @@ nav a{margin-right:1rem}
 <h2>Environment output</h2>
 {{if not .Captures}}<p class="muted">No setup, resume, or service output.</p>{{end}}
 {{range .Captures}}<h3>{{.Kind}}{{if .Name}} {{.Name}}{{end}}</h3>
-<p>{{.RecordedAt.Format "2006-01-02 15:04:05 MST"}}{{if .Failed}} · failed{{end}}{{if .Truncated}} · truncated to the last 1 MiB{{end}}</p>
-<pre>{{.Output}}</pre>
+<p>{{.RecordedAt.Format "2006-01-02 15:04:05 MST"}}{{if .Failed}} · failed{{end}}{{if .Truncated}} · truncated to the last 1 MiB{{end}}
+· <code>rusui envlog -kind {{.Kind}}{{if .Name}} -name {{.Name}}{{end}} {{$.Sess.ID}}</code></p>
 {{end}}
 <p>{{.Sess.Prompt}}</p>
 <form method="post" action="/console/sessions/{{.Sess.ID}}/prompt">
@@ -490,7 +490,7 @@ func (s *Server) sessionPage(id int64) (consolePage, error) {
 	if err != nil {
 		page.HistoryUnavailable = true
 	}
-	page.Captures, err = store.ListSessionCaptures(s.Eng.Store, id)
+	page.Captures, err = store.ListSessionCaptures(s.Eng.Store, id, store.CaptureListFilter{OmitBody: true})
 	if err != nil {
 		page.HistoryUnavailable = true
 	}
