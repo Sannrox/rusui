@@ -30,11 +30,11 @@ ADR does not change the contract until `ARCHITECTURE.md` is rewritten.
 
 For a Go contributor, the fake ACP conformance case is
 [`TestConformanceFakeAgent`](internal/acp/client_test.go); run it with
-`go test ./internal/acp -run '^TestConformanceFakeAgent$'`. The review
-evaluation set is [`eval/set.md`](eval/set.md), and its evidence work is
-tracked in [issue #105](https://github.com/Sannrox/rusui/issues/105). Do not
-present evaluation results as public evidence until #105 supplies a sanitized,
-reproducible record.
+`go test ./internal/acp -run '^TestConformanceFakeAgent$'`. The maintenance
+evaluation corpus is described in [`eval/set.md`](eval/set.md); `rusui eval`
+replays it. [docs/proofs/t2-maintenance-eval.md](docs/proofs/t2-maintenance-eval.md)
+is the sanitized project record. Its results are project evidence, not a
+public benchmark.
 
 ## Development setup
 

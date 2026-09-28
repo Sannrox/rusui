@@ -164,6 +164,12 @@
       "properties": []
     },
     {
+      "name": "RusuiEvaluationCorpus",
+      "description": "Versioned split (development or operator-owned held-out) of recorded review results with maintainer judgments, replayed through dry-run apply by rusui eval. Its digest covers cases, judgments, clock, and policy; evidence applies only to identical inputs. Held-out cases are reported in aggregate only.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiMaintenanceProfile",
       "description": "Versioned policy scope that decides which bound items get maintenance and which action classes may act. Action classes (advisory, comment, repair, close, merge) each have their own switch, measured promotion gate, and rollback threshold; enabling one grants no other. Advisory is the only class on by default.",
       "superclasses": [],
@@ -1085,6 +1091,12 @@
       "subject": "RusuiMaintenanceProfile",
       "source": "docs/decisions/0038-maintenance-eligibility-and-promotion.md",
       "locator": "docs/decisions/0038-maintenance-eligibility-and-promotion.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiEvaluationCorpus",
+      "source": "eval/set.md",
+      "locator": "eval/set.md#splits",
       "confidence": 1.0
     }
   ]

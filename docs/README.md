@@ -43,6 +43,7 @@ the runbook.
 | [proofs/p8-pilot-cohort.md](proofs/p8-pilot-cohort.md) | explanation | P8 ten-task cohort, predeclared before the live run |
 | [proofs/p8-pilot-results.md](proofs/p8-pilot-results.md) | explanation | P8 live outcomes; [ADR 0023](decisions/0023-p8-pilot-narrow.md) |
 | [proofs/u8-operator-journey.md](proofs/u8-operator-journey.md) | explanation | U8 self-hosting journey (narrowed; not external-user evidence) |
+| [proofs/t2-maintenance-eval.md](proofs/t2-maintenance-eval.md) | explanation | T2 evaluation replay: method, results, limitations |
 | [acp-editor.md](acp-editor.md) | reference | ACP protocolVersion 1 editor shim (`rusui acp`) |
 | [configuration.md](configuration.md) | reference | flags, env, HTTP, policy, Slack verbs |
 | [development.md](development.md) | how-to | `make`, Docker images, CI |
@@ -50,8 +51,8 @@ the runbook.
 | [../BUILD.md](../BUILD.md) | archive | pointer to development.md |
 | [decisions/](decisions/) | explanation | ADRs |
 | [v1-build-prompt.md](v1-build-prompt.md) | archive | historical agent prompt; not the contract |
-| [../eval/set.md](../eval/set.md) | reference | review-quality fixtures |
-| [../eval/results.md](../eval/results.md) | reference | last TestEvalSet snapshot |
+| [../eval/set.md](../eval/set.md) | reference | maintenance evaluation corpus and `rusui eval` |
+| [../eval/results.md](../eval/results.md) | reference | development split replay |
 | [../SECURITY.md](../SECURITY.md) | how-to | vulnerability reports |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | how-to | issues and pull requests |
 | [../AGENTS.md](../AGENTS.md) | how-to | agent instructions |

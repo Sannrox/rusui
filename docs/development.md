@@ -37,7 +37,8 @@ make all && make test && make validate
 make all WHAT=cmd/rusui
 make test WHAT=./internal/engine GOFLAGS="-v" TEST_ARGS='-run ^TestClaim'
 make test COVER=1
-go test ./eval -v
+go test ./eval -v          # development corpus must match eval/results.md
+go run ./cmd/rusui eval    # replay report; see eval/set.md
 ```
 
 Dockerized Makefile:

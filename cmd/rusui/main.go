@@ -89,6 +89,9 @@ func main() {
 		case "diagnostics":
 			diagnosticsCLI(os.Args[2:])
 			return
+		case "eval":
+			evalCLI(os.Args[2:])
+			return
 		}
 	}
 	addr := flag.String("addr", "127.0.0.1:8080", "listen")
