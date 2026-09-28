@@ -486,6 +486,21 @@ func LatestReviewForSession(s *Store, sessionID int64) (revisionID int64, payloa
 	return revisionID, payload, err == nil, err
 }
 
+// SessionCancelled reports whether a session is cancelled now: a local
+// session marked cancelled, or a managed turn that is failed because it
+// was cancelled. A failed turn was cancelled when its newest receipt is
+// a cancellation, or when an unclaimed revision is still pending, which
+// only cancelling a queued turn leaves behind. A follow-up requeues the
+// turn, so an earlier cancellation stops counting.
+func SessionCancelled(s *Store, sessionID int64) (bool, error) {
+	var cancelled bool
+	err := s.DB.QueryRow(`SELECT EXISTS(SELECT 1 FROM sessions WHERE id=? AND state='cancelled')
+  OR EXISTS(SELECT 1 FROM turns t WHERE t.session_id=? AND t.state='failed' AND (t.claimed_revision < t.pending_revision
+    OR COALESCE((SELECT r.kind FROM receipts r WHERE r.job_id=t.id ORDER BY r.rowid DESC LIMIT 1), '')='cancelled'))`,
+		sessionID, sessionID).Scan(&cancelled)
+	return cancelled, err
+}
+
 func IntendedBodies(s *Store, repo string, item int) ([]string, error) {
 	rows, err := s.DB.Query(`SELECT body FROM actions WHERE repo=? AND item=?`, repo, item)
 	if err != nil {

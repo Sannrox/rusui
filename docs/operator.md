@@ -380,6 +380,32 @@ served only with the operator token.
 rusui envlog [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_ID
 ```
 
+Fetch what a session published into a local checkout while its
+environment keeps running. `rusui sync` asks the plane for the newest pull
+request a turn of the session published (the plane observed it on GitHub
+at the candidate SHA), then runs your own `git fetch` of that pull
+request's head into `refs/rusui/sessions/SESSION_ID`. It uses your git
+remote and your git credentials; Rusui passes no token to git, and the
+implement-session credential never reaches the laptop. It does not take
+the terminal write lease, start a turn, wake or touch the environment,
+or change your branch, index, or working tree. It prints the pull
+request, the ref update, and the commits that landed locally, which in a
+stale checkout include the default-branch commits the session built on.
+
+```bash
+rusui sync [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] [-remote origin] [-dir .] SESSION_ID
+git worktree add --detach ../session-SESSION_ID refs/rusui/sessions/SESSION_ID
+```
+
+It exits non-zero and changes nothing when the session is unknown
+(`not found`), was cancelled, or never published a pull request (an
+ordinary run or review session, or an implement session whose pull
+request GitHub did not show at the candidate SHA). It also refuses when
+`-dir` is not a git checkout or the `-remote` URL does not end in the
+session's `owner/repo`. When the pull request head moved after the plane
+observed it, sync fetches the current head and prints a `note:` line
+with both SHAs. A second sync with nothing new says `already up to date`.
+
 Copy a local file into a live session workspace. The path is relative to the
 workspace. The cap is 32 MiB. The file is stored as bytes; the console does
 not render it as HTML.

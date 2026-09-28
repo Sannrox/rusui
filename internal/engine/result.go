@@ -133,26 +133,45 @@ func (e *Engine) observeFollowUpPublication(jobID int64, art *Artifact) {
 // priorPublication is the newest result this turn actually published.
 // A later blocked or unconfirmed follow-up does not erase it.
 func priorPublication(s *store.Store, jobID int64) (pr int, sha string, ok bool) {
-	rows, err := s.DB.Query(`SELECT payload FROM review_revisions WHERE job_id=? ORDER BY id DESC`, jobID)
-	if err != nil {
+	p, ok, err := newestPublication(s, `SELECT payload FROM review_revisions WHERE job_id=? ORDER BY id DESC`, jobID)
+	if err != nil || !ok {
 		return 0, "", false
+	}
+	return p.PullRequest, p.SHA, true
+}
+
+// Publication is a pull request the plane observed on GitHub at the
+// candidate SHA of a run result.
+type Publication struct {
+	Repo        string `json:"repo"`
+	PullRequest int    `json:"pull_request"`
+	SHA         string `json:"sha"`
+}
+
+// SessionPublication is the newest result any turn of the session
+// actually published. ok is false when no turn has published.
+func SessionPublication(s *store.Store, sessionID int64) (Publication, bool, error) {
+	return newestPublication(s, `SELECT r.payload FROM review_revisions r JOIN turns t ON t.id=r.job_id WHERE t.session_id=? ORDER BY r.id DESC`, sessionID)
+}
+
+func newestPublication(s *store.Store, query string, id int64) (Publication, bool, error) {
+	rows, err := s.DB.Query(query, id)
+	if err != nil {
+		return Publication{}, false, err
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var raw string
 		if err := rows.Scan(&raw); err != nil {
-			return 0, "", false
+			return Publication{}, false, err
 		}
 		var prev Artifact
 		if json.Unmarshal([]byte(raw), &prev) != nil || prev.Result == nil {
 			continue
 		}
-		if prev.Result.Outcome == OutcomePublished && prev.Result.PullRequest > 0 && prev.Result.PublishedSHA != "" {
-			return prev.Result.PullRequest, prev.Result.PublishedSHA, true
+		if r := prev.Result; r.Outcome == OutcomePublished && r.PullRequest > 0 && r.PublishedSHA != "" {
+			return Publication{Repo: prev.Repo, PullRequest: r.PullRequest, SHA: r.PublishedSHA}, true, nil
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return 0, "", false
-	}
-	return 0, "", false
+	return Publication{}, false, rows.Err()
 }

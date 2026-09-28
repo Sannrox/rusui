@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -111,9 +112,22 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 			"revision_id": revisionID, "artifact": artifact, "dry_run_actions": dryRun,
 		}
 	}
+	cancelled, err := store.SessionCancelled(s.Eng.Store, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	response := map[string]any{
 		"session": sess, "turns": turns, "processes": processes,
-		"environment_state": envState,
+		"environment_state": envState, "cancelled": cancelled,
+	}
+	publication, published, err := engine.SessionPublication(s.Eng.Store, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if published {
+		response["publication"] = publication
 	}
 	if reviewResult != nil {
 		response["review_result"] = reviewResult
