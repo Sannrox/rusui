@@ -26,11 +26,18 @@ type Client struct {
 	pending      map[string]chan rpcMessage
 	seq          atomic.Int64
 	once         sync.Once
-	writes       sync.Mutex
+	writerOnce   sync.Once
+	closeOutOnce sync.Once
+	writeCh      chan writeReq
 	promptMu     sync.Mutex
 	promptCtx    context.Context
 	promptCancel context.CancelFunc
 	err          atomic.Value
+}
+
+type writeReq struct {
+	b   []byte
+	err chan error
 }
 
 // UnmatchedWaiter waits on a live unmatched permission RPC.
@@ -341,6 +348,28 @@ func (c *Client) permissionWaitContext() context.Context {
 	return ctx
 }
 
+func (c *Client) ensureWriter() {
+	c.writerOnce.Do(func() {
+		c.writeCh = make(chan writeReq)
+		go c.writerLoop()
+	})
+}
+
+func (c *Client) writerLoop() {
+	for req := range c.writeCh {
+		_, err := fmt.Fprintf(c.Out, "%s\n", req.b)
+		req.err <- err
+	}
+}
+
+func (c *Client) closeOut() {
+	c.closeOutOnce.Do(func() {
+		if closer, ok := c.Out.(io.Closer); ok {
+			_ = closer.Close()
+		}
+	})
+}
+
 func (c *Client) Notify(method string, params any) error {
 	c.start()
 	raw, err := json.Marshal(params)
@@ -354,52 +383,34 @@ func (c *Client) Notify(method string, params any) error {
 	return c.write(ctx, rpcMessage{JSONRPC: "2.0", Method: method, Params: raw})
 }
 
-func (c *Client) lockWrites(ctx context.Context) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	got := make(chan struct{})
-	go func() {
-		c.writes.Lock()
-		close(got)
-	}()
-	select {
-	case <-got:
-		return nil
-	case <-ctx.Done():
-		go func() {
-			<-got
-			c.writes.Unlock()
-		}()
-		return ctx.Err()
-	}
-}
-
 func (c *Client) write(ctx context.Context, msg rpcMessage) error {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	b, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	if err := c.lockWrites(ctx); err != nil {
-		return err
-	}
-	defer c.writes.Unlock()
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := fmt.Fprintf(c.Out, "%s\n", b)
-		errCh <- err
-	}()
+	c.ensureWriter()
+	req := writeReq{b: b, err: make(chan error, 1)}
 	select {
-	case err := <-errCh:
+	case c.writeCh <- req:
+	case <-ctx.Done():
+		c.closeOut()
+		return ctx.Err()
+	}
+	select {
+	case err := <-req.err:
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return err
 	case <-ctx.Done():
-		if closer, ok := c.Out.(io.Closer); ok {
-			_ = closer.Close()
-		}
-		<-errCh
+		c.closeOut()
+		<-req.err
 		return ctx.Err()
 	}
 }

@@ -1,9 +1,11 @@
 package acp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -144,6 +146,19 @@ func TestPermissionMatchedAllowHasNoApproval(t *testing.T) {
 		if a.Type == ActionApproval {
 			t.Fatalf("matched allow should not create approval: %+v", a)
 		}
+	}
+}
+
+func TestWriteUsesSingleWriterGoroutine(t *testing.T) {
+	src, err := os.ReadFile("client.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(src, []byte("func (c *Client) lockWrites")) {
+		t.Fatal("lockWrites must not spawn a lock waiter")
+	}
+	if !bytes.Contains(src, []byte("func (c *Client) writerLoop()")) {
+		t.Fatal("dedicated writerLoop required")
 	}
 }
 
