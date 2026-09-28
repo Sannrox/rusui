@@ -335,6 +335,8 @@ func (d DockerCLI) Exec(id string, cmd []string) error {
 func (d DockerCLI) ExecOutput(id string, cmd []string) ([]byte, bool, error) {
 	args := append([]string{"exec", "-w", workspaceDir, id}, cmd...)
 	c := exec.Command(d.bin(), args...)
+	// One comparable writer for both streams makes os/exec share a single
+	// pipe and copy goroutine, so tailBuffer needs no lock.
 	buf := &tailBuffer{limit: CaptureLimit}
 	c.Stdout = buf
 	c.Stderr = buf

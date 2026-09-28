@@ -255,3 +255,23 @@ func stubDocker(t *testing.T) (bin, logPath string) {
 	t.Setenv("STUB_LOG", logPath)
 	return bin, logPath
 }
+
+// ExecOutput hands one tailBuffer to both streams; os/exec then shares a
+// single pipe and copy goroutine, so -race proves the writes never overlap.
+func TestDockerCLIExecOutputFloodsBothStreams(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "docker")
+	script := "#!/bin/sh\n" +
+		"yes out | head -c 3000000 &\n" +
+		"yes err | head -c 3000000 >&2 &\n" +
+		"wait\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out, truncated, err := DockerCLI{Bin: bin}.ExecOutput("box", []string{"sh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != CaptureLimit || !truncated {
+		t.Fatalf("len=%d truncated=%v", len(out), truncated)
+	}
+}
