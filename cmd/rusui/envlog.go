@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -14,14 +15,17 @@ import (
 // session's environment (#334). `rusui logs` stays the action receipts (ADR 0031).
 func envlogCLI(args []string) {
 	fs := flag.NewFlagSet("envlog", flag.ExitOnError)
-	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
+	base := fs.String("url", "http://127.0.0.1:8080", "plane URL")
 	token := fs.String("token", os.Getenv("RUSUI_OPERATOR_TOKEN"), "operator token")
+	kind := fs.String("kind", "", "filter by kind (setup, resume, service)")
+	name := fs.String("name", "", "filter by service name")
+	omitBody := fs.Bool("omit-body", false, "list captures without output bodies")
 	_ = fs.Parse(args)
 	if fs.NArg() < 1 {
-		fmt.Fprintln(os.Stderr, "usage: rusui envlog [-url URL] [-token TOKEN] SESSION_ID")
+		fmt.Fprintln(os.Stderr, "usage: rusui envlog [-url URL] [-token TOKEN] [-kind KIND] [-name NAME] [-omit-body] SESSION_ID")
 		os.Exit(2)
 	}
-	res, err := planeClient(*url, *token, "/sessions/"+fs.Arg(0)+"/envlog")
+	res, err := planeClient(*base, *token, envlogPath(fs.Arg(0), *kind, *name, *omitBody))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -77,4 +81,22 @@ func printCaptures(w io.Writer, b []byte) error {
 		}
 	}
 	return nil
+}
+
+func envlogPath(sessionID, kind, name string, omitBody bool) string {
+	path := "/sessions/" + sessionID + "/envlog"
+	q := url.Values{}
+	if kind != "" {
+		q.Set("kind", kind)
+	}
+	if name != "" {
+		q.Set("name", name)
+	}
+	if omitBody {
+		q.Set("omit-body", "1")
+	}
+	if encoded := q.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	return path
 }

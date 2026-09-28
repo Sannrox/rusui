@@ -25,3 +25,12 @@ func TestPrintCaptures(t *testing.T) {
 		t.Fatalf("got %q", out.String())
 	}
 }
+
+func TestEnvlogPathFilters(t *testing.T) {
+	if got := envlogPath("12", "", "", false); got != "/sessions/12/envlog" {
+		t.Fatalf("plain %q", got)
+	}
+	if got := envlogPath("12", "service", "web", true); got != "/sessions/12/envlog?kind=service&name=web&omit-body=1" {
+		t.Fatalf("filtered %q", got)
+	}
+}

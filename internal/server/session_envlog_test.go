@@ -38,9 +38,13 @@ func TestSessionEnvlogServesBoundedHookAndServiceCaptures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	get := func(token string) (int, []store.EnvironmentCapture) {
+	get := func(token string, query ...string) (int, []store.EnvironmentCapture) {
 		t.Helper()
-		req, _ := http.NewRequest(http.MethodGet, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/envlog", nil)
+		u := hs.URL + "/sessions/" + strconv.FormatInt(sid, 10) + "/envlog"
+		if len(query) > 0 && query[0] != "" {
+			u += "?" + query[0]
+		}
+		req, _ := http.NewRequest(http.MethodGet, u, nil)
 		if token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
@@ -103,6 +107,15 @@ func TestSessionEnvlogServesBoundedHookAndServiceCaptures(t *testing.T) {
 	if web == nil || web.Name != "web" || !web.Truncated || len(web.Output) != env.CaptureLimit {
 		t.Fatalf("service truncated=%v len=%d", web != nil && web.Truncated, len(caps))
 	}
+	if status, filtered := get("op-tok", "kind=service&name=web"); status != http.StatusOK || len(filtered) != 1 || filtered[0].Name != "web" || filtered[0].Output == "" {
+		t.Fatalf("filter %d %+v", status, filtered)
+	}
+	if status, omitted := get("op-tok", "kind=setup&omit-body=1"); status != http.StatusOK || len(omitted) != 1 || omitted[0].Kind != env.CaptureSetup || omitted[0].Output != "" || omitted[0].RecordedAt.IsZero() {
+		t.Fatalf("omit-body %d %+v", status, omitted)
+	}
+	if status, _ := get("op-tok", "kind=nope"); status != http.StatusBadRequest {
+		t.Fatalf("bad kind %d", status)
+	}
 
 	sleepWake := func() {
 		t.Helper()
@@ -149,10 +162,10 @@ func TestSessionEnvlogServesBoundedHookAndServiceCaptures(t *testing.T) {
 	}
 	page, _ := io.ReadAll(res.Body)
 	_ = res.Body.Close()
-	if !strings.Contains(string(page), "Environment output") || !strings.Contains(string(page), "setup: &lt;b&gt;ready&lt;/b&gt;") {
-		t.Fatalf("console page missing escaped output")
+	if !strings.Contains(string(page), "Environment output") || !strings.Contains(string(page), "setup") || !strings.Contains(string(page), "rusui envlog") {
+		t.Fatalf("console page missing capture listing")
 	}
-	if strings.Contains(string(page), "<b>ready</b>") {
-		t.Fatal("console rendered hook output as HTML")
+	if strings.Contains(string(page), "setup: &lt;b&gt;ready&lt;/b&gt;") || strings.Contains(string(page), "<b>ready</b>") {
+		t.Fatal("console inlined hook output")
 	}
 }
