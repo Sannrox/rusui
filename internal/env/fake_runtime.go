@@ -5,8 +5,10 @@ import (
 	"io"
 	"io/fs"
 	"maps"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 )
 
@@ -28,6 +30,7 @@ type FakeRuntime struct {
 	ExecHook        func(id string, cmd []string) error
 	StartHook       func(id string) error
 	StopHook        func(id string) error
+	GuestAddrs      map[string]string
 	alive           map[string]bool
 }
 
@@ -145,6 +148,28 @@ func (f *FakeRuntime) Exec(id string, cmd []string) error {
 		return hook(id, cmd)
 	}
 	return nil
+}
+
+func (f *FakeRuntime) GuestAddr(id string, port int) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := validGuestPort(port); err != nil {
+		return "", err
+	}
+	if f.GuestAddrs == nil {
+		return "", fmt.Errorf("env: no guest address")
+	}
+	addr := f.GuestAddrs[id+"/"+strconv.Itoa(port)]
+	if addr == "" {
+		addr = f.GuestAddrs[id]
+	}
+	if addr == "" {
+		return "", fmt.Errorf("env: no guest address")
+	}
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		return "", err
+	}
+	return addr, nil
 }
 
 func (f *FakeRuntime) ExecStdio(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {

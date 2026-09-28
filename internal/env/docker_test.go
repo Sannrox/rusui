@@ -239,6 +239,7 @@ func stubDocker(t *testing.T) (bin, logPath string) {
 		"  if [ \"$1\" = create ]; then echo net-id; exit 0; fi\n" +
 		"  exit 1\n" +
 		"fi\n" +
+		"if [ \"$cmd\" = inspect ]; then echo 10.88.0.12; exit 0; fi\n" +
 		"if [ \"$cmd\" = run ]; then echo 0123456789abcdef; exit 0; fi\n" +
 		"if [ \"$cmd\" = exec ]; then\n" +
 		"  if [ \"$1\" = -i ]; then [ -n \"$STUB_ENV_LOG\" ] && env >> \"$STUB_ENV_LOG\"; cat >/dev/null; exit 0; fi\n" +
