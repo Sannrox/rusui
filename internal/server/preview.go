@@ -29,6 +29,49 @@ func (s *Server) PreviewHandler() http.Handler {
 	return mux
 }
 
+// PreviewListener is the bind address and mux for the isolated preview
+// origin. Empty PreviewBase returns "", nil, nil (mint already refuses).
+// A non-loopback host, missing port, or origin that is not isolated from
+// the plane fails closed.
+func (s *Server) PreviewListener() (string, http.Handler, error) {
+	if strings.TrimSpace(s.PreviewBase) == "" {
+		return "", nil, nil
+	}
+	listen, err := previewListenAddr(s.PreviewBase)
+	if err != nil {
+		return "", nil, err
+	}
+	if strings.TrimSpace(s.Addr) == "" || listen == s.Addr {
+		return "", nil, fmt.Errorf("preview origin not isolated")
+	}
+	if err := s.denyPlaneDest(listen); err != nil {
+		return "", nil, fmt.Errorf("preview origin not isolated")
+	}
+	plane := "http://" + s.Addr
+	if s.GuestHTTPSOnly {
+		plane = "https://" + s.Addr
+	}
+	if !PreviewOriginIsolated(plane, s.PreviewBase) {
+		return "", nil, fmt.Errorf("preview origin not isolated")
+	}
+	return listen, s.PreviewHandler(), nil
+}
+
+func previewListenAddr(base string) (string, error) {
+	u, err := url.Parse(base)
+	if err != nil || u.Scheme != "http" || u.Host == "" {
+		return "", fmt.Errorf("preview origin unset")
+	}
+	host, port, err := net.SplitHostPort(u.Host)
+	if err != nil || host == "" || port == "" {
+		return "", fmt.Errorf("preview origin requires host:port")
+	}
+	if !planeLoopback(host) {
+		return "", fmt.Errorf("preview origin must be loopback")
+	}
+	return net.JoinHostPort(host, port), nil
+}
+
 func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 	if !s.consoleRequire(w, r) {
 		return

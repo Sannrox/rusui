@@ -319,6 +319,91 @@ func TestPreviewGrantDeniesPlaneListenPort(t *testing.T) {
 	}
 }
 
+func TestPreviewListenerServesCommentBesidePlane(t *testing.T) {
+	s, _, _ := consoleEnv(t)
+	listen, h, err := s.PreviewListener()
+	if err != nil || listen != "" || h != nil {
+		t.Fatalf("unset PreviewBase: %q %v %v", listen, h, err)
+	}
+
+	s.PreviewBase = "http://127.0.0.1:8090"
+	listen, h, err = s.PreviewListener()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listen != "127.0.0.1:8090" {
+		t.Fatalf("listen %q", listen)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/comment?g=deadbeef", strings.NewReader(url.Values{"text": {"x"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", s.PreviewBase)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("preview comment %d", rr.Code)
+	}
+
+	s.PreviewBase = "http://127.0.0.1:8080"
+	if _, _, err := s.PreviewListener(); err == nil {
+		t.Fatal("same origin as plane")
+	}
+	s.PreviewBase = "http://127.0.0.1"
+	if _, _, err := s.PreviewListener(); err == nil {
+		t.Fatal("missing port")
+	}
+	s.PreviewBase = "http://192.0.2.1:8090"
+	if _, _, err := s.PreviewListener(); err == nil {
+		t.Fatal("non-loopback")
+	}
+	s.PreviewBase = "https://127.0.0.1:8090"
+	if _, _, err := s.PreviewListener(); err == nil {
+		t.Fatal("https preview bind")
+	}
+	s.GuestHTTPSOnly = true
+	s.PreviewBase = "http://127.0.0.1:8080"
+	if _, _, err := s.PreviewListener(); err == nil {
+		t.Fatal("same bind as plane")
+	}
+	s.GuestHTTPSOnly = false
+	s.PreviewBase = "http://:8090"
+	if _, _, err := s.PreviewListener(); err == nil {
+		t.Fatal("empty host")
+	}
+	s.Addr = ":8080"
+	s.PreviewBase = "http://127.0.0.1:8080"
+	if _, _, err := s.PreviewListener(); err == nil {
+		t.Fatal("unspecified plane bind same port")
+	}
+	s.Addr = "0.0.0.0:8080"
+	s.PreviewBase = "http://127.0.0.1:8080"
+	if _, _, err := s.PreviewListener(); err == nil {
+		t.Fatal("wildcard plane bind same port")
+	}
+	s.Addr = ":8080"
+	s.PreviewBase = "http://127.0.0.1:8090"
+	listen, h, err = s.PreviewListener()
+	if err != nil || listen != "127.0.0.1:8090" || h == nil {
+		t.Fatalf("unspecified plane different port: %q %v %v", listen, h, err)
+	}
+}
+
+func TestPlaneHandlerDoesNotServePreviewComment(t *testing.T) {
+	s, _, _ := consoleEnv(t)
+	req := httptest.NewRequest(http.MethodPost, "/comment?g=deadbeef", strings.NewReader(url.Values{"text": {"x"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("plane POST /comment %d (preview routes belong on PreviewHandler)", rr.Code)
+	}
+
+	prev := httptest.NewRecorder()
+	s.PreviewHandler().ServeHTTP(prev, req)
+	if prev.Code == http.StatusNotFound {
+		t.Fatal("preview mux missing POST /comment")
+	}
+}
+
 func TestPreviewCommentPostsFollowUp(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "app-ok")
