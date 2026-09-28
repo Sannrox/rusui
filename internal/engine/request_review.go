@@ -24,6 +24,8 @@ var (
 	ErrReviewRefreshBusy = errors.New("pull request refresh is already in progress")
 	// ErrReviewRefreshFailed reports a PR that could not be refreshed.
 	ErrReviewRefreshFailed = errors.New("pull request refresh failed")
+	// ErrReviewIneligible reports a pull request outside the advisory profile.
+	ErrReviewIneligible = errors.New("pull request is not eligible for advisory review")
 )
 
 // ReviewRequest identifies the session and current revision admitted for a PR.
