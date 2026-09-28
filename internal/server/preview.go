@@ -176,11 +176,11 @@ func (s *Server) previewDial(envRow *store.Environment, port int) (string, error
 
 func (s *Server) denyPlaneDest(dial string) error {
 	if s == nil || s.Addr == "" {
-		return nil
+		return fmt.Errorf("plane listener not a preview target")
 	}
 	wantHost, wantPort, err := net.SplitHostPort(s.Addr)
 	if err != nil {
-		return nil
+		return fmt.Errorf("plane listener not a preview target")
 	}
 	gotHost, gotPort, err := net.SplitHostPort(dial)
 	if err != nil {
@@ -189,10 +189,13 @@ func (s *Server) denyPlaneDest(dial string) error {
 	if gotPort != wantPort {
 		return nil
 	}
+	if planeUnspecified(wantHost) && (planeLoopback(gotHost) || planeUnspecified(gotHost)) {
+		return fmt.Errorf("plane listener not a preview target")
+	}
 	if planeLoopback(wantHost) && planeLoopback(gotHost) {
 		return fmt.Errorf("plane listener not a preview target")
 	}
-	if wantHost != "" && !planeLoopback(wantHost) && strings.EqualFold(gotHost, wantHost) {
+	if wantHost != "" && strings.EqualFold(gotHost, wantHost) {
 		return fmt.Errorf("plane listener not a preview target")
 	}
 	return nil
@@ -204,6 +207,14 @@ func planeLoopback(host string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+func planeUnspecified(host string) bool {
+	if host == "" || host == "*" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsUnspecified()
 }
 
 func mustID(r *http.Request) int64 {
