@@ -40,6 +40,51 @@ func TestProcessWriteFileEnforcesCap(t *testing.T) {
 	}
 }
 
+func TestContainerWriteFileSourceHasNoReadAll(t *testing.T) {
+	b, err := os.ReadFile("workspace_write.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(b, []byte("io.ReadAll")) {
+		t.Fatal("container put must stream; io.ReadAll buffers the whole upload")
+	}
+}
+
+func TestDockerCLIWriteFileStreamsViaExec(t *testing.T) {
+	bin, logPath := stubDocker(t)
+	d := DockerCLI{Bin: bin}
+	src := &countReader{r: strings.NewReader(strings.Repeat("x", 4096))}
+	if err := d.WriteFile("0123456789abcdef", "note.txt", src, WorkspaceUploadCap); err != nil {
+		t.Fatal(err)
+	}
+	if src.n != 4096 {
+		t.Fatalf("read %d", src.n)
+	}
+	logb, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(logb)
+	if !strings.Contains(log, "exec -i 0123456789abcdef tee /workspace/note.txt") {
+		t.Fatalf("expected stdin tee, log:\n%s", log)
+	}
+	if strings.Contains(log, " cp ") || strings.Contains(log, "\ncp ") {
+		t.Fatalf("must not docker cp a host temp, log:\n%s", log)
+	}
+}
+
+func TestDockerCLIWriteFileEnforcesCapWithoutFullBuffer(t *testing.T) {
+	bin, _ := stubDocker(t)
+	d := DockerCLI{Bin: bin}
+	src := &countReader{r: strings.NewReader(strings.Repeat("a", 8))}
+	if err := d.WriteFile("0123456789abcdef", "big.bin", src, 4); err == nil {
+		t.Fatal("cap")
+	}
+	if src.n != 5 {
+		t.Fatalf("must stop at max+1, read %d", src.n)
+	}
+}
+
 func TestContainerWriteFileUsesRuntime(t *testing.T) {
 	rt := &FakeRuntime{}
 	c := Container{RT: rt, Image: "rusui-guest:test"}
