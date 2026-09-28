@@ -59,6 +59,9 @@ func main() {
 		case "read":
 			readCLI(os.Args[2:])
 			return
+		case "put":
+			putCLI(os.Args[2:])
+			return
 		case "approve":
 			approveCLI(os.Args[2:])
 			return
