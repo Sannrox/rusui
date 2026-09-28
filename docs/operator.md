@@ -431,6 +431,14 @@ handle ([ADR 0012](decisions/0012-operator-access.md)), and sleep keeps
 both, so the same grant URL works after wake without a new mint. In
 practice a live grant keeps the environment awake until the grant ends.
 
+Preview HTML and `POST /comment` live on that origin, not on `-addr`. Set
+`RUSUI_PREVIEW_BASE` to a loopback URL with an explicit port that is not
+the plane's, for example `http://127.0.0.1:8090`. The process then serves
+the preview handler on that host:port beside the plane listener. Unset, mint
+refuses. A PreviewBase that shares the plane origin, omits a port, or is
+not loopback fails closed at start. Routes, grant query, and body limits:
+[configuration.md](configuration.md#preview-origin).
+
 Attach to either runtime with the same operator command:
 
 ```bash

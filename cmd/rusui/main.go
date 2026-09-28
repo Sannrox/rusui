@@ -214,6 +214,16 @@ func main() {
 	if err := eng.Recover(); err != nil {
 		log.Printf("recover: %v", err)
 	}
+	previewAddr, previewHandler, err := srv.PreviewListener()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if previewHandler != nil {
+		go func() {
+			log.Printf("preview origin %s listen %s", srv.PreviewBase, previewAddr)
+			log.Fatal(http.ListenAndServe(previewAddr, previewHandler))
+		}()
+	}
 	go runScheduler(eng)
 	log.Printf("rusui %s listen %s api=%s reconcile=%s catch-up=%s apply=%s", Version, *addr, api.BaseURL, engine.ReconcileEvery, engine.CatchUpEvery, engine.ApplyRetryEvery)
 	if srv.GuestHTTPSOnly {

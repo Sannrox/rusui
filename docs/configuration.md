@@ -108,6 +108,7 @@ reported and exits successfully.
 | `RUSUI_DISABLE_COAUTHOR_TRAILER` | no | `1` drops `Co-authored-by: rusui <noreply@rusui.invalid>` from agent commits. |
 | `RUSUI_DISABLE_SESSION_TRAILER` | no | `1` drops `Rusui-Session: <session id>` from agent commits. |
 | `SUMIKA_SOCK` | local interactive profile | Optional same-user Unix socket path; otherwise Sumika's per-user default path is used. |
+| `RUSUI_PREVIEW_BASE` | no | Absolute preview origin, e.g. `http://127.0.0.1:8090`. Must be a different loopback origin from `-addr` ([ADR 0012](decisions/0012-operator-access.md) D5). Unset: mint refuses. When set, `rusui` serves `PreviewHandler` on that host:port beside the plane; it is never mounted on the plane mux. |
 
 ### Model upstream
 
@@ -217,6 +218,21 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 
 GitHub webhook events: `issues`, `pull_request`, `issue_comment`.
 Forward the tunnel to `http://127.0.0.1:8080/hooks/github`.
+
+## Preview origin
+
+`RUSUI_PREVIEW_BASE` is a second listener, not a path on `-addr`. The plane
+mux never serves these routes. Reach the origin through SSH local-forward
+or a tailnet; do not bind it off loopback.
+
+| Method | Path | Auth |
+| --- | --- | --- |
+| `*` | `/` | preview grant (`?g=` or `Authorization: Bearer`); reverse-proxies the granted environment port |
+| `POST` | `/comment` | preview grant (`?g=` or `Authorization: Bearer`) and `Origin` matching `RUSUI_PREVIEW_BASE`; 8 KiB form `text`, `url`, `selector` |
+
+The grant is a separate secret from the operator cookie. An operator cookie
+on this origin is refused. Minting requires the origin to be set and
+isolated from the plane host; otherwise the console returns 409.
 
 ## Policy schema
 
