@@ -26,6 +26,12 @@
       "properties": []
     },
     {
+      "name": "RusuiCommand",
+      "description": "A flat rusui CLI verb. No subcommand starts the plane. rusui logs lists action receipts. rusui envlog reads bounded setup, resume, and service output. rusui-runner is a separate binary. Session verbs stay flat; a nested session object is unauthorized until a superseding ADR.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiRunner",
       "description": "Outbound-only rusui-runner on the plane host. Schema seeds one row named local. Hello records presence; it does not mint a second host. Snapshot bytes and environment containers stay on this host. Additional runners are unauthorized until measured single-host limits are recorded and a superseding ADR selects a topology.",
       "superclasses": [],
@@ -975,6 +981,12 @@
       "subject": "RusuiSchedule",
       "source": "docs/decisions/0030-schedule-new-session.md",
       "locator": "docs/decisions/0030-schedule-new-session.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiCommand",
+      "source": "docs/decisions/0031-cli-command-tree.md",
+      "locator": "docs/decisions/0031-cli-command-tree.md#decision",
       "confidence": 1.0
     }
   ]
