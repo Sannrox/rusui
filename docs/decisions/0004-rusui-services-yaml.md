@@ -6,6 +6,8 @@
   declaration path). `.agents/setup`, `.agents/resume`, and `AGENTS.md`
   stand.
 - Resolves: [#35](https://github.com/Sannrox/rusui/issues/35)
+- Amended by: [ADR 0032](0032-named-services.md). A service may declare
+  `port` and `health`; unknown fields fail closed.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context

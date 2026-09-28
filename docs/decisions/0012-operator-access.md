@@ -9,6 +9,8 @@
 - Related: [ADR 0009](0009-credential-broker.md) (guest grants),
   [ADR 0010](0010-hybrid-roadmap-sequence.md) (M4 surfaces),
   [ADR 0011](0011-unattended-session-contract.md) (cancel vs pause).
+- Amended by: [ADR 0032](0032-named-services.md). A preview grant may
+  name a declared service; the grant class is unchanged.
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
   Objects: operator credential, worker credential, turn grant, browser

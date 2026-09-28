@@ -32,6 +32,12 @@
       "properties": []
     },
     {
+      "name": "RusuiNamedService",
+      "description": "A service declared in .rusui/services.yaml with command, cwd, env, and optionally port and health. Unknown fields fail closed. The plane injects PORT, RUSUI_SESSION_ID, and RUSUI_SERVICE, not a public origin. It starts after setup or resume, stops before sleep, and is starting, healthy, unhealthy, or exited. A preview grant may name it; a raw-port grant is operator-only and undeclared.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiRunner",
       "description": "Outbound-only rusui-runner on the plane host. Schema seeds one row named local. Hello records presence; it does not mint a second host. Snapshot bytes and environment containers stay on this host. Additional runners are unauthorized until measured single-host limits are recorded and a superseding ADR selects a topology.",
       "superclasses": [],
@@ -981,6 +987,12 @@
       "subject": "RusuiSchedule",
       "source": "docs/decisions/0030-schedule-new-session.md",
       "locator": "docs/decisions/0030-schedule-new-session.md#decision",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiNamedService",
+      "source": "docs/decisions/0032-named-services.md",
+      "locator": "docs/decisions/0032-named-services.md#decision",
       "confidence": 1.0
     },
     {
