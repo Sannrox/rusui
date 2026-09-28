@@ -27,6 +27,23 @@ func TestProcessWriteFileRejectsEscape(t *testing.T) {
 	if err != nil || string(b) != "hi" {
 		t.Fatalf("got %q %v", b, err)
 	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(handle, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.WriteFile(handle, "link/pwned", bytes.NewReader([]byte("x")), WorkspaceUploadCap); err == nil {
+		t.Fatal("intermediate symlink")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "pwned")); err == nil {
+		t.Fatal("wrote outside handle")
+	}
+	if err := p.WriteFile(handle, "sub/dir/ok.txt", bytes.NewReader([]byte("in")), WorkspaceUploadCap); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(handle, "sub", "dir", "ok.txt"))
+	if err != nil || string(got) != "in" {
+		t.Fatalf("nested %q %v", got, err)
+	}
 }
 
 func TestProcessWriteFileEnforcesCap(t *testing.T) {

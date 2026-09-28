@@ -2,6 +2,7 @@ package env
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -44,19 +45,10 @@ func (p Process) WriteFile(handle, rel string, r io.Reader, max int64) error {
 	if !ok {
 		return fmt.Errorf("env: path")
 	}
-	full := filepath.Join(handle, clean)
-	base := filepath.Clean(handle)
-	if full != base && !strings.HasPrefix(full, base+string(os.PathSeparator)) {
-		return fmt.Errorf("env: path")
-	}
-	if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
-		return err
-	}
-	fd, err := unix.Open(full, unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
+	f, err := createUnder(handle, clean)
 	if err != nil {
 		return err
 	}
-	f := os.NewFile(uintptr(fd), clean)
 	defer func() { _ = f.Close() }()
 	if max <= 0 {
 		max = WorkspaceUploadCap
@@ -66,10 +58,45 @@ func (p Process) WriteFile(handle, rel string, r io.Reader, max int64) error {
 		return err
 	}
 	if n > max {
-		_ = os.Remove(full)
+		_ = f.Truncate(0)
 		return fmt.Errorf("env: oversized")
 	}
 	return nil
+}
+
+func createUnder(root, rel string) (*os.File, error) {
+	dirfd, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.Split(rel, "/")
+	for i, part := range parts {
+		if part == "" || part == "." {
+			continue
+		}
+		last := i == len(parts)-1
+		if !last {
+			if err := unix.Mkdirat(dirfd, part, 0o700); err != nil && !errors.Is(err, unix.EEXIST) {
+				_ = unix.Close(dirfd)
+				return nil, err
+			}
+			next, err := unix.Openat(dirfd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+			_ = unix.Close(dirfd)
+			if err != nil {
+				return nil, err
+			}
+			dirfd = next
+			continue
+		}
+		fd, err := unix.Openat(dirfd, part, unix.O_WRONLY|unix.O_CREAT|unix.O_TRUNC|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
+		_ = unix.Close(dirfd)
+		if err != nil {
+			return nil, err
+		}
+		return os.NewFile(uintptr(fd), rel), nil
+	}
+	_ = unix.Close(dirfd)
+	return nil, fmt.Errorf("env: path")
 }
 
 type workspaceFileRuntime interface {
