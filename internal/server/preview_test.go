@@ -333,19 +333,26 @@ func TestPreviewCommentPostsFollowUp(t *testing.T) {
 	t.Cleanup(prev.Close)
 	s.PreviewBase = prev.URL
 	sid, grant := mintPreviewGrant(t, s, hs, e, bport)
-
-	res, err := http.Post(prev.URL+"/comment?g="+grant, "application/x-www-form-urlencoded", strings.NewReader(url.Values{
-		"text":     {"save button"},
-		"url":      {prev.URL + "/settings"},
-		"selector": {"#save"},
-	}.Encode()))
-	if err != nil {
-		t.Fatal(err)
+	post := func(origin string, v url.Values, cookie bool) int {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, prev.URL+"/comment?g="+grant, strings.NewReader(v.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		if cookie {
+			req.AddCookie(&http.Cookie{Name: consoleCookie, Value: s.consoleCookieValue(), Path: "/console"})
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = res.Body.Close()
+		return res.StatusCode
 	}
-	_, _ = io.ReadAll(res.Body)
-	_ = res.Body.Close()
-	if res.StatusCode != http.StatusNoContent {
-		t.Fatalf("comment %d", res.StatusCode)
+
+	if code := post(prev.URL, url.Values{"text": {"save button"}, "url": {prev.URL + "/settings"}, "selector": {"#save"}}, false); code != http.StatusNoContent {
+		t.Fatalf("comment %d", code)
 	}
 	sess, err := store.GetSession(e.Store, sid)
 	if err != nil {
@@ -370,35 +377,48 @@ func TestPreviewCommentPostsFollowUp(t *testing.T) {
 		t.Fatalf("read %d %s", read.StatusCode, body)
 	}
 
-	cookieReq, _ := http.NewRequest(http.MethodPost, prev.URL+"/comment?g="+grant, strings.NewReader(url.Values{"text": {"nope"}}.Encode()))
-	cookieReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	cookieReq.AddCookie(&http.Cookie{Name: consoleCookie, Value: s.consoleCookieValue(), Path: "/console"})
-	cookieRes, err := http.DefaultClient.Do(cookieReq)
-	if err != nil {
-		t.Fatal(err)
+	nope := url.Values{"text": {"nope"}}
+	if code := post(prev.URL, nope, true); code != http.StatusForbidden {
+		t.Fatalf("operator cookie %d", code)
 	}
-	_ = cookieRes.Body.Close()
-	if cookieRes.StatusCode != http.StatusForbidden {
-		t.Fatalf("operator cookie %d", cookieRes.StatusCode)
+	if code := post("", nope, false); code != http.StatusForbidden {
+		t.Fatalf("missing origin %d", code)
 	}
-
-	bad, err := http.Post(prev.URL+"/comment?g=deadbeef", "application/x-www-form-urlencoded", strings.NewReader(url.Values{"text": {"x"}}.Encode()))
-	if err != nil {
-		t.Fatal(err)
+	if code := post(hs.URL, nope, false); code != http.StatusForbidden {
+		t.Fatalf("plane origin %d", code)
 	}
-	_ = bad.Body.Close()
-	if bad.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("unknown grant %d", bad.StatusCode)
+	if code := post(prev.URL, url.Values{"text": {strings.Repeat("a", previewCommentCap+1)}}, false); code != http.StatusBadRequest {
+		t.Fatalf("oversized %d", code)
 	}
 
-	big := strings.Repeat("a", previewCommentCap+1)
-	over, err := http.Post(prev.URL+"/comment?g="+grant, "application/x-www-form-urlencoded", strings.NewReader(url.Values{"text": {big}}.Encode()))
+	bad, _ := http.NewRequest(http.MethodPost, prev.URL+"/comment?g=deadbeef", strings.NewReader(nope.Encode()))
+	bad.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	bad.Header.Set("Origin", prev.URL)
+	badRes, err := http.DefaultClient.Do(bad)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = over.Body.Close()
-	if over.StatusCode != http.StatusBadRequest {
-		t.Fatalf("oversized %d", over.StatusCode)
+	_ = badRes.Body.Close()
+	if badRes.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unknown grant %d", badRes.StatusCode)
+	}
+
+	// An unexpired grant stops writing follow-ups once its environment
+	// expires or is replaced, matching the proxy.
+	envRow, _ := store.GetEnvironment(e.Store, sess.EnvironmentID)
+	bound := *envRow
+	envRow.State = store.EnvExpired
+	_ = store.UpdateEnvironment(e.Store, *envRow)
+	if code := post(prev.URL, nope, false); code != http.StatusConflict {
+		t.Fatalf("expired environment %d", code)
+	}
+	bound.Handle = "replaced"
+	_ = store.UpdateEnvironment(e.Store, bound)
+	if code := post(prev.URL, nope, false); code != http.StatusConflict {
+		t.Fatalf("replaced environment %d", code)
+	}
+	if after, _ := store.GetSession(e.Store, sid); strings.Contains(after.Prompt, "nope") {
+		t.Fatalf("refused comment reached session: %q", after.Prompt)
 	}
 }
 
