@@ -244,6 +244,30 @@ func (e *Engine) IngestGuestEvent(sessionID int64, deliveryID, kind string) erro
 	return store.NoteFirstEvent(e.Store, turnID, e.now())
 }
 
+// withoutReviewedContent drops items that already have a review job for
+// their listed content, so the catch-up cap goes to items that can produce
+// a new job (ADR 0038 D5). A newer GitHub updated_at brings an item back;
+// an item without a listed updated_at is kept.
+func (e *Engine) withoutReviewedContent(open []snapshot.Item) ([]snapshot.Item, error) {
+	reviewed := map[string]map[int]string{}
+	out := make([]snapshot.Item, 0, len(open))
+	for _, it := range open {
+		known, ok := reviewed[it.Repo]
+		if !ok {
+			var err error
+			if known, err = store.ReviewedUpdatedAt(e.Store, it.Repo); err != nil {
+				return nil, err
+			}
+			reviewed[it.Repo] = known
+		}
+		if at, ok := known[it.Item]; ok && it.UpdatedAt != "" && at >= it.UpdatedAt {
+			continue
+		}
+		out = append(out, it)
+	}
+	return out, nil
+}
+
 func githubIntakeItem(kind string, item int) bool {
 	if item <= 0 {
 		return false
@@ -261,8 +285,12 @@ func (e *Engine) CatchUpItem(repo string, item int, kind string) error {
 }
 
 func (e *Engine) CatchUpOpenAndLocal(open []snapshot.Item) error {
+	fresh, err := e.withoutReviewedContent(open)
+	if err != nil {
+		return err
+	}
 	seen := map[string]bool{}
-	for _, it := range CatchUpAdvisoryBatch(open, e.PolicySnapshot()) {
+	for _, it := range CatchUpAdvisoryBatch(fresh, e.PolicySnapshot()) {
 		seen[fmt.Sprintf("%s#%d", it.Repo, it.Item)] = true
 		if err := e.CatchUpItem(it.Repo, it.Item, it.ItemKind); err != nil {
 			return err

@@ -287,6 +287,30 @@ func LoadSnapshotTx(tx *sql.Tx, repo string, item, rev int) (snapshot.Item, erro
 	return it, nil
 }
 
+// ReviewedUpdatedAt maps each item of repo that has a review job to the
+// GitHub updated_at of its latest snapshot. Catch-up skips an item whose
+// listing is no newer: it already has work for that content (ADR 0038 D5).
+func ReviewedUpdatedAt(s *Store, repo string) (map[int]string, error) {
+	rows, err := s.DB.Query(`SELECT s.item, IFNULL(json_extract(s.payload, '$.updated_at'), '')
+FROM snapshots s
+WHERE s.repo=? AND s.revision=(SELECT MAX(x.revision) FROM snapshots x WHERE x.repo=s.repo AND x.item=s.item)
+  AND EXISTS (SELECT 1 FROM jobs j WHERE j.repo=s.repo AND j.item=s.item AND j.lane='review')`, repo)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[int]string{}
+	for rows.Next() {
+		var item int
+		var at string
+		if err := rows.Scan(&item, &at); err != nil {
+			return nil, err
+		}
+		out[item] = at
+	}
+	return out, rows.Err()
+}
+
 func LatestSnapshotHashTx(tx *sql.Tx, repo string, item int) (hash string, rev int, err error) {
 	err = tx.QueryRow(`SELECT item_hash, revision FROM snapshots WHERE repo=? AND item=? ORDER BY revision DESC LIMIT 1`, repo, item).Scan(&hash, &rev)
 	if err == sql.ErrNoRows {

@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/sannrox/rusui/internal/engine"
@@ -195,5 +196,65 @@ func TestProtectedLabelStillAdmitted(t *testing.T) {
 	h.putRefresh(it)
 	if _, err := h.e.Claim("example/test-repo"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Successive catch-up passes reach new items instead of re-selecting the
+// oldest ones that already have a job for their content; a change on
+// GitHub makes an item eligible again (#400).
+func TestCatchUpPassesReachNewItems(t *testing.T) {
+	h := setup(t)
+	var open []snapshot.Item
+	for i := 1; i <= 5; i++ {
+		it := issue(i)
+		it.CreatedAt = "2026-02-0" + string(rune('0'+i)) + "T00:00:00Z"
+		h.f.Put(it)
+		open = append(open, it)
+	}
+	pass := func() []int {
+		t.Helper()
+		if err := h.e.CatchUpOpenAndLocal(open); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			ok, err := h.e.StepRefresh()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				break
+			}
+		}
+		rows, err := h.st.DB.Query(`SELECT item FROM jobs WHERE lane='review' ORDER BY item`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = rows.Close() }()
+		var items []int
+		for rows.Next() {
+			var n int
+			_ = rows.Scan(&n)
+			items = append(items, n)
+		}
+		return items
+	}
+	if got := pass(); fmt.Sprint(got) != "[1 2]" {
+		t.Fatalf("first pass %v", got)
+	}
+	if got := pass(); fmt.Sprint(got) != "[1 2 3 4]" {
+		t.Fatalf("second pass %v", got)
+	}
+	changed := open[0]
+	changed.UpdatedAt = "2026-03-01T00:00:00Z"
+	changed.Body = "new repro"
+	h.f.Put(changed)
+	open[0] = changed
+	var before int
+	_ = h.st.DB.QueryRow(`SELECT pending_revision FROM jobs WHERE item=1`).Scan(&before)
+	pass()
+	var after int
+	_ = h.st.DB.QueryRow(`SELECT pending_revision FROM jobs WHERE item=1`).Scan(&after)
+	if after <= before {
+		t.Fatalf("changed item not requeued: pending %d -> %d", before, after)
 	}
 }
