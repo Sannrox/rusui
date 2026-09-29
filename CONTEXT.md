@@ -95,6 +95,11 @@ stale-disconnect fencing. They are not client connections or Turn state.
 Rusui's managed terminal keeps its own write lease.
 _Avoid_: session, turn, process ownership
 
+**Extension**:
+Not a product object. Integrators use the object API, CLI, ACP, or Slack.
+A plugin boundary is not selected ([ADR 0043](docs/decisions/0043-extension-contract-deferred.md)).
+_Avoid_: plugin host, in-process loader, marketplace
+
 **Cancel**:
 Operator action that stops a live guest and fails the claimed turn without automatic retry. Distinct from pause.
 _Avoid_: pause, expire environment

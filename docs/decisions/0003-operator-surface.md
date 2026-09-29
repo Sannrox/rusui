@@ -12,6 +12,8 @@
   verb list; `rusui logs` is receipts; hook output is `rusui envlog`.
   [ADR 0036](0036-environment-desktop-deferred.md) adds no desktop view;
   the ten views stand.
+  [ADR 0043](0043-extension-contract-deferred.md) adds no plugin
+  boundary; unspecified clients still fail closed.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context
