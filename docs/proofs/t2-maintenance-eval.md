@@ -33,10 +33,10 @@ current per-case table.
 | measure | value |
 |---|---|
 | cases | 16 |
-| agree with judgment | 13 / 16 |
+| agree with judgment | 12 / 16 |
 | false actions (writes the judgment does not allow) | 3 / 16 |
 | wrong actions (writes on protected or stale work) | 1 / 16 |
-| missed writes | 0 / 16 |
+| missed writes | 1 / 16 |
 | duplicate work | 0 |
 | findings useful / neutral / harmful | 6 / 3 / 5 of 14 |
 | wrong findings | 5 / 14 |
@@ -47,6 +47,8 @@ current per-case table.
 
 - **E4, false close.** `duplicate_or_superseded` checks that the canonical
   item exists, not that the reports match. Known since v1.
+- **E5, missed close.** The item is a closed merged pull request. Advisory
+  admission requires `state=open` (ADR 0038 D2), so replay writes nothing.
 - **E12, close on held work (a wrong action).** A `rusui:hold` item past the stale
   thresholds is closed in dry-run. Protected labels are not enforced yet
   (ADR 0038 D3; [#106](https://github.com/Sannrox/rusui/issues/106)).
