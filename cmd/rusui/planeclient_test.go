@@ -15,7 +15,7 @@ import (
 // client must not cut them off the way the diagnose client does (#398).
 func TestPlaneHTTPStreamsPastTheDiagnoseTimeout(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		for i := 0; i < 7; i++ {
+		for range 7 {
 			_, _ = io.WriteString(w, "x")
 			w.(http.Flusher).Flush()
 			time.Sleep(500 * time.Millisecond)
