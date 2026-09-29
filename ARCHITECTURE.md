@@ -920,9 +920,9 @@ spend measurement.
 
 Do not promote because `confidence = high`.
 
-## Publication (ADR 0015)
+## Publication (ADR 0015, ADR 0044)
 
-The agent publishes. In an `implement` session the guest holds the
+By default the agent publishes. In an `implement` session the guest holds the
 operator's GitHub credential and runs `git push` and `gh pr create` /
 `gh pr edit` itself. The plane only decides which sessions receive the
 credential.
@@ -955,6 +955,21 @@ receive the credential.
   implement-session reject rules ([ADR 0017](docs/decisions/0017-claude-guest-and-model-upstream.md)
   D3) guard against it and are not a security boundary. rusui does not
   verify the profile; the operator owns it.
+
+**Plane publication (ADR 0044, opt-in).** With `RUSUI_PUBLICATION=plane`
+and GitHub App credentials, implement guests receive no GitHub
+credential. The agent pushes only `refs/heads/rusui/<session>/*` through
+the git proxy and asks for publication in its result
+(`{"publish": {"branch", "title", "body"}}`). On Complete the plane
+rechecks the lease, the implement predicate, and the branch prefix, then
+creates or updates one pull request as the App with a token scoped to the
+task repository (`contents` and `pull_requests` write). The result records
+`publisher: "plane"`; a refusal or failed write is `blocked`, with no
+fallback credential. A guest `pull_request` claim is refused in this mode,
+and a follow-up may only update the plane's own open pull request for the
+same branch. The App is the pull-request author and pusher; the
+session trailers stay attribution. The ADR 0020 controlled pilot gates
+making this the default.
 
 Existing PRs: land is triggered by a review verdict plus policy
 `land: true`, never by CI green alone.

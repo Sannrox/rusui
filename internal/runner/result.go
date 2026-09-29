@@ -2,6 +2,7 @@ package runner
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -18,6 +19,23 @@ const GuestResultPath = "/tmp/rusui-result.json"
 // resultInstructions tells a run-turn agent how to report its outcome.
 const resultInstructions = "\n\nWhen you finish, write one JSON object to the file named by $RUSUI_RESULT: " +
 	`{"pull_request": <number>} if you opened or updated a pull request, otherwise {"blocked_reason": "<why you stopped>"}.`
+
+const planePublication = "plane"
+
+// resultInstructionsFor adds the plane-publication contract (ADR 0044):
+// the agent pushes only its session branch and asks the plane to open or
+// update the pull request; it has no GitHub credential of its own.
+func resultInstructionsFor(a *Assignment) string {
+	if a.Publication != planePublication {
+		return resultInstructions
+	}
+	branch := fmt.Sprintf("rusui/%d/<name>", a.SessionID)
+	return "\n\nYou cannot open pull requests yourself. To publish, commit and run " +
+		"`git push origin HEAD:refs/heads/" + branch + "`; pushes to any other ref are refused. " +
+		"When you finish, write one JSON object to the file named by $RUSUI_RESULT: " +
+		`{"publish": {"branch": "` + branch + `", "title": "<title>", "body": "<description>"}} ` +
+		`to have the plane open or update the pull request, otherwise {"blocked_reason": "<why you stopped>"}.`
+}
 
 // maxResultBytes bounds what the runner reads back from the guest.
 const maxResultBytes = 64 << 10
@@ -67,14 +85,15 @@ func collectResult(x StdioExec, a *Assignment, cwd, sourceHash string) *engine.T
 		return nil
 	}
 	var claim struct {
-		PullRequest   int    `json:"pull_request"`
-		BlockedReason string `json:"blocked_reason"`
+		PullRequest   int                    `json:"pull_request"`
+		BlockedReason string                 `json:"blocked_reason"`
+		Publish       *engine.PublishRequest `json:"publish"`
 	}
 	if json.Unmarshal(raw, &claim) != nil {
 		return nil
 	}
 	claim.BlockedReason = strings.TrimSpace(claim.BlockedReason)
-	if claim.PullRequest <= 0 && claim.BlockedReason == "" {
+	if claim.PullRequest <= 0 && claim.BlockedReason == "" && claim.Publish == nil {
 		return nil
 	}
 	git := []string{"git"}
@@ -89,6 +108,7 @@ func collectResult(x StdioExec, a *Assignment, cwd, sourceHash string) *engine.T
 		CandidateSHA:  strings.TrimSpace(string(head)),
 		PullRequest:   max(claim.PullRequest, 0),
 		BlockedReason: claim.BlockedReason,
+		Publish:       claim.Publish,
 	}
 }
 

@@ -133,9 +133,9 @@ Isolated verifier output `(command, exit_code, log_digest, head_sha, base_sha)` 
 _Avoid_: CI green, author-session review, expired or drifted proof
 
 **Implement session**:
-A `run` session started for an open pinned implementation task on a bound repository with `implement: true`. The only session that holds the operator's GitHub credential (ADR 0015).
+A `run` session started for an open pinned implementation task on a bound repository with `implement: true`. The only session that holds the operator's GitHub credential (ADR 0015), or, with plane publication, the only session the plane publishes for (ADR 0044).
 _Avoid_: ordinary run session, scheduled session, review session as a publisher
 
 **Publication**:
-A pull request the agent opens or updates itself from an `implement` session, with the operator's GitHub credential via `git` and `gh` (ADR 0015). Commits carry `Co-authored-by: rusui` and `Rusui-Session` trailers. No proof gates it. Human merge is required.
-_Avoid_: plane-owned publish step, agent merge or close, trailer as authorization
+A pull request for an `implement` session. By default the agent opens or updates it with the operator's GitHub credential via `git` and `gh` (ADR 0015). With `RUSUI_PUBLICATION=plane` the guest holds no credential and the plane opens or updates it as the GitHub App from the turn result's `publish` request (ADR 0044). Commits carry `Co-authored-by: rusui` and `Rusui-Session` trailers. No proof gates it. Human merge is required.
+_Avoid_: guest-callable publish endpoint, agent merge or close, trailer as authorization

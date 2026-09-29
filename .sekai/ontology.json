@@ -45,7 +45,7 @@
     },
     {
       "name": "RusuiImplementLane",
-      "description": "Current ARCHITECTURE v1 and ADR 0015 publication path. An implement session (a run session for an open pinned task on a repository with implement: true) holds the operator GitHub credential; the agent pushes and opens or updates its own pull request with git and gh. No plane proof gate. Merge, close, and land stay unauthorized; token scope and branch protection enforce that. Accepted ADR 0020 defines a future target without asserting it is implemented.",
+      "description": "Current ARCHITECTURE v1 and ADR 0015 publication path. An implement session (a run session for an open pinned task on a repository with implement: true) holds the operator GitHub credential; the agent pushes and opens or updates its own pull request with git and gh. No plane proof gate. Merge, close, and land stay unauthorized; token scope and branch protection enforce that. With RUSUI_PUBLICATION=plane (ADR 0044, amending ADR 0020) the guest holds no GitHub credential; it pushes its session ref through the git proxy and the plane opens or updates the pull request as the GitHub App on Complete. Off by default until the ADR 0020 pilot.",
       "superclasses": [],
       "properties": []
     },
@@ -261,7 +261,7 @@
     },
     {
       "name": "RusuiPublication",
-      "description": "Pull request the agent opens or updates itself from an implement session as the operator (ADR 0015). Commits carry Co-authored-by: rusui and Rusui-Session trailers. Human merge is required.",
+      "description": "Pull request for an implement session: opened or updated by the agent as the operator (ADR 0015), or by the plane as the GitHub App under plane publication (ADR 0044). Commits carry Co-authored-by: rusui and Rusui-Session trailers. Human merge is required.",
       "superclasses": [],
       "properties": []
     },

@@ -4,6 +4,7 @@
 - Date: 2026-09-24
 - Accepted by: Sannrox, repository maintainer, 2026-09-25.
 - Resolves: [Issue #243](https://github.com/Sannrox/rusui/issues/243)
+- Amended by: [ADR 0044](0044-plane-publishes-from-turn-result.md) (publication request travels in the turn result)
 - Amends (target for follow-up implementation): [ADR 0015](0015-agent-publication.md)
   D1 and D4; [ADR 0009](0009-credential-broker.md) for implement-session Git access.
 - Related: [ADR 0001](0001-environment-plane.md) D3 and D5,

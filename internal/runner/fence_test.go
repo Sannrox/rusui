@@ -53,6 +53,10 @@ func TestImplementSessionFenceOverridesPolicyAllow(t *testing.T) {
 	if got := permissionAnswer(t, implement, "gh pr create --fill"); got != "allow-once" {
 		t.Fatalf("implement create answered %q", got)
 	}
+	plane := &Assignment{Publication: planePublication, Permissions: allowAll}
+	if got := permissionAnswer(t, plane, "gh pr merge 7 --squash"); got != "reject-once" {
+		t.Fatalf("plane-publication merge answered %q", got)
+	}
 	ordinary := &Assignment{Permissions: allowAll}
 	if got := permissionAnswer(t, ordinary, "gh pr merge 7 --squash"); got != "allow-once" {
 		t.Fatalf("non-implement session should follow policy, answered %q", got)

@@ -25,10 +25,14 @@ type TaskResult struct {
 	// PullRequest is the pull request the agent claims it opened or
 	// updated in the turn's repository (ADR 0015).
 	PullRequest int `json:"pull_request,omitempty"`
-	// PublishedSHA and Outcome are observed by the plane on Complete;
-	// values sent by the runner or guest are discarded.
+	// Publish asks the plane to publish the pushed session branch
+	// (ADR 0044). Only honored when plane publication is on.
+	Publish *PublishRequest `json:"publish,omitempty"`
+	// PublishedSHA, Outcome, and Publisher are observed by the plane on
+	// Complete; values sent by the runner or guest are discarded.
 	PublishedSHA string `json:"published_sha,omitempty"`
 	Outcome      string `json:"outcome,omitempty"`
+	Publisher    string `json:"publisher,omitempty"`
 }
 
 // Turn outcomes the plane records for a run result.
@@ -67,7 +71,7 @@ func ValidateResult(art Artifact) error {
 	if r.AgentVerified {
 		return fmt.Errorf("agent cannot declare verified")
 	}
-	if len(r.Findings) == 0 && r.BlockedReason == "" && r.PullRequest <= 0 {
+	if len(r.Findings) == 0 && r.BlockedReason == "" && r.PullRequest <= 0 && r.Publish == nil {
 		return fmt.Errorf("empty result")
 	}
 	return nil
@@ -115,10 +119,11 @@ func (e *Engine) observeFollowUpPublication(jobID int64, art *Artifact) {
 	if art.ItemKind != "run" || r == nil || r.PullRequest <= 0 {
 		return
 	}
-	prevPR, prevSHA, ok := priorPublication(e.Store, jobID)
+	prev, ok := priorPublication(e.Store, jobID)
 	if !ok {
 		return
 	}
+	prevPR, prevSHA := prev.PullRequest, prev.SHA
 	if r.PullRequest != prevPR {
 		r.Outcome = OutcomeBlocked
 		r.BlockedReason = fmt.Sprintf("follow-up must update pull request #%d", prevPR)
@@ -132,20 +137,23 @@ func (e *Engine) observeFollowUpPublication(jobID int64, art *Artifact) {
 
 // priorPublication is the newest result this turn actually published.
 // A later blocked or unconfirmed follow-up does not erase it.
-func priorPublication(s *store.Store, jobID int64) (pr int, sha string, ok bool) {
+func priorPublication(s *store.Store, jobID int64) (Publication, bool) {
 	p, ok, err := newestPublication(s, `SELECT payload FROM review_revisions WHERE job_id=? ORDER BY id DESC`, jobID)
 	if err != nil || !ok {
-		return 0, "", false
+		return Publication{}, false
 	}
-	return p.PullRequest, p.SHA, true
+	return p, true
 }
 
 // Publication is a pull request the plane observed on GitHub at the
-// candidate SHA of a run result.
+// candidate SHA of a run result. Publisher and Branch are set when the
+// plane wrote it (ADR 0044).
 type Publication struct {
 	Repo        string `json:"repo"`
 	PullRequest int    `json:"pull_request"`
 	SHA         string `json:"sha"`
+	Publisher   string `json:"publisher,omitempty"`
+	Branch      string `json:"branch,omitempty"`
 }
 
 // SessionPublication is the newest result any turn of the session
@@ -170,7 +178,11 @@ func newestPublication(s *store.Store, query string, id int64) (Publication, boo
 			continue
 		}
 		if r := prev.Result; r.Outcome == OutcomePublished && r.PullRequest > 0 && r.PublishedSHA != "" {
-			return Publication{Repo: prev.Repo, PullRequest: r.PullRequest, SHA: r.PublishedSHA}, true, nil
+			p := Publication{Repo: prev.Repo, PullRequest: r.PullRequest, SHA: r.PublishedSHA, Publisher: r.Publisher}
+			if r.Publisher == PublisherPlane && r.Publish != nil {
+				p.Branch = r.Publish.Branch
+			}
+			return p, true, nil
 		}
 	}
 	return Publication{}, false, rows.Err()
