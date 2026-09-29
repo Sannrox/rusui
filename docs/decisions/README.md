@@ -48,6 +48,7 @@ Decisions that must outlive a single pull request.
 | [0042](0042-disconnected-execution-deferred.md) | Disconnected execution is deferred | Accepted |
 | [0043](0043-extension-contract-deferred.md) | An extension contract is deferred | Accepted |
 | [0044](0044-plane-publishes-from-turn-result.md) | The plane publishes from the turn result | Accepted |
+| [0045](0045-local-unattended-promotion-deferred.md) | Local unattended promotion is deferred | Accepted |
 
 ## When to write an ADR
 

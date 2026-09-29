@@ -85,6 +85,7 @@ _Avoid_: session (for the PTY child), turn, environment
 A human-driven session of kind `local` associated with one Sumika Process on the
 operator's host. It has no Turns, leases, managed grants, model proxy
 credentials, or GitHub credential, and it is not an OS isolation boundary.
+It is not a supported unattended product claim ([ADR 0045](docs/decisions/0045-local-unattended-promotion-deferred.md)).
 _Avoid_: run session, implement session, attach
 
 **Attach**:
