@@ -213,7 +213,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/jobs/{id}/heartbeat` | same |
 | `POST` | `/jobs/{id}/complete` | same |
 | `POST` | `/jobs/{id}/fail` | same |
-| `POST` | `/sessions/{id}/turns` | worker secret |
+| `POST` | `/sessions/{id}/turns` | operator or worker token; follow-up prompt or steer (`rusui prompt`) |
 | `POST` | `/sessions/{id}/cancel` | worker secret |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
 | `*` | `/model-proxy/` | per-turn grant (HTTPS for container guests) |

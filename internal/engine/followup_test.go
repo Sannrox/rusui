@@ -307,4 +307,16 @@ func TestFollowUpHTTP(t *testing.T) {
 	if res.StatusCode != 401 {
 		t.Fatalf("unauth %d", res.StatusCode)
 	}
+	h.srv.OperatorTok = "op-tok"
+	req, _ = http.NewRequest("POST", h.http.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/turns", strings.NewReader(`{"prompt":"from-op"}`))
+	req.Header.Set("Authorization", "Bearer op-tok")
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ = io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(string(b), "pending_revision") {
+		t.Fatalf("operator %d %s", res.StatusCode, b)
+	}
 }
