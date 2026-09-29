@@ -13,6 +13,8 @@
   name a declared service; the grant class is unchanged.
   [ADR 0036](0036-environment-desktop-deferred.md) defers a graphical
   desktop; terminal and preview remain the operator's views.
+  [ADR 0039](0039-shared-operator-governance-deferred.md) keeps a single
+  local operator token; shared-operator governance is deferred.
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
   Objects: operator credential, worker credential, turn grant, browser

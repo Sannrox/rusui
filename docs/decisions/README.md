@@ -42,6 +42,7 @@ Decisions that must outlive a single pull request.
 | [0036](0036-environment-desktop-deferred.md) | A graphical desktop in the environment is deferred | Accepted |
 | [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Accepted |
 | [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
+| [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted |
 
 ## When to write an ADR
 
