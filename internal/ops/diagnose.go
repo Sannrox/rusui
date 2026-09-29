@@ -203,9 +203,23 @@ func checkPlaneCA(getenv func(string) string, runtimeOK bool) Check {
 	return c
 }
 
+// TLSClient is the diagnose client: it trusts caFile and gives up after
+// 3 seconds. Use StreamTLSClient for requests whose body may stay open.
 func TLSClient(caFile string) (*http.Client, error) {
+	c, err := StreamTLSClient(caFile)
+	if err != nil {
+		return nil, err
+	}
+	c.Timeout = 3 * time.Second
+	return c, nil
+}
+
+// StreamTLSClient trusts caFile and has no total timeout, so a response
+// body such as an attach transcript can stay open as long as the plane
+// keeps it open.
+func StreamTLSClient(caFile string) (*http.Client, error) {
 	if caFile == "" {
-		return &http.Client{Timeout: 3 * time.Second}, nil
+		return &http.Client{}, nil
 	}
 	pem, err := os.ReadFile(caFile)
 	if err != nil {
@@ -216,7 +230,6 @@ func TLSClient(caFile string) (*http.Client, error) {
 		return nil, fmt.Errorf("env: invalid plane CA")
 	}
 	return &http.Client{
-		Timeout:   3 * time.Second,
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}},
 	}, nil
 }

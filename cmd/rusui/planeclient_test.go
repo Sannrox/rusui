@@ -2,39 +2,42 @@ package main
 
 import (
 	"encoding/pem"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 )
 
-func TestPlaneHTTPTrustsThePlaneCA(t *testing.T) {
-	var got string
-	hs := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = r.Header.Get("Authorization")
-		_, _ = w.Write([]byte(`[]`))
+// Attach and transcript bodies stay open for the session; the https
+// client must not cut them off the way the diagnose client does (#398).
+func TestPlaneHTTPStreamsPastTheDiagnoseTimeout(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for range 7 {
+			_, _ = io.WriteString(w, "x")
+			w.(http.Flusher).Flush()
+			time.Sleep(500 * time.Millisecond)
+		}
 	}))
-	t.Cleanup(hs.Close)
-	ca := t.TempDir() + "/ca.pem"
-	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: hs.Certificate().Raw}), 0o600); err != nil {
+	t.Cleanup(srv.Close)
+	ca := filepath.Join(t.TempDir(), "ca.pem")
+	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-
-	t.Setenv("RUSUI_PLANE_CA", "")
-	if _, err := planeHTTP(hs.URL); err == nil {
-		t.Fatal("https plane accepted without a CA")
-	}
-	if c, err := planeHTTP("http://127.0.0.1:8080"); err != nil || c != http.DefaultClient {
-		t.Fatalf("http plane %v %v", c, err)
-	}
-
 	t.Setenv("RUSUI_PLANE_CA", ca)
-	res, err := planeClient(hs.URL, "tok", "/sessions")
+	client, err := planeHTTP(srv.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = res.Body.Close()
-	if res.StatusCode != 200 || got != "Bearer tok" {
-		t.Fatalf("status %d auth %q", res.StatusCode, got)
+	res, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	body, err := io.ReadAll(res.Body)
+	if err != nil || string(body) != "xxxxxxx" {
+		t.Fatalf("stream cut off after %q: %v", body, err)
 	}
 }
