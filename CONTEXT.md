@@ -50,6 +50,12 @@ single `runners` row named `local`. Snapshot bytes stay on this host
 ([ADR 0029](docs/decisions/0029-single-host-runner.md)).
 _Avoid_: fleet, Kubernetes, additional placement hosts
 
+**Plane store**:
+One SQLite file on the plane host, one writer. Recovery is copy and
+`store.Restore`; live leases and grants do not survive. A redundant plane is
+not selected ([ADR 0001](docs/decisions/0001-environment-plane.md) D8, [ADR 0041](docs/decisions/0041-ha-plane-deferred.md)).
+_Avoid_: Postgres, leader lease, active-active, second writer
+
 **Snapshot**:
 The prepared, reusable tree identified by `source_hash` (base image digest, git pin, `.agents/setup` bytes). Two sessions may share a snapshot; they never share an environment. A second session starts from a snapshot, never from a live fork ([ADR 0035](docs/decisions/0035-live-environment-fork-deferred.md)).
 _Avoid_: environment, GitHub item snapshot hash, image tag
