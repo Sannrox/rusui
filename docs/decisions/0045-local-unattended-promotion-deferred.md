@@ -42,8 +42,19 @@ The objects this choice binds:
 The maintainer predeclared the matrix and thresholds on
 [186-unified-workflow-matrix.md](../proofs/186-unified-workflow-matrix.md)
 before results. Live execution required Sumika `3dadc7a` and an eval
-plane on `127.0.0.1:8282`. The Sumika binary was not installed. Docker
-was available. No eval plane was started.
+plane on `127.0.0.1:8282`.
+
+Amended 2026-09-29: the first version of this ADR said the Sumika binary
+was not installed and no eval plane started; it had checked only `PATH`.
+The live matrix did run at the same candidate, with Sumika built from
+`3dadc7a` and an eval plane on `127.0.0.1:8282`
+([results](../proofs/186-unified-workflow-results.md)). Local passed every
+live cell except identity: its lifecycle writes no receipt
+([#414](https://github.com/Sannrox/rusui/issues/414)). Managed failed
+start at the candidate (Claude driver deadlock and container-name
+collision, fixed in #396 and #406); after those fixes it passed every
+transition except environment replacement, which reuses the environment
+id without a receipt ([#415](https://github.com/Sannrox/rusui/issues/415)).
 
 Synthetic package tests at the candidate
 (`TestLocalRuntimeHTTPAndSumikaLifecycle`) cover local create, attach,
@@ -71,7 +82,8 @@ make them one.
 2. the predeclared live matrix is executed at an immutable revision
    with the named Sumika and managed runtimes, and meets the
    predeclared pass or narrow bar without an identity, authorization,
-   or ownership failure.
+   or ownership failure. The 2026-09-29 run failed identity in both
+   profiles; #414 and #415 must land before a re-run.
 
 **D4. Support limits until then:**
 
@@ -96,11 +108,11 @@ Irreversible: none.
 
 ## Rejected alternatives
 
-- **Pass.** The live matrix did not run. Incomplete cells are not a
-  pass.
-- **Narrow.** Narrow requires one profile to pass fully live. Managed
-  live cells were not run on the eval plane; local live cells could
-  not start without Sumika.
+- **Pass.** Both profiles failed an identity cell in the live run
+  (local L11, managed M15 post-fix).
+- **Narrow.** Narrow requires one profile to pass fully and the other to
+  fail only non-identity transitions. Each profile failed an identity
+  transition.
 - **Promote local anyway because synthetic tests pass.** The issue
   forbids hiding a failed or incomplete campaign as a pass. Synthetic
   tests are the adapter contract, not the predeclared cohort.
