@@ -74,6 +74,9 @@ func main() {
 		case "disposition":
 			dispositionCLI(os.Args[2:])
 			return
+		case "retry":
+			retryCLI(os.Args[2:])
+			return
 		case "diagnose":
 			diagnoseCLI(os.Args[2:])
 			return

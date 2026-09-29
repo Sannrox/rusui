@@ -202,6 +202,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/reviews` | operator or worker token; request one bound pull-request review (`rusui review`) |
 | `POST` | `/results/{id}/dispositions` | operator token; JSON `disposition` (`useful`/`neutral`/`harmful`), optional `wrong_finding` and `note` (4 KiB) for review result `{id}` (`rusui disposition`); 404 unknown result |
 | `GET` | `/dispositions/comment-gate` | operator token; trailing 20 disposed shadow results against the ADR 0038 D6 comment thresholds |
+| `POST` | `/retry` | operator token; JSON `target` `OWNER/REPO` (every failed review job) or `OWNER/REPO#ITEM` (one); same as Slack `retry` (`rusui retry`); 409 when the item has no failed review job |
 | `POST` | `/drain` | worker secret; pause claims and list live turns |
 | `POST` | `/hooks/github` | `X-Hub-Signature-256` |
 | `POST` | `/hooks/events` | `X-Rusui-Signature-256` (same webhook secret); 202 |
