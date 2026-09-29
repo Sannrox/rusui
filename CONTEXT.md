@@ -26,8 +26,9 @@ _Avoid_: operator, interactive, chat, implement (as a session kind)
 A unit of work on one project and one environment. A review session is
 identified by `(project, bound repo, item)`. A `run` or `scheduled` session
 is minted at create. An experimental `local` session is human-driven and has
-no Turn.
-_Avoid_: GitHub issue, turn, environment
+no Turn. A session has no children; independent work is another session from
+a snapshot ([ADR 0006](docs/decisions/0006-session-start.md), [ADR 0040](docs/decisions/0040-child-session-delegation-deferred.md)).
+_Avoid_: GitHub issue, turn, environment, child session, parent session
 
 **Turn**:
 One leased attempt on an unattended session. A local session has no Turn.
