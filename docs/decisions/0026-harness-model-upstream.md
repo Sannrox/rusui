@@ -9,6 +9,8 @@
 - Related: [ADR 0025](0025-provider-boundary.md) names the harness
   binaries. Diagnose of the named model is
   [#293](https://github.com/Sannrox/rusui/issues/293).
+  [ADR 0042](0042-disconnected-execution-deferred.md) keeps the proxy
+  path; a disconnected profile is deferred.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context
