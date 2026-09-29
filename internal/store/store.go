@@ -18,7 +18,10 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
-	dsn := path + "?_pragma=busy_timeout(5000)"
+	// Transactions take the write lock at BEGIN so a second handle on the same
+	// file (local attach beside the server) waits in busy_timeout. A deferred
+	// read-then-write would get SQLITE_BUSY on lock upgrade without waiting.
+	dsn := path + "?_pragma=busy_timeout(5000)&_txlock=immediate"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
