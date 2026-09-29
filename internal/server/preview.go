@@ -282,6 +282,16 @@ func (s *Server) previewProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	grantTok := r.URL.Query().Get("g")
+	if grantTok == "" {
+		grantTok = bearerToken(r)
+	}
+	q := r.URL.Query()
+	q.Del("g")
+	r.URL.RawQuery = q.Encode()
+	if grantTok != "" && bearerToken(r) == grantTok {
+		r.Header.Del("Authorization")
+	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		http.Error(w, "unavailable", http.StatusBadGateway)
