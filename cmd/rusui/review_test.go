@@ -57,6 +57,7 @@ func TestReviewCLIBlackboxWaitsForCurrentPendingRevision(t *testing.T) {
 	fake.Put(snapshot.Item{
 		Repo: "example/test-repo", Item: 42, ItemKind: "pull", State: "open",
 		Title: "review me", HeadSHA: "head-42", BaseSHA: "base-42", MainSHA: "main-42",
+		BaseRef: "main", DefaultBranch: "main",
 	})
 	eng := engine.New(st, pol, fake, &clock.Fake{T: time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)})
 	eng.ReloadPolicy(pol)

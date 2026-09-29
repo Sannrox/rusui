@@ -90,7 +90,7 @@ func TestReviewRequestRefusesPolicyGates(t *testing.T) {
 			e := engine.New(st, p, fake, &clock.Fake{T: time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)})
 			e.ReloadPolicy(p)
 			if tc.putPull {
-				fake.Put(snapshot.Item{Repo: tc.repo, Item: 42, ItemKind: "pull", State: "open", HeadSHA: "head-42"})
+				fake.Put(snapshot.Item{Repo: tc.repo, Item: 42, ItemKind: "pull", State: "open", HeadSHA: "head-42", BaseRef: "main", DefaultBranch: "main"})
 			}
 			if tc.configure != nil {
 				tc.configure(t, e)
