@@ -124,6 +124,105 @@ func TestPreviewGrantIsolatedOrigin(t *testing.T) {
 	}
 }
 
+func TestPreviewProxyStripsGrantFromGuest(t *testing.T) {
+	var gotQuery, gotAuth string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		gotAuth = r.Header.Get("Authorization")
+		_, _ = io.WriteString(w, "app-ok")
+	}))
+	t.Cleanup(backend.Close)
+	_, bport, err := net.SplitHostPort(backend.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, _ := strconv.Atoi(bport)
+
+	s, hs, e := consoleEnv(t)
+	prev := httptest.NewServer(s.PreviewHandler())
+	t.Cleanup(prev.Close)
+	s.PreviewBase = prev.URL
+
+	sid, err := e.StartRun("test", "preview-strip", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, _ := store.GetSession(e.Store, sid)
+	envRow, _ := store.GetEnvironment(e.Store, sess.EnvironmentID)
+	p, ok := e.Env.(env.Process)
+	if !ok {
+		t.Fatal("process driver")
+	}
+	ws := filepath.Join(p.Root, "sess")
+	if err := os.MkdirAll(ws, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	envRow.Handle = ws
+	envRow.Driver = env.KindProcess
+	envRow.State = store.EnvReady
+	_ = store.UpdateEnvironment(e.Store, *envRow)
+
+	c := operatorClient(t, hs)
+	res, err := c.Get(hs.URL + "/console/sessions/" + strconv.FormatInt(sid, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	csrf := csrfFrom(string(page))
+	req, _ := http.NewRequest("POST", "/console/sessions/"+strconv.FormatInt(sid, 10)+"/preview", strings.NewReader(url.Values{"csrf": {csrf}, "port": {strconv.Itoa(port)}}.Encode()))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	u, _ := url.Parse(hs.URL + "/console/sessions")
+	for _, ck := range c.Jar.Cookies(u) {
+		req.AddCookie(ck)
+	}
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	grant := grantFrom(rr.Body.String())
+	if rr.Code != 200 || grant == "" {
+		t.Fatalf("mint %d %s", rr.Code, rr.Body.String())
+	}
+
+	res, err = http.Get(prev.URL + "/app?g=" + grant + "&keep=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != 200 || string(body) != "app-ok" {
+		t.Fatalf("proxy %d %s", res.StatusCode, body)
+	}
+	q, _ := url.ParseQuery(gotQuery)
+	if q.Get("g") != "" {
+		t.Fatalf("guest saw grant query %q", gotQuery)
+	}
+	if q.Get("keep") != "1" {
+		t.Fatalf("stripped unrelated query %q", gotQuery)
+	}
+	if gotAuth != "" {
+		t.Fatalf("guest saw Authorization %q", gotAuth)
+	}
+
+	gotQuery, gotAuth = "", ""
+	req, _ = http.NewRequest("GET", prev.URL+"/app?keep=1", nil)
+	req.Header.Set("Authorization", "Bearer "+grant)
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("bearer grant %d", res.StatusCode)
+	}
+	if strings.Contains(gotQuery, "g=") {
+		t.Fatalf("guest saw g in query %q", gotQuery)
+	}
+	if gotAuth != "" {
+		t.Fatalf("guest saw grant bearer %q", gotAuth)
+	}
+}
+
 func TestPreviewGrantUsesContainerGuestAddr(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "guest-ok")
