@@ -1488,8 +1488,11 @@ func (e *Engine) SetPause(project string, on bool) error {
 func (e *Engine) OperatorRetry(repo string, item int, actor string) error {
 	return e.Store.Tx(func(tx *sql.Tx) error {
 		j, err := store.GetJobTx(tx, repo, item, "review")
-		if err != nil || j == nil {
+		if err != nil {
 			return err
+		}
+		if j == nil {
+			return fmt.Errorf("no review job")
 		}
 		if j.State != "failed" {
 			return fmt.Errorf("not failed")

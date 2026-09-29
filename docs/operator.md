@@ -659,7 +659,7 @@ Commands: `status`, `pause [project]`, `resume [project]`, `sweep [repo]`,
 `retry repo` or `retry repo#item`, `reload`. `implement` is rejected.
 `pause rusui` is the project slug, not `Sannrox/rusui`.
 
-`retry` requeues `state=failed` on unchanged content. `sweep` only enqueues
+`retry` requeues `state=failed` on unchanged content; without Slack, `rusui retry OWNER/REPO[#ITEM]` with the operator token does the same. `sweep` only enqueues
 refreshes.
 
 ## 7. Images
