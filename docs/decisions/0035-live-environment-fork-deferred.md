@@ -13,7 +13,9 @@
   grants), [ADR 0028](0028-container-isolation-profile.md) (container
   isolation), [#121](https://github.com/Sannrox/rusui/issues/121) and
   [#122](https://github.com/Sannrox/rusui/issues/122) (child-session
-  delegation, a sibling question).
+  delegation, a sibling question),
+  [ADR 0040](0040-child-session-delegation-deferred.md) (child sessions
+  are deferred).
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
 

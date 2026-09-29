@@ -7,6 +7,8 @@
   `sync` is not required for P1 dogfood). [ADR 0005](0005-policy-v2-project.md)
   stands: session belongs to one project; review requires a bound repo.
 - Resolves: [#45](https://github.com/Sannrox/rusui/issues/45)
+- Related: [ADR 0040](0040-child-session-delegation-deferred.md) keeps
+  one session, one environment; child-session delegation is deferred.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context

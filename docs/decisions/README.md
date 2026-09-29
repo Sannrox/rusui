@@ -43,6 +43,7 @@ Decisions that must outlive a single pull request.
 | [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Accepted |
 | [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
 | [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted |
+| [0040](0040-child-session-delegation-deferred.md) | Child-session delegation is deferred | Accepted |
 
 ## When to write an ADR
 
