@@ -51,10 +51,18 @@ yet:
 | Provider | Process | Protocol | Pin |
 | --- | --- | --- | --- |
 | Grok | `agent --permission-mode default agent stdio` | ACP JSON-RPC | `protocolVersion` 1 |
-| Claude | `claude --print --input-format stream-json --output-format stream-json --verbose --permission-mode default` | Claude Code stream-json | CLI `@anthropic-ai/claude-code` 2.1.283, protocol `stream-json` |
+| Claude | `claude --print --input-format stream-json --output-format stream-json --verbose --permission-mode default --permission-prompt-tool stdio` | Claude Code stream-json | CLI `@anthropic-ai/claude-code` 2.1.283 (`claude_code_version` in `system/init`) |
 | Codex | `codex app-server --listen stdio://` | app-server JSON-RPC, experimental | `app-server-2026-04-15` |
 
 An answer that names another version is refused before the turn starts.
+Amended 2026-09-29 ([#396](https://github.com/Sannrox/rusui/issues/396)),
+from the real 2.1.283 binary: Claude emits `system/init` only after the
+first user message, so the prompt is written first and `init` (version,
+resume cursor) is checked before any other event is acted on. Its `init`
+names no protocol field; the argv fixes the stream format. Permission
+prompts reach rusui only with `--permission-prompt-tool stdio`, as
+`control_request` `can_use_tool`; the adapter maps the tool to an ACP kind
+for the policy gate and answers with a `control_response` allow or deny.
 Codex drift is a refusal, not a best-effort parse.
 
 ### Instances

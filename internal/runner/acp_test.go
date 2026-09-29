@@ -91,17 +91,20 @@ func TestHostACPClaudeReadsStreamJSONInit(t *testing.T) {
 		seen []map[string]any
 	)
 	go func() {
-		raw, _ := json.Marshal(map[string]any{
-			"type":                "system",
-			"subtype":             "init",
-			"protocol":            provider.ClaudeStreamProto,
-			"claude_code_version": provider.ClaudeCodeVersion,
-			"session_id":          "claude-sess",
-		})
-		_, _ = agentOut.Write(append(raw, '\n'))
+		var raw []byte
 		sc := bufio.NewScanner(agentIn)
 		sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
-		for sc.Scan() {
+		for first := true; sc.Scan(); first = false {
+			if first {
+				// Claude Code 2.1.283 emits system/init only after the first input.
+				raw, _ = json.Marshal(map[string]any{
+					"type":                "system",
+					"subtype":             "init",
+					"claude_code_version": provider.ClaudeCodeVersion,
+					"session_id":          "claude-sess",
+				})
+				_, _ = agentOut.Write(append(raw, '\n'))
+			}
 			var msg map[string]any
 			if err := json.Unmarshal(sc.Bytes(), &msg); err != nil {
 				return
@@ -163,16 +166,16 @@ func TestHostACPClaudeFollowUpStartsNewConversation(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	go func() {
-		raw, _ := json.Marshal(map[string]any{
-			"type":                "system",
-			"subtype":             "init",
-			"protocol":            provider.ClaudeStreamProto,
-			"claude_code_version": provider.ClaudeCodeVersion,
-			"session_id":          "fresh-sess",
-		})
-		_, _ = agentOut.Write(append(raw, '\n'))
 		sc := bufio.NewScanner(agentIn)
 		if sc.Scan() {
+			// Claude Code 2.1.283 emits system/init only after the first input.
+			raw, _ := json.Marshal(map[string]any{
+				"type":                "system",
+				"subtype":             "init",
+				"claude_code_version": provider.ClaudeCodeVersion,
+				"session_id":          "fresh-sess",
+			})
+			_, _ = agentOut.Write(append(raw, '\n'))
 			raw, _ = json.Marshal(map[string]any{"type": "result"})
 			_, _ = agentOut.Write(append(raw, '\n'))
 		}

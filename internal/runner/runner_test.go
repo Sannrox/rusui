@@ -574,19 +574,19 @@ func startFakeClaudeStdio(t *testing.T) (io.WriteCloser, io.ReadCloser, func(), 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		raw, _ := json.Marshal(map[string]any{
-			"type":                "system",
-			"subtype":             "init",
-			"protocol":            provider.ClaudeStreamProto,
-			"claude_code_version": provider.ClaudeCodeVersion,
-			"session_id":          "claude-sess",
-		})
-		_, _ = agentOut.Write(append(raw, '\n'))
 		sc := bufio.NewScanner(agentIn)
 		sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 		if !sc.Scan() {
 			return
 		}
+		// Claude Code 2.1.283 emits system/init only after the first input.
+		raw, _ := json.Marshal(map[string]any{
+			"type":                "system",
+			"subtype":             "init",
+			"claude_code_version": provider.ClaudeCodeVersion,
+			"session_id":          "claude-sess",
+		})
+		_, _ = agentOut.Write(append(raw, '\n'))
 		var msg map[string]any
 		if err := json.Unmarshal(sc.Bytes(), &msg); err != nil || msg["type"] != "user" {
 			return

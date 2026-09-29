@@ -16,7 +16,9 @@ const (
 // ClaudeStdio is the pinned Claude Code CLI session (ADR 0025). The
 // npm package claude-agent-acp is not the guest. --print is required:
 // without it, --input-format is ignored and Claude starts interactive.
-const ClaudeStdio = "claude --print --input-format stream-json --output-format stream-json --verbose --permission-mode default"
+// --permission-prompt-tool stdio sends every permission prompt to rusui as a
+// can_use_tool control request; without it Claude denies them silently.
+const ClaudeStdio = "claude --print --input-format stream-json --output-format stream-json --verbose --permission-mode default --permission-prompt-tool stdio"
 
 // GrokCommand builds the ADR 0002 spawn. PATH must contain `agent`.
 func GrokCommand() (*exec.Cmd, error) {
