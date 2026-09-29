@@ -42,7 +42,9 @@ snapshot, drives any ACP agent inside it, streams the transcript, diff, and
 terminal, brokers scoped short-lived credentials through its own proxies, runs
 the project's proofs after the agent stops, and lets the agent publish its
 own pull request as the operator, attributed to the session
-([ADR 0015](docs/decisions/0015-agent-publication.md)).
+([ADR 0015](docs/decisions/0015-agent-publication.md)); with plane
+publication on, the plane opens it as the GitHub App instead
+([ADR 0044](docs/decisions/0044-plane-publishes-from-turn-result.md)).
 Idle environments cost nothing; waking one is fast. Nothing leaves the
 operator's perimeter and there is no per-minute meter.
 

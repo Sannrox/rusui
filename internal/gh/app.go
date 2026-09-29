@@ -1,6 +1,7 @@
 package gh
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -44,6 +45,12 @@ type InstallationTokens struct {
 
 	mu     sync.Mutex
 	cached string
+	expiry time.Time
+	repos  map[string]cachedToken
+}
+
+type cachedToken struct {
+	token  string
 	expiry time.Time
 }
 
@@ -111,7 +118,7 @@ func (a *InstallationTokens) Token() (string, error) {
 	if a.cached != "" && now.Add(time.Minute).Before(a.expiry) {
 		return a.cached, nil
 	}
-	tok, exp, err := a.mint(now)
+	tok, exp, err := a.mint(now, nil)
 	if err != nil {
 		return "", err
 	}
@@ -119,7 +126,40 @@ func (a *InstallationTokens) Token() (string, error) {
 	return tok, nil
 }
 
-func (a *InstallationTokens) mint(now time.Time) (string, time.Time, error) {
+// RepoToken mints an installation token limited to one repository
+// ("owner/name") with contents and pull-request write only (ADR 0020).
+// Plane-owned publication and its git pushes use it; tokens are cached per
+// repository until a minute before expiry.
+func (a *InstallationTokens) RepoToken(repo string) (string, error) {
+	_, name, err := splitRepo(repo)
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	if a.Now != nil {
+		now = a.Now()
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if c, ok := a.repos[repo]; ok && now.Add(time.Minute).Before(c.expiry) {
+		return c.token, nil
+	}
+	body, _ := json.Marshal(map[string]any{
+		"repositories": []string{name},
+		"permissions":  map[string]string{"contents": "write", "pull_requests": "write"},
+	})
+	tok, exp, err := a.mint(now, body)
+	if err != nil {
+		return "", err
+	}
+	if a.repos == nil {
+		a.repos = map[string]cachedToken{}
+	}
+	a.repos[repo] = cachedToken{tok, exp}
+	return tok, nil
+}
+
+func (a *InstallationTokens) mint(now time.Time, scope []byte) (string, time.Time, error) {
 	jwt, err := appJWT(a.AppID, a.Key, now)
 	if err != nil {
 		return "", time.Time{}, err
@@ -141,7 +181,11 @@ func (a *InstallationTokens) mint(now time.Time) (string, time.Time, error) {
 		a.InstallationID = id
 		instID = id
 	}
-	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(base, "/")+"/app/installations/"+strconv.FormatInt(instID, 10)+"/access_tokens", nil)
+	var reqBody io.Reader
+	if scope != nil {
+		reqBody = bytes.NewReader(scope)
+	}
+	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(base, "/")+"/app/installations/"+strconv.FormatInt(instID, 10)+"/access_tokens", reqBody)
 	if err != nil {
 		return "", time.Time{}, err
 	}

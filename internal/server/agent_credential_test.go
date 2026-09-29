@@ -180,3 +180,36 @@ func TestOnlyOpenImplementTasksReceiveTheAgentCredential(t *testing.T) {
 		t.Fatalf("abandoned task received %q", got)
 	}
 }
+
+type repoTokens struct{}
+
+func (repoTokens) RepoToken(string) (string, error) { return "ghs_scoped", nil }
+
+// With plane publication (ADR 0044) an implement guest gets no GitHub
+// credential, even when the operator token is configured, and pushes
+// through the proxy grant; the assignment says the plane publishes.
+func TestPlanePublicationGivesImplementGuestsNoCredential(t *testing.T) {
+	_, e := agentCredentialEnv(t, true, agentToken)
+	hs := httptest.NewServer((&Server{Eng: e, WorkerSec: "wsec", AgentGitHubToken: agentToken, RepoTokens: repoTokens{}}).Handler())
+	t.Cleanup(hs.Close)
+
+	a := claim(t, hs, e, true)
+	if a.GitHubToken != "" || a.Publication != "plane" {
+		t.Fatalf("implement assignment token=%q publication=%q", a.GitHubToken, a.Publication)
+	}
+	guestEnv := runner.DriverEnv(a, t.TempDir(), os.Getenv("PATH"))
+	joined := strings.Join(guestEnv, "\n")
+	if strings.Contains(joined, "GH_TOKEN") || strings.Contains(joined, "ghs_scoped") || !strings.Contains(joined, "insteadof") {
+		t.Fatalf("guest env:\n%s", joined)
+	}
+	if out := gitCredential(t, guestEnv); strings.Contains(out, agentToken) {
+		t.Fatalf("credential leaked:\n%s", out)
+	}
+
+	_, e2 := agentCredentialEnv(t, true, agentToken)
+	hs2 := httptest.NewServer((&Server{Eng: e2, WorkerSec: "wsec", RepoTokens: repoTokens{}}).Handler())
+	t.Cleanup(hs2.Close)
+	if b := claim(t, hs2, e2, false); b.Publication != "" {
+		t.Fatalf("ordinary run marked for publication %q", b.Publication)
+	}
+}

@@ -196,8 +196,8 @@ func permissionGate(a *Assignment) acp.PermissionGate {
 	if a != nil && len(a.Permissions) > 0 {
 		gate = acp.RulesGate{Rules: a.Permissions}
 	}
-	if a != nil && a.GitHubToken != "" {
-		// Implement sessions hold a write credential (ADR 0015); the
+	if a != nil && (a.GitHubToken != "" || a.Publication == planePublication) {
+		// Implement sessions can publish (ADR 0015, ADR 0044); the
 		// built-in fence applies whatever policy allows (ADR 0017 D3).
 		gate = acp.FenceGate{Next: gate}
 	}
@@ -350,7 +350,7 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 	}
 	prompt := promptFromInput(a.Input)
 	if a.ResultPath != "" {
-		prompt += resultInstructions
+		prompt += resultInstructionsFor(a)
 	}
 	var currentSteerID int64
 	var deliveredSteerIDs []int64
@@ -412,7 +412,7 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 			}
 			prompt = steer.Prompt
 			if a.ResultPath != "" {
-				prompt += resultInstructions
+				prompt += resultInstructionsFor(a)
 			}
 			currentSteerID = steer.ID
 		}
@@ -463,7 +463,7 @@ func hostClaude(ctx context.Context, a *Assignment, host *acp.Client, cwd string
 	host.Ctx = ctx
 	prompt := promptFromInput(a.Input)
 	if a.ResultPath != "" {
-		prompt += resultInstructions
+		prompt += resultInstructionsFor(a)
 	}
 	rw := &stdioRWC{r: host.In, w: host.Out}
 	stop := make(chan struct{})

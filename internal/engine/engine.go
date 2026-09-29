@@ -46,14 +46,16 @@ const (
 )
 
 type Engine struct {
-	Store   *store.Store
-	policy  *policy.Effective
-	GitHub  gh.Client
-	Clock   clock.Clock
-	Log     *log.Logger
-	HookID  string
-	HookIDs map[string]string
-	Notify  func(string)
+	Store  *store.Store
+	policy *policy.Effective
+	GitHub gh.Client
+	// Publisher is set only when plane publication is on (ADR 0044).
+	Publisher PullPublisher
+	Clock     clock.Clock
+	Log       *log.Logger
+	HookID    string
+	HookIDs   map[string]string
+	Notify    func(string)
 
 	FetchTimeout   time.Duration
 	OwnerTTL       time.Duration
@@ -945,8 +947,9 @@ func (e *Engine) Complete(jobID int64, gen, claimed int, art Artifact) (map[stri
 }
 
 func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact, acknowledgedSteers []int64) (map[string]any, error) {
-	// Outside the transaction: it may call GitHub. The transaction still
-	// checks that art.Repo is the job's repository.
+	// Outside the transaction: these may call GitHub. The transaction still
+	// checks the lease and that art.Repo is the job's repository.
+	e.publishResult(jobID, gen, claimed, &art)
 	e.observeResult(&art)
 	e.observeFollowUpPublication(jobID, &art)
 	var out map[string]any
@@ -1039,6 +1042,11 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 		j.State = "queued"
 		return store.UpdateJobTx(tx, j)
 	})
+	if err != nil && art.Result != nil && art.Result.Publisher == PublisherPlane {
+		// The pull request exists on GitHub even though the result was not
+		// recorded; the operator needs to know.
+		e.exception(fmt.Sprintf("publish job=%d: wrote %s#%d but Complete rejected the result: %v", jobID, art.Repo, art.Result.PullRequest, err))
+	}
 	return out, err
 }
 
@@ -1607,9 +1615,9 @@ func (e *Engine) BuildInput(c *Claim) map[string]any {
 		"state":                  c.Snapshot.State,
 		"linked_same_repo_items": c.Snapshot.LinkedSameRepoItems,
 	}
-	if pr, sha, ok := priorPublication(e.Store, c.Job.ID); ok {
-		in["published_pull_request"] = pr
-		in["published_sha"] = sha
+	if prev, ok := priorPublication(e.Store, c.Job.ID); ok {
+		in["published_pull_request"] = prev.PullRequest
+		in["published_sha"] = prev.SHA
 	}
 	return in
 }

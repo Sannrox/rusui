@@ -137,7 +137,7 @@ func (s *Server) allowStillValid(actionID string) bool {
 	}
 	var params acp.PermissionParams
 	_ = json.Unmarshal([]byte(act.Body), &params)
-	if s.agentGitHubToken(sess) != "" {
+	if s.implementFenced(sess) {
 		// Implement sessions: the built-in fence overrides any approval.
 		if d := (acp.FenceGate{Next: acp.RulesGate{}}).Decide(params); d.Matched && !d.Allow {
 			return false

@@ -2,8 +2,6 @@ package server
 
 import (
 	"bytes"
-	"fmt"
-	"strings"
 )
 
 func refFromReceiveCmd(line []byte) string {
@@ -16,12 +14,4 @@ func refFromReceiveCmd(line []byte) string {
 		return ""
 	}
 	return string(parts[2])
-}
-
-func sessionRefAllowed(sessionID int64, ref string) bool {
-	prefix := fmt.Sprintf("refs/heads/rusui/%d", sessionID)
-	if ref == prefix {
-		return true
-	}
-	return strings.HasPrefix(ref, prefix+"/")
 }

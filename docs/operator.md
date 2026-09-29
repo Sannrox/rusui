@@ -590,6 +590,20 @@ rules are workflow control, not a security boundary.
 Merging stays yours. Commits carry `Co-authored-by: rusui` and
 `Rusui-Session` trailers ([configuration](configuration.md)).
 
+### Plane publication (opt-in)
+
+`RUSUI_PUBLICATION=plane` moves publication behind the plane
+([ADR 0044](decisions/0044-plane-publishes-from-turn-result.md)). It needs
+GitHub App credentials (`RUSUI_GITHUB_APP_ID`, a private key, and the
+installation) with **Contents** and **Pull requests** write on the bound
+repositories; the plane refuses to start without them. The guest then
+holds no GitHub credential: it pushes `rusui/<session>/<name>` through the
+plane's git proxy and writes a `publish` request to its result, and the
+plane creates or updates the pull request as the App on Complete.
+`RUSUI_AGENT_GITHUB_TOKEN` is ignored. Pull requests show the App as
+author. Keep it off until you have run the ADR 0020 pilot
+([ADR 0020](decisions/0020-turn-scoped-github-publication.md) Validation).
+
 A review-only App on a public test repository, including permissions,
 tunnel verify/cleanup, a receipt check, and signature failures:
 [github-app-pilot.md](github-app-pilot.md).

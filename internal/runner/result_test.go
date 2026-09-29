@@ -161,6 +161,17 @@ func TestBlockedTurnNamesItsReason(t *testing.T) {
 	}
 }
 
+// The publish request reaches the plane; with plane publication off it
+// is refused rather than ignored.
+func TestPublishRequestReachesThePlane(t *testing.T) {
+	st, job := runTurn(t, gh.NewFake(), func(a *runner.Assignment, dir string) {
+		writeResult(t, a, `{"publish": {"branch": "rusui/1/x", "title": "t"}}`)
+	})
+	if r := turnResult(t, st, job); r.Outcome != engine.OutcomeBlocked || r.BlockedReason != "publication refused: plane publication is off" {
+		t.Fatalf("result %+v", r)
+	}
+}
+
 func TestFollowUpPublishesANewCommitOnTheSamePullRequest(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")

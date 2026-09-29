@@ -145,6 +145,21 @@ func main() {
 		api.BaseURL = u
 	}
 	eng := engine.New(st, p, api, clock.Real{})
+	// Plane publication (ADR 0044) needs the App: implement guests hold no
+	// GitHub credential, so the plane is the only publisher.
+	var repoTokens *gh.InstallationTokens
+	switch os.Getenv("RUSUI_PUBLICATION") {
+	case "", "agent":
+	case "plane":
+		app, ok := tokens.(*gh.InstallationTokens)
+		if !ok {
+			log.Fatal("RUSUI_PUBLICATION=plane requires GitHub App credentials")
+		}
+		repoTokens = app
+		eng.Publisher = &gh.Publisher{Tokens: app, BaseURL: api.BaseURL, HTTP: api.HTTP}
+	default:
+		log.Fatal("RUSUI_PUBLICATION must be agent or plane")
+	}
 	eng.EnvIdleSleep = *envIdleSleep
 	eng.HookIDs = api.HookIDs
 	eng.SnapshotRoot = filepath.Join(filepath.Dir(*db), "snapshots")
@@ -213,6 +228,9 @@ func main() {
 		NoSessionTrailer:  os.Getenv("RUSUI_DISABLE_SESSION_TRAILER") == "1",
 		GuestHTTPSOnly:    tlsCert != "" && tlsKey != "",
 		PreviewBase:       os.Getenv("RUSUI_PREVIEW_BASE"),
+	}
+	if repoTokens != nil {
+		srv.RepoTokens = repoTokens
 	}
 	if err := eng.Recover(); err != nil {
 		log.Printf("recover: %v", err)

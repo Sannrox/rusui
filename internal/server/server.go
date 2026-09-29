@@ -21,31 +21,36 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
-	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/slack"
 	"github.com/sannrox/rusui/internal/store"
 )
 
 type Server struct {
-	Eng                 *engine.Engine
-	WebhookSec          string
-	WorkerSec           string
-	OperatorTok         string
-	SlackSec            string
-	SlackUsers          map[string]bool
-	PolicyPath          string
-	Guest               string // acp.GuestGrok (default) or acp.GuestClaude
-	GuestVersion        string // set only when the operator names a pinned guest version
-	GuestModel          string // RUSUI_GUEST_MODEL; copied into the Claude guest
-	OTelEndpoint        string // unset: no export; a dead collector must not fail a turn
-	ModelProvider       string // ProviderXAI (default) or ProviderAnthropic
-	ModelKey            string
-	ModelOrigin         *url.URL // operator model upstream; keyless forwarding allowed
-	GitHubToken         string
-	GitHubTokens        gh.TokenSource
-	AgentGitHubToken    string // operator credential for implement sessions (ADR 0015)
-	NoCoauthorTrailer   bool   // RUSUI_DISABLE_COAUTHOR_TRAILER
-	NoSessionTrailer    bool   // RUSUI_DISABLE_SESSION_TRAILER
+	Eng              *engine.Engine
+	WebhookSec       string
+	WorkerSec        string
+	OperatorTok      string
+	SlackSec         string
+	SlackUsers       map[string]bool
+	PolicyPath       string
+	Guest            string // acp.GuestGrok (default) or acp.GuestClaude
+	GuestVersion     string // set only when the operator names a pinned guest version
+	GuestModel       string // RUSUI_GUEST_MODEL; copied into the Claude guest
+	OTelEndpoint     string // unset: no export; a dead collector must not fail a turn
+	ModelProvider    string // ProviderXAI (default) or ProviderAnthropic
+	ModelKey         string
+	ModelOrigin      *url.URL // operator model upstream; keyless forwarding allowed
+	GitHubToken      string
+	GitHubTokens     gh.TokenSource
+	AgentGitHubToken string // operator credential for implement sessions (ADR 0015)
+	// RepoTokens is set when plane publication is on (ADR 0044): implement
+	// guests get no GitHub credential and git pushes use a token scoped to
+	// the one repository.
+	RepoTokens interface {
+		RepoToken(repo string) (string, error)
+	}
+	NoCoauthorTrailer   bool // RUSUI_DISABLE_COAUTHOR_TRAILER
+	NoSessionTrailer    bool // RUSUI_DISABLE_SESSION_TRAILER
 	GitOrigin           *url.URL
 	GuestHTTPSOnly      bool
 	Addr                string
@@ -455,6 +460,8 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 			}
 			if tok := s.agentGitHubToken(sess); tok != "" {
 				out["github_token"] = tok
+			} else if _, ok := s.Eng.ImplementTask(sess); ok && s.RepoTokens != nil {
+				out["publication"] = "plane"
 			}
 			if t := s.commitTrailers(sess); len(t) > 0 {
 				out["commit_trailers"] = t
@@ -479,26 +486,28 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 }
 
 // agentGitHubToken is the operator credential an implement session
-// receives: a run session started for an open implementation task on a
-// bound repository with implement enabled. Review, scheduled, and ordinary
-// run sessions never receive it.
+// receives under ADR 0015 agent publication. Review, scheduled, and
+// ordinary run sessions never receive it, and plane publication (ADR 0044)
+// gives no guest a GitHub credential.
 func (s *Server) agentGitHubToken(sess *store.Session) string {
-	if s.AgentGitHubToken == "" || sess == nil || sess.Kind != store.SessionKindRun {
+	if s.AgentGitHubToken == "" || s.RepoTokens != nil {
 		return ""
 	}
-	pol := s.Eng.PolicySnapshot()
-	rr, ok := pol.Repo(sess.Repo)
-	if !ok || !rr.Implement {
-		return ""
-	}
-	if p, ok := pol.Project(sess.Project); !ok || !p.AllowsKind(policy.KindRun) {
-		return ""
-	}
-	task, err := store.OpenTaskForSession(s.Eng.Store, sess.ID)
-	if err != nil || task == nil || task.Repo != sess.Repo {
+	if _, ok := s.Eng.ImplementTask(sess); !ok {
 		return ""
 	}
 	return s.AgentGitHubToken
+}
+
+// implementFenced matches the runner's fence rule (permissionGate): an
+// implement session whose guest holds the agent credential (ADR 0015) or
+// publishes through the plane (ADR 0044).
+func (s *Server) implementFenced(sess *store.Session) bool {
+	if s.agentGitHubToken(sess) != "" {
+		return true
+	}
+	_, ok := s.Eng.ImplementTask(sess)
+	return ok && s.RepoTokens != nil
 }
 
 func (s *Server) guest() string {

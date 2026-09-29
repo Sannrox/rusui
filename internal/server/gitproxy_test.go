@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,10 +34,10 @@ func TestSplitReceivePackAndRefAllow(t *testing.T) {
 	if !strings.HasSuffix(string(b), "PACK") {
 		t.Fatalf("rest %q", b)
 	}
-	if sessionRefAllowed(8, "refs/heads/main") {
+	if engine.SessionRefAllowed(8, "refs/heads/main") {
 		t.Fatal("main allowed")
 	}
-	if !sessionRefAllowed(8, "refs/heads/rusui/8/work") {
+	if !engine.SessionRefAllowed(8, "refs/heads/rusui/8/work") {
 		t.Fatal("session ref denied")
 	}
 }
@@ -258,5 +259,51 @@ func TestGitProxyMissingToken(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("code %d", resp.StatusCode)
+	}
+}
+
+type scopedTokens struct {
+	err  error
+	repo string
+}
+
+func (s *scopedTokens) RepoToken(repo string) (string, error) {
+	s.repo = repo
+	return "ghs_scoped", s.err
+}
+
+// Under plane publication the proxy forwards with the repository-scoped
+// App token, and fails closed without falling back when it cannot mint one.
+func TestGitProxyUsesRepoScopedTokenAndFailsClosed(t *testing.T) {
+	var sawAuth string
+	var calls int
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		sawAuth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(up.Close)
+	origin, _ := url.Parse(up.URL)
+	e, _, tok := leasedTurn(t)
+	scoped := &scopedTokens{}
+	hs := httptest.NewServer((&Server{Eng: e, GitHubToken: "plane-pat", GitOrigin: origin, RepoTokens: scoped}).Handler())
+	t.Cleanup(hs.Close)
+	fetch := func() int {
+		req, _ := http.NewRequest("POST", hs.URL+"/git-proxy/github.com/example/test-repo.git/git-upload-pack", strings.NewReader("0000"))
+		req.Header.Set("Authorization", "Bearer "+tok)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := fetch(); code != 200 || scoped.repo != "example/test-repo" ||
+		sawAuth != "Basic "+base64.StdEncoding.EncodeToString([]byte("x-access-token:ghs_scoped")) {
+		t.Fatalf("code %d repo %q auth %q", code, scoped.repo, sawAuth)
+	}
+	scoped.err = errors.New("mint failed")
+	if code := fetch(); code != http.StatusBadGateway || calls != 1 {
+		t.Fatalf("mint failure code %d upstream calls %d", code, calls)
 	}
 }

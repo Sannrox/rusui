@@ -40,25 +40,28 @@ type StdioExec interface {
 }
 
 type Assignment struct {
-	TurnID          int64    `json:"turn_id"`
-	JobID           int64    `json:"job_id"`
-	LeaseGeneration int      `json:"lease_generation"`
-	ClaimedRevision int      `json:"claimed_revision"`
-	Repo            string   `json:"repo"`
-	Item            int      `json:"item"`
-	ItemKind        string   `json:"item_kind"`
-	ItemHash        string   `json:"item_hash"`
-	SessionID       int64    `json:"session_id"`
-	TurnToken       string   `json:"turn_token"`
-	Driver          string   `json:"driver"`
-	Handle          string   `json:"handle"`
-	Workspace       string   `json:"workspace"`
-	ModelBaseURL    string   `json:"model_base_url"`
-	GuestModel      string   `json:"guest_model,omitempty"`
-	GitProxyURL     string   `json:"git_proxy_url"`
-	GitHubToken     string   `json:"github_token,omitempty"`
-	Guest           string   `json:"guest,omitempty"`
-	CommitTrailers  []string `json:"commit_trailers,omitempty"`
+	TurnID          int64  `json:"turn_id"`
+	JobID           int64  `json:"job_id"`
+	LeaseGeneration int    `json:"lease_generation"`
+	ClaimedRevision int    `json:"claimed_revision"`
+	Repo            string `json:"repo"`
+	Item            int    `json:"item"`
+	ItemKind        string `json:"item_kind"`
+	ItemHash        string `json:"item_hash"`
+	SessionID       int64  `json:"session_id"`
+	TurnToken       string `json:"turn_token"`
+	Driver          string `json:"driver"`
+	Handle          string `json:"handle"`
+	Workspace       string `json:"workspace"`
+	ModelBaseURL    string `json:"model_base_url"`
+	GuestModel      string `json:"guest_model,omitempty"`
+	GitProxyURL     string `json:"git_proxy_url"`
+	GitHubToken     string `json:"github_token,omitempty"`
+	// Publication is "plane" for an implement turn under ADR 0044: the
+	// guest holds no GitHub credential and asks the plane to publish.
+	Publication    string   `json:"publication,omitempty"`
+	Guest          string   `json:"guest,omitempty"`
+	CommitTrailers []string `json:"commit_trailers,omitempty"`
 	// CommitHooksDir is where PrepareCommitHooks placed the attribution
 	// hooks for this turn; set on the runner, never by the plane.
 	CommitHooksDir string `json:"-"`

@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/sannrox/rusui/internal/engine"
 )
 
 func (s *Server) githubAuthToken() string {
@@ -121,7 +123,7 @@ func (s *Server) gitProxy(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			for _, ref := range refs {
-				if !sessionRefAllowed(g.SessionID, ref) {
+				if !engine.SessionRefAllowed(g.SessionID, ref) {
 					http.Error(w, "ref not allowed", http.StatusForbidden)
 					return
 				}
@@ -146,8 +148,17 @@ func (s *Server) forwardGit(w http.ResponseWriter, r *http.Request, owner, name,
 	upstream := s.gitUpstream()
 	path := "/" + owner + "/" + name + ".git" + rest
 	query := r.URL.RawQuery
-	proxy := httputil.NewSingleHostReverseProxy(upstream)
 	token := s.githubAuthToken()
+	if s.RepoTokens != nil {
+		// Plane publication: no fallback to the installation-wide token.
+		t, err := s.RepoTokens.RepoToken(owner + "/" + name)
+		if err != nil {
+			http.Error(w, "github token unavailable", http.StatusBadGateway)
+			return
+		}
+		token = t
+	}
+	proxy := httputil.NewSingleHostReverseProxy(upstream)
 	orig := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		orig(req)
