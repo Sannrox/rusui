@@ -71,6 +71,9 @@ func main() {
 		case "approve":
 			approveCLI(os.Args[2:])
 			return
+		case "disposition":
+			dispositionCLI(os.Args[2:])
+			return
 		case "diagnose":
 			diagnoseCLI(os.Args[2:])
 			return

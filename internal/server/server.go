@@ -112,6 +112,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /sessions/{id}/cancel", s.cancelSession)
 	mux.HandleFunc("POST /sessions/{id}/restart", s.restartLocalSession)
 	mux.HandleFunc("GET /projects/{slug}/measurements", s.projectMeasurements)
+	mux.HandleFunc("POST /results/{id}/dispositions", s.recordDisposition)
+	mux.HandleFunc("GET /dispositions/comment-gate", s.commentGate)
 	mux.HandleFunc("POST /projects/{slug}/sessions", s.createSession)
 	mux.HandleFunc("POST /projects/{slug}/schedules", s.createSchedule)
 	mux.HandleFunc("POST /jobs/{id}/heartbeat", s.heartbeat)
