@@ -258,7 +258,12 @@ func answerClaudeControl(w io.Writer, line []byte, decide Decide) (Event, error)
 		return Event{}, err
 	}
 	allow := false
-	if req.Request.Subtype == "can_use_tool" {
+	decision := map[string]any{"behavior": "deny", "message": "denied by rusui policy"}
+	if req.Request.ToolName == "AskUserQuestion" {
+		// No human answers inside a headless turn; waiting for approval
+		// would only hold the turn until its deadline.
+		decision["message"] = "no one can answer questions during this turn; decide yourself or report the uncertainty in your result"
+	} else if req.Request.Subtype == "can_use_tool" {
 		kind, ok := claudeToolKinds[req.Request.ToolName]
 		if !ok {
 			kind = "other"
@@ -270,7 +275,6 @@ func answerClaudeControl(w io.Writer, line []byte, decide Decide) (Event, error)
 		raw, _ := json.Marshal(call)
 		_, allow = rejectMissing([]Option{{ID: "allow"}, {ID: "deny"}}, decide, raw)
 	}
-	decision := map[string]any{"behavior": "deny", "message": "denied by rusui policy"}
 	optionID := "deny"
 	if allow {
 		decision = map[string]any{"behavior": "allow", "updatedInput": req.Request.Input}
