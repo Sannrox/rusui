@@ -7,7 +7,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 26
+const CurrentSchema = 27
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -389,8 +389,34 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 26); err != nil {
 			return err
 		}
+		ver = 26
+	}
+	if ver < 27 {
+		if err := migrateV27(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 27); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// migrateV27 stores maintainer dispositions of review results (ADR 0038
+// D8, #379). Rows are append-only; the latest per result counts.
+func migrateV27(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS result_dispositions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  review_revision_id INTEGER NOT NULL,
+  disposition TEXT NOT NULL CHECK (disposition IN ('useful', 'neutral', 'harmful')),
+  wrong_finding INTEGER NOT NULL DEFAULT 0,
+  note TEXT NOT NULL DEFAULT '',
+  recorded_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS result_dispositions_revision ON result_dispositions(review_revision_id, id);
+`)
+	return err
 }
 
 // migrateV26 stores the last setup, resume, and service output per
