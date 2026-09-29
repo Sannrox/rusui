@@ -198,7 +198,7 @@ func TestAPIListOpenItems(t *testing.T) {
 		}
 		pr := map[string]string{"url": "https://example/pulls"}
 		_ = json.NewEncoder(w).Encode([]map[string]any{
-			{"number": 1, "state": "open", "created_at": "2026-01-01T00:00:00Z"},
+			{"number": 1, "state": "open", "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z"},
 			{"number": 7, "state": "open", "pull_request": pr},
 			{"number": 8, "state": "open", "pull_request": pr},
 			{"number": 9, "state": "open", "pull_request": pr},
@@ -220,7 +220,7 @@ func TestAPIListOpenItems(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 5 || list[0].ItemKind != "issue" || list[0].CreatedAt != "2026-01-01T00:00:00Z" {
+	if len(list) != 5 || list[0].ItemKind != "issue" || list[0].CreatedAt != "2026-01-01T00:00:00Z" || list[0].UpdatedAt != "2026-01-02T00:00:00Z" {
 		t.Fatalf("%+v", list)
 	}
 	type pull struct {

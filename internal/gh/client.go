@@ -417,7 +417,8 @@ func (a *API) GetDelivery(repo, id string) (*DeliveryDetail, error) {
 }
 
 // ListOpenItems lists a repository's open issues and pull requests with
-// what advisory eligibility needs (ADR 0038 D2): creation time, and for
+// what advisory eligibility and catch-up need (ADR 0038 D2, D5): creation
+// and update time, and for
 // pull requests draft state, base branch, and the default branch.
 func (a *API) ListOpenItems(repo string) ([]snapshot.Item, error) {
 	owner, name, err := splitRepo(repo)
@@ -443,7 +444,7 @@ func (a *API) ListOpenItems(repo string) ([]snapshot.Item, error) {
 	out := make([]snapshot.Item, 0, len(issues))
 	for _, issue := range issues {
 		it := snapshot.Item{Repo: repo, Item: issue.Number, ItemKind: "issue", State: issue.State,
-			CreatedAt: issue.CreatedAt.UTC().Format(time.RFC3339)}
+			CreatedAt: issue.CreatedAt.UTC().Format(time.RFC3339), UpdatedAt: issue.UpdatedAt.UTC().Format(time.RFC3339)}
 		if issue.PullRequest != nil {
 			it.ItemKind = "pull"
 			it.DefaultBranch = rr.DefaultBranch
