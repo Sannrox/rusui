@@ -35,7 +35,9 @@ func Argv(kind string) ([]string, error) {
 	case "", KindGrok:
 		return []string{"agent", "--permission-mode", "default", "agent", "stdio"}, nil
 	case KindClaude:
-		return []string{"claude", "--print", "--input-format", ClaudeStreamProto, "--output-format", ClaudeStreamProto, "--verbose", "--permission-mode", "default"}, nil
+		// stdio delegates every permission prompt to rusui as a
+		// can_use_tool control request; without it Claude denies silently.
+		return []string{"claude", "--print", "--input-format", ClaudeStreamProto, "--output-format", ClaudeStreamProto, "--verbose", "--permission-mode", "default", "--permission-prompt-tool", "stdio"}, nil
 	case KindCodex:
 		return []string{"codex", "app-server", "--listen", "stdio://"}, nil
 	default:

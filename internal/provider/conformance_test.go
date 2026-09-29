@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -84,8 +85,10 @@ func runConformance(t *testing.T, kind string) {
 	if kind != KindClaude && (!hasKind(history, "tool_call") || !hasKind(history, "transcript")) {
 		t.Fatalf("events %+v", history)
 	}
+	// Grok and Codex may omit a reject option, so the adapter must deny;
+	// Claude always accepts deny, so its gate's answer stands.
 	for _, ev := range history {
-		if ev.Kind == "permission" && ev.OptionID != "deny" {
+		if kind != KindClaude && ev.Kind == "permission" && ev.OptionID != "deny" {
 			t.Fatalf("permission option %q", ev.OptionID)
 		}
 	}
@@ -261,7 +264,7 @@ func drive(t *testing.T, kind string, turn Turn, wantDeny bool) Result {
 	if err != nil {
 		t.Fatalf("%s run %v", kind, err)
 	}
-	if wantDeny {
+	if wantDeny && kind != KindClaude {
 		ok := false
 		for _, ev := range res.Events {
 			if ev.Kind == "permission" && ev.OptionID == "deny" {
@@ -320,4 +323,75 @@ func eventsText(events []Event) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+// The prompt goes first, but a wrong init still refuses the turn before any
+// later event (here a permission request) is acted on.
+func TestClaudeInitMismatchRefusedBeforeAnyDecision(t *testing.T) {
+	for name, tc := range map[string]struct {
+		version, session, cursor, want string
+	}{
+		"version": {version: "0.0.1", session: "s", want: "protocol refused"},
+		"cursor":  {version: ClaudeCodeVersion, session: "other", cursor: "prior", want: "cursor mismatch"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r, w := io.Pipe()
+			go func() {
+				defer func() { _ = w.Close() }()
+				_, _ = fmt.Fprintf(w, `{"type":"system","subtype":"init","claude_code_version":%q,"session_id":%q}`+"\n", tc.version, tc.session)
+				_, _ = fmt.Fprintln(w, `{"type":"control_request","request_id":"p","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls"}}}`)
+			}()
+			decided := false
+			_, err := runClaude(stdio{Reader: r, WriteCloser: nopWriteCloser{io.Discard}}, Turn{Prompt: "x", Cursor: tc.cursor},
+				func([]Option, json.RawMessage) (string, bool) { decided = true; return "", false })
+			if err == nil || !strings.Contains(err.Error(), tc.want) || decided {
+				t.Fatalf("err=%v decided=%v", err, decided)
+			}
+		})
+	}
+}
+
+// Claude's can_use_tool reaches the gate in ACP shape and the reply is a
+// control_response; denial and unknown subtypes answer deny.
+func TestClaudeControlRequestUsesGateAndReplies(t *testing.T) {
+	for name, tc := range map[string]struct {
+		line      string
+		allow     bool
+		wantKind  string
+		wantCmd   string
+		behaviour string
+	}{
+		"bash allowed":    {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"gh pr merge 1"}}}`, true, "execute", "gh pr merge 1", "allow"},
+		"write denied":    {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Write","input":{"file_path":"/tmp/x"}}}`, false, "edit", "", "deny"},
+		"unknown tool":    {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Frobnicate","input":{}}}`, true, "other", "", "allow"},
+		"unknown subtype": {`{"type":"control_request","request_id":"r1","request":{"subtype":"interrupt"}}`, true, "", "", "deny"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var seen map[string]any
+			var out strings.Builder
+			ev, err := answerClaudeControl(&out, []byte(tc.line), func(_ []Option, raw json.RawMessage) (string, bool) {
+				_ = json.Unmarshal(raw, &seen)
+				return "allow", tc.allow
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantKind != "" && (seen["kind"] != tc.wantKind || (tc.wantCmd != "" && seen["command"] != tc.wantCmd)) {
+				t.Fatalf("gate saw %v", seen)
+			}
+			var reply struct {
+				Type     string `json:"type"`
+				Response struct {
+					RequestID string `json:"request_id"`
+					Response  struct {
+						Behavior string `json:"behavior"`
+					} `json:"response"`
+				} `json:"response"`
+			}
+			if err := json.Unmarshal([]byte(out.String()), &reply); err != nil || reply.Type != "control_response" ||
+				reply.Response.RequestID != "r1" || reply.Response.Response.Behavior != tc.behaviour || ev.OptionID != tc.behaviour {
+				t.Fatalf("reply %s event %+v", out.String(), ev)
+			}
+		})
+	}
 }

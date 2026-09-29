@@ -104,16 +104,18 @@ func fakeGrok(in io.Reader, out io.Writer) error {
 	return writeJSON(out, map[string]any{"jsonrpc": "2.0", "id": 3, "result": map[string]any{"stopReason": "end_turn"}})
 }
 
+// fakeClaude matches Claude Code 2.1.283: system/init comes only after
+// the first user message on stdin.
 func fakeClaude(in io.Reader, out io.Writer) error {
-	if err := writeJSON(out, map[string]any{
-		"type": "system", "subtype": "init", "protocol": ClaudeStreamProto,
-		"claude_code_version": ClaudeCodeVersion, "session_id": "claude-sess",
-	}); err != nil {
-		return err
-	}
 	r := bufio.NewReader(in)
 	user, err := readMap(r)
 	if err != nil {
+		return err
+	}
+	if err := writeJSON(out, map[string]any{
+		"type": "system", "subtype": "init",
+		"claude_code_version": ClaudeCodeVersion, "session_id": "claude-sess",
+	}); err != nil {
 		return err
 	}
 	msg, _ := user["message"].(map[string]any)
@@ -134,15 +136,20 @@ func fakeClaude(in io.Reader, out io.Writer) error {
 	if err := writeJSON(out, map[string]any{"type": "rate_limit_event"}); err != nil {
 		return err
 	}
-	if err := writeJSON(out, map[string]any{"type": "permission_request", "id": "perm-1", "options": []map[string]string{{"id": "allow-once"}}}); err != nil {
+	if err := writeJSON(out, map[string]any{"type": "control_request", "request_id": "req-1", "request": map[string]any{
+		"subtype": "can_use_tool", "tool_name": "Bash", "input": map[string]any{"command": "ls"},
+	}}); err != nil {
 		return err
 	}
 	reply, err := readMap(r)
 	if err != nil {
 		return err
 	}
-	if permissionAllows(reply) {
-		return fmt.Errorf("fake claude was allowed without a reject option")
+	resp, _ := reply["response"].(map[string]any)
+	decision, _ := resp["response"].(map[string]any)
+	if reply["type"] != "control_response" || resp["subtype"] != "success" || resp["request_id"] != "req-1" ||
+		(decision["behavior"] != "allow" && decision["behavior"] != "deny") {
+		return fmt.Errorf("fake claude got a malformed control_response %v", reply)
 	}
 	return writeJSON(out, map[string]any{"type": "result"})
 }
