@@ -8,6 +8,8 @@
   Sumika attach the session list or the way a managed session is read.
   [ADR 0034](0034-operator-host-location-deferred.md): registering this
   host does not make it a managed location.
+  [ADR 0045](0045-local-unattended-promotion-deferred.md): local stays
+  experimental; it is not promoted to supported unattended work.
 - Related: [ADR 0001](0001-environment-plane.md) (environment plane),
   [ADR 0003](0003-operator-surface.md) (one object API),
   [ADR 0011](0011-unattended-session-contract.md) (unattended session and
