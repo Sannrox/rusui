@@ -11,6 +11,8 @@ import (
 
 // planeHTTP trusts the plane CA (RUSUI_PLANE_CA) for an https plane URL;
 // setup-generated TLS is signed by a local CA the system does not know.
+// Like the http path it sets no total timeout: attach and transcript
+// streams stay open for the life of the session.
 func planeHTTP(url string) (*http.Client, error) {
 	if !strings.HasPrefix(url, "https://") {
 		return http.DefaultClient, nil
@@ -19,5 +21,5 @@ func planeHTTP(url string) (*http.Client, error) {
 	if ca == "" {
 		return nil, fmt.Errorf("set RUSUI_PLANE_CA for an https plane URL")
 	}
-	return ops.TLSClient(ca)
+	return ops.StreamTLSClient(ca)
 }
