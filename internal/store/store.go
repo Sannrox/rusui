@@ -287,6 +287,13 @@ func LoadSnapshotTx(tx *sql.Tx, repo string, item, rev int) (snapshot.Item, erro
 	return it, nil
 }
 
+// PlaneID is this database's stable plane identity (#406).
+func PlaneID(s *Store) (string, error) {
+	var id string
+	err := s.DB.QueryRow(`SELECT id FROM plane_identity LIMIT 1`).Scan(&id)
+	return id, err
+}
+
 // ReviewedUpdatedAt maps each item of repo that has a review job to the
 // GitHub updated_at of its latest snapshot. Catch-up skips an item whose
 // listing is no newer: it already has work for that content (ADR 0038 D5).

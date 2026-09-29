@@ -1,13 +1,15 @@
 package store
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"time"
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 27
+const CurrentSchema = 28
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -398,8 +400,32 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 27); err != nil {
 			return err
 		}
+		ver = 27
+	}
+	if ver < 28 {
+		if err := migrateV28(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 28); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// migrateV28 gives the database a stable plane identity (#406). Guest
+// container names carry it, so two planes, or a replaced database, on one
+// host never pick the same name.
+func migrateV28(db *sql.DB) error {
+	raw := make([]byte, 4)
+	if _, err := rand.Read(raw); err != nil {
+		return err
+	}
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS plane_identity (id TEXT NOT NULL);
+INSERT INTO plane_identity (id) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM plane_identity);
+`, hex.EncodeToString(raw))
+	return err
 }
 
 // migrateV27 stores maintainer dispositions of review results (ADR 0038

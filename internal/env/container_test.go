@@ -90,3 +90,18 @@ func TestTailBufferKeepsLastLimitBytes(t *testing.T) {
 		t.Fatalf("out %q truncated %v", out, truncated)
 	}
 }
+
+// A scoped container carries the plane identity in its name; the handle
+// is still the runtime's container id (#406).
+func TestContainerScopePrefixesName(t *testing.T) {
+	rt := &FakeRuntime{}
+	for _, tc := range []struct{ scope, want string }{{"ab12cd34", "ab12cd34-review-o-r-1"}, {"", "review-o-r-1"}} {
+		c := Container{RT: rt, Image: "img", Scope: tc.scope}
+		if _, err := c.CreateSpec(Spec{Name: "review-o-r-1"}); err != nil {
+			t.Fatal(err)
+		}
+		if got := rt.Created[len(rt.Created)-1].Name; got != tc.want {
+			t.Fatalf("scope %q: name %q want %q", tc.scope, got, tc.want)
+		}
+	}
+}

@@ -241,3 +241,28 @@ func TestLocalRuntimeMigrationsPreserveManagedState(t *testing.T) {
 		t.Fatalf("identity_hash migration result %v, want empty table with column present", err)
 	}
 }
+
+// Each database gets one plane identity that survives reopening (#406).
+func TestPlaneIDStablePerDatabase(t *testing.T) {
+	dir := t.TempDir()
+	open := func(name string) string {
+		t.Helper()
+		s, err := Open(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = s.Close() }()
+		id, err := PlaneID(s)
+		if err != nil || len(id) != 8 {
+			t.Fatalf("plane id %q %v", id, err)
+		}
+		return id
+	}
+	a := open("a.db")
+	if again := open("a.db"); again != a {
+		t.Fatalf("reopen changed plane id %s -> %s", a, again)
+	}
+	if b := open("b.db"); b == a {
+		t.Fatalf("two databases share plane id %s", a)
+	}
+}

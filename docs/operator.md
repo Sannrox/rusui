@@ -683,7 +683,10 @@ Secrets live in the operator environment, not in those files. Do not
 embed token values in examples. Restore a copied database with
 `store.Restore` (inventory, clear live leases, drop grants). Guest
 containers named `rusui-*` are not in the backup; destroy them with the
-container CLI if any are left.
+container CLI if any are left. New container names carry the database's
+plane id (`rusui-<plane id>-…`), so two planes or a replaced database on
+one host do not collide. A copied database keeps its plane id: restore it
+in place of the old plane, not beside it on the same host.
 
 Uninstall: stop the process, delete the database and snapshot directory,
 unset the env vars listed in [configuration.md](configuration.md).
