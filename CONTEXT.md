@@ -108,8 +108,8 @@ The only credential in a P1 guest outside `implement` sessions (ADR 0015): D3’
 _Avoid_: PAT, installation token, `auth.json`, xAI API key, registry or cloud key (in the guest)
 
 **Plane proxy**:
-Git smart-HTTP and model egress on the plane, which redeem a grant for the real token. GitHub REST stays plane-internal. The guest may reach only these endpoints under egress `trusted`. HTTPS to `rusui.plane`; plane CA at `/usr/local/share/ca-certificates/rusui-plane.crt`. Snapshot prepare uses a read-only grant on the same git proxy.
-_Avoid_: runner-side proxy, `api.github.com` from the guest, PAT on the runner disk, HTTP to the proxies from a container guest
+Git smart-HTTP and model egress on the plane, which redeem a grant for the real token. GitHub REST stays plane-internal. The guest may reach only these endpoints under egress `trusted`. HTTPS to `rusui.plane`; plane CA at `/usr/local/share/ca-certificates/rusui-plane.crt`. Snapshot prepare uses a read-only grant on the same git proxy. A disconnected or local-inference session profile is not selected ([ADR 0042](docs/decisions/0042-disconnected-execution-deferred.md)).
+_Avoid_: runner-side proxy, `api.github.com` from the guest, PAT on the runner disk, HTTP to the proxies from a container guest, offline session kind
 
 **Source**:
 The pinned intake identity `(repo, item, snapshot_hash, main_sha)` a candidate is proven against. Source drift invalidates proof.

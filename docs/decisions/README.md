@@ -45,6 +45,7 @@ Decisions that must outlive a single pull request.
 | [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted |
 | [0040](0040-child-session-delegation-deferred.md) | Child-session delegation is deferred | Accepted |
 | [0041](0041-ha-plane-deferred.md) | An HA plane is deferred | Accepted |
+| [0042](0042-disconnected-execution-deferred.md) | Disconnected execution is deferred | Accepted |
 
 ## When to write an ADR
 
