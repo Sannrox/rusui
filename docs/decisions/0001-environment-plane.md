@@ -17,7 +17,9 @@
   [ADR 0034](0034-operator-host-location-deferred.md) (D4 drivers have
   no operator-chosen location),
   [ADR 0035](0035-live-environment-fork-deferred.md) (D4 `Fork` is not
-  a driver operation)
+  a driver operation),
+  [ADR 0041](0041-ha-plane-deferred.md) (D8 stays SQLite one writer; HA
+  is deferred)
 
 ## Context
 
