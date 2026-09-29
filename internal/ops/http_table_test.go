@@ -26,6 +26,9 @@ func TestConfigurationHTTPTableDocumentsPostReviews(t *testing.T) {
 	if !strings.Contains(table, "`POST` | `/reviews` | operator or worker token") {
 		t.Fatal("HTTP table missing POST /reviews with operator or worker auth")
 	}
+	if !strings.Contains(table, "`POST` | `/sessions/{id}/turns` | operator or worker token") {
+		t.Fatal("HTTP table missing POST /sessions/{id}/turns with operator or worker auth")
+	}
 	if strings.Contains(table, "`POST` | `/comment`") {
 		t.Fatal("plane HTTP table must not list preview-origin POST /comment")
 	}
