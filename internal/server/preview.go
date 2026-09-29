@@ -292,12 +292,35 @@ func (s *Server) previewProxy(w http.ResponseWriter, r *http.Request) {
 	if grantTok != "" && bearerToken(r) == grantTok {
 		r.Header.Del("Authorization")
 	}
+	scrubRefererGrant(r.Header)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		http.Error(w, "unavailable", http.StatusBadGateway)
 	}
 	r.Host = target.Host
 	proxy.ServeHTTP(w, r)
+}
+
+// scrubRefererGrant removes the grant query from a browser Referer, which
+// carries the minted `?g=` document URL onto every follow-up request. An
+// unparsable Referer is dropped rather than forwarded unchecked.
+func scrubRefererGrant(h http.Header) {
+	ref := h.Get("Referer")
+	if ref == "" {
+		return
+	}
+	u, err := url.Parse(ref)
+	if err != nil {
+		h.Del("Referer")
+		return
+	}
+	q := u.Query()
+	if !q.Has("g") {
+		return
+	}
+	q.Del("g")
+	u.RawQuery = q.Encode()
+	h.Set("Referer", u.String())
 }
 
 func (s *Server) previewDial(envRow *store.Environment, port int) (string, error) {
