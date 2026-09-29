@@ -365,6 +365,7 @@ func TestClaudeControlRequestUsesGateAndReplies(t *testing.T) {
 		"write denied":    {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Write","input":{"file_path":"/tmp/x"}}}`, false, "edit", "", "deny"},
 		"unknown tool":    {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Frobnicate","input":{}}}`, true, "other", "", "allow"},
 		"unknown subtype": {`{"type":"control_request","request_id":"r1","request":{"subtype":"interrupt"}}`, true, "", "", "deny"},
+		"ask user":        {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]}}}`, true, "", "", "deny"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var seen map[string]any
@@ -373,6 +374,9 @@ func TestClaudeControlRequestUsesGateAndReplies(t *testing.T) {
 				_ = json.Unmarshal(raw, &seen)
 				return "allow", tc.allow
 			})
+			if tc.wantKind == "" && seen != nil {
+				t.Fatalf("gate consulted for %s: %v", name, seen)
+			}
 			if err != nil {
 				t.Fatal(err)
 			}
