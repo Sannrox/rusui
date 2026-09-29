@@ -177,7 +177,11 @@ func main() {
 				d.CAFile = planeCA
 				rt = d
 			}
-			eng.Container = envpkg.Container{RT: rt, Image: os.Getenv("RUSUI_GUEST_IMAGE"), CAFile: planeCA}
+			scope, err := store.PlaneID(st)
+			if err != nil {
+				log.Fatal(err)
+			}
+			eng.Container = envpkg.Container{RT: rt, Image: os.Getenv("RUSUI_GUEST_IMAGE"), CAFile: planeCA, Scope: scope}
 		}
 	}
 	if tlsCert != "" && tlsKey != "" && planeCA == "" {

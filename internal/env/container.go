@@ -36,6 +36,9 @@ type Container struct {
 	RT     Runtime
 	Image  string
 	CAFile string
+	// Scope is the plane identity. It prefixes container names so planes
+	// sharing a runtime never collide; the handle stays the container id.
+	Scope string
 }
 
 func (c Container) Kind() string { return KindContainer }
@@ -56,6 +59,9 @@ func (c Container) CreateSpec(spec Spec) (string, error) {
 	}
 	if c.CAFile != "" && spec.CAFile == "" {
 		spec.CAFile = c.CAFile
+	}
+	if c.Scope != "" && spec.Name != "" {
+		spec.Name = c.Scope + "-" + spec.Name
 	}
 	ApplyTrustedNetwork(&spec)
 	return c.RT.CreateAndStart(spec)
