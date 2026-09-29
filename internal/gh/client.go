@@ -416,22 +416,45 @@ func (a *API) GetDelivery(repo, id string) (*DeliveryDetail, error) {
 	}, nil
 }
 
+// ListOpenItems lists a repository's open issues and pull requests with
+// what advisory eligibility needs (ADR 0038 D2): creation time, and for
+// pull requests draft state, base branch, and the default branch.
 func (a *API) ListOpenItems(repo string) ([]snapshot.Item, error) {
 	owner, name, err := splitRepo(repo)
 	if err != nil {
+		return nil, err
+	}
+	var rr ghRepo
+	if err := a.get(fmt.Sprintf("/repos/%s/%s", owner, name), &rr); err != nil {
 		return nil, err
 	}
 	var issues []ghIssue
 	if err := a.get(fmt.Sprintf("/repos/%s/%s/issues?state=open&per_page=100", owner, name), &issues); err != nil {
 		return nil, err
 	}
+	var pulls []ghPR
+	if err := a.get(fmt.Sprintf("/repos/%s/%s/pulls?state=open&per_page=100", owner, name), &pulls); err != nil {
+		return nil, err
+	}
+	byNumber := make(map[int]ghPR, len(pulls))
+	for _, pr := range pulls {
+		byNumber[pr.Number] = pr
+	}
 	out := make([]snapshot.Item, 0, len(issues))
 	for _, issue := range issues {
-		kind := "issue"
+		it := snapshot.Item{Repo: repo, Item: issue.Number, ItemKind: "issue", State: issue.State,
+			CreatedAt: issue.CreatedAt.UTC().Format(time.RFC3339)}
 		if issue.PullRequest != nil {
-			kind = "pull"
+			it.ItemKind = "pull"
+			it.DefaultBranch = rr.DefaultBranch
+			// A pull request missing from the pulls page keeps an empty
+			// base, which advisory eligibility refuses.
+			if pr, ok := byNumber[issue.Number]; ok {
+				it.Draft = pr.Draft
+				it.BaseRef = pr.Base.Ref
+			}
 		}
-		out = append(out, snapshot.Item{Repo: repo, Item: issue.Number, ItemKind: kind, State: issue.State})
+		out = append(out, it)
 	}
 	return out, nil
 }

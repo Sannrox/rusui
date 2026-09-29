@@ -184,16 +184,32 @@ func TestAPIDeliveries(t *testing.T) {
 	}
 }
 
+// The issues list carries no draft or base; ListOpenItems hydrates pull
+// requests from the pulls list so advisory catch-up can filter them (#386).
 func TestAPIListOpenItems(t *testing.T) {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/example/test-repo", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"default_branch": "main"})
+	})
 	mux.HandleFunc("/repos/example/test-repo/issues", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("state") != "open" {
 			http.Error(w, "state", 400)
 			return
 		}
+		pr := map[string]string{"url": "https://example/pulls"}
 		_ = json.NewEncoder(w).Encode([]map[string]any{
-			{"number": 1, "state": "open"},
-			{"number": 7, "state": "open", "pull_request": map[string]string{"url": "https://example/pulls/7"}},
+			{"number": 1, "state": "open", "created_at": "2026-01-01T00:00:00Z"},
+			{"number": 7, "state": "open", "pull_request": pr},
+			{"number": 8, "state": "open", "pull_request": pr},
+			{"number": 9, "state": "open", "pull_request": pr},
+			{"number": 10, "state": "open", "pull_request": pr},
+		})
+	})
+	mux.HandleFunc("/repos/example/test-repo/pulls", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"number": 7, "draft": false, "base": map[string]string{"ref": "main"}},
+			{"number": 8, "draft": true, "base": map[string]string{"ref": "main"}},
+			{"number": 9, "draft": false, "base": map[string]string{"ref": "release"}},
 		})
 	})
 	srv := httptest.NewServer(mux)
@@ -204,8 +220,18 @@ func TestAPIListOpenItems(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 2 || list[0].Item != 1 || list[0].ItemKind != "issue" || list[1].Item != 7 || list[1].ItemKind != "pull" {
+	if len(list) != 5 || list[0].ItemKind != "issue" || list[0].CreatedAt != "2026-01-01T00:00:00Z" {
 		t.Fatalf("%+v", list)
+	}
+	type pull struct {
+		draft      bool
+		base, dflt string
+	}
+	want := map[int]pull{7: {false, "main", "main"}, 8: {true, "main", "main"}, 9: {false, "release", "main"}, 10: {false, "", "main"}}
+	for _, it := range list[1:] {
+		if got := (pull{it.Draft, it.BaseRef, it.DefaultBranch}); it.ItemKind != "pull" || got != want[it.Item] {
+			t.Fatalf("#%d %+v", it.Item, it)
+		}
 	}
 }
 

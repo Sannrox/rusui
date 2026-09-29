@@ -10,20 +10,15 @@ import (
 // AdvisoryEligible is the first maintenance profile (ADR 0038 D2):
 // open items on a bound repository; pull requests target the default
 // branch and are not drafts. Closed, merged, and other-base items are
-// out of scope. Protected labels still get advisory; they only block
+// out of scope, and so is a pull request whose base is unknown. Protected labels still get advisory; they only block
 // live classes that stay off.
 func AdvisoryEligible(it snapshot.Item) bool {
 	switch it.ItemKind {
 	case "issue":
 		return it.State == "open"
 	case "pull":
-		if it.State != "open" || it.Draft {
-			return false
-		}
-		if it.BaseRef != "" && it.DefaultBranch != "" && it.BaseRef != it.DefaultBranch {
-			return false
-		}
-		return true
+		// An unknown base or default branch is refused, not assumed.
+		return it.State == "open" && !it.Draft && it.BaseRef != "" && it.BaseRef == it.DefaultBranch
 	default:
 		return false
 	}

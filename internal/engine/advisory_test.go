@@ -45,10 +45,33 @@ func TestAdvisoryEligible(t *testing.T) {
 	if engine.AdvisoryEligible(pr) {
 		t.Fatal("other-base PR")
 	}
+	pr.BaseRef = ""
+	if engine.AdvisoryEligible(pr) {
+		t.Fatal("unknown-base PR")
+	}
 	pr.ItemKind = "run"
 	pr.BaseRef = "main"
 	if engine.AdvisoryEligible(pr) {
 		t.Fatal("run item")
+	}
+}
+
+// A pull request listed without its base (thin list) must not take a
+// catch-up slot from eligible work (#386).
+func TestCatchUpAdvisoryBatchSkipsPullsWithUnknownBase(t *testing.T) {
+	pol, err := policy.Parse([]byte(fixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var open []snapshot.Item
+	for i := 1; i <= 2; i++ {
+		thin := snapshot.Item{Repo: "example/test-repo", Item: i, ItemKind: "pull", State: "open", CreatedAt: "2025-01-01T00:00:00Z"}
+		open = append(open, thin)
+	}
+	open = append(open, issue(3), issue(4))
+	got := engine.CatchUpAdvisoryBatch(open, pol)
+	if len(got) != 2 || got[0].Item != 3 || got[1].Item != 4 {
+		t.Fatalf("batch %+v", got)
 	}
 }
 

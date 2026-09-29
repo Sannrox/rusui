@@ -108,6 +108,7 @@ func TestOnDemandReviewSerializesBackgroundRefresh(t *testing.T) {
 	it := issue(42)
 	it.ItemKind = "pull"
 	it.HeadSHA = "head-42"
+	it.BaseRef = "main"
 	h.f.Put(it)
 	if err := h.e.CatchUpItem(it.Repo, it.Item, it.ItemKind); err != nil {
 		t.Fatal(err)
