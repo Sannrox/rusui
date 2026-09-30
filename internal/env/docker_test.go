@@ -275,3 +275,19 @@ func TestDockerCLIExecOutputFloodsBothStreams(t *testing.T) {
 		t.Fatalf("len=%d truncated=%v", len(out), truncated)
 	}
 }
+
+// Operators clean up guests by the documented rusui-<plane id>-… name.
+func TestPlaneScopedDockerNameMatchesOperatorContract(t *testing.T) {
+	bin, logPath := stubDocker(t)
+	c := Container{RT: DockerCLI{Bin: bin}, Image: "img", Scope: "ab12cd34"}
+	if _, err := c.CreateSpec(Spec{Name: "review-o-r-1"}); err != nil {
+		t.Fatal(err)
+	}
+	argv, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(argv), "--name rusui-ab12cd34-review-o-r-1 ") {
+		t.Fatalf("argv %s", argv)
+	}
+}

@@ -37,7 +37,8 @@ type Container struct {
 	Image  string
 	CAFile string
 	// Scope is the plane identity. It prefixes container names so planes
-	// sharing a runtime never collide; the handle stays the container id.
+	// sharing a runtime never collide; DockerCLI adds "rusui-", giving the
+	// documented rusui-<scope>-<name>. The handle stays the container id.
 	Scope string
 }
 
