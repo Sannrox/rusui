@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -111,6 +112,27 @@ func InsertEnvironmentReceipt(s *Store, envID int64, kind, state, detail string,
 VALUES (?, (SELECT id FROM sessions WHERE environment_id=? ORDER BY id LIMIT 1), ?, ?, ?, ?)`,
 		envID, envID, kind, state, detail, now.UTC().Format(time.RFC3339Nano))
 	return err
+}
+
+// ReplaceSessionEnvironment points the session at its replacement
+// environment and records the replacement on the old one, atomically. The
+// old environment keeps its id and stays expired; a new guest never runs
+// under an id that already named another.
+func ReplaceSessionEnvironment(s *Store, sessionID, oldID, newID int64, now time.Time) error {
+	return s.Tx(func(tx *sql.Tx) error {
+		res, err := tx.Exec(`UPDATE sessions SET environment_id=? WHERE id=? AND environment_id=?`, newID, sessionID, oldID)
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n != 1 {
+			return fmt.Errorf("session %d no longer names environment %d", sessionID, oldID)
+		}
+		_, err = tx.Exec(`INSERT INTO environment_receipts (environment_id, session_id, kind, state, detail, created_at)
+VALUES (?, ?, 'replace', 'succeeded', ?, ?)`, oldID, sessionID, fmt.Sprintf("replaced by environment %d", newID), now.UTC().Format(time.RFC3339Nano))
+		return err
+	})
 }
 
 func ListEnvironmentReceipts(s *Store, sessionID int64) ([]EnvironmentReceipt, error) {

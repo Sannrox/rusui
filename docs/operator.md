@@ -433,6 +433,13 @@ is an explicit error; no terminal lease or preview grant is created, and
 the environment stays asleep. An expired or replaced environment is
 never woken as a different handle.
 
+An environment id names exactly one guest. When an environment expires,
+or the pinned source changes, the session's next turn provisions a new
+environment with a new id (`<name>-r<old id>` after expiry) instead of
+refilling the old one. The old id stays `expired`, and the session's
+environment receipts record `expire` and `replace` (naming the new id),
+so every guest a session used stays attributable.
+
 A preview grant survives sleep. Its identity is the environment id and
 handle ([ADR 0012](decisions/0012-operator-access.md)), and sleep keeps
 both, so the same grant URL works after wake without a new mint. In

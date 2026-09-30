@@ -162,6 +162,10 @@ func TestRestoreReleasesGuestHandlesAndPlaneIdentity(t *testing.T) {
 	if err != nil || envRow.Handle != "" || envRow.State != EnvExpired {
 		t.Fatalf("restored environment %+v %v", envRow, err)
 	}
+	receipts, err := ListEnvironmentReceipts(st2, sid)
+	if err != nil || len(receipts) != 1 || receipts[0].Kind != "expire" || receipts[0].EnvironmentID != envID {
+		t.Fatalf("receipts %+v %v", receipts, err)
+	}
 	restoredPlane, err := PlaneID(st2)
 	if err != nil || restoredPlane == "" || restoredPlane == sourcePlane {
 		t.Fatalf("plane id %q (source %q) %v", restoredPlane, sourcePlane, err)

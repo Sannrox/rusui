@@ -3,6 +3,7 @@ package engine_test
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -587,5 +588,66 @@ func TestConcurrentOperatorWakesShareOneWake(t *testing.T) {
 	}
 	if len(rt.Started) != 1 {
 		t.Fatalf("starts %d, want one shared wake", len(rt.Started))
+	}
+}
+
+// An expired session environment is replaced, not refilled: the next turn
+// gets a new environment id, and receipts record the expiry and the
+// replacement (#415).
+func TestExpiredSessionEnvironmentIsReplacedWithReceipts(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{DefaultFiles: map[string]bool{env.SetupPath: true}}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	h.putRefresh(issue(1))
+	c := h.claim()
+	turn, err := store.GetTurn(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil || first.Handle == "" {
+		t.Fatalf("first env %+v %v", first, err)
+	}
+	h.clk.T = first.ExpiresAt.Add(time.Minute)
+	if err := h.e.ReapEnvironments(); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.e.EnsureSessionEnvironment(c.Job.ID, issue(1)); err != nil {
+		t.Fatal(err)
+	}
+	sess, err = store.GetSession(h.st, turn.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess.EnvironmentID == first.ID {
+		t.Fatal("expired environment id reused for a new guest")
+	}
+	old, err := store.GetEnvironment(h.st, first.ID)
+	if err != nil || old.State != store.EnvExpired || old.Handle != "" {
+		t.Fatalf("old env %+v %v", old, err)
+	}
+	replacement, err := store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil || replacement.State != store.EnvReady || replacement.Handle == "" || replacement.Handle == first.Handle ||
+		replacement.Name != first.Name+"-r"+strconv.FormatInt(first.ID, 10) {
+		t.Fatalf("replacement %+v %v", replacement, err)
+	}
+	receipts, err := store.ListEnvironmentReceipts(h.st, sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range receipts {
+		got = append(got, fmt.Sprintf("%d %s %s", r.EnvironmentID, r.Kind, r.Detail))
+	}
+	want := []string{
+		fmt.Sprintf("%d expire time to live elapsed", first.ID),
+		fmt.Sprintf("%d replace replaced by environment %d", first.ID, replacement.ID),
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("receipts %q want %q", got, want)
 	}
 }

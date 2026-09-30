@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sannrox/rusui/internal/env"
@@ -450,6 +452,9 @@ func (e *Engine) ReapEnvironments() error {
 		if err := store.UpdateEnvironment(e.Store, envRow); err != nil {
 			return err
 		}
+		if err := store.InsertEnvironmentReceipt(e.Store, envRow.ID, "expire", "succeeded", "time to live elapsed", e.now()); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -543,20 +548,19 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 		if err := store.UpdateEnvironment(e.Store, *envRow); err != nil {
 			return err
 		}
+		if err := store.InsertEnvironmentReceipt(e.Store, envRow.ID, "expire", "succeeded", "source changed", e.now()); err != nil {
+			return err
+		}
 		suffix := pin
 		if len(suffix) > 12 {
 			suffix = suffix[:12]
 		}
-		created, err := e.ProvisionEnvironment(EnvSpec{Name: envRow.Name + "-" + suffix, Kind: kind, SourceHash: hash, Repo: item.Repo, Pin: pin})
-		if err != nil {
-			// The session still names the old environment; keep the
-			// failed setup output where the operator reads it.
-			if pe, ok := errors.AsType[*ProvisionError](err); ok {
-				e.recordProvision(envRow.ID, pe.captures)
-			}
-			return err
-		}
-		return store.SetSessionEnvironment(e.Store, sess.ID, created.ID)
+		return e.replaceSessionEnvironment(sess.ID, envRow, EnvSpec{Name: envRow.Name + "-" + suffix, Kind: kind, SourceHash: hash, Repo: item.Repo, Pin: pin})
+	}
+	if envRow.State == store.EnvExpired {
+		// An expired environment is never refilled: its id named the old
+		// guest, so the session moves to a new environment (#415).
+		return e.replaceSessionEnvironment(sess.ID, envRow, EnvSpec{Name: replacementName(envRow.Name, envRow.ID), Kind: kind, SourceHash: hash, Repo: item.Repo, Pin: pin})
 	}
 	d, err := e.driverFor(kind)
 	if err != nil {
@@ -595,6 +599,41 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	envRow.SourceHash = hash
 	envRow.ExpiresAt = &exp
 	return store.UpdateEnvironment(e.Store, *envRow)
+}
+
+// replaceSessionEnvironment provisions spec as a new environment and moves
+// the session to it, recording the replacement on old.
+func (e *Engine) replaceSessionEnvironment(sessionID int64, old *store.Environment, spec EnvSpec) error {
+	created, err := e.ProvisionEnvironment(spec)
+	if err != nil {
+		// The session still names the old environment; keep the
+		// failed setup output where the operator reads it.
+		if pe, ok := errors.AsType[*ProvisionError](err); ok {
+			e.recordProvision(old.ID, pe.captures)
+		}
+		return err
+	}
+	if err := store.ReplaceSessionEnvironment(e.Store, sessionID, old.ID, created.ID, e.now()); err != nil {
+		// Another replacement won; do not leave this guest running unowned.
+		if d, derr := e.driverFor(created.Driver); derr == nil {
+			_ = stopServices(d, created.Handle)
+			_ = d.Destroy(created.Handle)
+		}
+		created.State, created.Handle = store.EnvExpired, ""
+		return errors.Join(err, store.UpdateEnvironment(e.Store, *created))
+	}
+	return nil
+}
+
+// replacementName names the environment that replaces id. It drops an
+// earlier -r<id> suffix, so repeated replacement keeps names bounded.
+func replacementName(name string, id int64) string {
+	if i := strings.LastIndex(name, "-r"); i > 0 {
+		if _, err := strconv.ParseUint(name[i+2:], 10, 64); err == nil {
+			name = name[:i]
+		}
+	}
+	return name + "-r" + strconv.FormatInt(id, 10)
 }
 
 // startServices reports started=false when the driver has no services.
