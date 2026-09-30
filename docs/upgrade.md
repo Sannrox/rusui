@@ -27,9 +27,15 @@ rusui drain -token "$RUSUI_WORKER_SECRET"
 # defaults to https://127.0.0.1:8080 when RUSUI_TLS_CERT and RUSUI_TLS_KEY are set
 ```
 
-The JSON `live` list is the blocked/running work. Resume with Slack
-`resume` after the new binary is up, or leave pause set until you
-explicitly resume.
+The JSON `live` list is the blocked/running work. Resume after the new
+binary is up, or leave pause set until you explicitly resume:
+
+```bash
+rusui resume -token "$RUSUI_WORKER_SECRET"           # global
+rusui resume -token "$RUSUI_WORKER_SECRET" -project rusui
+```
+
+Slack `resume [project]` does the same.
 
 ## Replace and recover
 
@@ -38,10 +44,10 @@ explicitly resume.
 3. Copy `rusui.db` (and `-wal`/`-shm`) as the rollback artifact.
 4. Replace the `rusui` / `rusui-runner` binaries or image tag.
 5. Start with the same `-db` and `-policy`.
-6. If start fails, restore the copied database with the shipped
-   `store.Restore` path (inventory, clear live leases, drop grants,
+6. If start fails, stop it and restore the copied database with
+   `rusui restore -db <copy>` (inventory, clear live leases, drop grants,
    release guests and rotate the plane id, keep receipts and approval
-   **records**).
+   **records**), then start on that file and `rusui resume`.
 
 Durable session, approval, budget, and receipt rows stay in SQLite across
 a successful upgrade. Live grants do not.

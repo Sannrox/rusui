@@ -92,6 +92,12 @@ func main() {
 		case "drain":
 			drainCLI(os.Args[2:])
 			return
+		case "resume":
+			resumeCLI(os.Args[2:])
+			return
+		case "restore":
+			restoreCLI(os.Args[2:])
+			return
 		case "diagnostics":
 			diagnosticsCLI(os.Args[2:])
 			return
