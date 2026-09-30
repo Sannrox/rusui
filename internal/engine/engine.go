@@ -71,6 +71,8 @@ type Engine struct {
 	sumikaMu       sync.Mutex
 	envOperationMu sync.Mutex
 	envOperations  map[int64]struct{}
+	completeMu     sync.Mutex
+	completing     map[int64]*completeLock
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {
@@ -975,6 +977,9 @@ func (e *Engine) Complete(jobID int64, gen, claimed int, art Artifact) (map[stri
 }
 
 func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact, acknowledgedSteers []int64) (map[string]any, error) {
+	// One Complete per job at a time: a concurrent duplicate waits, then
+	// finds the lease completed, skips publishing, and returns the receipt.
+	defer e.lockComplete(jobID)()
 	// Outside the transaction: these may call GitHub. The transaction still
 	// checks the lease and that art.Repo is the job's repository.
 	e.publishResult(jobID, gen, claimed, &art)
@@ -1117,6 +1122,38 @@ func (e *Engine) Fail(jobID int64, gen, claimed int) (map[string]any, error) {
 		return nil
 	})
 	return out, err
+}
+
+// completeLock serializes Completes for one job; refs counts holders and
+// waiters so the map entry is dropped when the last one leaves.
+type completeLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// lockComplete holds the job's Complete lock and returns its release. The
+// lock is in-process: one plane process owns its SQLite database.
+func (e *Engine) lockComplete(jobID int64) func() {
+	e.completeMu.Lock()
+	if e.completing == nil {
+		e.completing = make(map[int64]*completeLock)
+	}
+	l := e.completing[jobID]
+	if l == nil {
+		l = &completeLock{}
+		e.completing[jobID] = l
+	}
+	l.refs++
+	e.completeMu.Unlock()
+	l.mu.Lock()
+	return func() {
+		l.mu.Unlock()
+		e.completeMu.Lock()
+		if l.refs--; l.refs == 0 {
+			delete(e.completing, jobID)
+		}
+		e.completeMu.Unlock()
+	}
 }
 
 func (e *Engine) acceptLeaseIdentity(j *store.Job, gen, claimed int) error {
