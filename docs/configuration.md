@@ -315,6 +315,12 @@ substring; empty fields are wildcards. `action` is `allow` (the default) or
 must name at least one field. Unmatched requests wait for an operator
 approval.
 
+`kind` is the ACP tool kind: `read`, `edit`, `search`, `execute`, `fetch`,
+`think`, `switch_mode`, or `other`. Claude Code tools are classified by
+effect: subagents and todos are `think`, plan mode is `switch_mode`, and
+MCP tools (`mcp__*`) and tools that act beyond the turn are `other`, so
+allow those by `tool` name.
+
 ```yaml
 projects:
   rusui:

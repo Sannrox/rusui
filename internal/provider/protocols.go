@@ -230,15 +230,21 @@ func writePermission(w io.Writer, kind, id, optionID string, allow bool) error {
 	}
 }
 
-// claudeToolKinds maps Claude Code tool names to ACP tool kinds so policy
-// rules and the fence judge Claude like any other guest. Unknown tools map
-// to "other", which no kind rule matches.
+// claudeToolKinds maps Claude Code tool names to ACP tool kinds by their
+// effect, so policy rules and the fence judge Claude like any other guest.
+// "think" tools only plan or delegate: a subagent's own tool calls come
+// back through can_use_tool. MCP tools and tools that act beyond the turn
+// (messages, schedules, notifications) stay "other" and need a tool rule
+// or an operator approval.
 var claudeToolKinds = map[string]string{
-	"Read": "read", "NotebookRead": "read",
+	"Read": "read", "NotebookRead": "read", "Skill": "read", "LSP": "read",
 	"Write": "edit", "Edit": "edit", "MultiEdit": "edit", "NotebookEdit": "edit",
-	"Glob": "search", "Grep": "search", "LS": "search",
+	"Glob": "search", "Grep": "search", "LS": "search", "ToolSearch": "search",
 	"Bash": "execute", "BashOutput": "execute", "KillShell": "execute",
+	"TaskOutput": "execute", "TaskStop": "execute", "Monitor": "execute",
 	"WebFetch": "fetch", "WebSearch": "fetch",
+	"Agent": "think", "Task": "think", "TodoWrite": "think",
+	"EnterPlanMode": "switch_mode", "ExitPlanMode": "switch_mode",
 }
 
 // answerClaudeControl answers one Claude Code control request. Only
