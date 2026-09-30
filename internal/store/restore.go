@@ -27,7 +27,7 @@ type RestoreReport struct {
 // Missing or corrupt files fail; they must not look like a successful restore.
 // Historical approval_decisions remain as records, not grants for new RPCs.
 // The copy never adopts the source's guests: managed environments are
-// expired (counted in the report) and the plane identity is rotated, so a copy
+// expired with a receipt and the plane identity is rotated, so a copy
 // beside its source on one host cannot attach or name-collide with them.
 func Restore(path string) (*Store, RestoreReport, error) {
 	st, err := os.Stat(path)
@@ -85,14 +85,14 @@ func sanitizeRestored(s *Store) (RestoreReport, error) {
 	if err := MarkRuntimeObservationsUnknown(s, time.Now().UTC()); err != nil {
 		return r, err
 	}
-	released, err := releaseRestoredGuests(s)
+	released, err := releaseRestoredGuests(s, time.Now())
 	r.EnvironmentsReleased = released
 	return r, err
 }
 
 // releaseRestoredGuests expires every managed environment that names a guest
 // and gives the database a fresh plane identity, in one transaction.
-func releaseRestoredGuests(s *Store) (int, error) {
+func releaseRestoredGuests(s *Store, now time.Time) (int, error) {
 	raw := make([]byte, 4)
 	if _, err := rand.Read(raw); err != nil {
 		return 0, err
@@ -117,6 +117,11 @@ func releaseRestoredGuests(s *Store) (int, error) {
 		}
 		for _, id := range ids {
 			if _, err := tx.Exec(`UPDATE environments SET state=?, handle='', slept_at=NULL WHERE id=?`, EnvExpired, id); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(`INSERT INTO environment_receipts (environment_id, session_id, kind, state, detail, created_at)
+VALUES (?, (SELECT id FROM sessions WHERE environment_id=? ORDER BY id LIMIT 1), 'expire', 'succeeded', 'restored copy does not adopt the source guest', ?)`,
+				id, id, now.UTC().Format(time.RFC3339Nano)); err != nil {
 				return err
 			}
 		}

@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 29
+const CurrentSchema = 30
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -418,8 +418,51 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 29); err != nil {
 			return err
 		}
+		ver = 29
+	}
+	if ver < 30 {
+		if err := migrateV30(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 30); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// migrateV30 lets environment receipts record expiry and replacement
+// (#415). SQLite cannot alter a CHECK, so the table is rebuilt; the
+// rebuild and its version stamp commit together or not at all.
+func migrateV30(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`
+CREATE TABLE environment_receipts_v30 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  environment_id INTEGER NOT NULL,
+  session_id INTEGER,
+  kind TEXT NOT NULL CHECK (kind IN ('sleep', 'wake', 'expire', 'replace')),
+  state TEXT NOT NULL CHECK (state IN ('succeeded', 'failed')),
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+INSERT INTO environment_receipts_v30 (id, environment_id, session_id, kind, state, detail, created_at)
+  SELECT id, environment_id, session_id, kind, state, detail, created_at FROM environment_receipts;
+DROP TABLE environment_receipts;
+ALTER TABLE environment_receipts_v30 RENAME TO environment_receipts;
+CREATE INDEX IF NOT EXISTS environment_receipts_session ON environment_receipts(session_id, id);
+`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (30, ?)`,
+		time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // migrateV29 records local lifecycle transitions (#414). session_processes
