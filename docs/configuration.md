@@ -197,7 +197,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
 | `GET` | `/sessions/{id}/envlog` | operator token; last setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
 | `POST` | `/sessions/{id}/workspace` | operator token; multipart `file` plus `path` query; 32 MiB cap; workspace-relative only |
-| `GET` | `/sessions/{id}?include=receipts[&receipt_after_id={id}]` | operator or worker token; up to 100 receipts in ID order; follow `environment_receipts_next_after_id` when present |
+| `GET` | `/sessions/{id}?include=receipts[&receipt_after_id={id}][&process_receipt_after_id={id}]` | operator or worker token; up to 100 environment and 100 local process receipts in ID order; follow `environment_receipts_next_after_id` and `process_receipts_next_after_id` when present |
 | `GET` | `/sessions/{id}?view=review-status&turn_id={turn}` | operator or worker token; compact turn state and revisions for polling |
 | `POST` | `/reviews` | operator or worker token; request one bound pull-request review (`rusui review`) |
 | `POST` | `/results/{id}/dispositions` | operator token; JSON `disposition` (`useful`/`neutral`/`harmful`), optional `wrong_finding` and `note` (4 KiB) for review result `{id}` (`rusui disposition`); 404 unknown result |

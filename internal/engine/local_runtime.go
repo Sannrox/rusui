@@ -260,14 +260,14 @@ func (e *Engine) CancelLocalSession(sessionID int64) (bool, error) {
 	}
 	process, err := store.LatestSumikaProcess(e.Store, sessionID)
 	if errors.Is(err, sql.ErrNoRows) {
-		err := store.CancelLocalSessionWithoutProcess(e.Store, sessionID)
+		err := store.CancelLocalSessionWithoutProcess(e.Store, sessionID, e.now())
 		return err == nil, err
 	}
 	if err != nil {
 		return false, err
 	}
 	if process.State == store.ProcessDead {
-		err := store.CancelLocalSessionAfterDeath(e.Store, sessionID, process.ID, process.Generation, process.Revision)
+		err := store.CancelLocalSessionAfterDeath(e.Store, sessionID, process.ID, process.Generation, process.Revision, e.now())
 		return err == nil, err
 	}
 	process, err = store.RequestSumikaCancel(e.Store, process.ID, process.Generation, process.Revision, e.now())

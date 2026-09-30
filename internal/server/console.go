@@ -81,6 +81,7 @@ nav a{margin-right:1rem}
 <h1>Session {{.Sess.ID}}</h1>
 <p>Project {{.Sess.Project}} · {{.Sess.Kind}} · {{.Sess.State}} · environment {{.Sess.EnvironmentState}}{{if .TurnState}} · turn {{.TurnState}}{{end}}</p>
 {{if .Notice}}<p role="status">{{.Notice}}</p>{{end}}
+{{if .ProcessReceipts}}<h2>Local process activity</h2><ul>{{range .ProcessReceipts}}<li>{{.CreatedAt.Format "2006-01-02 15:04:05 MST"}}{{if .ProcessGeneration}} process {{.ProcessGeneration}}{{end}}{{if .AttachGeneration}} attach {{.AttachGeneration}}{{end}} {{.Kind}} {{.State}}</li>{{end}}</ul>{{end}}
 {{if .EnvironmentReceipts}}<h2>Environment activity</h2><ul>{{range .EnvironmentReceipts}}<li>{{.CreatedAt.Format "2006-01-02 15:04:05 MST"}} {{.Kind}} {{.State}}{{if .Detail}} — {{.Detail}}{{end}}</li>{{end}}</ul>{{end}}
 <h2>Environment output</h2>
 {{if not .Captures}}<p class="muted">No setup, resume, or service output.</p>{{end}}
@@ -219,6 +220,7 @@ type consolePage struct {
 	Sessions            []consoleSess
 	Sess                *store.Session
 	EnvironmentReceipts []store.EnvironmentReceipt
+	ProcessReceipts     []store.ProcessReceipt
 	Captures            []store.EnvironmentCapture
 	TurnState           string
 	Reason              string
@@ -487,6 +489,10 @@ func (s *Server) sessionPage(id int64) (consolePage, error) {
 	}
 	page := consolePage{Title: fmt.Sprintf("Session %d", id), View: "session", Sess: sess}
 	page.EnvironmentReceipts, err = store.ListEnvironmentReceipts(s.Eng.Store, id)
+	if err != nil {
+		page.HistoryUnavailable = true
+	}
+	page.ProcessReceipts, err = store.ListProcessReceipts(s.Eng.Store, id)
 	if err != nil {
 		page.HistoryUnavailable = true
 	}
