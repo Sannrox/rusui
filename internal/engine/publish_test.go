@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/gh"
@@ -14,11 +16,22 @@ import (
 
 // fakePublisher records the plane's pull-request writes.
 type fakePublisher struct {
-	specs []gh.PullSpec
-	err   error
+	mu      sync.Mutex
+	specs   []gh.PullSpec
+	err     error
+	entered chan struct{} // when set, signalled on each call
+	release chan struct{} // when set, each call waits for it
 }
 
 func (f *fakePublisher) PublishPull(repo string, s gh.PullSpec) (int, error) {
+	if f.entered != nil {
+		f.entered <- struct{}{}
+	}
+	if f.release != nil {
+		<-f.release
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.specs = append(f.specs, s)
 	if f.err != nil {
 		return 0, f.err
@@ -220,6 +233,48 @@ func TestPlanePublicationWritesOncePerCompletedTurn(t *testing.T) {
 	again, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a)
 	if err != nil || fmt.Sprint(again) != fmt.Sprint(first) {
 		t.Fatalf("retry %v %v", again, err)
+	}
+	if len(pub.specs) != 1 {
+		t.Fatalf("wrote %d times", len(pub.specs))
+	}
+}
+
+// Two Completes for one lease in flight at once write to GitHub once; the
+// second returns the first one's receipt.
+func TestPlanePublicationWritesOnceForConcurrentCompletes(t *testing.T) {
+	h := setupImplement(t)
+	pub := &fakePublisher{entered: make(chan struct{}, 2), release: make(chan struct{})}
+	h.e.Publisher = pub
+	task, err := h.e.StartTask("test", pin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.f.Put(snapshot.Item{Repo: "example/test-repo", Item: 7, ItemKind: "pull", State: "open", HeadSHA: "sha-a"})
+	c := h.claim()
+	a := art(c, "keep", "", "")
+	a.Result = &engine.TaskResult{SchemaVersion: engine.ResultSchema, SourceHash: c.ItemHash, CandidateSHA: "sha-a",
+		Publish: &engine.PublishRequest{Branch: fmt.Sprintf("rusui/%d/pin", task.SessionID), Title: "t"}}
+	type out struct {
+		receipt map[string]any
+		err     error
+	}
+	results := make(chan out, 2)
+	complete := func() {
+		r, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a)
+		results <- out{r, err}
+	}
+	go complete()
+	<-pub.entered // the first Complete is inside PublishPull
+	go complete()
+	select {
+	case <-pub.entered:
+		t.Fatal("second concurrent Complete reached PublishPull")
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(pub.release)
+	first, second := <-results, <-results
+	if first.err != nil || second.err != nil || fmt.Sprint(first.receipt) != fmt.Sprint(second.receipt) {
+		t.Fatalf("receipts %+v %+v", first, second)
 	}
 	if len(pub.specs) != 1 {
 		t.Fatalf("wrote %d times", len(pub.specs))
