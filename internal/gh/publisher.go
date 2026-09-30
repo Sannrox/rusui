@@ -3,6 +3,7 @@ package gh
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 type PullSpec struct {
 	Number int // update this pull request when > 0
 	Head   string
+	SHA    string // commit Head must point at; required
 	Base   string
 	Title  string
 	Body   string
@@ -31,7 +33,7 @@ type Publisher struct {
 }
 
 // PublishPull updates s.Number, or the open pull request whose head is
-// s.Head, or creates one. s.Number must name the open pull request for
+// s.Head, or creates one, only while s.Head points at s.SHA. s.Number must name the open pull request for
 // s.Head in repo; anything else is refused rather than edited. Looking up
 // by head first, and again after a failed create, makes a lost response
 // update instead of duplicate.
@@ -42,6 +44,9 @@ func (p *Publisher) PublishPull(repo string, s PullSpec) (int, error) {
 	}
 	tok, err := p.Tokens.RepoToken(repo)
 	if err != nil {
+		return 0, err
+	}
+	if err := p.requireHead(tok, "/repos/"+owner+"/"+name, s); err != nil {
 		return 0, err
 	}
 	pulls := "/repos/" + owner + "/" + name + "/pulls"
@@ -83,6 +88,51 @@ func (p *Publisher) PublishPull(repo string, s PullSpec) (int, error) {
 	}
 	return out.Number, nil
 }
+
+// ErrHeadMismatch refuses a publication whose branch does not point at
+// the commit the plane was asked to publish.
+var ErrHeadMismatch = errors.New("github: branch head is not the publication commit")
+
+// requireHead checks, just before the write, that s.Head points at s.SHA.
+// A push after this check can still move the branch; the result's
+// observation records the head GitHub shows afterwards.
+func (p *Publisher) requireHead(tok, repoPath string, s PullSpec) error {
+	if s.SHA == "" {
+		return fmt.Errorf("%w: no commit named", ErrHeadMismatch)
+	}
+	var ref struct {
+		Object struct {
+			SHA string `json:"sha"`
+		} `json:"object"`
+	}
+	segs := strings.Split(s.Head, "/")
+	for i, seg := range segs {
+		if seg == "" || seg == "." || seg == ".." {
+			return fmt.Errorf("%w: invalid branch %q", ErrHeadMismatch, s.Head)
+		}
+		segs[i] = url.PathEscape(seg)
+	}
+	err := p.do(tok, http.MethodGet, repoPath+"/git/ref/heads/"+strings.Join(segs, "/"), nil, &ref)
+	var se *statusError
+	if errors.As(err, &se) && se.code == http.StatusNotFound {
+		return fmt.Errorf("%w: %s does not exist", ErrHeadMismatch, s.Head)
+	}
+	if err != nil {
+		return err
+	}
+	if ref.Object.SHA != s.SHA {
+		return fmt.Errorf("%w: %s is at %s, not %s", ErrHeadMismatch, s.Head, ref.Object.SHA, s.SHA)
+	}
+	return nil
+}
+
+// statusError is a non-2xx GitHub response.
+type statusError struct {
+	code int
+	msg  string
+}
+
+func (e *statusError) Error() string { return e.msg }
 
 // openFor returns the open pull request whose head is branch, or 0.
 func (p *Publisher) openFor(tok, pulls, owner, branch string) (int, error) {
@@ -144,7 +194,7 @@ func (p *Publisher) do(tok, method, path string, in, dst any) error {
 		return err
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("github %s %s: %s %s", method, path, res.Status, truncate(raw, 200))
+		return &statusError{code: res.StatusCode, msg: fmt.Sprintf("github %s %s: %s %s", method, path, res.Status, truncate(raw, 200))}
 	}
 	return json.Unmarshal(raw, dst)
 }

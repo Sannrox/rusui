@@ -601,7 +601,9 @@ installation) with **Contents** and **Pull requests** write on the bound
 repositories; the plane refuses to start without them. The guest then
 holds no GitHub credential: it pushes `rusui/<session>/<name>` through the
 plane's git proxy and writes a `publish` request to its result, and the
-plane creates or updates the pull request as the App on Complete.
+plane creates or updates the pull request as the App on Complete, only
+while the branch points at the result's `candidate_sha`; a result without
+one, or a branch that moved, is blocked without a GitHub write.
 `RUSUI_AGENT_GITHUB_TOKEN` is ignored. Pull requests show the App as
 author. Keep it off until you have run the ADR 0020 pilot
 ([ADR 0020](decisions/0020-turn-scoped-github-publication.md) Validation).
