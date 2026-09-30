@@ -40,7 +40,8 @@ explicitly resume.
 5. Start with the same `-db` and `-policy`.
 6. If start fails, restore the copied database with the shipped
    `store.Restore` path (inventory, clear live leases, drop grants,
-   keep receipts and approval **records**).
+   release guests and rotate the plane id, keep receipts and approval
+   **records**).
 
 Durable session, approval, budget, and receipt rows stay in SQLite across
 a successful upgrade. Live grants do not.

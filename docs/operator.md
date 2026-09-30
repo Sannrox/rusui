@@ -525,8 +525,10 @@ catch-up every 15m, apply retry every 1m. Reconcile is skipped with a log when
 SQLite defaults to `rusui.db` in the current working directory (`*.db` is
 gitignored). Stop the process, copy `rusui.db` (and `-wal`/`-shm` if
 present). Restore with the shipped `store.Restore` path: it inventories
-sessions/turns/environments, clears live leases, drops turn grants, and
-keeps approval rows as records only (they do not authorize a new RPC).
+sessions/turns/environments, clears live leases, drops turn grants,
+expires managed environments without adopting their guests, gives the
+copy a new plane id, and keeps approval rows as records only (they do not
+authorize a new RPC).
 A missing or corrupt file is an error, not a successful empty plane.
 Container workspace dirt is not in the database; it rematerializes from
 the snapshot after idle expiry. Credentials in env files are not in the
@@ -681,12 +683,14 @@ Stop the process (SIGINT). Data that remains until you delete it:
 
 Secrets live in the operator environment, not in those files. Do not
 embed token values in examples. Restore a copied database with
-`store.Restore` (inventory, clear live leases, drop grants). Guest
+`store.Restore` (inventory, clear live leases, drop grants, release
+guests). Guest
 containers named `rusui-*` are not in the backup; destroy them with the
 container CLI if any are left. New container names carry the database's
 plane id (`rusui-<plane id>-<environment name>`), so two planes or a replaced database on
-one host do not collide. A copied database keeps its plane id: restore it
-in place of the old plane, not beside it on the same host.
+one host do not collide. Restore rotates the plane id and expires every
+managed environment, so a restored copy beside its source provisions new
+guests on the next turn instead of attaching the source's.
 
 Uninstall: stop the process, delete the database and snapshot directory,
 unset the env vars listed in [configuration.md](configuration.md).

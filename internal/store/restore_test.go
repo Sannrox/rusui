@@ -109,3 +109,61 @@ func TestRestoreClearsStaleAuthority(t *testing.T) {
 		t.Fatalf("restored attach observations %+v", processes[0].Attaches)
 	}
 }
+
+// A restored copy may run beside its source on one container host. It must
+// not adopt the source's guests or reuse its plane identity in guest names.
+func TestRestoreReleasesGuestHandlesAndPlaneIdentity(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "rusui.db")
+	st, err := Open(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	envID, err := InsertEnvironment(st, Environment{Name: "review-o-r-1", Driver: "container", State: EnvReady, Handle: "source-guest-id", CreatedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sid int64
+	if err := st.Tx(func(tx *sql.Tx) error {
+		sid, _, err = InsertRunSessionTx(tx, "test", "example/test-repo", "hello")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetSessionEnvironment(st, sid, envID); err != nil {
+		t.Fatal(err)
+	}
+	sourcePlane, err := PlaneID(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "restore.db")
+	b, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dst, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	st2, rep, err := Restore(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st2.Close() })
+	if rep.EnvironmentsReleased != 1 {
+		t.Fatalf("report %+v", rep)
+	}
+	envRow, err := GetEnvironment(st2, envID)
+	if err != nil || envRow.Handle != "" || envRow.State != EnvExpired {
+		t.Fatalf("restored environment %+v %v", envRow, err)
+	}
+	restoredPlane, err := PlaneID(st2)
+	if err != nil || restoredPlane == "" || restoredPlane == sourcePlane {
+		t.Fatalf("plane id %q (source %q) %v", restoredPlane, sourcePlane, err)
+	}
+}
