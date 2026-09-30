@@ -52,7 +52,10 @@ The owned directory is removed unless `-keep`. Walkthrough:
 [tutorial.md](tutorial.md#sample-demo-no-github-no-model).
 
 `rusui drain -url URL -token TOKEN` POSTs `/drain` (worker auth), pauses new
-claims, and lists leased turns. Do not open `rusui.db` while the plane holds it.
+claims, and lists leased turns. `rusui resume [-project P]` POSTs `/resume`
+(worker auth) and lifts that pause. `rusui restore -db PATH` restores a copied
+database offline and prints its inventory. Do not open `rusui.db` while the
+plane holds it.
 `rusui diagnostics` writes a redacted bundle (`diagnostics.json`).
 Upgrade procedure: [upgrade.md](upgrade.md).
 

@@ -538,8 +538,9 @@ catch-up every 15m, apply retry every 1m. Reconcile is skipped with a log when
 
 SQLite defaults to `rusui.db` in the current working directory (`*.db` is
 gitignored). Stop the process, copy `rusui.db` (and `-wal`/`-shm` if
-present). Restore with the shipped `store.Restore` path: it inventories
-sessions/turns/environments, clears live leases, drops turn grants,
+present). Restore with `rusui restore -db <copy>` while the plane is
+stopped, then start the plane on that file. It prints an inventory and
+counts sessions/turns/environments, clears live leases, drops turn grants,
 expires managed environments without adopting their guests, gives the
 copy a new plane id, and keeps approval rows as records only (they do not
 authorize a new RPC).
@@ -699,8 +700,8 @@ Stop the process (SIGINT). Data that remains until you delete it:
 
 Secrets live in the operator environment, not in those files. Do not
 embed token values in examples. Restore a copied database with
-`store.Restore` (inventory, clear live leases, drop grants, release
-guests). Guest
+`rusui restore -db <copy>` (inventory, clear live leases, drop grants,
+release guests). Guest
 containers named `rusui-*` are not in the backup; destroy them with the
 container CLI if any are left. New container names carry the database's
 plane id (`rusui-<plane id>-<environment name>`), so two planes or a replaced database on
