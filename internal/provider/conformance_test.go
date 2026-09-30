@@ -363,6 +363,11 @@ func TestClaudeControlRequestUsesGateAndReplies(t *testing.T) {
 	}{
 		"bash allowed":    {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"gh pr merge 1"}}}`, true, "execute", "gh pr merge 1", "allow"},
 		"write denied":    {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Write","input":{"file_path":"/tmp/x"}}}`, false, "edit", "", "deny"},
+		"subagent":        {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Agent","input":{}}}`, true, "think", "", "allow"},
+		"todos":           {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"TodoWrite","input":{}}}`, true, "think", "", "allow"},
+		"plan mode":       {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"ExitPlanMode","input":{}}}`, true, "switch_mode", "", "allow"},
+		"skill":           {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Skill","input":{}}}`, true, "read", "", "allow"},
+		"mcp tool":        {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"mcp__github__create_issue","input":{}}}`, true, "other", "", "allow"},
 		"unknown tool":    {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Frobnicate","input":{}}}`, true, "other", "", "allow"},
 		"unknown subtype": {`{"type":"control_request","request_id":"r1","request":{"subtype":"interrupt"}}`, true, "", "", "deny"},
 		"ask user":        {`{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[]}}}`, true, "", "", "deny"},

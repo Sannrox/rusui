@@ -125,10 +125,11 @@ func TestPreviewGrantIsolatedOrigin(t *testing.T) {
 }
 
 func TestPreviewProxyStripsGrantFromGuest(t *testing.T) {
-	var gotQuery, gotAuth string
+	var gotQuery, gotAuth, gotReferer string
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotQuery = r.URL.RawQuery
 		gotAuth = r.Header.Get("Authorization")
+		gotReferer = r.Header.Get("Referer")
 		_, _ = io.WriteString(w, "app-ok")
 	}))
 	t.Cleanup(backend.Close)
@@ -184,7 +185,10 @@ func TestPreviewProxyStripsGrantFromGuest(t *testing.T) {
 		t.Fatalf("mint %d %s", rr.Code, rr.Body.String())
 	}
 
-	res, err = http.Get(prev.URL + "/app?g=" + grant + "&keep=1")
+	// Browsers send the minted document URL, grant included, as Referer.
+	req, _ = http.NewRequest("GET", prev.URL+"/app?g="+grant+"&keep=1", nil)
+	req.Header.Set("Referer", prev.URL+"/?g="+grant+"&tab=2")
+	res, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,6 +206,9 @@ func TestPreviewProxyStripsGrantFromGuest(t *testing.T) {
 	}
 	if gotAuth != "" {
 		t.Fatalf("guest saw Authorization %q", gotAuth)
+	}
+	if strings.Contains(gotReferer, grant) || !strings.Contains(gotReferer, "tab=2") {
+		t.Fatalf("guest Referer %q", gotReferer)
 	}
 
 	gotQuery, gotAuth = "", ""
