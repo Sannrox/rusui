@@ -50,6 +50,20 @@ type Session struct {
 	CreatedAt        time.Time
 }
 
+// ProcessReceipt is one local lifecycle transition (#414): a Process
+// start, state change, or cancel request, an Attach, steal, detach, or
+// exit, or the session's cancellation. Rows are append-only.
+type ProcessReceipt struct {
+	ID                int64     `json:"id"`
+	SessionID         int64     `json:"session_id"`
+	ProcessID         *int64    `json:"process_id,omitempty"`
+	ProcessGeneration *int64    `json:"process_generation,omitempty"`
+	AttachGeneration  *int64    `json:"attach_generation,omitempty"`
+	Kind              string    `json:"kind"`
+	State             string    `json:"state"`
+	CreatedAt         time.Time `json:"created_at"`
+}
+
 type EnvironmentReceipt struct {
 	ID            int64     `json:"id"`
 	EnvironmentID int64     `json:"environment_id"`

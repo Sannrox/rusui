@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -37,7 +38,7 @@ func TestSessionDetailReturnsSeparateProcessAndAttachIdentities(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req, err := http.NewRequest("GET", hs.URL+"/sessions/"+strconv.FormatInt(sessionID, 10), nil)
+	req, err := http.NewRequest("GET", hs.URL+"/sessions/"+strconv.FormatInt(sessionID, 10)+"?include=receipts", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,10 +56,11 @@ func TestSessionDetailReturnsSeparateProcessAndAttachIdentities(t *testing.T) {
 		t.Fatalf("session detail %d: %s", resp.StatusCode, body)
 	}
 	var detail struct {
-		Session          store.Session   `json:"session"`
-		Turns            []store.Turn    `json:"turns"`
-		Processes        []store.Process `json:"processes"`
-		EnvironmentState string          `json:"environment_state"`
+		Session          store.Session          `json:"session"`
+		Turns            []store.Turn           `json:"turns"`
+		Processes        []store.Process        `json:"processes"`
+		ProcessReceipts  []store.ProcessReceipt `json:"process_receipts"`
+		EnvironmentState string                 `json:"environment_state"`
 	}
 	if err := json.Unmarshal(body, &detail); err != nil {
 		t.Fatal(err)
@@ -75,6 +77,13 @@ func TestSessionDetailReturnsSeparateProcessAndAttachIdentities(t *testing.T) {
 	}
 	if len(got.Attaches) != 1 || got.Attaches[0].ID != attach.ID || got.Attaches[0].ProcessID != process.ID || got.Attaches[0].Generation != attach.Generation || got.Attaches[0].State != store.AttachAttached {
 		t.Fatalf("attach identity %+v", got.Attaches)
+	}
+	var kinds []string
+	for _, r := range detail.ProcessReceipts {
+		kinds = append(kinds, r.Kind+" "+r.State)
+	}
+	if fmt.Sprint(kinds) != "[start starting observe idle attach attached]" {
+		t.Fatalf("process receipts %v", kinds)
 	}
 	encoded := strings.ToLower(string(body))
 	if strings.Contains(encoded, "scrollback") || strings.Contains(encoded, "pty_bytes") || strings.Contains(encoded, "terminal_bytes") || strings.Contains(encoded, `"argv"`) || strings.Contains(encoded, `"cwd"`) {

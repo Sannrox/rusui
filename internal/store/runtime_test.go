@@ -154,7 +154,7 @@ func TestLocalSessionCancellationFencesProcessGeneration(t *testing.T) {
 
 	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	noProcessSession := insertLocalSession(t, st)
-	if err := CancelLocalSessionWithoutProcess(st, noProcessSession); err != nil {
+	if err := CancelLocalSessionWithoutProcess(st, noProcessSession, now); err != nil {
 		t.Fatal(err)
 	}
 	if sess, err := GetSession(st, noProcessSession); err != nil || sess.State != "cancelled" {
@@ -173,7 +173,7 @@ func TestLocalSessionCancellationFencesProcessGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := CancelLocalSessionWithoutProcess(st, sessionID); !errors.Is(err, ErrStaleProcessObservation) {
+	if err := CancelLocalSessionWithoutProcess(st, sessionID, now); !errors.Is(err, ErrStaleProcessObservation) {
 		t.Fatalf("cancel with a recorded generation error %v", err)
 	}
 	first, err = ObserveSumikaProcess(st, first.ID, first.Generation, first.Revision, ProcessDead, now.Add(time.Second))
@@ -184,18 +184,40 @@ func TestLocalSessionCancellationFencesProcessGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := CancelLocalSessionAfterDeath(st, sessionID, first.ID, first.Generation, first.Revision); !errors.Is(err, ErrStaleProcessObservation) {
+	if err := CancelLocalSessionAfterDeath(st, sessionID, first.ID, first.Generation, first.Revision, now); !errors.Is(err, ErrStaleProcessObservation) {
 		t.Fatalf("cancel from an older generation error %v", err)
 	}
 	second, err = ObserveSumikaProcess(st, second.ID, second.Generation, second.Revision, ProcessDead, now.Add(3*time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := CancelLocalSessionAfterDeath(st, sessionID, second.ID, second.Generation, second.Revision); err != nil {
+	if err := CancelLocalSessionAfterDeath(st, sessionID, second.ID, second.Generation, second.Revision, now.Add(4*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	if sess, err := GetSession(st, sessionID); err != nil || sess.State != "cancelled" {
 		t.Fatalf("session after current dead generation %+v: %v", sess, err)
+	}
+	// Repeating either cancel is idempotent and records one cancellation.
+	if err := CancelLocalSessionWithoutProcess(st, noProcessSession, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := CancelLocalSessionAfterDeath(st, sessionID, second.ID, second.Generation, second.Revision, now); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []int64{noProcessSession, sessionID} {
+		receipts, err := ListProcessReceipts(st, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cancels := 0
+		for _, r := range receipts {
+			if r.Kind == "cancel" {
+				cancels++
+			}
+		}
+		if cancels != 1 {
+			t.Fatalf("session %d cancel receipts %d: %+v", id, cancels, receipts)
+		}
 	}
 }
 
@@ -273,4 +295,94 @@ func insertLocalSession(t *testing.T, st *Store) int64 {
 		t.Fatal(err)
 	}
 	return id
+}
+
+// Every local lifecycle transition leaves an append-only receipt, so an
+// operator can audit starts, steals, deaths, restarts, and cancels later.
+func TestLocalLifecycleWritesReceipts(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "receipts.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	sid := insertLocalSession(t, st)
+	now := time.Date(2026, 9, 30, 9, 0, 0, 0, time.UTC)
+	tick := func() time.Time { now = now.Add(time.Second); return now }
+
+	p, err := StartSumikaProcess(st, sid, "id-1", tick())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, err = ObserveSumikaProcess(st, p.ID, p.Generation, p.Revision, ProcessRunning, tick()); err != nil {
+		t.Fatal(err)
+	}
+	// An unchanged observation is not a transition.
+	if p, err = ObserveSumikaProcess(st, p.ID, p.Generation, p.Revision, ProcessRunning, tick()); err != nil {
+		t.Fatal(err)
+	}
+	first, err := BeginSumikaAttach(st, p.ID, p.Generation, tick())
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := BeginSumikaAttach(st, p.ID, p.Generation, tick())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EndSumikaAttach(st, p.ID, p.Generation, first.Generation, AttachDetached, tick()); !errors.Is(err, ErrStaleAttach) {
+		t.Fatalf("stolen attach detach: %v", err)
+	}
+	if _, err := EndSumikaAttach(st, p.ID, p.Generation, second.Generation, AttachDetached, tick()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := BeginSumikaAttach(st, p.ID, p.Generation, tick()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ObserveSumikaProcess(st, p.ID, p.Generation, p.Revision, ProcessLost, tick()); err != nil {
+		t.Fatal(err)
+	}
+	p2, err := StartSumikaProcess(st, sid, "id-2", tick())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p2, err = ObserveSumikaProcess(st, p2.ID, p2.Generation, p2.Revision, ProcessRunning, tick()); err != nil {
+		t.Fatal(err)
+	}
+	if err := MarkRuntimeObservationsUnknown(st, tick()); err != nil {
+		t.Fatal(err)
+	}
+	if p2, err = GetSumikaProcess(st, p2.ID); err != nil {
+		t.Fatal(err)
+	}
+	if p2, err = ObserveSumikaProcess(st, p2.ID, p2.Generation, p2.Revision, ProcessRunning, tick()); err != nil {
+		t.Fatal(err)
+	}
+	if p2, err = RequestSumikaCancel(st, p2.ID, p2.Generation, p2.Revision, tick()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = ObserveSumikaProcess(st, p2.ID, p2.Generation, p2.Revision, ProcessDead, tick()); err != nil {
+		t.Fatal(err)
+	}
+
+	receipts, err := ListProcessReceipts(st, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range receipts {
+		line := fmt.Sprintf("g%d %s %s", *r.ProcessGeneration, r.Kind, r.State)
+		if r.AttachGeneration != nil {
+			line += fmt.Sprintf(" a%d", *r.AttachGeneration)
+		}
+		got = append(got, line)
+	}
+	want := []string{
+		"g1 start starting", "g1 observe running",
+		"g1 attach attached a1", "g1 steal stolen a1", "g1 attach attached a2", "g1 detach detached a2",
+		"g1 attach attached a3", "g1 observe lost", "g1 exit process_exited a3",
+		"g2 start starting", "g2 observe running", "g2 observe unknown", "g2 observe running",
+		"g2 cancel_requested running", "g2 observe dead", "g2 cancel cancelled",
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("receipts\n got %q\nwant %q", got, want)
+	}
 }

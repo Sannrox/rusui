@@ -13,7 +13,7 @@ import (
 	"github.com/sannrox/rusui/internal/store"
 )
 
-const environmentReceiptPageSize = 100
+const receiptPageSize = 100
 
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOrWorkerOK(r) {
@@ -54,6 +54,14 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		receiptAfterID, err = strconv.ParseInt(query.Get("receipt_after_id"), 10, 64)
 		if err != nil || receiptAfterID < 0 {
 			http.Error(w, "receipt_after_id", http.StatusBadRequest)
+			return
+		}
+	}
+	var processReceiptAfterID int64
+	if includeReceipts && query.Has("process_receipt_after_id") {
+		processReceiptAfterID, err = strconv.ParseInt(query.Get("process_receipt_after_id"), 10, 64)
+		if err != nil || processReceiptAfterID < 0 {
+			http.Error(w, "process_receipt_after_id", http.StatusBadRequest)
 			return
 		}
 	}
@@ -133,7 +141,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		response["review_result"] = reviewResult
 	}
 	if includeReceipts {
-		receipts, hasMore, err := store.ListEnvironmentReceiptPage(s.Eng.Store, id, receiptAfterID, environmentReceiptPageSize)
+		receipts, hasMore, err := store.ListEnvironmentReceiptPage(s.Eng.Store, id, receiptAfterID, receiptPageSize)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -141,6 +149,15 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		response["environment_receipts"] = receipts
 		if hasMore {
 			response["environment_receipts_next_after_id"] = receipts[len(receipts)-1].ID
+		}
+		processReceipts, hasMore, err := store.ListProcessReceiptPage(s.Eng.Store, id, processReceiptAfterID, receiptPageSize)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		response["process_receipts"] = processReceipts
+		if hasMore {
+			response["process_receipts_next_after_id"] = processReceipts[len(processReceipts)-1].ID
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")

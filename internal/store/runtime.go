@@ -127,7 +127,10 @@ func StartSumikaProcess(s *Store, sessionID int64, identityHash string, now time
 			return err
 		}
 		processID, err = res.LastInsertId()
-		return err
+		if err != nil {
+			return err
+		}
+		return processReceiptTx(tx, processID, "start", ProcessStarting, formatRuntimeTime(now))
 	})
 	if err != nil {
 		return nil, err
@@ -164,7 +167,16 @@ func ObserveSumikaProcess(s *Store, processID, generation, revision int64, state
 		if changed != 1 {
 			return ErrStaleProcessObservation
 		}
+		if state != p.State {
+			if err := processReceiptTx(tx, processID, "observe", state, at); err != nil {
+				return err
+			}
+		}
 		if state == ProcessDead || state == ProcessLost {
+			if err := attachReceiptsTx(tx, "exit", AttachProcessExited, at,
+				`a.process_id=? AND a.process_generation=? AND a.state IN ('attached', 'unknown')`, processID, generation); err != nil {
+				return err
+			}
 			_, err = tx.Exec(`UPDATE process_attaches SET state=?, revision=revision+1, observed_at=?
 				WHERE process_id=? AND process_generation=? AND state IN ('attached', 'unknown')`, AttachProcessExited, at, processID, generation)
 			if err != nil {
@@ -172,10 +184,17 @@ func ObserveSumikaProcess(s *Store, processID, generation, revision int64, state
 			}
 		}
 		if state == ProcessDead {
-			_, err = tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=(SELECT session_id FROM session_processes WHERE id=?)
-				AND EXISTS (SELECT 1 FROM session_processes WHERE id=? AND cancel_requested_at IS NOT NULL)`, processID, processID)
+			res, err := tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=? AND state!='cancelled'
+				AND EXISTS (SELECT 1 FROM session_processes WHERE id=? AND cancel_requested_at IS NOT NULL)`, p.SessionID, processID)
+			if err != nil {
+				return err
+			}
+			if n, err := res.RowsAffected(); err != nil || n == 0 {
+				return err
+			}
+			return processReceiptTx(tx, processID, "cancel", "cancelled", at)
 		}
-		return err
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -194,10 +213,10 @@ func validObservedProcessState(state string) bool {
 
 // CancelLocalSessionWithoutProcess cancels a local session only while it has
 // no recorded process generation.
-func CancelLocalSessionWithoutProcess(s *Store, sessionID int64) error {
+func CancelLocalSessionWithoutProcess(s *Store, sessionID int64, now time.Time) error {
 	return s.Tx(func(tx *sql.Tx) error {
-		var kind string
-		if err := tx.QueryRow(`SELECT kind FROM sessions WHERE id=?`, sessionID).Scan(&kind); err != nil {
+		var kind, state string
+		if err := tx.QueryRow(`SELECT kind, state FROM sessions WHERE id=?`, sessionID).Scan(&kind, &state); err != nil {
 			return err
 		}
 		if kind != SessionKindLocal {
@@ -211,14 +230,21 @@ func CancelLocalSessionWithoutProcess(s *Store, sessionID int64) error {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		_, err = tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=? AND kind=?`, sessionID, SessionKindLocal)
+		if state == "cancelled" {
+			return nil // a repeated cancel is not a transition
+		}
+		if _, err = tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=? AND kind=?`, sessionID, SessionKindLocal); err != nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO process_receipts (session_id, kind, state, created_at) VALUES (?, 'cancel', 'cancelled', ?)`,
+			sessionID, formatRuntimeTime(now))
 		return err
 	})
 }
 
 // CancelLocalSessionAfterDeath cancels only if the exact latest process
 // generation is still dead at the revision observed by the caller.
-func CancelLocalSessionAfterDeath(s *Store, sessionID, processID, generation, revision int64) error {
+func CancelLocalSessionAfterDeath(s *Store, sessionID, processID, generation, revision int64, now time.Time) error {
 	return s.Tx(func(tx *sql.Tx) error {
 		var processSessionID, currentGeneration, currentRevision int64
 		var state string
@@ -235,6 +261,13 @@ func CancelLocalSessionAfterDeath(s *Store, sessionID, processID, generation, re
 		if latestID != processID {
 			return ErrStaleProcessObservation
 		}
+		var sessionState string
+		if err := tx.QueryRow(`SELECT state FROM sessions WHERE id=?`, sessionID).Scan(&sessionState); err != nil {
+			return err
+		}
+		if sessionState == "cancelled" {
+			return nil // a repeated cancel is not a transition
+		}
 		res, err := tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=? AND kind=?`, sessionID, SessionKindLocal)
 		if err != nil {
 			return err
@@ -246,7 +279,7 @@ func CancelLocalSessionAfterDeath(s *Store, sessionID, processID, generation, re
 		if changed != 1 {
 			return sql.ErrNoRows
 		}
-		return nil
+		return processReceiptTx(tx, processID, "cancel", "cancelled", formatRuntimeTime(now))
 	})
 }
 
@@ -262,15 +295,18 @@ func BeginSumikaAttach(s *Store, processID, processGeneration int64, now time.Ti
 		if p.Generation != processGeneration || (p.State != ProcessRunning && p.State != ProcessIdle && p.State != ProcessBlocked) {
 			return ErrProcessNotAttachable
 		}
-		var currentID int64
-		err = tx.QueryRow(`SELECT id FROM process_attaches WHERE process_id=? AND state IN ('attached', 'unknown')
-			ORDER BY generation DESC LIMIT 1`, processID).Scan(&currentID)
+		var currentID, currentGeneration int64
+		err = tx.QueryRow(`SELECT id, generation FROM process_attaches WHERE process_id=? AND state IN ('attached', 'unknown')
+			ORDER BY generation DESC LIMIT 1`, processID).Scan(&currentID, &currentGeneration)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
 		at := formatRuntimeTime(now)
 		if err == nil {
 			if _, err := tx.Exec(`UPDATE process_attaches SET state=?, revision=revision+1, observed_at=? WHERE id=? AND state IN ('attached', 'unknown')`, AttachStolen, at, currentID); err != nil {
+				return err
+			}
+			if err := attachReceiptsTx(tx, "steal", AttachStolen, at, `a.id=?`, currentID); err != nil {
 				return err
 			}
 		}
@@ -284,7 +320,10 @@ func BeginSumikaAttach(s *Store, processID, processGeneration int64, now time.Ti
 			return err
 		}
 		attachID, err = res.LastInsertId()
-		return err
+		if err != nil {
+			return err
+		}
+		return attachReceiptsTx(tx, "attach", AttachAttached, at, `a.id=?`, attachID)
 	})
 	if err != nil {
 		return nil, err
@@ -326,7 +365,7 @@ func EndSumikaAttach(s *Store, processID, processGeneration, attachGeneration in
 		if changed != 1 {
 			return ErrStaleAttach
 		}
-		return nil
+		return attachReceiptsTx(tx, "detach", state, formatRuntimeTime(observedAt), `a.id=?`, attachID)
 	})
 	if err != nil {
 		return nil, err
@@ -398,15 +437,22 @@ func RequestSumikaCancel(s *Store, processID, generation, revision int64, reques
 		if p.Generation != generation || p.Revision != revision {
 			return ErrStaleProcessObservation
 		}
+		at := formatRuntimeTime(requestedAt)
 		if p.State == ProcessDead {
-			_, err := tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=?`, p.SessionID)
-			return err
+			res, err := tx.Exec(`UPDATE sessions SET state='cancelled' WHERE id=? AND state!='cancelled'`, p.SessionID)
+			if err != nil {
+				return err
+			}
+			if n, err := res.RowsAffected(); err != nil || n == 0 {
+				return err
+			}
+			return processReceiptTx(tx, processID, "cancel", "cancelled", at)
 		}
 		if p.CancelRequestedAt != nil {
 			return nil
 		}
 		res, err := tx.Exec(`UPDATE session_processes SET cancel_requested_at=?, revision=revision+1
-			WHERE id=? AND generation=? AND revision=? AND cancel_requested_at IS NULL`, formatRuntimeTime(requestedAt), processID, generation, revision)
+			WHERE id=? AND generation=? AND revision=? AND cancel_requested_at IS NULL`, at, processID, generation, revision)
 		if err != nil {
 			return err
 		}
@@ -417,7 +463,7 @@ func RequestSumikaCancel(s *Store, processID, generation, revision int64, reques
 		if changed != 1 {
 			return ErrStaleProcessObservation
 		}
-		return nil
+		return processReceiptTx(tx, processID, "cancel_requested", p.State, at)
 	})
 	if err != nil {
 		return nil, err
@@ -490,13 +536,88 @@ func ListSumikaAttaches(s *Store, processID int64) ([]Attach, error) {
 func MarkRuntimeObservationsUnknown(s *Store, observedAt time.Time) error {
 	return s.Tx(func(tx *sql.Tx) error {
 		at := formatRuntimeTime(observedAt)
+		if _, err := tx.Exec(`INSERT INTO process_receipts (session_id, process_id, process_generation, kind, state, created_at)
+			SELECT session_id, id, generation, 'observe', ?, ? FROM session_processes WHERE state IN ('starting', 'running', 'idle', 'blocked')`,
+			ProcessUnknown, at); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`UPDATE session_processes SET state=?, revision=revision+1, observed_at=?
 			WHERE state IN ('starting', 'running', 'idle', 'blocked', 'unknown')`, ProcessUnknown, at); err != nil {
+			return err
+		}
+		if err := attachReceiptsTx(tx, "observe", AttachUnknown, at, `a.state='attached'`); err != nil {
 			return err
 		}
 		_, err := tx.Exec(`UPDATE process_attaches SET state=?, revision=revision+1, observed_at=? WHERE state IN ('attached', 'unknown')`, AttachUnknown, at)
 		return err
 	})
+}
+
+// processReceiptTx appends a Process-level lifecycle receipt.
+func processReceiptTx(tx *sql.Tx, processID int64, kind, state, at string) error {
+	_, err := tx.Exec(`INSERT INTO process_receipts (session_id, process_id, process_generation, kind, state, created_at)
+		SELECT session_id, id, generation, ?, ?, ? FROM session_processes WHERE id=?`, kind, state, at, processID)
+	return err
+}
+
+// attachReceiptsTx appends one Attach-level receipt per attach matching
+// where (over process_attaches a), before the caller changes their state.
+func attachReceiptsTx(tx *sql.Tx, kind, state, at, where string, args ...any) error {
+	_, err := tx.Exec(`INSERT INTO process_receipts (session_id, process_id, process_generation, attach_generation, kind, state, created_at)
+		SELECT p.session_id, p.id, p.generation, a.generation, ?, ?, ?
+		FROM process_attaches a JOIN session_processes p ON p.id=a.process_id WHERE `+where+` ORDER BY a.id`,
+		append([]any{kind, state, at}, args...)...)
+	return err
+}
+
+// ListProcessReceipts returns a session's local lifecycle history, oldest first.
+func ListProcessReceipts(s *Store, sessionID int64) ([]ProcessReceipt, error) {
+	rows, err := s.DB.Query(`SELECT id, session_id, process_id, process_generation, attach_generation, kind, state, created_at
+		FROM process_receipts WHERE session_id=? ORDER BY id`, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return scanProcessReceipts(rows)
+}
+
+// ListProcessReceiptPage returns up to limit receipts after afterID and
+// whether more follow.
+func ListProcessReceiptPage(s *Store, sessionID, afterID int64, limit int) ([]ProcessReceipt, bool, error) {
+	if afterID < 0 || limit <= 0 {
+		return nil, false, errors.New("invalid process receipt page")
+	}
+	rows, err := s.DB.Query(`SELECT id, session_id, process_id, process_generation, attach_generation, kind, state, created_at
+		FROM process_receipts WHERE session_id=? AND id>? ORDER BY id LIMIT ?`, sessionID, afterID, limit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	receipts, err := scanProcessReceipts(rows)
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(receipts) > limit
+	if hasMore {
+		receipts = receipts[:limit]
+	}
+	return receipts, hasMore, nil
+}
+
+func scanProcessReceipts(rows *sql.Rows) ([]ProcessReceipt, error) {
+	defer func() { _ = rows.Close() }()
+	out := []ProcessReceipt{}
+	for rows.Next() {
+		var r ProcessReceipt
+		var created string
+		if err := rows.Scan(&r.ID, &r.SessionID, &r.ProcessID, &r.ProcessGeneration, &r.AttachGeneration, &r.Kind, &r.State, &created); err != nil {
+			return nil, err
+		}
+		var err error
+		if r.CreatedAt, err = time.Parse(time.RFC3339Nano, created); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 func formatRuntimeTime(t time.Time) string {

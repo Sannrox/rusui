@@ -355,6 +355,13 @@ curl -fsS -X POST "http://127.0.0.1:8080/sessions/$SESSION_ID/restart" \
   -H "Authorization: Bearer $RUSUI_WORKER_SECRET"
 ```
 
+Every local lifecycle transition is recorded as an append-only receipt in
+the same transaction as the state change: Process start, each observed
+state change, cancel request and cancellation, and Attach, steal, detach,
+and exit. `GET /sessions/{id}?include=receipts` returns them as `process_receipts`
+(paged by `process_receipt_after_id`), and the
+console session page lists them under Local process activity.
+
 Read a session without opening its terminal. The command prints the same
 durable transcript the console shows, including recorded tool-call events,
 and the current workspace diff. An empty diff and an unavailable workspace

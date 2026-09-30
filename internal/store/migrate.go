@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 28
+const CurrentSchema = 29
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -409,8 +409,37 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 28); err != nil {
 			return err
 		}
+		ver = 28
+	}
+	if ver < 29 {
+		if err := migrateV29(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 29); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// migrateV29 records local lifecycle transitions (#414). session_processes
+// and process_attaches keep only the latest state; these rows are the
+// append-only history, written in the transaction that changes the state.
+func migrateV29(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS process_receipts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  process_id INTEGER,
+  process_generation INTEGER,
+  attach_generation INTEGER,
+  kind TEXT NOT NULL CHECK (kind IN ('start', 'observe', 'cancel_requested', 'cancel', 'attach', 'steal', 'detach', 'exit')),
+  state TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS process_receipts_session ON process_receipts(session_id, id);
+`)
+	return err
 }
 
 // migrateV28 gives the database a stable plane identity (#406). Guest
