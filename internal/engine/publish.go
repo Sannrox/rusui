@@ -129,8 +129,13 @@ func (e *Engine) publishResult(jobID int64, gen, claimed int, art *Artifact) {
 	case strings.TrimSpace(req.Title) == "":
 		block("title required")
 		return
+	case r.CandidateSHA == "":
+		block("candidate commit required")
+		return
 	}
-	spec := gh.PullSpec{Head: req.Branch, Base: strings.TrimPrefix(task.Ref, "refs/heads/"), Title: req.Title, Body: req.Body}
+	// The publisher writes only while the branch points at the candidate,
+	// so a pull request never goes live on a commit the turn did not report.
+	spec := gh.PullSpec{Head: req.Branch, SHA: r.CandidateSHA, Base: strings.TrimPrefix(task.Ref, "refs/heads/"), Title: req.Title, Body: req.Body}
 	if prev, ok := priorPublication(e.Store, jobID); ok {
 		switch {
 		case prev.Publisher != PublisherPlane:
@@ -143,6 +148,10 @@ func (e *Engine) publishResult(jobID int64, gen, claimed int, art *Artifact) {
 		spec.Number = prev.PullRequest
 	}
 	n, err := e.Publisher.PublishPull(task.Repo, spec)
+	if errors.Is(err, gh.ErrHeadMismatch) {
+		block("branch head is not the candidate commit")
+		return
+	}
 	if err != nil {
 		e.exception(fmt.Sprintf("publish job=%d: %v", jobID, err))
 		block("github write failed")
