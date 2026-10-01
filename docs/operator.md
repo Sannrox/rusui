@@ -372,6 +372,25 @@ the command leaves the session running.
 rusui read [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_ID
 ```
 
+Follow a working session with `-follow`. The command prints the recorded
+transcript, then each new transcript event and every change of the session
+state (`queued`, `running`, `waiting` for an approval, `completed`, `failed`,
+`cancelled`) as it is recorded. It stops when the session completes (exit 0),
+fails, or is cancelled (exit 1); interrupt it to stop earlier. A waiting
+state means an approval request of the running turn has no decision yet. A
+local session has no turns: it stays `open` and is followed until it is
+cancelled or you interrupt the command. It does not
+print the workspace diff or terminal output. When the connection drops, or
+nothing arrives from the plane for 45 seconds (the plane sends a heartbeat
+every 15 seconds), it reconnects after the last event it printed, so events
+recorded meanwhile are printed once. A rejected token, a missing session, or
+a plane without this stream (`GET /sessions/{id}/read/follow?after=SEQ`)
+ends it with an error instead of a retry.
+
+```bash
+rusui read -follow [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_ID
+```
+
 Read what `.agents/setup`, `.agents/resume`, and the `.rusui/services.yaml`
 commands printed in a container session. `rusui logs` stays the list of
 action receipts; `rusui envlog` is the hook and service output, so the two

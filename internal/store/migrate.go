@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 30
+const CurrentSchema = 31
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -427,8 +427,29 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 30); err != nil {
 			return err
 		}
+		ver = 30
+	}
+	if ver < 31 {
+		if err := migrateV31(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 31); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// migrateV31 indexes the transcript by session (#430). A followed read
+// asks on every poll for a session's actions after a rowid cursor and for
+// its open approvals; the index keeps both lookups proportional to the
+// matching rows, not to the table or the session's whole transcript.
+func migrateV31(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE INDEX IF NOT EXISTS actions_session ON actions(session_id);
+CREATE INDEX IF NOT EXISTS actions_session_type ON actions(session_id, action_type);
+`)
+	return err
 }
 
 // migrateV30 lets environment receipts record expiry and replacement
