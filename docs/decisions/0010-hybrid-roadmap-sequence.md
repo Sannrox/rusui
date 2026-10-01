@@ -1,7 +1,12 @@
 # ADR 0010: Hybrid core-1.0 sequence and earlier gate mapping
 
 - Status: Accepted
+- Amended by: [ADR 0046](0046-workspace-first-sequence.md) on the core
+  sequence and release gates.
 - Date: 2026-09-20
+- Sequence amendment: [ADR 0046](0046-workspace-first-sequence.md) moves
+  daily remote workspace onto the core path and makes maintenance a separate
+  release gate. Other accepted constraints remain as identified there.
 - Resolves: [#87](https://github.com/Sannrox/rusui/issues/87)
 - Amends: sequencing and phase-end measurements in
   [ADR 0001](0001-environment-plane.md) Validation, the P1 completeness

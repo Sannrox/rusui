@@ -34,7 +34,7 @@ the runbook.
 | [../ARCHITECTURE.md](../ARCHITECTURE.md) | explanation | product contract |
 | [../CONTEXT.md](../CONTEXT.md) | explanation | product nouns |
 | [../VISION.md](../VISION.md) | explanation | accepted direction; not the runbook |
-| [../ROADMAP.md](../ROADMAP.md) | explanation | published M1–M6 sequence ([ADR 0010](decisions/0010-hybrid-roadmap-sequence.md) Accepted) |
+| [../ROADMAP.md](../ROADMAP.md) | explanation | workspace-first core sequence ([ADR 0046](decisions/0046-workspace-first-sequence.md) Accepted) |
 | [operator.md](operator.md) | how-to | run, webhook, Slack, troubleshoot |
 | [github-app-pilot.md](github-app-pilot.md) | how-to | review-only GitHub App, tunnel, receipt |
 | [user-service.md](user-service.md) | how-to | install, update, and remove the per-user host service |

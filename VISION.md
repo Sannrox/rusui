@@ -12,6 +12,11 @@ that gives an agent a machine, keeps that machine alive across sleep and wake,
 brokers credentials so no secret enters it, wires events and schedules into
 sessions, and records every external action.
 
+The first supported product outcome is a dependable remote coding-agent
+workspace that one self-hosting maintainer operates from the terminal.
+Continuous repository maintenance is a separate, measured use of that
+workspace, with its own promotion gate ([ADR 0046](docs/decisions/0046-workspace-first-sequence.md)).
+
 留守居 is the steward who keeps house while you are away. The steward now runs
 the workshop too.
 

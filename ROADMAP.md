@@ -3,8 +3,9 @@
 > **Not the runbook.** Sequencing estimates, not deadlines or the product
 > contract ([ARCHITECTURE.md](ARCHITECTURE.md)).
 >
-> [ADR 0010](docs/decisions/0010-hybrid-roadmap-sequence.md) is **Accepted**.
-> This file is the published M1–M6 sequence. The earlier P0–P4 calendar
+> [ADR 0046](docs/decisions/0046-workspace-first-sequence.md) is **Accepted**
+> and amends the core sequence in [ADR 0010](docs/decisions/0010-hybrid-roadmap-sequence.md).
+> This file is the published workspace-first sequence. The earlier P0–P4 calendar
 > remains at
 > [94aabd7/ROADMAP.md](https://github.com/Sannrox/rusui/blob/94aabd7d292faa052ec8faba0f028f8e07bc9ade/ROADMAP.md).
 > [ARCHITECTURE.md](ARCHITECTURE.md) names agent-owned publication from
@@ -12,35 +13,45 @@
 > superseding ADR 0013).
 
 GitHub Issues remain the planning source of truth; this file links to them
-and never overrides their `## Dependencies` sections. 24–36 months after
-acceptance is a planning envelope, not a delivery commitment. Month zero
-is acceptance of ADR 0010. Re-estimate after M1 and M2. Reduce scope
-before moving a safety or correctness gate.
+and never overrides their `## Dependencies` sections. Milestone IDs stay
+stable for existing Issue links; the core order is M1 → M2 → M4 → M6.
+M3 maintenance and M5 infrastructure or agent-choice tracks are optional.
+Re-estimate after each live evidence gate. Reduce scope before moving a
+safety or correctness gate.
 
-ADR 0010 does not enable live GitHub writes, implement-to-PR, or merging.
 ADR 0015 lets the agent in an implement session push and open its own pull
 request with the operator's credential. Human merge remains required.
+No live comment, close, merge, or land action is enabled by this sequence.
+
+[#141](https://github.com/Sannrox/rusui/issues/141) still lists
+[#110](https://github.com/Sannrox/rusui/issues/110) as a dependency. Its
+Issue body requires a separate authorized update before the new core path
+can be treated as ready. A changed roadmap does not silently edit Issue
+dependencies.
 
 ## Shape
 
-| Horizon | Operator outcome | Release shape |
+| Horizon | Operator outcome | Place in sequence |
 | --- | --- | --- |
-| **M1 Dependable sessions** | Leave one real session, return, steer it, recover interruptions | Maintainer alpha |
-| **M2 Verified delivery** | One bounded issue becomes a verified PR; humans merge | Maintainer delivery beta |
-| **M3 Continuous maintenance** | Two repositories stay reviewed; eligible repairs run under policy | Maintenance beta |
-| **M4 Daily remote workspace** | CLI, editor, and console on the same API; independent install/restore | Self-hosting beta |
-| **M5 Agent and infrastructure choice** | Independent optional tracks chosen from measured need | Selected capability releases |
-| **M6 Stable core** | Freeze the demonstrated core; document support and limits | Candidate 1.0 |
+| **M1 Dependable sessions** | Leave a real managed session, return, steer, recover interruptions | Core gate |
+| **M2 Verified delivery** | One bounded issue becomes an attributable PR; humans merge | Core gate |
+| **M4 Daily remote workspace** | Complete the session and delivery loop from the terminal; independent install/restore | Core gate |
+| **M6 Stable core** | Freeze the demonstrated terminal workflow and support limits | Core 1.0 gate |
+| **M3 Continuous maintenance** | Two repositories stay reviewed; eligible repairs run under policy | Separate maintenance release gate |
+| **M5 Agent and infrastructure choice** | Add selected capabilities when measured need justifies them | Optional capability releases |
 
-Common path: M1 lifecycle → M2 publication → M3 maintenance promotion.
-M4 may proceed from a stable M1/M2 API without waiting for every M3
-promotion. M5 tracks are independent of each other. M6 freezes what was
-demonstrated; it does not require every M5 track.
+M1 → M2 → M4 → M6 is the core path. The optional tracks can proceed
+independently after their own dependencies and adoption decisions. A closed
+component Issue or a narrower proof is not a passing release gate.
 
 ## M1 Dependable sessions
 
-Exit: a bounded real-container/guest proof (twenty-run matrix including
-follow-ups and deliberate faults). Process driver is not production
+Exit for the core path: a predeclared real-container/guest terminal workflow
+including follow-ups and deliberate faults. The earlier twenty-run
+[D6 proof](docs/proofs/d6-session-workflow.md) covered a bounded lifecycle
+but did not run a live guest in that matrix. The
+[unified live workflow](docs/proofs/186-unified-workflow-results.md) recorded
+identity failures and a rerun gate. Process driver is not production
 isolation. [ADR 0009](docs/decisions/0009-credential-broker.md) and
 [ADR 0011](docs/decisions/0011-unattended-session-contract.md) stand.
 
@@ -59,31 +70,42 @@ and land stay unauthorized; token scope and branch protection enforce
 that.
 
 Planning issues: [#96](https://github.com/Sannrox/rusui/issues/96)–[#103](https://github.com/Sannrox/rusui/issues/103).
+The [P8 live pilot](docs/proofs/p8-pilot-results.md) ended narrow. A new
+predeclared cohort must demonstrate reliable bounded publication and
+follow-up updates before a broad delivery claim.
 
-## M3 Continuous maintenance
+## M3 Continuous maintenance (separate release gate)
 
 Retains the original P1 observation: thirty measured days on rusui plus
 one sibling repository at twenty or more sessions per week with zero
 observed credential leaks and no unauthorized action in the measured run.
-A finite sample is evidence, not a future guarantee. Live comment/close/merge
-are separate promotions, not required for the initial hybrid product.
+A finite sample is evidence, not a future guarantee. This gate is required
+for a maintenance release or autonomous-maintenance claim, not for the
+remote-workspace 1.0. Live comment/close/merge are separate promotions.
 
 Planning issues: [#104](https://github.com/Sannrox/rusui/issues/104)–[#110](https://github.com/Sannrox/rusui/issues/110).
 
-## M4 Daily remote workspace
+## M4 Daily terminal workspace
 
-CLI and HTTP+SSE first. A small console subset may ship once the M1 API is
-stable. The ten views, terminal, authenticated previews, and editor ACP
-facade complete here ([ADR 0003](docs/decisions/0003-operator-surface.md)).
-`rusui sync` remains unnecessary for unattended dogfood
-([ADR 0006](docs/decisions/0006-session-start.md)).
+CLI and HTTP+SSE are the primary path. An operator must be able to start,
+follow, inspect, steer, approve, attach to, and recover a managed session,
+then obtain its result, without using the browser console. Terminal access
+to services and previews belongs here when needed to verify the task.
+The existing console and editor ACP facade remain supported surfaces;
+their completeness is not a core-1.0 gate under
+[ADR 0046](docs/decisions/0046-workspace-first-sequence.md).
+
+The [U8 self-hosting journey](docs/proofs/u8-operator-journey.md) was an
+in-process author exercise. Core exit needs a documented terminal-only
+exercise with shipped binaries and an independent self-hosting maintainer,
+including installation, disconnect/reconnect, upgrade, and restore.
 
 Planning issues: [#111](https://github.com/Sannrox/rusui/issues/111)–[#118](https://github.com/Sannrox/rusui/issues/118).
 
 ## M5 Optional tracks (not required for core 1.0)
 
 Each earlier gate stays named. Absence from core 1.0 is allowed only as
-recorded in ADR 0010 D4.
+recorded in [ADR 0046](docs/decisions/0046-workspace-first-sequence.md).
 
 | Track | Treatment |
 | --- | --- |
@@ -100,8 +122,10 @@ Planning issues: [#119](https://github.com/Sannrox/rusui/issues/119)–[#140](ht
 
 ## M6 Stable core
 
-Freeze what was demonstrated. Security review and contract freeze required.
-Does not require every M5 track.
+Freeze what was demonstrated in M1, M2, and M4. Security review and
+contract freeze are required. M3's thirty-day observation and M5's
+optional tracks are not required for the remote-workspace 1.0; a
+maintenance or optional-capability release keeps its own gates.
 
 Planning issues: [#141](https://github.com/Sannrox/rusui/issues/141)–[#146](https://github.com/Sannrox/rusui/issues/146).
 
@@ -109,6 +133,9 @@ Planning issues: [#141](https://github.com/Sannrox/rusui/issues/141)–[#146](ht
 
 - Audience: one-maintainer self-hosting. Shared small-team use is M5.
   Hosted multi-tenant SaaS and billing are out of scope.
+- Primary operator path: terminal CLI and HTTP+SSE. Browser console and
+  editor ACP remain clients of the same API; neither is a core-1.0
+  completeness gate.
 - Merge authority: humans merge core delivery.
 - Persistence: SQLite with WAL and one writer.
 - Reasoning: ACP-owned guest loop; rusui owns environments, admission,
