@@ -13,7 +13,7 @@ Decisions that must outlive a single pull request.
 | [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted |
-| [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted |
+| [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
 | [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted |
 | [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
@@ -49,6 +49,7 @@ Decisions that must outlive a single pull request.
 | [0043](0043-extension-contract-deferred.md) | An extension contract is deferred | Accepted |
 | [0044](0044-plane-publishes-from-turn-result.md) | The plane publishes from the turn result | Accepted |
 | [0045](0045-local-unattended-promotion-deferred.md) | Local unattended promotion is deferred | Accepted |
+| [0046](0046-workspace-first-sequence.md) | Terminal-first remote workspace sequence | Accepted |
 
 ## When to write an ADR
 
