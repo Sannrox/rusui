@@ -725,6 +725,48 @@ func ListActionsForSession(s *Store, sessionID int64) ([]Action, error) {
 	return out, rows.Err()
 }
 
+// TranscriptEntry is one durable transcript action with its append
+// position. Seq is the actions rowid: SQLite has one writer at a time, so
+// rowids grow in commit order and a reader that resumes after Seq misses
+// no later entry. Actions are never deleted and Rusui never VACUUMs, so a
+// recorded Seq keeps naming the same entry.
+type TranscriptEntry struct {
+	Seq int64
+	Action
+}
+
+// ListTranscriptAfter returns at most limit actions of the session
+// appended after seq, oldest first.
+func ListTranscriptAfter(s *Store, sessionID, seq int64, limit int) ([]TranscriptEntry, error) {
+	rows, err := s.DB.Query(`SELECT rowid, action_id, action_type, reason_code, body FROM actions WHERE session_id=? AND rowid>? ORDER BY rowid LIMIT ?`, sessionID, seq, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []TranscriptEntry
+	for rows.Next() {
+		var e TranscriptEntry
+		if err := rows.Scan(&e.Seq, &e.ID, &e.Type, &e.ReasonCode, &e.Body); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// CountPendingApprovals is the number of the session's approval requests
+// an operator can still answer: unmatched by policy, undecided, and on a
+// turn that is leased now. A policy denial needs no answer, and a request
+// whose turn ended stays undecided forever.
+func CountPendingApprovals(s *Store, sessionID int64) (int, error) {
+	var n int
+	err := s.DB.QueryRow(`SELECT COUNT(*) FROM actions a
+JOIN turns t ON t.id=a.turn_id AND t.state='leased'
+LEFT JOIN approval_decisions d ON d.action_id=a.action_id
+WHERE a.session_id=? AND a.action_type='acp.approval' AND a.reason_code='permission_unmatched' AND d.action_id IS NULL`, sessionID).Scan(&n)
+	return n, err
+}
+
 func GetSession(s *Store, id int64) (*Session, error) {
 	var sess Session
 	var created string

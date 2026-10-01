@@ -288,6 +288,12 @@
       "description": "Ephemeral exclusive client connection to one Sumika Process. Sumika owns local Attach; a new Attach steals the prior one, while detach leaves the Process running.",
       "superclasses": [],
       "properties": []
+    },
+    {
+      "name": "RusuiSessionFollow",
+      "description": "Operator-authorized SSE read of one session (GET /sessions/{id}/read/follow, rusui read -follow). Streams durable transcript actions in append order after an actions-rowid cursor, then session state changes; ends at completed, failed, or cancelled. Carries no terminal bytes, diff, or credentials. Reconnect resumes after the last received seq.",
+      "superclasses": [],
+      "properties": []
     }
   ],
   "relations": [
@@ -609,6 +615,14 @@
       "domain": "RusuiProject",
       "range": "SumikaProcess",
       "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
+      "name": "rusui_follow_reads_session",
+      "description": "A followed read observes exactly one session's durable transcript and state; it never mutates the session.",
+      "domain": "RusuiSessionFollow",
+      "range": "RusuiSession",
+      "cardinality": { "min": 1, "max": 1 },
       "transitive": false
     }
   ],
@@ -1097,6 +1111,12 @@
       "subject": "RusuiEvaluationCorpus",
       "source": "eval/set.md",
       "locator": "eval/set.md#splits",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiSessionFollow",
+      "source": "docs/operator.md",
+      "locator": "internal/server/session_follow.go#followSessionRead",
       "confidence": 1.0
     }
   ]

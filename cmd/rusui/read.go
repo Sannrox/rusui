@@ -35,16 +35,20 @@ func readMain(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
 	token := fs.String("token", os.Getenv("RUSUI_OPERATOR_TOKEN"), "operator token")
+	follow := fs.Bool("follow", false, "print the transcript, then new events and state until the work finishes")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: rusui read [-url URL] [-token TOKEN] SESSION_ID")
+		_, _ = fmt.Fprintln(stderr, "usage: rusui read [-follow] [-url URL] [-token TOKEN] SESSION_ID")
 		return 2
 	}
 	if _, err := strconv.ParseInt(fs.Arg(0), 10, 64); err != nil {
 		_, _ = fmt.Fprintln(stderr, "read: invalid session id")
 		return 2
+	}
+	if *follow {
+		return followRead(*url, *token, fs.Arg(0), stdout, stderr)
 	}
 	res, err := planeClient(*url, *token, "/sessions/"+fs.Arg(0)+"/read")
 	if err != nil {
