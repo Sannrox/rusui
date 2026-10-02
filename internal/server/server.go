@@ -330,6 +330,10 @@ func (s *Server) turnActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, err := s.Eng.IngestTurnAction(tid, rec.Type, rec.Reason, rec.Body)
+	if errors.Is(err, engine.ErrTurnNotLeased) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

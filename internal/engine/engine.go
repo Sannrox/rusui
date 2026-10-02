@@ -150,6 +150,10 @@ func (e *Engine) IngestEvent(deliveryID, source, repo string, item int, kind str
 	})
 }
 
+// ErrTurnNotLeased refuses a turn action that arrives after the turn
+// stopped running.
+var ErrTurnNotLeased = errors.New("action: turn not leased")
+
 func (e *Engine) IngestTurnAction(turnID int64, typ, reason string, body any) (string, error) {
 	if typ == "" {
 		return "", fmt.Errorf("action: type required")
@@ -178,17 +182,31 @@ func (e *Engine) IngestTurnAction(turnID int64, typ, reason string, body any) (s
 	if err != nil {
 		return "", err
 	}
-	if err := store.InsertAction(e.Store, store.Action{
-		ID:            id,
-		SessionID:     &sid,
-		TurnID:        &tid,
-		Repo:          sess.Repo,
-		Item:          sess.Item,
-		Type:          typ,
-		ReasonCode:    reason,
-		EvidenceClass: "plane_observed",
-		LimitSentence: "ACP client recorded the request; no request bypasses stdio dispatch.",
-		Body:          string(payload),
+	// The state check and the insert share one write transaction, so an
+	// action is either recorded while the turn is leased, before its
+	// completion commits, or refused. A followed read reads the state
+	// before the entries, so it never ends ahead of a recorded action
+	// (#437).
+	if err := e.Store.Tx(func(tx *sql.Tx) error {
+		cur, err := store.GetTurnTx(tx, turnID)
+		if err != nil {
+			return err
+		}
+		if cur.State != "leased" {
+			return fmt.Errorf("%w: turn is %s", ErrTurnNotLeased, cur.State)
+		}
+		return store.InsertActionTx(tx, store.Action{
+			ID:            id,
+			SessionID:     &sid,
+			TurnID:        &tid,
+			Repo:          sess.Repo,
+			Item:          sess.Item,
+			Type:          typ,
+			ReasonCode:    reason,
+			EvidenceClass: "plane_observed",
+			LimitSentence: "ACP client recorded the request; no request bypasses stdio dispatch.",
+			Body:          string(payload),
+		})
 	}); err != nil {
 		return "", err
 	}
