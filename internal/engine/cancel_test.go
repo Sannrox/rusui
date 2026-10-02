@@ -160,3 +160,49 @@ func TestCancelContainerSessionKillsGuestProcesses(t *testing.T) {
 		t.Fatalf("guest of %s not killed: %#v", cur.Handle, rt.Execs)
 	}
 }
+
+// While a cancel stops the guest, a turn the cancel requeued cannot be
+// claimed onto that environment; it is claimable once the kill is done
+// (#446).
+func TestCancelHoldsEnvironmentUntilGuestIsStopped(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	box, err := h.e.ProvisionEnvironment(engine.EnvSpec{Name: "box-race", Kind: env.KindContainer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetSessionEnvironment(h.st, sid, box.ID); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := h.e.Claim("example/test-repo"); err != nil || c == nil {
+		t.Fatal(err)
+	}
+	if _, _, live, err := h.e.PromptSteer(sid, "continue after cancellation"); err != nil || !live {
+		t.Fatalf("live %t err %v", live, err)
+	}
+	var duringKill *engine.Claim
+	rt.ExecHook = func(id string, cmd []string) error {
+		if strings.Contains(strings.Join(cmd, " "), "kill -TERM") {
+			duringKill, err = h.e.Claim("example/test-repo")
+			if err != nil {
+				t.Error(err)
+			}
+		}
+		return nil
+	}
+	if err := h.e.CancelSession(sid); err != nil {
+		t.Fatal(err)
+	}
+	if duringKill != nil {
+		t.Fatalf("requeued turn %d was claimed while its guest was being stopped", duringKill.Job.ID)
+	}
+	after, err := h.e.Claim("example/test-repo")
+	if err != nil || after == nil {
+		t.Fatalf("requeued turn not claimable after the cancel: %+v %v", after, err)
+	}
+}
