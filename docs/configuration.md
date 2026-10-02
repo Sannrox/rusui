@@ -347,6 +347,12 @@ substitutions (also inside double quotes) are checked separately, and
 `sh|bash|zsh|dash|ksh -c` and `eval` payloads are checked recursively.
 Approvals in implement sessions are re-checked against the fence.
 
+The Claude guest asks before every shell command, including ones Claude
+Code would otherwise run without asking because it considers them
+read-only (`ls`, `cat`, `uname`): rusui starts it with an ask rule for
+`Bash`. Allow such commands with a rule, for example `kind: execute`
+with `command: ls`, or approve them.
+
 These rules see only the permission requests the guest makes. A bare
 `git push` while the current branch is `main`, a command inside a script
 file, a subcommand built from shell variables (`X=merge; gh pr $X 1`),

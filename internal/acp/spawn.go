@@ -18,7 +18,13 @@ const (
 // without it, --input-format is ignored and Claude starts interactive.
 // --permission-prompt-tool stdio sends every permission prompt to rusui as a
 // can_use_tool control request; without it Claude denies them silently.
-const ClaudeStdio = "claude --print --input-format stream-json --output-format stream-json --verbose --permission-mode default --permission-prompt-tool stdio"
+// The ask rule for Bash makes every shell command such a prompt: without
+// it Claude Code runs commands it considers read-only (ls, cat, uname)
+// without asking, so the project's permission rules never see them
+// (#442). The JSON has no spaces because the command is split on them.
+const ClaudeStdio = "claude --print --input-format stream-json --output-format stream-json --verbose --permission-mode default --permission-prompt-tool stdio --settings " + claudeAskSettings
+
+const claudeAskSettings = `{"permissions":{"ask":["Bash"]}}`
 
 // GrokCommand builds the ADR 0002 spawn. PATH must contain `agent`.
 func GrokCommand() (*exec.Cmd, error) {
