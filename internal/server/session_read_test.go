@@ -222,7 +222,13 @@ func TestSessionReadShowsContainerWorkspaceDiff(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt.SetFileContent(box.Handle, "note.txt", []byte("hello\n"))
+	for i := range 20 {
+		rt.SetFileContent(box.Handle, "extra-"+strconv.Itoa(i)+".txt", []byte("x\n"))
+	}
 	read := authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10)+"/read", "op-tok")
+	if rt.Snapshots != 1 || rt.FileReads != 0 {
+		t.Fatalf("read used %d snapshots and %d per-file reads for 21 files, want one snapshot (#449)", rt.Snapshots, rt.FileReads)
+	}
 	var view sessionRead
 	if err := json.Unmarshal([]byte(read.body), &view); err != nil {
 		t.Fatal(read.body)

@@ -28,13 +28,16 @@ type FakeRuntime struct {
 	Removed         []string
 	Execs           [][]string
 	Stdio           []StdioCall
-	StdioHook       func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error)
-	ExecHook        func(id string, cmd []string) error
-	OutputHook      func(id string, cmd []string) []byte
-	StartHook       func(id string) error
-	StopHook        func(id string) error
-	GuestAddrs      map[string]string
-	alive           map[string]bool
+	// Snapshots and FileReads count WorkspaceSnapshot and WorkspaceFile calls.
+	Snapshots  int
+	FileReads  int
+	StdioHook  func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error)
+	ExecHook   func(id string, cmd []string) error
+	OutputHook func(id string, cmd []string) []byte
+	StartHook  func(id string) error
+	StopHook   func(id string) error
+	GuestAddrs map[string]string
+	alive      map[string]bool
 }
 
 type StdioCall struct {
@@ -280,6 +283,9 @@ func (f *FakeRuntime) WorkspaceNames(id string) ([]string, error) {
 
 // WorkspaceFile returns a top-level fake content under the size cap.
 func (f *FakeRuntime) WorkspaceFile(id, name string, limit int64) ([]byte, string, error) {
+	f.mu.Lock()
+	f.FileReads++
+	f.mu.Unlock()
 	if strings.ContainsAny(name, "/\\") {
 		return nil, FilePathDenied, nil
 	}
@@ -293,4 +299,28 @@ func (f *FakeRuntime) WorkspaceFile(id, name string, limit int64) ([]byte, strin
 		return nil, FileOversized, nil
 	}
 	return append([]byte(nil), b...), "", nil
+}
+
+// WorkspaceSnapshot returns the fake container's top-level contents in
+// one call, with the same caps as the real runtime.
+func (f *FakeRuntime) WorkspaceSnapshot(id string, fileCap, totalCap int64) ([]WorkspaceEntry, error) {
+	names, _ := f.WorkspaceNames(id)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Snapshots++
+	var out []WorkspaceEntry
+	var total int64
+	for _, n := range names {
+		b := f.Contents[id][n]
+		switch {
+		case int64(len(b)) > fileCap:
+			out = append(out, WorkspaceEntry{Name: n, State: FileOversized})
+		case total >= totalCap:
+			out = append(out, WorkspaceEntry{Name: n, State: FileSkipped})
+		default:
+			total += int64(len(b))
+			out = append(out, WorkspaceEntry{Name: n, Body: append([]byte(nil), b...)})
+		}
+	}
+	return out, nil
 }

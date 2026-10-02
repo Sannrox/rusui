@@ -1,8 +1,10 @@
 package env
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -17,6 +19,8 @@ const (
 	// FileRootReplaced is a /workspace that is no longer the real
 	// workspace directory.
 	FileRootReplaced = "workspace replaced"
+	// FileSkipped is a file left out once a snapshot reached its total cap.
+	FileSkipped = "skipped: workspace diff too large"
 )
 
 // ErrWorkspaceReplaced is a /workspace that is no longer a real
@@ -91,10 +95,96 @@ func (d DockerCLI) WorkspaceFile(id, name string, limit int64) ([]byte, string, 
 type WorkspaceInspector interface {
 	WorkspaceNames(id string) ([]string, error)
 	WorkspaceFile(id, name string, limit int64) ([]byte, string, error)
+	WorkspaceSnapshot(id string, fileCap, totalCap int64) ([]WorkspaceEntry, error)
 }
 
 // Inspector returns the container runtime's workspace inspector.
 func (c Container) Inspector() (WorkspaceInspector, bool) {
 	w, ok := c.RT.(WorkspaceInspector)
 	return w, ok
+}
+
+// WorkspaceEntry is one top-level workspace file in a snapshot: its body,
+// or the state that stands in for it.
+type WorkspaceEntry struct {
+	Name  string
+	Body  []byte
+	State string
+}
+
+// snapshotWorkspaceScript prints every top-level non-directory entry of
+// the real /workspace as NUL-separated triples: base64 name, state, and
+// base64 of at most $1+1 bytes of body. One exec covers the whole
+// workspace (#449); base64 keeps names and bodies from breaking the
+// framing.
+const snapshotWorkspaceScript = `cd -P /workspace 2>/dev/null && [ "$(pwd -P)" = /workspace ] || exit 13; for f in * .[!.]* ..?*; do [ -e "$f" ] || [ -L "$f" ] || continue; if [ -d "$f" ] && [ ! -L "$f" ]; then continue; fi; printf '%s' "$f" | base64; printf '\0'; if [ -L "$f" ] || [ ! -f "$f" ]; then printf 'irregular\0\0'; continue; fi; printf 'file\0'; head -c "$(($1 + 1))" -- "$f" | base64; printf '\0'; done`
+
+// WorkspaceSnapshot reads every top-level workspace file in one exec. A
+// file over fileCap is oversized; once the bodies reach totalCap, the
+// remaining files are reported as skipped.
+func (d DockerCLI) WorkspaceSnapshot(id string, fileCap, totalCap int64) ([]WorkspaceEntry, error) {
+	cmd := exec.Command(d.bin(), "exec", id, "sh", "-c", snapshotWorkspaceScript, "sh", strconv.FormatInt(fileCap, 10))
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	// base64 is 4/3 of the bodies, plus names and framing.
+	limit := totalCap*4/3 + fileCap*4/3 + 1<<20
+	raw, readErr := io.ReadAll(io.LimitReader(stdout, limit))
+	_ = stdout.Close()
+	waitErr := cmd.Wait()
+	if ee, ok := errors.AsType[*exec.ExitError](waitErr); ok && ee.ExitCode() == 13 {
+		return nil, ErrWorkspaceReplaced
+	}
+	if readErr != nil {
+		return nil, readErr
+	}
+	truncated := int64(len(raw)) >= limit
+	if waitErr != nil && !truncated {
+		return nil, fmt.Errorf("env: snapshot workspace: %w", waitErr)
+	}
+	return parseWorkspaceSnapshot(raw, fileCap, totalCap, truncated)
+}
+
+func parseWorkspaceSnapshot(raw []byte, fileCap, totalCap int64, truncated bool) ([]WorkspaceEntry, error) {
+	fields := strings.Split(string(raw), "\x00")
+	decode := func(s string) ([]byte, error) {
+		return base64.StdEncoding.DecodeString(strings.NewReplacer("\n", "", "\r", "").Replace(s))
+	}
+	var out []WorkspaceEntry
+	var total int64
+	for i := 0; i+2 < len(fields); i += 3 {
+		name, err := decode(fields[i])
+		if err != nil {
+			return nil, fmt.Errorf("env: snapshot name: %w", err)
+		}
+		e := WorkspaceEntry{Name: string(name)}
+		switch {
+		case fields[i+1] == "irregular":
+			e.State = FileIrregular
+		case fields[i+1] != "file":
+			return nil, fmt.Errorf("env: snapshot state %q", fields[i+1])
+		case total >= totalCap:
+			e.State = FileSkipped
+		default:
+			body, err := decode(fields[i+2])
+			if err != nil {
+				return nil, fmt.Errorf("env: snapshot body: %w", err)
+			}
+			if int64(len(body)) > fileCap {
+				e.State = FileOversized
+			} else {
+				e.Body = body
+				total += int64(len(body))
+			}
+		}
+		out = append(out, e)
+	}
+	if truncated {
+		out = append(out, WorkspaceEntry{Name: "…", State: FileSkipped})
+	}
+	return out, nil
 }

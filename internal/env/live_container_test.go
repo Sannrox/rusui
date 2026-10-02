@@ -215,3 +215,66 @@ func TestLiveWorkspaceInspectionRefusesReplacedRoot(t *testing.T) {
 		t.Fatalf("read %d bytes, state %q, err %v", len(body), state, err)
 	}
 }
+
+// One exec snapshots the whole workspace with the per-file and total
+// caps, and odd names or bodies cannot break the framing (#449).
+func TestLiveWorkspaceSnapshot(t *testing.T) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("docker required for live proof")
+	}
+	rt, err := LookRuntime()
+	if err != nil {
+		t.Skip(err)
+	}
+	d := Container{RT: rt, Image: "alpine:3.20"}
+	id, err := d.Create(fmt.Sprintf("snap-%d", time.Now().UnixNano()%1_000_000_000))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+			t.Skipf("container runtime unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Destroy(id) })
+	setup := `cd /workspace && printf 'hello\n' > note.txt && printf 'a\000b' > nul.bin && mkdir dir && ln -s /etc/passwd link && head -c 300 /dev/zero > big && printf 'q' > "$(printf 'odd\nname $(id)')" && for i in 1 2 3; do printf '12345678' > "z$i"; done`
+	if err := d.RT.Exec(id, []string{"sh", "-c", setup}); err != nil {
+		t.Fatal(err)
+	}
+	in, _ := d.Inspector()
+	entries, err := in.WorkspaceSnapshot(id, 256, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]WorkspaceEntry{}
+	for _, e := range entries {
+		got[e.Name] = e
+	}
+	if _, ok := got["dir"]; ok {
+		t.Fatal("directory in snapshot")
+	}
+	if e := got["link"]; e.State != FileIrregular {
+		t.Fatalf("link %+v", e)
+	}
+	if e := got["big"]; e.State != FileOversized {
+		t.Fatalf("big %+v", e)
+	}
+	if e := got["nul.bin"]; string(e.Body) != "a\x00b" {
+		t.Fatalf("binary body %+v", e)
+	}
+	if e, ok := got["odd\nname $(id)"]; !ok || string(e.Body) != "q" {
+		t.Fatalf("odd name %+v in %v", e, entries)
+	}
+	// Glob order: note.txt, nul.bin, the odd name, then z1..z3. The
+	// 20-byte total cap is reached after z2.
+	if e := got["z2"]; string(e.Body) != "12345678" {
+		t.Fatalf("z2 %+v", e)
+	}
+	if e := got["z3"]; e.State != FileSkipped {
+		t.Fatalf("z3 %+v", e)
+	}
+	if err := d.RT.Exec(id, []string{"sh", "-c", "cd / && rm -rf /workspace && ln -s /etc /workspace"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := in.WorkspaceSnapshot(id, 256, 1<<20); !errors.Is(err, ErrWorkspaceReplaced) {
+		t.Fatalf("replaced root err %v", err)
+	}
+}
