@@ -164,3 +164,65 @@ func TestCountPendingApprovalsOnlyCountsAnswerableRequests(t *testing.T) {
 		t.Fatalf("ended turn %d", n)
 	}
 }
+
+func TestFollowTokenMovesOnlyWithFollowedState(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	var sid, tid int64
+	if err := s.Tx(func(tx *sql.Tx) error {
+		res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, 'run', 'o/r', 1, 'issue', 'open', ?)`, time.Now().UTC().Format(time.RFC3339Nano))
+		if err != nil {
+			return err
+		}
+		if sid, err = res.LastInsertId(); err != nil {
+			return err
+		}
+		res, err = tx.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'queued')`, sid)
+		if err != nil {
+			return err
+		}
+		tid, err = res.LastInsertId()
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	token := func() string {
+		t.Helper()
+		v, err := FollowToken(s, sid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	prev := token()
+	if again := token(); again != prev {
+		t.Fatalf("token moved without a change: %q %q", prev, again)
+	}
+	moved := func(what string) {
+		t.Helper()
+		next := token()
+		if next == prev {
+			t.Fatalf("token did not move after %s: %q", what, next)
+		}
+		prev = next
+	}
+	if err := InsertAction(s, Action{ID: "a1", SessionID: &sid, TurnID: &tid, Repo: "o/r", Item: 1, Type: "acp.approval", ReasonCode: "permission_unmatched", EvidenceClass: "plane_observed", Body: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	moved("an action")
+	if _, err := s.DB.Exec(`UPDATE turns SET state='leased' WHERE id=?`, tid); err != nil {
+		t.Fatal(err)
+	}
+	moved("a turn state change")
+	if err := PutApprovalDecision(s, "a1", "allow"); err != nil {
+		t.Fatal(err)
+	}
+	moved("an approval decision")
+	if _, err := s.DB.Exec(`UPDATE sessions SET state='cancelled' WHERE id=?`, sid); err != nil {
+		t.Fatal(err)
+	}
+	moved("a session state change")
+}

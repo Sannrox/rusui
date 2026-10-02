@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/sannrox/rusui/internal/store"
@@ -16,9 +17,16 @@ import (
 const followPage = 256
 
 var (
+	// followPoll is the poll interval after a change; while nothing moves
+	// it doubles up to followIdlePoll.
 	followPoll      = 250 * time.Millisecond
+	followIdlePoll  = 2 * time.Second
 	followHeartbeat = 15 * time.Second
 )
+
+// followStateReads counts the full state reads of followed reads, so the
+// cost of an idle follower is measurable.
+var followStateReads atomic.Int64
 
 // Followed session states. Completed, failed, and cancelled end the
 // stream; the others say what the session is doing now.
@@ -112,9 +120,38 @@ func (s *Server) followSessionRead(w http.ResponseWriter, r *http.Request) {
 
 	var last followStatus
 	lastWrite := time.Now()
-	tick := time.NewTicker(followPoll)
-	defer tick.Stop()
+	lastToken := ""
+	wait := followPoll
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+	first := true
 	for {
+		if !first {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-timer.C:
+			}
+		}
+		first = false
+		// One cheap query says whether anything moved; the state and the
+		// transcript are read only then (#439).
+		token, err := store.FollowToken(s.Eng.Store, id)
+		if err != nil {
+			return
+		}
+		if token == lastToken {
+			if time.Since(lastWrite) >= followHeartbeat {
+				_, _ = fmt.Fprint(w, ": keepalive\n\n")
+				fl.Flush()
+				lastWrite = time.Now()
+			}
+			wait = min(2*wait, followIdlePoll)
+			timer.Reset(wait)
+			continue
+		}
+		lastToken = token
+		wait = followPoll
 		// The state is read before the entries: everything recorded before
 		// a session finished is sent before the state that ends the stream.
 		status, err := s.followState(id)
@@ -154,11 +191,7 @@ func (s *Server) followSessionRead(w http.ResponseWriter, r *http.Request) {
 			fl.Flush()
 			lastWrite = time.Now()
 		}
-		select {
-		case <-r.Context().Done():
-			return
-		case <-tick.C:
-		}
+		timer.Reset(wait)
 	}
 }
 
@@ -166,6 +199,7 @@ func (s *Server) followSessionRead(w http.ResponseWriter, r *http.Request) {
 // approval is waiting even while its turn is leased. Without turns, as
 // for a local session, the session stays open until it is cancelled.
 func (s *Server) followState(id int64) (followStatus, error) {
+	followStateReads.Add(1)
 	cancelled, err := store.SessionCancelled(s.Eng.Store, id)
 	if err != nil {
 		return followStatus{}, err

@@ -397,3 +397,22 @@ func TestFollowReadEndIsNotAheadOfLateActions(t *testing.T) {
 		t.Fatalf("plain read shows a refused action: %s", plain.body)
 	}
 }
+
+// An idle follower reads the full state only when something moved, not
+// on every 250 ms tick (#439).
+func TestFollowReadIdleDoesNotRereadState(t *testing.T) {
+	_, hs, e := consoleEnv(t)
+	sid := createRunSession(t, hs, "idle")
+	s, _ := openFollow(t, hs, sid, 0, "op-tok")
+	s.expect("session")
+	s.expect("state")
+	before := followStateReads.Load()
+	time.Sleep(1500 * time.Millisecond)
+	if n := followStateReads.Load() - before; n > 1 {
+		t.Fatalf("%d full state reads in 1.5 s of idle follow", n)
+	}
+	setTurns(t, e, sid, "leased")
+	if st := stateOf(t, s.expect("state")); st.State != followRunning {
+		t.Fatalf("state after change %+v", st)
+	}
+}
