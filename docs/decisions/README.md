@@ -2,6 +2,11 @@
 
 Decisions that must outlive a single pull request.
 
+> **Historical decision record.** Read each status before applying a decision.
+> Superseded records preserve the earlier reasoning; they do not define the
+> current contract. [ARCHITECTURE.md](../../ARCHITECTURE.md) remains the
+> product contract. Proposed direction remains proposed until accepted.
+
 | ADR | Title | Status |
 | --- | --- | --- |
 | [0001](0001-environment-plane.md) | rusui becomes the environment plane for coding agents | Accepted |

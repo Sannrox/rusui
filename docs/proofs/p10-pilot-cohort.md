@@ -1,5 +1,8 @@
 # P10 ten-task pilot cohort
 
+> **Historical evidence.** This record applies to its stated run and revision;
+> it is not a current operator procedure.
+
 Predeclared before the first attempt. Do not replace a task after its
 result is known. P9 did not complete: its first turn stayed leased past
 the execution deadline. This cohort starts after that deadline, the

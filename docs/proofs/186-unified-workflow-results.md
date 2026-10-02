@@ -1,5 +1,8 @@
 # #186 unified local and managed workflow: results
 
+> **Historical evidence.** This record applies to its stated run and revision;
+> it is not a current operator procedure.
+
 Results for the matrix predeclared in
 [186-unified-workflow-matrix.md](186-unified-workflow-matrix.md)
 (committed `7e507a8`, before the first run). Scored against the confirmed

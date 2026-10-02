@@ -7,14 +7,7 @@ judgments and the promotion gates of
 [ADR 0038](../docs/decisions/0038-maintenance-eligibility-and-promotion.md).
 No model runs and nothing is written to GitHub.
 
-```bash
-rusui eval                                   # development split, Markdown
-rusui eval -heldout ~/rusui-heldout.json     # add the operator-owned split
-rusui eval -heldout FILE -gate comment       # exit 4 fail, 5 incomplete
-rusui eval -heldout FILE -out eval-reports   # keep a JSON report; never overwrites
-rusui eval -heldout FILE -check PRIOR.json   # exit 3 if PRIOR came from other inputs
-go test ./eval -update                       # refresh results.md after reviewing the diff
-```
+Run and update the corpus with the [evaluation how-to](../docs/evaluate-reviews.md).
 
 ## Splits
 
@@ -68,6 +61,5 @@ kept.
 
 ## Adding cases
 
-Add development cases for new situations and regenerate `results.md`.
-Move a case to held-out only by copying it into the operator's file;
-held-out cases are never committed.
+For the steps to add cases, see the
+[evaluation how-to](../docs/evaluate-reviews.md#add-a-development-case).

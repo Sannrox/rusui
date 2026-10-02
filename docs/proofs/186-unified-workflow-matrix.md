@@ -1,5 +1,8 @@
 # #186 unified local and managed workflow: predeclared matrix
 
+> **Historical evidence.** This record applies to its stated run and revision;
+> it is not a current operator procedure.
+
 Predeclared 2026-09-29, before the first run, for
 [#186](https://github.com/Sannrox/rusui/issues/186). The maintainer
 confirmed the profile and thresholds on the issue the same day. Do not

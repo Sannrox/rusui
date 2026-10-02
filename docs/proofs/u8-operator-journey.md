@@ -1,5 +1,8 @@
 # U8 self-hosting operator journey
 
+> **Historical evidence.** This record applies to its stated run and revision;
+> it is not a current operator procedure.
+
 Investigation for [#118](https://github.com/Sannrox/rusui/issues/118).
 The scenario list was predeclared before execution. No independent
 self-hosting maintainer was available.

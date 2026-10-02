@@ -1,0 +1,22 @@
+# Proof and research records
+
+> **Historical evidence.** These records describe predeclared matrices,
+> attempts, and results at the stated revisions. They are not instructions
+> for operating today's checkout and do not by themselves establish a
+> current release claim. Read [ARCHITECTURE.md](../../ARCHITECTURE.md) for
+> the product contract and [docs/README.md](../README.md) for current guides.
+
+| Record | Matrix or cohort | Results or interpretation |
+| --- | --- | --- |
+| D6 session workflow | — | [Twenty-run proof](d6-session-workflow.md) |
+| P8 live publication pilot | [Cohort](p8-pilot-cohort.md) | [Results](p8-pilot-results.md) |
+| P9 publication pilot | [Cohort](p9-pilot-cohort.md) | First attempt did not complete; see the [P10 cohort](p10-pilot-cohort.md) for the next predeclared run |
+| P10 publication pilot | [Cohort](p10-pilot-cohort.md) | Cohort record only; no result page here |
+| U8 self-hosting | — | [Operator journey](u8-operator-journey.md) |
+| T2 maintenance | — | [Evaluation replay](t2-maintenance-eval.md) |
+| #186 unified workflow | [Matrix](186-unified-workflow-matrix.md) | [Results](186-unified-workflow-results.md) |
+| #429 managed rerun | [Matrix](429-managed-rerun-matrix.md) | [Results](429-managed-rerun-results.md) |
+
+The [development corpus replay](../../eval/results.md) is another historical
+result. The [corpus reference](../../eval/set.md) describes its inputs and
+measures.
