@@ -8,7 +8,9 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -260,4 +262,35 @@ func (f *FakeRuntime) SetFileContent(id, path string, data []byte) {
 		f.Contents[id] = map[string][]byte{}
 	}
 	f.Contents[id][path] = data
+}
+
+// WorkspaceNames lists the fake container's top-level contents.
+func (f *FakeRuntime) WorkspaceNames(id string) ([]string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []string
+	for name := range f.Contents[id] {
+		if !strings.Contains(name, "/") {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// WorkspaceFile returns a top-level fake content under the size cap.
+func (f *FakeRuntime) WorkspaceFile(id, name string, limit int64) ([]byte, string, error) {
+	if strings.ContainsAny(name, "/\\") {
+		return nil, FilePathDenied, nil
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	b, ok := f.Contents[id][name]
+	if !ok {
+		return nil, FileMissing, nil
+	}
+	if int64(len(b)) > limit {
+		return nil, FileOversized, nil
+	}
+	return append([]byte(nil), b...), "", nil
 }
