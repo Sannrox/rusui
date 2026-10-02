@@ -754,6 +754,21 @@ func ListTranscriptAfter(s *Store, sessionID, seq int64, limit int) ([]Transcrip
 	return out, rows.Err()
 }
 
+// FollowToken summarizes everything that can change what a followed read
+// shows: the newest transcript entry, each turn's state and revision, the
+// session state, and the approval decisions on the session's requests.
+// It is one indexed query, so an idle follower can poll it cheaply and
+// read the rest only when it changes (#439).
+func FollowToken(s *Store, sessionID int64) (string, error) {
+	var token string
+	err := s.DB.QueryRow(`SELECT
+  COALESCE((SELECT MAX(rowid) FROM actions WHERE session_id=?1), 0) || '|' ||
+  COALESCE((SELECT group_concat(id || ':' || state || ':' || pending_revision || ':' || claimed_revision, ',') FROM (SELECT id, state, pending_revision, claimed_revision FROM turns WHERE session_id=?1 ORDER BY id)), '') || '|' ||
+  COALESCE((SELECT state FROM sessions WHERE id=?1), '') || '|' ||
+  (SELECT COUNT(*) FROM actions a JOIN approval_decisions d ON d.action_id=a.action_id WHERE a.session_id=?1 AND a.action_type='acp.approval')`, sessionID).Scan(&token)
+	return token, err
+}
+
 // CountPendingApprovals is the number of the session's approval requests
 // an operator can still answer: unmatched by policy, undecided, and on a
 // turn that is leased now. A policy denial needs no answer, and a request
