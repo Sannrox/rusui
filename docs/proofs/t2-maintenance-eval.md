@@ -1,5 +1,8 @@
 # T2 maintenance evaluation replay
 
+> **Historical evidence.** This record applies to its stated run and revision;
+> it is not a current operator procedure.
+
 Project evidence for [#105](https://github.com/Sannrox/rusui/issues/105).
 It describes this repository's development corpus and the plane's dry-run
 behavior on it. It is not a public benchmark and makes no claim about

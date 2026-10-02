@@ -1,5 +1,8 @@
 # #429 managed remote-session rerun: results
 
+> **Historical evidence.** This record applies to its stated run and revision;
+> it is not a current operator procedure.
+
 Results for the matrix predeclared in
 [429-managed-rerun-matrix.md](429-managed-rerun-matrix.md), scored
 against the candidate `main` at `fb13ce19abc955dbd19c5db61c277fe327320190`.

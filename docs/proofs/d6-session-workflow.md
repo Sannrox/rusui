@@ -1,5 +1,8 @@
 # D6 session-workflow proof
 
+> **Historical evidence.** This record applies to its stated run and revision;
+> it is not a current operator procedure.
+
 Investigation for [#95](https://github.com/Sannrox/rusui/issues/95).
 The twenty-run matrix was predeclared before execution. Review-kind runs
 prove lifecycle only, not review quality. Live GitHub mutation is out of

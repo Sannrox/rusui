@@ -1,60 +1,72 @@
 # Documentation
 
-rusui is a self-hosted environment plane. You write `policy.yaml`. The server
-admits work onto sessions and turns, records immutable reviews, and dry-runs
-apply for comment and close. Agent-driven publication in `implement`
-sessions is named in [ADR 0015](decisions/0015-agent-publication.md).
+rusui is a self-hosted environment plane. The current product contract is
+[ARCHITECTURE.md](../ARCHITECTURE.md); [CONTEXT.md](../CONTEXT.md) defines its
+nouns. GitHub comment and close remain dry runs. In `implement` sessions an
+agent may push and open its own pull request under
+[ADR 0015](decisions/0015-agent-publication.md).
 
-[ARCHITECTURE.md](../ARCHITECTURE.md) is the product contract.
-[CONTEXT.md](../CONTEXT.md) is the noun glossary.
-[VISION.md](../VISION.md) and [ROADMAP.md](../ROADMAP.md) are sequencing, not
-the runbook.
+Choose what you need now. Pages keep their established paths so existing
+links continue to work. This index covers current guidance and historical
+records; historical material is labeled below and is not a runbook.
 
-## Start here
+## Learn: tutorials
 
-| Role | Start |
-| --- | --- |
-| First look | [README](../README.md) |
-| First session | [tutorial.md](tutorial.md) |
-| Sample receipt without GitHub | [tutorial.md](tutorial.md#sample-demo-no-github-no-model) |
-| Operator | [operator.md](operator.md) |
-| Review-only GitHub App | [github-app-pilot.md](github-app-pilot.md) |
-| Install as a user service | [user-service.md](user-service.md) |
-| Flags, env, HTTP, policy | [configuration.md](configuration.md) |
-| Contributor | [CONTRIBUTING.md](../CONTRIBUTING.md), [development.md](development.md) |
-| Agent | [AGENTS.md](../AGENTS.md) |
-| Security report | [SECURITY.md](../SECURITY.md) |
+Follow an experience from start to finish, with expected observations.
 
-## Map
+- [Your first rusui session](tutorial.md) runs a disposable sample without
+  GitHub, Slack, or model credentials; it also has an optional loopback exercise.
 
-| File | Type | Authority |
-| --- | --- | --- |
-| [../README.md](../README.md) | tutorial | what it is, quick start, next steps |
-| [tutorial.md](tutorial.md) | tutorial | first loopback session |
-| [../ARCHITECTURE.md](../ARCHITECTURE.md) | explanation | product contract |
-| [../CONTEXT.md](../CONTEXT.md) | explanation | product nouns |
-| [../VISION.md](../VISION.md) | explanation | accepted direction; not the runbook |
-| [../ROADMAP.md](../ROADMAP.md) | explanation | workspace-first core sequence ([ADR 0046](decisions/0046-workspace-first-sequence.md) Accepted) |
-| [operator.md](operator.md) | how-to | run, webhook, Slack, troubleshoot |
-| [github-app-pilot.md](github-app-pilot.md) | how-to | review-only GitHub App, tunnel, receipt |
-| [user-service.md](user-service.md) | how-to | install, update, and remove the per-user host service |
-| [upgrade.md](upgrade.md) | how-to | drain, packaged upgrade, redacted diagnostics |
-| [proofs/d6-session-workflow.md](proofs/d6-session-workflow.md) | explanation | D6 twenty-run matrix and supported claim |
-| [proofs/p8-pilot-cohort.md](proofs/p8-pilot-cohort.md) | explanation | P8 ten-task cohort, predeclared before the live run |
-| [proofs/p8-pilot-results.md](proofs/p8-pilot-results.md) | explanation | P8 live outcomes; [ADR 0023](decisions/0023-p8-pilot-narrow.md) |
-| [proofs/u8-operator-journey.md](proofs/u8-operator-journey.md) | explanation | U8 self-hosting journey (narrowed; not external-user evidence) |
-| [proofs/t2-maintenance-eval.md](proofs/t2-maintenance-eval.md) | explanation | T2 evaluation replay: method, results, limitations |
-| [acp-editor.md](acp-editor.md) | reference | ACP protocolVersion 1 editor shim (`rusui acp`) |
-| [configuration.md](configuration.md) | reference | flags, env, HTTP, policy, Slack verbs |
-| [development.md](development.md) | how-to | `make`, Docker images, CI |
-| [../build/README.md](../build/README.md) | reference | image internals |
-| [../BUILD.md](../BUILD.md) | archive | pointer to development.md |
-| [decisions/](decisions/) | explanation | ADRs |
-| [v1-build-prompt.md](v1-build-prompt.md) | archive | historical agent prompt; not the contract |
-| [../eval/set.md](../eval/set.md) | reference | maintenance evaluation corpus and `rusui eval` |
-| [../eval/results.md](../eval/results.md) | reference | development split replay |
-| [../SECURITY.md](../SECURITY.md) | how-to | vulnerability reports |
-| [../CONTRIBUTING.md](../CONTRIBUTING.md) | how-to | issues and pull requests |
-| [../AGENTS.md](../AGENTS.md) | how-to | agent instructions |
-| [../CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | explanation | community standards |
-| [../LICENSE](../LICENSE) | reference | MIT |
+## Do: how-to guides
+
+Use these when you already have a task to complete.
+
+- [Run rusui against a repository](operator.md) — setup, webhook, runner,
+  optional profiles, and troubleshooting. A deeper capability split is tracked
+  separately in [issue #438](https://github.com/Sannrox/rusui/issues/438).
+- [Run a review-only GitHub App pilot](github-app-pilot.md).
+- [Install a user service](user-service.md).
+- [Drain, upgrade, diagnose, or remove](upgrade.md).
+- [Build, test, and release images](development.md).
+- [Evaluate recorded reviews](evaluate-reviews.md).
+- [Contribute code or issues](../CONTRIBUTING.md); agents follow the canonical
+  [agent instructions](../AGENTS.md). The [AGENT.md](../AGENT.md) and
+  [CLAUDE.md](../CLAUDE.md) files are pointers to those instructions.
+- [Report a vulnerability](../SECURITY.md).
+
+## Look up: reference
+
+Use these for precise commands, fields, interfaces, and source layout.
+
+- [Configuration, CLI flags, environment, HTTP, policy, and Slack](configuration.md).
+- [Build targets, toolchain, layout, and CI](build-reference.md).
+- [ACP editor shim](acp-editor.md).
+- [Build and runtime image internals](../build/README.md).
+- [Maintenance evaluation corpus and measures](../eval/set.md).
+- [MIT license](../LICENSE).
+
+## Understand: explanations
+
+Read these for rationale, boundaries, direction, and the evidence behind claims.
+
+- [Product contract](../ARCHITECTURE.md) and [noun glossary](../CONTEXT.md).
+- [Vision](../VISION.md) and [roadmap](../ROADMAP.md) describe proposed or
+  sequenced work; they do not change the current contract.
+- [Architecture decisions](decisions/README.md), including their status and
+  superseded records.
+- [Proof and research records](proofs/README.md) explain what was observed
+  at a recorded revision; they are historical evidence, not current setup steps.
+- [Community standards](../CODE_OF_CONDUCT.md).
+
+## Historical and pointer pages
+
+- [Archived v1 agent build prompt](v1-build-prompt.md) is provenance only;
+  do not implement from it.
+- [BUILD.md](../BUILD.md) points to the current build guide.
+- [Development evaluation replay](../eval/results.md) records historical
+  results for the development corpus, not a public benchmark.
+- [Project README](../README.md) is the short repository entry point.
+
+The documentation gate checks this page's reachability graph, local links,
+and Markdown heading fragments. Run `python3 scripts/check-docs.py` or
+`make validate` from the repository root.

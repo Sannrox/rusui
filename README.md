@@ -38,43 +38,10 @@ runbook.
 
 ## Quick start
 
-Prerequisites: Go 1.26 (`make` pins [`.go-version`](.go-version), currently
-1.26.6) and a **read-only** GitHub token.
-
-```bash
-git clone https://github.com/Sannrox/rusui.git
-cd rusui
-cp policy.example.yaml policy.yaml    # set your project and owner/repo
-make all
-
-export RUSUI_GITHUB_TOKEN=...                    # required
-export RUSUI_WEBHOOK_SECRET="$(openssl rand -hex 16)"
-export RUSUI_WORKER_SECRET="$(openssl rand -hex 16)"
-export RUSUI_SLACK_SECRET="$(openssl rand -hex 16)"   # replace with the Slack signing secret if you use Slack
-
-BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
-"$BIN/rusui" -addr 127.0.0.1:8080 -policy policy.yaml -db rusui.db
-```
-
-In another terminal, export the same `RUSUI_WORKER_SECRET`:
-
-```bash
-BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
-"$BIN/rusui-runner" -url http://127.0.0.1:8080 -repo OWNER/REPO -acp
-```
-
-`GET http://127.0.0.1:8080/healthz` returns `ok`. `rusui diagnose` and
-`GET /readyz` report whether the supported unattended topology is ready.
-`-acp` hosts one ACP
-turn with the guest the plane names (`RUSUI_GUEST`: Grok by default, or
-Claude Code). A process driver is a command that prints review JSON
-on stdout; pass `-driver` instead of `-acp`. There is no in-tree
-`review-driver` binary. Repeat `-repo OWNER/REPO` to let one runner serve
-several policy-bound repositories; each turn keeps its own workspace.
-
-The process refuses to start if webhook, worker, or Slack secrets are unset.
-Pass `-allow-insecure` only for local experiments. GitHub and Slack cannot
-reach loopback: [docs/operator.md](docs/operator.md).
+Run the [first-session tutorial](docs/tutorial.md) to see a disposable
+session and receipt without credentials. To connect a real repository, use
+the [operator guide](docs/operator.md); look up flags and policy fields in
+the [configuration reference](docs/configuration.md).
 
 Contributor gate before a PR: `make all && make test && make validate`.
 

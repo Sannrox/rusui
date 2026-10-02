@@ -1,5 +1,8 @@
 # P8 ten-task pilot cohort
 
+> **Historical evidence.** This record applies to its stated run and revision;
+> it is not a current operator procedure.
+
 Predeclared 2026-09-26, before the first attempt, for
 [#103](https://github.com/Sannrox/rusui/issues/103). Do not replace a
 task after its result is known.

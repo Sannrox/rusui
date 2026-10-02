@@ -1,5 +1,8 @@
 # P8 ten-task live pilot results
 
+> **Historical evidence.** This record applies to its stated run and revision;
+> it is not a current operator procedure.
+
 Run 2026-09-26 on this operator host against `Sannrox/rusui`. Cohort:
 [p8-pilot-cohort.md](p8-pilot-cohort.md), committed as `90bf40a` before
 the first implement attempt. Humans still decide whether to merge task

@@ -1,5 +1,8 @@
 # P9 ten-task pilot cohort
 
+> **Historical evidence.** This record applies to its stated run and revision;
+> it is not a current operator procedure.
+
 Predeclared before the first attempt. Do not replace a task after its
 result is known. This cohort reruns the P8 bar after the implement
 deadline and same-PR follow-up fixes are on main.

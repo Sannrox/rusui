@@ -1,5 +1,8 @@
 # #429 managed remote-session rerun: predeclared matrix
 
+> **Historical evidence.** This record applies to its stated run and revision;
+> it is not a current operator procedure.
+
 Predeclared 2026-10-01, before the first attempt, for
 [#429](https://github.com/Sannrox/rusui/issues/429). The maintainer
 chose the defaults and asked to run without a separate confirmation
