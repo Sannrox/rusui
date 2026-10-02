@@ -37,7 +37,9 @@ func Argv(kind string) ([]string, error) {
 	case KindClaude:
 		// stdio delegates every permission prompt to rusui as a
 		// can_use_tool control request; without it Claude denies silently.
-		return []string{"claude", "--print", "--input-format", ClaudeStreamProto, "--output-format", ClaudeStreamProto, "--verbose", "--permission-mode", "default", "--permission-prompt-tool", "stdio"}, nil
+		// The Bash ask rule makes every shell command such a prompt,
+		// including those Claude considers read-only (#442).
+		return []string{"claude", "--print", "--input-format", ClaudeStreamProto, "--output-format", ClaudeStreamProto, "--verbose", "--permission-mode", "default", "--permission-prompt-tool", "stdio", "--settings", `{"permissions":{"ask":["Bash"]}}`}, nil
 	case KindCodex:
 		return []string{"codex", "app-server", "--listen", "stdio://"}, nil
 	default:
