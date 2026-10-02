@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -672,6 +673,9 @@ func (s *Server) containerNames(envRow *store.Environment) ([]string, string) {
 		return nil, "workspace unavailable"
 	}
 	names, err := in.WorkspaceNames(envRow.Handle)
+	if errors.Is(err, env.ErrWorkspaceReplaced) {
+		return nil, env.FileRootReplaced
+	}
 	if err != nil {
 		return nil, "workspace unavailable"
 	}
