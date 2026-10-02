@@ -4,8 +4,11 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -113,5 +116,47 @@ func TestCancelSessionQueuesUnacknowledgedSteer(t *testing.T) {
 	var promoted int
 	if err := h.st.DB.QueryRow(`SELECT promoted FROM turn_steers WHERE turn_id=?`, c.Job.ID).Scan(&promoted); err != nil || promoted != 1 {
 		t.Fatalf("steer promoted=%d err=%v", promoted, err)
+	}
+}
+
+// A container session's cancel reaches the container driver's guest kill,
+// not the process driver (#441).
+func TestCancelContainerSessionKillsGuestProcesses(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	box, err := h.e.ProvisionEnvironment(engine.EnvSpec{Name: "box-cancel", Kind: env.KindContainer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetSessionEnvironment(h.st, sid, box.ID); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := h.e.Claim("example/test-repo"); err != nil || c == nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cur, err := store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil || cur.Driver != env.KindContainer || cur.Handle == "" {
+		t.Fatalf("session environment %+v %v", cur, err)
+	}
+	if err := h.e.CancelSession(sid); err != nil {
+		t.Fatal(err)
+	}
+	killed := false
+	for _, ex := range rt.Execs {
+		if ex[0] == cur.Handle && strings.Contains(strings.Join(ex, " "), "kill -TERM $l") {
+			killed = true
+		}
+	}
+	if !killed {
+		t.Fatalf("guest of %s not killed: %#v", cur.Handle, rt.Execs)
 	}
 }

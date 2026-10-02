@@ -87,11 +87,21 @@ func (c Container) Destroy(handle string) error {
 	return c.RT.Remove(handle)
 }
 
+// killGuestScript signals every process in the guest that exists when it
+// starts, except PID 1 (the container keepalive) and the shell itself.
+// Processes started by `docker exec`, such as the harness, have parent
+// PID 0 inside the container, so selecting children of PID 1 misses them
+// (#441). The list is taken once, so a harness exec'd for a requeued turn
+// during the grace second is not killed. A process that ignores TERM is
+// killed after one second. The glob and loop are shell builtins, so
+// listing starts no process of its own.
+const killGuestScript = `l=; for d in /proc/[0-9]*; do p=${d#/proc/}; [ "$p" = 1 ] || [ "$p" = "$$" ] || l="$l $p"; done; [ -n "$l" ] || exit 0; kill -TERM $l 2>/dev/null; sleep 1; kill -KILL $l 2>/dev/null; exit 0`
+
 func (c Container) KillGuest(handle string) error {
 	if handle == "" || c.RT == nil {
 		return nil
 	}
-	return c.RT.Exec(handle, []string{"pkill", "-TERM", "-P", "1"})
+	return c.RT.Exec(handle, []string{"/bin/sh", "-c", killGuestScript})
 }
 
 func (c Container) ExecStdio(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
