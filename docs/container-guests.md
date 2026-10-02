@@ -1,0 +1,64 @@
+# Container guests (trusted egress)
+
+The first unattended topology is **one runner**, the **container** driver
+(Docker or Podman CLI), and Grok ACP over container stdio with plane
+proxies. Tests in this repository prove that path with `FakeRuntime` and a
+stubbed Docker CLI. They do **not** claim live Docker/Podman, IPv6, or
+cross-host combinations.
+
+Container guests may reach only `rusui.plane` (git and model HTTPS proxies).
+Direct addresses, IPv6, host loopback, and other proxy names are denied.
+The guest image does not declare that ask. Policy and the trusted network
+are the grant
+([ADR 0027](decisions/0027-guest-reachability-ask.md)). An image that
+asked for more would be refused, not prompted.
+The guest image must trust the plane CA at
+`/usr/local/share/ca-certificates/rusui-plane.crt`. Provision that file as
+part of the guest image identity (`source_hash`) or mount it with
+`RUSUI_PLANE_CA`. An untrusted endpoint never receives the grant: TLS
+handshake fails before the bearer is sent.
+
+Required for the container driver:
+
+```bash
+export RUSUI_TLS_CERT=/etc/rusui/plane.crt
+export RUSUI_TLS_KEY=/etc/rusui/plane.key
+export RUSUI_PLANE_CA=/etc/rusui/plane-ca.crt   # mounted into the guest
+export RUSUI_GUEST_IMAGE=rusui-guest:local
+```
+
+The plane certificate must include Subject Alternative Names `rusui.plane`
+(guest) and the listen address (host prepare, typically `127.0.0.1`). Host
+git fetch and `rusui drain` use `https://127.0.0.1:<port>` with
+`RUSUI_PLANE_CA`. Guests use `https://rusui.plane:<port>`.
+
+If Docker or Podman is installed but the TLS pair is unset, the container
+driver stays disabled and the process logs that fact. Process-driver review
+on loopback HTTP remains available.
+
+Snapshot prepare uses a **read-only prepare grant** through `/git-proxy/`,
+not a GitHub token on the runner disk. Turn grants may push only
+`refs/heads/rusui/<session>/*` on the bound repo. Grant loss (expiry, lease
+loss, other session) is a failed turn, not a silent continue.
+
+Permissive `docker run` without `--network rusui-trusted` is not the
+supported topology.
+
+At startup the server expires hung refresh owners, reconciles missed hook
+deliveries, catches up open and locally tracked items, and retries unpublished
+apply attempts. The same paths repeat: refresh every 1s, reconcile every 5m,
+catch-up every 15m, apply retry every 1m. Reconcile is skipped with a log when
+`RUSUI_GITHUB_HOOK_IDS` is unset.
+
+SQLite defaults to `rusui.db` in the current working directory (`*.db` is
+gitignored). Stop the process, copy `rusui.db` (and `-wal`/`-shm` if
+present). Restore with `rusui restore -db <copy>` while the plane is
+stopped, then start the plane on that file. It prints an inventory and
+counts sessions/turns/environments, clears live leases, drops turn grants,
+expires managed environments without adopting their guests, gives the
+copy a new plane id, and keeps approval rows as records only (they do not
+authorize a new RPC).
+A missing or corrupt file is an error, not a successful empty plane.
+Container workspace dirt is not in the database; it rematerializes from
+the snapshot after idle expiry. Credentials in env files are not in the
+backup.

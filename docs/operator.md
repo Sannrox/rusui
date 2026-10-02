@@ -1,64 +1,39 @@
 # Operator guide
 
-Run a self-hosted rusui installation on your own machine. Apply is dry-run:
-nothing is commented, closed, or merged on GitHub.
+Run rusui against a real repository. This how-to covers setup, the main
+loopback path, GitHub intake, optional Slack, restart, removal, and
+troubleshooting. Apply is dry-run: nothing is commented, closed, or merged
+on GitHub.
 
-First loopback session: [tutorial.md](tutorial.md).
-Sample session and receipt without GitHub or a model:
-[tutorial.md](tutorial.md#sample-demo-no-github-no-model).
-Review-only GitHub App on a test repository:
-[github-app-pilot.md](github-app-pilot.md).
-Flags, env, HTTP, and policy: [configuration.md](configuration.md).
-Upgrade, drain, diagnostics: [upgrade.md](upgrade.md).
-Nouns: [CONTEXT.md](../CONTEXT.md).
+For a first credential-free session, start with [the tutorial](tutorial.md).
+For flags, policy fields, and HTTP behavior, see [configuration](configuration.md).
+For turn measurements and review-result dispositions, see the
+[review results reference](review-results.md).
+<a id="supported-topology"></a>
+For the supported unattended profile and its boundaries, see the
+[supported topology explanation](supported-topology.md).
+For drain, packaged upgrade, and redacted diagnostics, see [upgrade](upgrade.md).
 
-## Supported topology
+## Optional capability guides
 
-The unattended proof is one tuple (D1/D4). Other OS/runtime/image
-combinations are not claimed:
+Read these separate procedures when you need the capability:
 
-| Piece | Supported value |
-| --- | --- |
-| Host OS | Linux or macOS |
-| Runner | one `rusui-runner` on the same host as the plane ([ADR 0029](decisions/0029-single-host-runner.md)) |
-| Runtime | Docker or Podman CLI (`docker`/`podman` on `PATH`) |
-| Guest | `$RUSUI_GUEST_IMAGE` (Grok ACP, Claude Code CLI 2.1.283, or Codex app-server) |
-| Egress | `trusted`: HTTPS to `rusui.plane` only |
-| Listen | loopback `127.0.0.1` |
+### Local interactive profile
 
-Check it before dispatch:
+<a id="local-interactive-profile"></a>
+Use the [local interactive how-to](local-interactive.md).
 
-```bash
-BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
-"$BIN/rusui" diagnose -policy policy.yaml -addr 127.0.0.1:8080
-```
+### Container guests (trusted egress)
 
-`rusui diagnose` and `GET /readyz` report topology checks as `ready`,
-`misconfigured`, or `unavailable`; `rusui diagnose` also probes the model
-upstream. Neither prints secret values.
-Exit status 0 means the topology is ready; do not start unattended work
-otherwise. The `model_upstream` check sends a bounded `GET /v1/models` request
-using the configured provider credential or upstream authentication and does
-not generate a model response. That list is not proof the guest can prompt.
-The harness, the model, and the upstream are three settings.
-`RUSUI_GUEST` selects the harness process. `RUSUI_MODEL_UPSTREAM` selects
-where the plane model proxy forwards the body. `RUSUI_GUEST_MODEL` is the
-id that process puts in the body. For Claude, the plane also copies that
-id into `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`,
-and `ANTHROPIC_DEFAULT_HAIKU_MODEL`, so compaction and subagents do not
-call a different model on the gateway. The `model_guest` check sends one
-bounded `POST /v1/messages` (`max_tokens` 1) for that id. HTTP 429 is
-`unavailable`: the catalog can be ready while the model is in quota
-cooldown. `GET /v1/models` is not proof the guest can prompt. `GET /healthz`
-only proves the process is listening.
+Use the [container guest how-to](container-guests.md).
 
-Process-driver review (`-driver`) is test/dev. It is not this topology.
-Public-repository unattended sessions (review, run, scheduled, implement
-on `visibility: public`) use this container topology. They do not fall
-back to the process driver or the experimental local profile when Docker
-or Podman is missing ([ADR 0022](decisions/0022-public-repo-isolation.md)).
-A second isolation runtime is not part of the supported topology
-([ADR 0028](decisions/0028-container-isolation-profile.md)).
+### On-demand pull request review
+
+Use the [pull request review how-to](pull-request-review.md).
+
+### Implement sessions (agent publication)
+
+Use the [implement session how-to](implement-sessions.md).
 
 ## Prerequisites
 
@@ -109,91 +84,10 @@ lingering so the service starts at boot and continues after logout. See
 [user-service.md](user-service.md) for service behavior and removal. The
 sections below describe the same setup steps by hand.
 
-### First pinned implement task
-
-For the `Sannrox/rusui` example, setup must leave `implement: true` on that
-repository and `run` in project `rusui`'s `session_kinds`. Add a narrowly
-scoped `RUSUI_AGENT_GITHUB_TOKEN`, one model credential or logged-in model
-proxy, and `RUSUI_GUEST_MODEL` when the guest is Claude. Put them in
-`rusui.env`, then apply setup and confirm its embedded `diagnose` report
-shows `model_upstream: ready` and, for Claude, `model_guest: ready`. A
-ready model list alone is not enough. Do not put a credential in the
-shell command.
-
-The task below pins the source commit before admission and allows only the
-operator guide to change. Replace the prompt with one bounded task for your
-own repository, and match `-project`, `-repo`, `-ref`, and `-paths` to its
-policy and task. `run` prints the session and task IDs; the runner prints the
-session and turn IDs it claims.
-
-```bash
-BIN="_output/local/bin/$(go env GOOS)/$(go env GOARCH)"
-STATE="$HOME/Library/Application Support/rusui" # Linux: use setup's state directory
-export RUSUI_WORKER_SECRET="$(sed -n 's/^RUSUI_WORKER_SECRET=//p' "$STATE/rusui.env")"
-export RUSUI_PLANE_CA="$(sed -n 's/^RUSUI_PLANE_CA=//p' "$STATE/rusui.env")"
-PLANE_URL="https://127.0.0.1:8080"
-BASE_SHA="$(git ls-remote https://github.com/Sannrox/rusui.git refs/heads/main | cut -f1)"
-EFFORT_KEY="first-run-$(date -u +%Y%m%dT%H%M%SZ)"
-STARTED="$("$BIN/rusui" run -url "$PLANE_URL" \
-  -project rusui -effort "$EFFORT_KEY" -repo Sannrox/rusui -ref main \
-  -base-sha "$BASE_SHA" -paths docs/operator.md \
-  'Add one concise operator troubleshooting entry for a documented setup failure.')"
-SESSION_ID="$(printf '%s\n' "$STARTED" | jq -r '.session_id')"
-TASK_ID="$(printf '%s\n' "$STARTED" | jq -r '.task_id')"
-printf 'session_id=%s task_id=%s\n' "$SESSION_ID" "$TASK_ID"
-
-"$BIN/rusui-runner" -url "$PLANE_URL" -repo Sannrox/rusui \
-  -ca "$RUSUI_PLANE_CA" -acp -once
-```
-
-The runner logs a `claimed session=… turn=…` line after the turn ends. While
-it runs, inspect the session and turn IDs with the operator token:
-
-```bash
-curl --cacert "$RUSUI_PLANE_CA" -fsS -H "Authorization: Bearer $RUSUI_WORKER_SECRET" \
-  "$PLANE_URL/sessions/$SESSION_ID" | jq '{session: .session.ID, turns: [.turns[] | {id: .ID, state: .State}]}'
-```
-
-After the turn is complete, stop the setup-managed service before reading its
-SQLite file. This removes the user-service entry but preserves the state;
-rerun `setup apply` to install it again.
-
-```bash
-"$BIN/rusui" setup remove-service -state "$STATE"
-```
-
-Use the turn ID from the runner log to confirm the plane's observed outcome;
-the guest's claim alone is not publication evidence:
-
-```bash
-TURN_ID=123 # replace with the runner's logged turn ID
-sqlite3 -readonly "$STATE/rusui.db" \
-  "SELECT json_extract(payload, '$.result.outcome') AS plane_outcome, json_extract(payload, '$.result.pull_request') AS pull_request, json_extract(payload, '$.result.candidate_sha') AS candidate_sha, json_extract(payload, '$.result.published_sha') AS published_sha FROM review_revisions WHERE job_id = $TURN_ID ORDER BY id DESC LIMIT 1;"
-```
-
-`published` means the plane saw the pull request at the candidate SHA. A
-missing row, `unconfirmed`, or `blocked` is not a published PR. Merging stays
-with a human maintainer.
-
-### Timed macOS walkthrough record
-
-Record each duration on a clean macOS user account; exclude guest image
-download time. Keep the account, credentials, repository, guest version, and
-policy revision with the private run notes, not in this public guide.
-
-| Step | Duration |
-| --- | --- |
-| `make all` and `rusui setup plan` | Not measured on a clean account |
-| Fill model and scoped GitHub credentials; set the bound repo's implement policy | Not measured on a clean account |
-| `rusui setup apply` and readiness check | Not measured on a clean account |
-| Start pinned task and record session/turn IDs | Not measured on a clean account |
-| Wait for the plane outcome and confirm the PR SHA | Not measured on a clean account |
-| Total, excluding image download | Unverified; the clean-account run was unavailable in this environment |
-
-The current evidence is the earlier live run recorded on #181, not a timed
-clean-account walkthrough. This leaves the fifteen-minute target unverified;
-no isolated clean account or model/write credentials were available here, so
-the gap starts before `make all` and no later step was timed.
+For a first pinned implement task, follow the
+[implement session how-to](implement-sessions.md#first-pinned-implement-task).
+The timed macOS walkthrough record is retained as
+[historical evidence](proofs/operator-timed-macos-walkthrough.md).
 
 ## 1. Build and policy
 
@@ -303,349 +197,6 @@ Live interruption requires the ACP runner. A process-driver turn has no guest
 ACP session, so a steer targeted at it stays durable and runs as a follow-up
 after the live lease ends.
 
-## Local interactive profile
-
-The experimental local profile runs a policy-configured command through
-Sumika on the Rusui host. Build Sumika from the source baseline recorded in
-[issue #184](https://github.com/Sannrox/rusui/issues/184), start its daemon as
-the same OS user as Rusui (`sumika daemon`), and explicitly add a `local` kind plus
-`local_runtime` argv and absolute cwd to the Project in `policy.yaml`. The
-initial supported hosts are macOS and Linux. The compatibility baseline is
-Sumika commit [`3dadc7a`](https://github.com/Sannrox/sumika/commit/3dadc7a97fba2aaaa53aea767f269dfa6c1cfff0),
-workspace version `0.1.0`, built with Rust `1.97.1`. Sumika's socket defaults to its
-per-user location; set `SUMIKA_SOCK` on the Rusui process only when using an
-alternate local socket.
-
-Each Process generation stores an internal fingerprint of the argv and cwd
-used at start. Policy edits affect future starts; existing Processes continue
-to reconcile and can still be cancelled if the local profile is later disabled.
-The fingerprint is not returned by the session API.
-
-Create a local Session through the authenticated API:
-
-```bash
-curl -fsS -X POST http://127.0.0.1:8080/projects/local/sessions \
-  -H "Authorization: Bearer $RUSUI_WORKER_SECRET" \
-  -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: local-example-1' \
-  -d '{"kind":"local"}'
-```
-
-HTTP `201` confirms the durable Session was created; it does not guarantee that
-Sumika confirmed the Process start. A start error is returned as `start_error`
-with the Process state `unknown`. Reconcile that generation before requesting
-an explicit restart.
-
-The request cannot supply argv or cwd. Rusui stores a Session without a Turn,
-then records Sumika's Process observations separately. A client disconnect
-does not kill the Process. Use Rusui cancellation to request a kill; the
-Session is marked cancelled only after Sumika reports the Process dead. Rusui
-first sends a graceful SIGTERM, then a reconciliation after the 30-second grace
-period sends SIGKILL if the Process remains alive. Periodic reconciliation can
-delay escalation until its next run. If the daemon is unavailable, state stays
-unknown or cancellation remains unconfirmed until reconciliation. Never infer
-death or restart automatically.
-After death or a successful List confirms a Process is absent, an operator can
-request its next generation explicitly. A lost generation with a pending cancel
-remains unconfirmed; an explicit restart creates a new generation without
-marking the old cancellation complete:
-
-```bash
-curl -fsS -X POST "http://127.0.0.1:8080/sessions/$SESSION_ID/restart" \
-  -H "Authorization: Bearer $RUSUI_WORKER_SECRET"
-```
-
-Every local lifecycle transition is recorded as an append-only receipt in
-the same transaction as the state change: Process start, each observed
-state change, cancel request and cancellation, and Attach, steal, detach,
-and exit. `GET /sessions/{id}?include=receipts` returns them as `process_receipts`
-(paged by `process_receipt_after_id`), and the
-console session page lists them under Local process activity.
-
-Read a session without opening its terminal. The command prints the same
-durable transcript the console shows, including recorded tool-call events,
-and the current workspace diff. An empty diff and an unavailable workspace
-are stated. A local session with no stored transcript is an error. Closing
-the command leaves the session running.
-
-```bash
-rusui read [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_ID
-```
-
-Follow a working session with `-follow`. The command prints the recorded
-transcript, then each new transcript event and every change of the session
-state (`queued`, `running`, `waiting` for an approval, `completed`, `failed`,
-`cancelled`) as it is recorded. It stops when the session completes (exit 0),
-fails, or is cancelled (exit 1); interrupt it to stop earlier. A waiting
-state means an approval request of the running turn has no decision yet. A
-local session has no turns: it stays `open` and is followed until it is
-cancelled or you interrupt the command. It does not
-print the workspace diff or terminal output. When the connection drops, or
-nothing arrives from the plane for 45 seconds (the plane sends a heartbeat
-every 15 seconds), it reconnects after the last event it printed, so events
-recorded meanwhile are printed once. A rejected token, a missing session, or
-a plane without this stream (`GET /sessions/{id}/read/follow?after=SEQ`)
-ends it with an error instead of a retry.
-
-```bash
-rusui read -follow [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_ID
-```
-
-Read what `.agents/setup`, `.agents/resume`, and the `.rusui/services.yaml`
-commands printed in a container session. `rusui logs` stays the list of
-action receipts; `rusui envlog` is the hook and service output, so the two
-never mix ([ADR 0031](decisions/0031-cli-command-tree.md)). Each capture is combined stdout and stderr of the last run of
-that hook or service; a new run replaces it. A capture over 1 MiB keeps
-its last 1 MiB and is marked truncated. A hook that is absent has no
-capture, and a session with no output says so. The console session page
-lists the same captures under Environment output without inlining bodies;
-`rusui envlog` reads one kind or name when you pass `-kind` and `-name`.
-Treat the output like the transcript: it may contain what setup printed,
-and it is served only with the operator token.
-
-```bash
-rusui envlog [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] [-kind KIND] [-name NAME] [-omit-body] SESSION_ID
-```
-
-Fetch what a session published into a local checkout while its
-environment keeps running. `rusui sync` asks the plane for the newest pull
-request a turn of the session published (the plane observed it on GitHub
-at the candidate SHA), then runs your own `git fetch` of that pull
-request's head into `refs/rusui/sessions/SESSION_ID`. It uses your git
-remote and your git credentials; Rusui passes no token to git, and the
-implement-session credential never reaches the laptop. It does not take
-the terminal write lease, start a turn, wake or touch the environment,
-or change your branch, index, or working tree. It prints the pull
-request, the ref update, and the commits that landed locally, which in a
-stale checkout include the default-branch commits the session built on.
-
-```bash
-rusui sync [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] [-remote origin] [-dir .] SESSION_ID
-git worktree add --detach ../session-SESSION_ID refs/rusui/sessions/SESSION_ID
-```
-
-It exits non-zero and changes nothing when the session is unknown
-(`not found`), was cancelled, or never published a pull request (an
-ordinary run or review session, or an implement session whose pull
-request GitHub did not show at the candidate SHA). It also refuses when
-`-dir` is not a git checkout or the `-remote` URL does not end in the
-session's `owner/repo`. When the pull request head moved after the plane
-observed it, sync fetches the current head and prints a `note:` line
-with both SHAs. A second sync with nothing new says `already up to date`.
-
-Copy a local file into a live session workspace. The path is relative to the
-workspace. The cap is 32 MiB. The file is stored as bytes; the console does
-not render it as HTML.
-
-```bash
-rusui put [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -file ./shot.png SESSION_ID shot.png
-```
-
-A managed environment sleeps after `-env-idle-sleep`. Opening the console
-terminal (observe or write), minting a preview, following a live preview
-grant, or sending `rusui prompt` or a console prompt wakes it first. The
-wake runs `.agents/resume` and the declared services once, then the
-action proceeds on the same environment id and handle. The wake receipt
-names its cause: `operator terminal`, `operator terminal write`,
-`operator preview`, `preview grant`, or `operator prompt`. A failed wake
-is an explicit error; no terminal lease or preview grant is created, and
-the environment stays asleep. An expired or replaced environment is
-never woken as a different handle.
-
-An environment id names exactly one guest. When an environment expires,
-or the pinned source changes, the session's next turn provisions a new
-environment with a new id (`<name>-r<old id>` after expiry) instead of
-refilling the old one. The old id stays `expired`, and the session's
-environment receipts record `expire` and `replace` (naming the new id),
-so every guest a session used stays attributable.
-
-A preview grant survives sleep. Its identity is the environment id and
-handle ([ADR 0012](decisions/0012-operator-access.md)), and sleep keeps
-both, so the same grant URL works after wake without a new mint. In
-practice a live grant keeps the environment awake until the grant ends.
-
-Preview HTML and `POST /comment` live on that origin, not on `-addr`. Set
-`RUSUI_PREVIEW_BASE` to a loopback URL with an explicit port that is not
-the plane's, for example `http://127.0.0.1:8090`. The process then serves
-the preview handler on that host:port beside the plane listener. Unset, mint
-refuses. A PreviewBase that shares the plane origin, omits a port, or is
-not loopback fails closed at start. Routes, grant query, and body limits:
-[configuration.md](configuration.md#preview-origin).
-
-Attach to either runtime with the same operator command:
-
-```bash
-export RUSUI_OPERATOR_TOKEN=...   # generated in rusui.env by rusui setup
-rusui attach [-url http://127.0.0.1:8080] [-db rusui.db] SESSION_ID
-```
-
-The CLI reports the Session, Environment, runtime, current Process, and Turn
-before connecting. For a local Session, run it on the Sumika host as the same
-OS user and point `-db` at the server's SQLite database if it is not
-`rusui.db`. Rusui checks that the local Session and Process match the
-authenticated session detail before opening the PTY, and refuses a mismatch.
-It attaches directly to Sumika; `Ctrl+]` detaches and terminal resizes follow
-the local terminal. For a managed Session, input remains
-line-oriented and the CLI acquires an audited write lease when available. If a
-browser or another CLI already holds that lease, this CLI connects read-only.
-It releases only the lease generation it acquired. Typing renews the lease; after
-an idle period longer than the lease TTL, input fails with `no write lease`
-and the command must be run again.
-Managed attachment replays the existing Session, Turn, and action transcript
-events to stderr while terminal output stays on stdout. It reconnects by the
-existing session id and environment; it does not create either object.
-
-This profile runs with Sumika's OS identity and inherited environment. It may
-use same-user files and CLI authentication; it has no managed-container
-isolation, GitHub credential, turn grant, or model proxy credential. Local PTY
-bytes remain with Sumika.
-
-Do not pass `-addr 0.0.0.0:8080` unless secrets are set. Operator HTTP
-(`-addr`) has no TLS unless `RUSUI_TLS_CERT` and `RUSUI_TLS_KEY` are set.
-
-## Container guests (trusted egress)
-
-The first unattended topology is **one runner**, the **container** driver
-(Docker or Podman CLI), and Grok ACP over container stdio with plane
-proxies. Tests in this repository prove that path with `FakeRuntime` and a
-stubbed Docker CLI. They do **not** claim live Docker/Podman, IPv6, or
-cross-host combinations.
-
-Container guests may reach only `rusui.plane` (git and model HTTPS proxies).
-Direct addresses, IPv6, host loopback, and other proxy names are denied.
-The guest image does not declare that ask. Policy and the trusted network
-are the grant
-([ADR 0027](decisions/0027-guest-reachability-ask.md)). An image that
-asked for more would be refused, not prompted.
-The guest image must trust the plane CA at
-`/usr/local/share/ca-certificates/rusui-plane.crt`. Provision that file as
-part of the guest image identity (`source_hash`) or mount it with
-`RUSUI_PLANE_CA`. An untrusted endpoint never receives the grant: TLS
-handshake fails before the bearer is sent.
-
-Required for the container driver:
-
-```bash
-export RUSUI_TLS_CERT=/etc/rusui/plane.crt
-export RUSUI_TLS_KEY=/etc/rusui/plane.key
-export RUSUI_PLANE_CA=/etc/rusui/plane-ca.crt   # mounted into the guest
-export RUSUI_GUEST_IMAGE=rusui-guest:local
-```
-
-The plane certificate must include Subject Alternative Names `rusui.plane`
-(guest) and the listen address (host prepare, typically `127.0.0.1`). Host
-git fetch and `rusui drain` use `https://127.0.0.1:<port>` with
-`RUSUI_PLANE_CA`. Guests use `https://rusui.plane:<port>`.
-
-If Docker or Podman is installed but the TLS pair is unset, the container
-driver stays disabled and the process logs that fact. Process-driver review
-on loopback HTTP remains available.
-
-Snapshot prepare uses a **read-only prepare grant** through `/git-proxy/`,
-not a GitHub token on the runner disk. Turn grants may push only
-`refs/heads/rusui/<session>/*` on the bound repo. Grant loss (expiry, lease
-loss, other session) is a failed turn, not a silent continue.
-
-Permissive `docker run` without `--network rusui-trusted` is not the
-supported topology.
-
-At startup the server expires hung refresh owners, reconciles missed hook
-deliveries, catches up open and locally tracked items, and retries unpublished
-apply attempts. The same paths repeat: refresh every 1s, reconcile every 5m,
-catch-up every 15m, apply retry every 1m. Reconcile is skipped with a log when
-`RUSUI_GITHUB_HOOK_IDS` is unset.
-
-SQLite defaults to `rusui.db` in the current working directory (`*.db` is
-gitignored). Stop the process, copy `rusui.db` (and `-wal`/`-shm` if
-present). Restore with `rusui restore -db <copy>` while the plane is
-stopped, then start the plane on that file. It prints an inventory and
-counts sessions/turns/environments, clears live leases, drops turn grants,
-expires managed environments without adopting their guests, gives the
-copy a new plane id, and keeps approval rows as records only (they do not
-authorize a new RPC).
-A missing or corrupt file is an error, not a successful empty plane.
-Container workspace dirt is not in the database; it rematerializes from
-the snapshot after idle expiry. Credentials in env files are not in the
-backup.
-
-## On-demand pull request review
-
-Ask the plane to review one bound pull request and wait for its immutable
-result:
-
-```bash
-rusui review OWNER/REPO#42
-```
-
-The repository must have `review: true`, the project must not be paused, and
-the daily review budget must have room. The command prints the review session,
-then the stored artifact and its dry-run apply actions. Reviews never comment
-or close on GitHub. Use `-url` and `-token` to select the plane and its
-operator/worker credential; `-timeout` defaults to 30 minutes, and `0` waits
-without a deadline.
-
-## Implement sessions (agent publication)
-
-In an implement session the agent pushes a branch and opens or updates its
-own pull request as you ([ADR 0015](decisions/0015-agent-publication.md)).
-It needs all of:
-
-- `implement: true` on the repository in `policy.yaml`, and `run` in the
-  project's `session_kinds`;
-- `RUSUI_AGENT_GITHUB_TOKEN` on the plane;
-- a pinned task: `rusui run -project SLUG -effort KEY -repo OWNER/NAME
-  -ref main -base-sha SHA -paths docs,internal/x "the change"`;
-- `gh` in the guest image (container guests) or on the runner `PATH`.
-
-Ordinary `rusui run PROMPT` sessions, scheduled sessions, and review
-sessions never receive the token.
-
-A run turn may execute for 45 minutes from claim (`RunExecDeadline`).
-Review and scheduled turns keep the 12-minute execution deadline.
-Heartbeats renew the grant and the lease liveness window. They do not
-move the execution deadline.
-
-rusui cannot stop a token from doing what its scope allows. Before you
-enable `implement`, set up:
-
-- a fine-grained token limited to the bound repositories, with only
-  **Contents** and **Pull requests** read and write; no administration,
-  workflows, secrets, or environments;
-- protection on the default branch that requires pull requests and status
-  checks and blocks force pushes and deletion. With more than one
-  maintainer, also require an approving review from someone other than the
-  last pusher.
-
-On a solo repository GitHub cannot tell the agent from you: merging needs
-the same permission as pushing, and you cannot require your own approval.
-rusui rejects `gh pr merge`, `gh pr close`, `gh release`, default-branch
-and force pushes, and similar commands in implement sessions
-([ADR 0017](decisions/0017-claude-guest-and-model-upstream.md) D3). Those
-rules are workflow control, not a security boundary.
-
-Merging stays yours. Commits carry `Co-authored-by: rusui` and
-`Rusui-Session` trailers ([configuration](configuration.md)).
-
-### Plane publication (opt-in)
-
-`RUSUI_PUBLICATION=plane` moves publication behind the plane
-([ADR 0044](decisions/0044-plane-publishes-from-turn-result.md)). It needs
-GitHub App credentials (`RUSUI_GITHUB_APP_ID`, a private key, and the
-installation) with **Contents** and **Pull requests** write on the bound
-repositories; the plane refuses to start without them. The guest then
-holds no GitHub credential: it pushes `rusui/<session>/<name>` through the
-plane's git proxy and writes a `publish` request to its result, and the
-plane creates or updates the pull request as the App on Complete, only
-while the branch points at the result's `candidate_sha`; a result without
-one, or a branch that moved, is blocked without a GitHub write.
-`RUSUI_AGENT_GITHUB_TOKEN` is ignored. Pull requests show the App as
-author. Keep it off until you have run the ADR 0020 pilot
-([ADR 0020](decisions/0020-turn-scoped-github-publication.md) Validation).
-
-A review-only App on a public test repository, including permissions,
-tunnel verify/cleanup, a receipt check, and signature failures:
-[github-app-pilot.md](github-app-pilot.md).
-
 ## 4. GitHub webhook
 
 Create a **repository** webhook:
@@ -730,36 +281,6 @@ guests on the next turn instead of attaching the source's.
 
 Uninstall: stop the process, delete the database and snapshot directory,
 unset the env vars listed in [configuration.md](configuration.md).
-
-## Turn measurements
-
-`GET /projects/{slug}/measurements` with the operator token returns Turn
-counts, terminal states, the median duration, permission denies, and how
-many Turns omitted token counts. The row names the session id. It does
-not include the prompt, tool arguments, diffs, terminal bytes, file
-contents, or credentials. Export stays off unless `RUSUI_OTEL_ENDPOINT`
-points at a collector you run.
-
-## Result dispositions
-
-Record your judgment of an advisory review result so the comment gate
-([ADR 0038](decisions/0038-maintenance-eligibility-and-promotion.md) D6)
-can be measured. The result id is `review_result.revision_id` from
-`GET /sessions/{id}`.
-
-```sh
-rusui disposition -value useful 42
-rusui disposition -value harmful -wrong -note "flagged a correct lock" 43
-rusui disposition            # comment gate report
-```
-
-A disposition is a record only. It changes no policy, job, or action and
-writes nothing to GitHub. Re-recording keeps history; the latest counts.
-The report reads the 20 most recent disposed results that produced a
-dry-run comment. Below 20 it says `incomplete`; otherwise `fail` or
-`shadow_pass`, which covers the shadow thresholds only. Held-out cases, replay
-duplicates, and private-context leaks are listed as `not_measured`;
-`rusui eval` covers the first two. Promotion stays a `policy.yaml` edit.
 
 ## Troubleshooting
 

@@ -22,8 +22,11 @@ Follow an experience from start to finish, with expected observations.
 Use these when you already have a task to complete.
 
 - [Run rusui against a repository](operator.md) — setup, webhook, runner,
-  optional profiles, and troubleshooting. A deeper capability split is tracked
-  separately in [issue #438](https://github.com/Sannrox/rusui/issues/438).
+  restart, removal, and troubleshooting.
+- [Use the local interactive profile](local-interactive.md).
+- [Configure container guests](container-guests.md).
+- [Request a pull request review](pull-request-review.md).
+- [Use implement sessions](implement-sessions.md).
 - [Run a review-only GitHub App pilot](github-app-pilot.md).
 - [Install a user service](user-service.md).
 - [Drain, upgrade, diagnose, or remove](upgrade.md).
@@ -43,6 +46,7 @@ Use these for precise commands, fields, interfaces, and source layout.
 - [ACP editor shim](acp-editor.md).
 - [Build and runtime image internals](../build/README.md).
 - [Maintenance evaluation corpus and measures](../eval/set.md).
+- [Turn measurements and review dispositions](review-results.md).
 - [MIT license](../LICENSE).
 
 ## Understand: explanations
@@ -54,8 +58,12 @@ Read these for rationale, boundaries, direction, and the evidence behind claims.
   sequenced work; they do not change the current contract.
 - [Architecture decisions](decisions/README.md), including their status and
   superseded records.
+- [Supported unattended topology](supported-topology.md) explains what the
+  current evidence supports and its limits.
 - [Proof and research records](proofs/README.md) explain what was observed
   at a recorded revision; they are historical evidence, not current setup steps.
+- [Timed macOS walkthrough record](proofs/operator-timed-macos-walkthrough.md)
+  is historical, unverified project evidence.
 - [Community standards](../CODE_OF_CONDUCT.md).
 
 ## Historical and pointer pages
