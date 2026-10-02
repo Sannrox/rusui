@@ -306,7 +306,7 @@ projects:
 
 The Rusui server and Sumika daemon must run as the same OS user on macOS or
 Linux. Rusui connects to Sumika's local Unix socket and never injects managed
-credentials into the local process. See [the local operator profile](operator.md#local-interactive-profile).
+credentials into the local process. See [the local interactive how-to](local-interactive.md).
 
 Project `budgets` may set `max_concurrent_leases` (integer ≥ 1, default 1).
 Any other budget key fails closed at parse.

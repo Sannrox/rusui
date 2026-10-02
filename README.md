@@ -24,7 +24,7 @@ driver or ACP). Model processes receive a GitHub write credential only in `imple
 sessions.
 
 The experimental local-interactive profile is default-off and runs a
-policy-configured process through Sumika on the operator's host ([ADR 0016](docs/decisions/0016-local-interactive-runtime.md), [operator profile](docs/operator.md#local-interactive-profile)).
+policy-configured process through Sumika on the operator's host ([ADR 0016](docs/decisions/0016-local-interactive-runtime.md), [operator profile](docs/local-interactive.md)).
 
 Nouns (project, session, turn, environment, runner): [CONTEXT.md](CONTEXT.md).
 The v1 contract: [ARCHITECTURE.md](ARCHITECTURE.md).
