@@ -21,6 +21,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -535,8 +536,19 @@ func (s *Server) sessionPage(id int64) (consolePage, error) {
 		page.FilesErr = "workspace unavailable or expired"
 		return page, nil
 	}
+	if envRow.Driver == env.KindContainer {
+		names, state := s.containerNames(envRow)
+		if state != "" {
+			page.FilesErr = state
+			return page, nil
+		}
+		for _, name := range names {
+			page.Files = append(page.Files, consoleFile{Name: name, Enc: template.URLQueryEscaper(name)})
+		}
+		return page, nil
+	}
 	if envRow.Driver != "" && envRow.Driver != "process" {
-		page.FilesErr = "file inspection is process-workspace only"
+		page.FilesErr = "file inspection is not available for this environment"
 		return page, nil
 	}
 	entries, err := os.ReadDir(envRow.Handle)
@@ -636,7 +648,7 @@ func (s *Server) consoleFile(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		handle, envState = envRow.Handle, envRow.State
 	}
-	body, state := inspectWorkspaceFile(handle, envState, rel, r.URL.Query().Get("view") == "diff")
+	body, state := s.inspectFile(envRow, handle, envState, rel, r.URL.Query().Get("view") == "diff")
 	if state == "path" {
 		http.Error(w, "path", 400)
 		return
@@ -647,6 +659,68 @@ func (s *Server) consoleFile(w http.ResponseWriter, r *http.Request) {
 		page.FileBody = body
 	}
 	s.renderConsole(w, page)
+}
+
+// containerNames lists a ready container workspace through the runtime.
+// A sleeping guest is not woken to be listed.
+func (s *Server) containerNames(envRow *store.Environment) ([]string, string) {
+	if envRow.State != store.EnvReady {
+		return nil, "workspace " + envRow.State
+	}
+	in, ok := s.containerInspector()
+	if !ok {
+		return nil, "workspace unavailable"
+	}
+	names, err := in.WorkspaceNames(envRow.Handle)
+	if err != nil {
+		return nil, "workspace unavailable"
+	}
+	return names, ""
+}
+
+func (s *Server) containerInspector() (env.WorkspaceInspector, bool) {
+	c, ok := s.Eng.Container.(env.Container)
+	if !ok {
+		return nil, false
+	}
+	return c.Inspector()
+}
+
+// inspectFile reads one workspace file from the environment's own
+// driver: the host directory for a process workspace, the runtime for a
+// container (#440). fileState is empty when body is the text or diff.
+func (s *Server) inspectFile(envRow *store.Environment, handle, envState, rel string, asDiff bool) (string, string) {
+	if envRow == nil || envRow.Driver != env.KindContainer {
+		return inspectWorkspaceFile(handle, envState, rel, asDiff)
+	}
+	clean, ok := safeRel(rel)
+	if !ok || strings.Contains(clean, "/") {
+		return "", "path"
+	}
+	if envRow.State != store.EnvReady {
+		return "", "missing or " + envRow.State
+	}
+	in, ok := s.containerInspector()
+	if !ok {
+		return "", "missing"
+	}
+	b, state, err := in.WorkspaceFile(envRow.Handle, clean, consoleFileCap)
+	if err != nil {
+		return "", "missing"
+	}
+	if state == env.FilePathDenied {
+		return "", "path"
+	}
+	if state != "" {
+		return "", state
+	}
+	if bytes.IndexByte(b, 0) >= 0 || !utf8.Valid(b) {
+		return "", "binary"
+	}
+	if asDiff {
+		return unifiedFromEmpty(clean, string(b)), ""
+	}
+	return string(b), ""
 }
 
 // inspectWorkspaceFile reads one workspace file the console can show.

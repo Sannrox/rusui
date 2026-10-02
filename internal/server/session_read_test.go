@@ -16,6 +16,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -203,4 +204,45 @@ func consoleGet(t *testing.T, hs *httptest.Server, path string) string {
 		t.Fatalf("console %s %d %s", path, res.StatusCode, b)
 	}
 	return string(b)
+}
+
+// A container session's read shows the workspace diff through the
+// runtime, and a sleeping environment states its condition without being
+// woken (#440).
+func TestSessionReadShowsContainerWorkspaceDiff(t *testing.T) {
+	_, hs, e := consoleEnv(t)
+	rt := &env.FakeRuntime{}
+	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	sid := createRunSession(t, hs, "first prompt")
+	box, err := e.ProvisionEnvironment(engine.EnvSpec{Name: "box-read", Kind: env.KindContainer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetSessionEnvironment(e.Store, sid, box.ID); err != nil {
+		t.Fatal(err)
+	}
+	rt.SetFileContent(box.Handle, "note.txt", []byte("hello\n"))
+	read := authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10)+"/read", "op-tok")
+	var view sessionRead
+	if err := json.Unmarshal([]byte(read.body), &view); err != nil {
+		t.Fatal(read.body)
+	}
+	if view.DiffState != "" || !strings.Contains(view.Diff, "+++ b/note.txt") || !strings.Contains(view.Diff, "+hello") {
+		t.Fatalf("diff %q state %q", view.Diff, view.DiffState)
+	}
+	box.State = store.EnvSleeping
+	if err := store.UpdateEnvironment(e.Store, *box); err != nil {
+		t.Fatal(err)
+	}
+	starts := len(rt.Started)
+	read = authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10)+"/read", "op-tok")
+	if err := json.Unmarshal([]byte(read.body), &view); err != nil {
+		t.Fatal(read.body)
+	}
+	if view.DiffState != "workspace "+store.EnvSleeping || view.Diff != "" {
+		t.Fatalf("sleeping diff %q state %q", view.Diff, view.DiffState)
+	}
+	if len(rt.Started) != starts {
+		t.Fatal("read woke the environment")
+	}
 }

@@ -83,10 +83,13 @@ func (s *Server) sessionRead(id int64) (sessionRead, error) {
 		return sessionRead{}, errNoDurableTranscript
 	}
 	handle, envState := "", ""
-	if envRow, err := store.GetEnvironment(s.Eng.Store, page.Sess.EnvironmentID); err == nil {
+	envRow, err := store.GetEnvironment(s.Eng.Store, page.Sess.EnvironmentID)
+	if err == nil {
 		handle, envState = envRow.Handle, envRow.State
+	} else {
+		envRow = nil
 	}
-	out.Diff, out.DiffState = workspaceDiff(page, handle, envState)
+	out.Diff, out.DiffState = s.workspaceDiff(page, envRow, handle, envState)
 	return out, nil
 }
 
@@ -94,7 +97,7 @@ func (s *Server) sessionRead(id int64) (sessionRead, error) {
 // the file text as a unified patch from an empty baseline. It is not a git
 // diff. No files is an empty diff. A workspace the console cannot list is
 // the console's unavailable state.
-func workspaceDiff(page consolePage, handle, envState string) (string, string) {
+func (s *Server) workspaceDiff(page consolePage, envRow *store.Environment, handle, envState string) (string, string) {
 	if page.FilesErr != "" {
 		return "", page.FilesErr
 	}
@@ -103,7 +106,7 @@ func workspaceDiff(page consolePage, handle, envState string) (string, string) {
 	}
 	var b strings.Builder
 	for _, file := range page.Files {
-		body, state := inspectWorkspaceFile(handle, envState, file.Name, true)
+		body, state := s.inspectFile(envRow, handle, envState, file.Name, true)
 		if b.Len() > 0 {
 			b.WriteByte('\n')
 		}
