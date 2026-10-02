@@ -351,3 +351,49 @@ func TestFollowReadExplicitErrors(t *testing.T) {
 		t.Fatalf("local %d %s", got.code, got.body)
 	}
 }
+
+// A turn action that arrives after the turn completed is refused, so a
+// followed read that ended has shown every recorded entry (#437).
+func TestFollowReadEndIsNotAheadOfLateActions(t *testing.T) {
+	_, hs, e := consoleEnv(t)
+	sid := createRunSession(t, hs, "p")
+	turns, err := store.ListTurnsForSession(e.Store, sid)
+	if err != nil || len(turns) != 1 {
+		t.Fatalf("turns %v %v", turns, err)
+	}
+	tid := turns[0].ID
+	post := func(body string) int {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, hs.URL+"/turns/"+strconv.FormatInt(tid, 10)+"/actions", strings.NewReader(`{"type":"acp.update","body":{"text":"`+body+`"}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer wsec")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = res.Body.Close()
+		return res.StatusCode
+	}
+	setTurns(t, e, sid, "leased")
+	if code := post("while running"); code >= 300 {
+		t.Fatalf("leased ingest %d", code)
+	}
+	setTurns(t, e, sid, "completed")
+	if code := post("too late"); code != http.StatusConflict {
+		t.Fatalf("late ingest %d, want 409", code)
+	}
+	s, _ := openFollow(t, hs, sid, 0, "op-tok")
+	s.expect("session")
+	if got := entryOf(t, s.expect("entry")); !strings.Contains(got.Body, "while running") {
+		t.Fatalf("entry %+v", got)
+	}
+	s.expect("state")
+	s.expect("end")
+	s.closed()
+	plain := authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10)+"/read", "op-tok")
+	if strings.Contains(plain.body, "too late") {
+		t.Fatalf("plain read shows a refused action: %s", plain.body)
+	}
+}

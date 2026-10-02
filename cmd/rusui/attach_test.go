@@ -172,11 +172,11 @@ func TestRunAttachManagedAfterWakeReusesSessionEnvironmentAndTranscript(t *testi
 			Findings:      []engine.Finding{{Title: "existing workspace", Body: "ready for follow-up"}},
 		},
 	}
-	if _, err := e.Complete(claim.Job.ID, claim.Job.LeaseGeneration, claim.Job.ClaimedRevision, artifact); err != nil {
-		t.Fatal(err)
-	}
 	transcript := "existing transcript entry" + strings.Repeat("x", (1<<20)+1)
 	if _, err := e.IngestTurnAction(claim.Job.ID, "acp.session.update", "recorded", map[string]string{"text": transcript}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Complete(claim.Job.ID, claim.Job.LeaseGeneration, claim.Job.ClaimedRevision, artifact); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.SleepEnvironment(envBefore.ID); err != nil {
