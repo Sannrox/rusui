@@ -67,6 +67,11 @@ func TestBlackBoxReadShowsGuestTranscriptOnce(t *testing.T) {
 		t.Fatalf("session %s", detail)
 	}
 	turnID := body.Turns[0].ID
+	// Actions are recorded only for a running turn (#437), as a runner
+	// posts them after it claims the turn.
+	if c, err := e.Claim("example/test-repo"); err != nil || c == nil || c.Job.ID != turnID {
+		t.Fatalf("claim %+v %v", c, err)
+	}
 
 	cmd := fakeCommand(t, KindGrok, false)
 	stdin, err := cmd.StdinPipe()
