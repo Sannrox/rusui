@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -8,7 +9,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -97,9 +100,15 @@ func (s *Server) sessionRead(id int64) (sessionRead, error) {
 // the file text as a unified patch from an empty baseline. It is not a git
 // diff. No files is an empty diff. A workspace the console cannot list is
 // the console's unavailable state.
+// sessionDiffCap bounds the bodies one container session read carries.
+const sessionDiffCap = 4 << 20
+
 func (s *Server) workspaceDiff(page consolePage, envRow *store.Environment, handle, envState string) (string, string) {
 	if page.FilesErr != "" {
 		return "", page.FilesErr
+	}
+	if envRow != nil && envRow.Driver == env.KindContainer {
+		return s.containerDiff(envRow)
 	}
 	if len(page.Files) == 0 {
 		return "", "empty"
@@ -115,6 +124,41 @@ func (s *Server) workspaceDiff(page consolePage, envRow *store.Environment, hand
 			continue
 		}
 		b.WriteString(body)
+	}
+	return b.String(), ""
+}
+
+// containerDiff is the workspace diff of a ready container from one
+// runtime exec, not one per file (#449).
+func (s *Server) containerDiff(envRow *store.Environment) (string, string) {
+	in, ok := s.containerInspector()
+	if !ok {
+		return "", "workspace unavailable"
+	}
+	entries, err := in.WorkspaceSnapshot(envRow.Handle, consoleFileCap, sessionDiffCap)
+	if errors.Is(err, env.ErrWorkspaceReplaced) {
+		return "", env.FileRootReplaced
+	}
+	if err != nil {
+		return "", "workspace unavailable"
+	}
+	if len(entries) == 0 {
+		return "", "empty"
+	}
+	var b strings.Builder
+	for _, e := range entries {
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		state := e.State
+		if state == "" && (bytes.IndexByte(e.Body, 0) >= 0 || !utf8.Valid(e.Body)) {
+			state = "binary"
+		}
+		if state != "" {
+			fmt.Fprintf(&b, "# %s\n%s\n", e.Name, state)
+			continue
+		}
+		b.WriteString(unifiedFromEmpty(e.Name, string(e.Body)))
 	}
 	return b.String(), ""
 }
