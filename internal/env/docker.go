@@ -133,6 +133,9 @@ func (d DockerCLI) CreateAndStart(spec Spec) (string, error) {
 	}
 	args := []string{"run", "-d"}
 	args = append(args, TrustedRunArgs(spec)...)
+	// PID 1 must stay this keepalive: KillGuest signals every other
+	// process, so --init or another entrypoint would stop the container
+	// on cancel (#441).
 	args = append(args, "--entrypoint", "sleep")
 	if spec.Name != "" {
 		args = append(args, "--name", "rusui-"+spec.Name)

@@ -36,8 +36,17 @@ func (e *Engine) CancelSession(sessionID int64) error {
 		return err
 	}
 	if envRow, err := store.GetEnvironment(e.Store, sess.EnvironmentID); err == nil && envRow.Handle != "" {
-		if k, ok := e.envDriver().(guestKiller); ok {
-			_ = k.KillGuest(envRow.Handle)
+		// The environment's own driver: a container session is killed by
+		// the container driver, not the process driver (#441).
+		if d, err := e.driverFor(envRow.Driver); err == nil {
+			if k, ok := d.(guestKiller); ok {
+				_ = k.KillGuest(envRow.Handle)
+				// The kill also ends the declared services; a follow-up
+				// turn on this environment still expects them.
+				if envRow.State == store.EnvReady {
+					_ = e.startServicesFor(d, envRow.ID, envRow.Handle)
+				}
+			}
 		}
 	}
 	return nil
