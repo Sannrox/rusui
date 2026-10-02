@@ -2,6 +2,7 @@ package env
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -181,5 +182,36 @@ func TestLiveWorkspaceInspection(t *testing.T) {
 		if state != "" && state != want || state == "" && string(body) != want {
 			t.Fatalf("%s: body %q state %q, want %q", name, body, state, want)
 		}
+	}
+}
+
+// A guest that replaces /workspace with a symlink does not get other
+// files listed or read as its workspace (#447).
+func TestLiveWorkspaceInspectionRefusesReplacedRoot(t *testing.T) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("docker required for live proof")
+	}
+	rt, err := LookRuntime()
+	if err != nil {
+		t.Skip(err)
+	}
+	d := Container{RT: rt, Image: "alpine:3.20"}
+	id, err := d.Create(fmt.Sprintf("root-%d", time.Now().UnixNano()%1_000_000_000))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+			t.Skipf("container runtime unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Destroy(id) })
+	if err := d.RT.Exec(id, []string{"sh", "-c", "cd / && rm -rf /workspace && ln -s /etc /workspace"}); err != nil {
+		t.Fatal(err)
+	}
+	in, _ := d.Inspector()
+	if names, err := in.WorkspaceNames(id); !errors.Is(err, ErrWorkspaceReplaced) {
+		t.Fatalf("listed %q, err %v", names, err)
+	}
+	if body, state, err := in.WorkspaceFile(id, "passwd", 1<<16); err != nil || state != FileRootReplaced || len(body) != 0 {
+		t.Fatalf("read %d bytes, state %q, err %v", len(body), state, err)
 	}
 }
