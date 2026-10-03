@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sannrox/rusui/internal/snapshot"
 )
 
 // Two handles on one file, as when local attach writes beside the server.
@@ -162,6 +164,43 @@ func TestCountPendingApprovalsOnlyCountsAnswerableRequests(t *testing.T) {
 	}
 	if n := count(); n != 0 {
 		t.Fatalf("ended turn %d", n)
+	}
+}
+
+// A run session and a scheduled session on the same repository must not be
+// minted the same negative item number: each kind used to count down from -1
+// independently, so their snapshots collided on (repo, item, revision).
+func TestOperatorItemNumbersAreUniquePerRepoAcrossSessionKinds(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	var runItem, scheduledItem int
+	if err := s.Tx(func(tx *sql.Tx) error {
+		_, runItem, err = InsertRunSessionTx(tx, "test", "o/r", "hello")
+		if err != nil {
+			return err
+		}
+		it := snapshot.Item{Repo: "o/r", Item: runItem, ItemKind: "run", State: "open"}
+		return SaveSnapshotTx(tx, "o/r", runItem, 1, it)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Tx(func(tx *sql.Tx) error {
+		_, scheduledItem, err = InsertScheduledSessionTx(tx, "test", "o/r", "hello", 0)
+		if err != nil {
+			return err
+		}
+		it := snapshot.Item{Repo: "o/r", Item: scheduledItem, ItemKind: "scheduled", State: "open"}
+		return SaveSnapshotTx(tx, "o/r", scheduledItem, 1, it)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if runItem == scheduledItem {
+		t.Fatalf("run item %d collided with scheduled item %d", runItem, scheduledItem)
 	}
 }
 
