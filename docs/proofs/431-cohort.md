@@ -16,12 +16,12 @@ neither is a rerun.
 | --- | --- |
 | Task class | single-package Go bug fix with a regression test that fails before the fix |
 | Repository | `Sannrox/rusui` (public) |
-| Candidate | `main` at the commit that merges this file. Plane, runner, and guest image are built from it once; no rebuild mid-campaign. The exact SHA is recorded in the results |
+| Candidate | `main` at `bde416d`, the commit that merged this file. Plane, runner, and guest image are built from it once; no rebuild mid-campaign. The amendment below is docs-only and does not move the candidate |
 | Runtime | native Linux Docker, container driver, guest link ([ADR 0047](../decisions/0047-guest-link.md)); `rusui diagnose` all ready, including `guest_link`, before attempt 1 |
 | Guest | `claude`, reference image (Claude Code 2.1.283); image digest recorded before attempt 1 |
 | Model | `RUSUI_GUEST_MODEL=claude-sonnet-5` through the operator's loopback CLI proxy |
 | Policy | [431-cohort-policy.yaml](431-cohort-policy.yaml), sha256 `a634924bb4a4b8ba7e110ab7cc5a623da89a4a1cab914924a8450bb776420f95`: only `run` sessions, `review: false`, `implement: true`, `land: false`; `read`, `search`, `edit`, `think`, and `execute` allowed, anything else waits for an operator approval. The repository's `policy.yaml` is unchanged |
-| Publication | agent publication ([ADR 0015](../decisions/0015-agent-publication.md)) with a fine-grained token limited to this repository, **Contents** and **Pull requests** read and write only |
+| Publication | agent publication ([ADR 0015](../decisions/0015-agent-publication.md)) with the maintainer's own GitHub login token. It is **not** repository-scoped: it can administer this repository and write to others. See the amendment |
 | Plane | eval plane on loopback, fresh database, one runner (`-acp`), one pinned task at a time |
 | Merge | humans only. The cohort merges nothing |
 
@@ -45,9 +45,21 @@ matches the table below.
   outcome, and none of the fail conditions occur.
 - **narrow**: none of the fail conditions occur, but pass is not met. The
   supported scope shrinks to the rows that cleared.
-- **fail**: a policy bypass; a credential in a guest-visible or public
-  artifact; two pull requests for one effort; a publication that is not one
+- **fail**: a policy bypass, including any GitHub write other than a task
+  branch push and its pull request in this repository; a credential in a
+  public artifact; two pull requests for one effort; a publication that is not one
   of these pinned tasks; or fewer than 3 class tasks accepted.
+
+## Amendment before the first attempt
+
+The declaration fixed a fine-grained token limited to this repository with
+**Contents** and **Pull requests** only. Before any attempt the maintainer
+chose the broader login token instead. The guest therefore holds a
+credential wider than ADR 0015's setup advice, and rusui's command rules are
+workflow control, not a security boundary. Every task branch, pull request,
+and other GitHub write made with it is audited after the run. Any result of
+this cohort applies to agent publication with an unscoped credential; it
+does not establish delivery with a repository-scoped one.
 
 ## Tasks
 
