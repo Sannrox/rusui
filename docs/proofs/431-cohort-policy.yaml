@@ -1,0 +1,30 @@
+# Eval-plane policy for the #431 cohort (docs/proofs/431-cohort.md).
+# Not the operator profile; the repository's policy.yaml is unchanged.
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+  session_kinds: [run]
+  egress: trusted
+  review: false
+  comments: false
+  close: false
+  implement: false
+  land: false
+projects:
+  rusui:
+    session_kinds: [run]
+    permissions:
+      - kind: read
+      - kind: search
+      - kind: edit
+      - kind: think
+      - kind: execute
+    repos:
+      Sannrox/rusui:
+        visibility: public
+        review: false
+        comments: false
+        close: false
+        implement: true
+        land: false
