@@ -203,7 +203,7 @@ func InsertScheduledSessionTx(tx *sql.Tx, project, repo, prompt string, schedule
 
 func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt string, scheduleID int64) (sessionID int64, item int, err error) {
 	var minItem int
-	if err := tx.QueryRow(`SELECT COALESCE(MIN(item),0) FROM sessions WHERE kind=? AND repo=?`, kind, repo).Scan(&minItem); err != nil {
+	if err := tx.QueryRow(`SELECT COALESCE(MIN(item),0) FROM sessions WHERE repo=? AND item<0`, repo).Scan(&minItem); err != nil {
 		return 0, 0, err
 	}
 	item = minItem - 1
