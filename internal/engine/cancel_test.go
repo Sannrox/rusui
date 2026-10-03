@@ -161,6 +161,48 @@ func TestCancelContainerSessionKillsGuestProcesses(t *testing.T) {
 	}
 }
 
+// A cancel on a slept environment runs nothing in the guest: there is
+// no harness to kill and no service to restart (#448).
+func TestCancelSkipsGuestOfSleepingEnvironment(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	box, err := h.e.ProvisionEnvironment(engine.EnvSpec{Name: "box-cancel-sleep", Kind: env.KindContainer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetSessionEnvironment(h.st, sid, box.ID); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := h.e.Claim("example/test-repo"); err != nil || c == nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The idle sleep stopped the container under the leased turn.
+	cur, err := store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cur.State = store.EnvSleeping
+	if err := store.UpdateEnvironment(h.st, *cur); err != nil {
+		t.Fatal(err)
+	}
+	before := len(rt.Execs)
+	if err := h.e.CancelSession(sid); err != nil {
+		t.Fatal(err)
+	}
+	if extra := rt.Execs[before:]; len(extra) != 0 {
+		t.Fatalf("cancel ran in a slept guest: %#v", extra)
+	}
+}
+
 // While a cancel stops the guest, a turn the cancel requeued cannot be
 // claimed onto that environment; it is claimable once the kill is done
 // (#446).
