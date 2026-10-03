@@ -92,10 +92,12 @@ func (c Container) Destroy(handle string) error {
 // Processes started by `docker exec`, such as the harness, have parent
 // PID 0 inside the container, so selecting children of PID 1 misses them
 // (#441). The list is taken once, so a harness exec'd for a requeued turn
-// during the grace second is not killed. A process that ignores TERM is
-// killed after one second. The glob and loop are shell builtins, so
-// listing starts no process of its own.
-const killGuestScript = `l=; for d in /proc/[0-9]*; do p=${d#/proc/}; [ "$p" = 1 ] || [ "$p" = "$$" ] || l="$l $p"; done; [ -n "$l" ] || exit 0; kill -TERM $l 2>/dev/null; sleep 1; kill -KILL $l 2>/dev/null; exit 0`
+// during the grace period is not killed. The grace ends as soon as every
+// listed process is gone or a zombie (PID 1 does not reap), polled every
+// 0.1 s; a process that ignores TERM is killed after one second (#448).
+// The glob, loops, and read are shell builtins, so listing starts no
+// process of its own.
+const killGuestScript = `l=; for d in /proc/[0-9]*; do p=${d#/proc/}; [ "$p" = 1 ] || [ "$p" = "$$" ] || l="$l $p"; done; [ -n "$l" ] || exit 0; kill -TERM $l 2>/dev/null; i=0; while :; do a=; for p in $l; do s=Z; { while read -r k v r; do [ "$k" = State: ] && { s=$v; break; }; done < /proc/$p/status; } 2>/dev/null; [ "$s" = Z ] || a="$a $p"; done; [ -n "$a" ] || exit 0; [ $i -lt 10 ] || break; sleep 0.1 2>/dev/null || sleep 1; i=$((i+1)); done; kill -KILL $a 2>/dev/null; exit 0`
 
 func (c Container) KillGuest(handle string) error {
 	if handle == "" || c.RT == nil {

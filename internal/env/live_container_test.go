@@ -125,6 +125,52 @@ func TestLiveKillGuestStopsExecProcessesOnly(t *testing.T) {
 	}
 }
 
+// KillGuest returns as soon as the guest's processes have ended on TERM,
+// rather than after a fixed grace second (#448).
+func TestLiveKillGuestEndsGraceWhenProcessesExit(t *testing.T) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("docker required for live proof")
+	}
+	rt, err := LookRuntime()
+	if err != nil {
+		t.Skip(err)
+	}
+	d := Container{RT: rt, Image: "alpine:3.20"}
+	id, err := d.Create(fmt.Sprintf("killfast-%d", time.Now().UnixNano()%1_000_000_000))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+			t.Skipf("container runtime unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Destroy(id) })
+	docker := rt.(DockerCLI).bin()
+	// The orphaned sleep becomes an unreaped zombie under PID 1 once
+	// killed; it must not hold the grace open.
+	for _, args := range [][]string{
+		{"exec", "-d", id, "sleep", "600"},
+		{"exec", "-d", id, "sh", "-c", "sleep 600 & wait"},
+	} {
+		if out, err := exec.Command(docker, args...).CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+	}
+	time.Sleep(300 * time.Millisecond)
+	// Measure the exec's own cost so a slow daemon does not fail the test.
+	base := time.Now()
+	if err := d.RT.Exec(id, []string{"true"}); err != nil {
+		t.Fatal(err)
+	}
+	overhead := time.Since(base)
+	start := time.Now()
+	if err := d.KillGuest(id); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start) - overhead; took > 700*time.Millisecond {
+		t.Fatalf("kill took %s beyond exec overhead %s; want the grace to end early", took, overhead)
+	}
+}
+
 // The container workspace is listed and read through the runtime with
 // the console's limits: no directories, no symlinks, a size cap, a
 // name that is an argument rather than script text (#440).

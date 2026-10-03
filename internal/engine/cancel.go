@@ -48,7 +48,9 @@ func (e *Engine) CancelSession(sessionID int64) error {
 	if err != nil {
 		return err
 	}
-	if envErr != nil || envRow.Handle == "" {
+	// Only a ready environment can run a guest; a sleeping or failed one
+	// has nothing to kill and no services to restart (#448).
+	if envErr != nil || envRow.Handle == "" || envRow.State != store.EnvReady {
 		return nil
 	}
 	// The environment's own driver: a container session is killed by
@@ -66,10 +68,8 @@ func (e *Engine) CancelSession(sessionID int64) error {
 	}
 	// The kill also ends the declared services; a follow-up turn on this
 	// environment still expects them.
-	if envRow.State == store.EnvReady {
-		if err := e.startServicesFor(d, envRow.ID, envRow.Handle); err != nil {
-			e.exception(fmt.Sprintf("cancel session=%d: restart services of environment %d: %v", sessionID, envRow.ID, err))
-		}
+	if err := e.startServicesFor(d, envRow.ID, envRow.Handle); err != nil {
+		e.exception(fmt.Sprintf("cancel session=%d: restart services of environment %d: %v", sessionID, envRow.ID, err))
 	}
 	return nil
 }
