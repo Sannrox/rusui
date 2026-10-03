@@ -29,8 +29,11 @@ type FakeRuntime struct {
 	Execs           [][]string
 	Stdio           []StdioCall
 	// Snapshots and FileReads count WorkspaceSnapshot and WorkspaceFile calls.
-	Snapshots  int
-	FileReads  int
+	Snapshots int
+	FileReads int
+	// Links are guest-link starts (ADR 0047). The fake guest side binds
+	// nothing and reports ready, so a turn's link starts and stays up.
+	Links      []StdioCall
 	StdioHook  func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error)
 	ExecHook   func(id string, cmd []string) error
 	OutputHook func(id string, cmd []string) []byte
@@ -194,6 +197,12 @@ func (f *FakeRuntime) GuestAddr(id string, port int) (string, error) {
 }
 
 func (f *FakeRuntime) ExecStdio(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+	if IsLinkArgv(argv) {
+		f.mu.Lock()
+		f.Links = append(f.Links, StdioCall{Handle: handle, Argv: append([]string(nil), argv...)})
+		f.mu.Unlock()
+		return fakeLinkGuest()
+	}
 	f.mu.Lock()
 	f.Stdio = append(f.Stdio, StdioCall{Handle: handle, Argv: append([]string(nil), argv...), Env: append([]string(nil), env...)})
 	hook := f.StdioHook
@@ -323,4 +332,21 @@ func (f *FakeRuntime) WorkspaceSnapshot(id string, fileCap, totalCap int64) ([]W
 		}
 	}
 	return out, nil
+}
+
+// fakeLinkGuest is a guest-link guest side with no listeners: it reports
+// ready and then holds the link open until the host closes it.
+func fakeLinkGuest() (io.WriteCloser, io.ReadCloser, func(), error) {
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	go func() {
+		_, _ = outW.Write([]byte{linkReady, 0, 0, 0, 0, 0, 0, 0, 0})
+		_, _ = io.Copy(io.Discard, inR)
+		_ = outW.Close()
+	}()
+	stop := func() {
+		_ = inW.Close()
+		_ = outW.Close()
+	}
+	return inW, outR, stop, nil
 }

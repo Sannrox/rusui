@@ -18,6 +18,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/provider"
 )
 
@@ -262,7 +263,7 @@ func TestOneACPTurnFailsWhenGuestStopsReading(t *testing.T) {
 			return acp.Decision{}
 		}}, stop, nil
 	}
-	cli := &Client{Base: hs.URL, HTTP: hs.Client(), Bootstrap: "wsec", Repo: "example/test-repo"}
+	cli := &Client{Base: hs.URL, HTTP: hs.Client(), Bootstrap: "wsec", Repo: "example/test-repo", Exec: &env.FakeRuntime{}}
 	started := time.Now()
 	_, err := OneACPTurnWithOutcome(context.Background(), cli, hostFn)
 	if !errors.Is(err, context.DeadlineExceeded) {

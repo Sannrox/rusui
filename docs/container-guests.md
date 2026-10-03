@@ -6,9 +6,19 @@ proxies. Tests in this repository prove that path with `FakeRuntime` and a
 stubbed Docker CLI. They do **not** claim live Docker/Podman, IPv6, or
 cross-host combinations.
 
-Container guests may reach only `rusui.plane` (git and model HTTPS proxies).
-Direct addresses, IPv6, host loopback, and other proxy names are denied.
-The guest image does not declare that ask. Policy and the trusted network
+Container guests run with no network (`--network none`) and may reach
+only `rusui.plane` (git and model HTTPS proxies), through a guest link: a
+multiplexed stream over the same `docker exec` stdio that runs the
+harness ([ADR 0047](decisions/0047-guest-link.md)). An implement session
+under agent publication also reaches `github.com` and `api.github.com`
+through its link. Direct addresses, IPv6, host loopback, DNS, and other
+names are unreachable, so `.agents/setup` cannot download from the
+internet; put dependencies in the image or the snapshot. Preview reaches
+a guest port through the same kind of link. The guest image must include
+Node, which runs the guest side of the link. `rusui diagnose` checks the
+path with a throwaway guest (`guest_link`). The plane keeps listening on
+loopback; no host firewall change is needed.
+The guest image does not declare that ask. Policy and the guest link
 are the grant
 ([ADR 0027](decisions/0027-guest-reachability-ask.md)). An image that
 asked for more would be refused, not prompted.
@@ -41,7 +51,7 @@ not a GitHub token on the runner disk. Turn grants may push only
 `refs/heads/rusui/<session>/*` on the bound repo. Grant loss (expiry, lease
 loss, other session) is a failed turn, not a silent continue.
 
-Permissive `docker run` without `--network rusui-trusted` is not the
+A guest started with any network other than `none` is not the
 supported topology.
 
 At startup the server expires hung refresh owners, reconciles missed hook

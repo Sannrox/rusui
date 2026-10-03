@@ -15,7 +15,7 @@
 | U8 self-hosting | — | [Operator journey](u8-operator-journey.md) |
 | T2 maintenance | — | [Evaluation replay](t2-maintenance-eval.md) |
 | #186 unified workflow | [Matrix](186-unified-workflow-matrix.md) | [Results](186-unified-workflow-results.md) |
-| #429 managed rerun | [Matrix](429-managed-rerun-matrix.md) | [Results](429-managed-rerun-results.md) |
+| #429 managed rerun | [Matrix](429-managed-rerun-matrix.md) | [First results](429-managed-rerun-results.md) (deferred), [second results](429-managed-rerun-2-results.md) (narrow) |
 
 The [development corpus replay](../../eval/results.md) is another historical
 result. The [corpus reference](../../eval/set.md) describes its inputs and

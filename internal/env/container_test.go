@@ -9,7 +9,7 @@ func TestContainerUsesRuntimeNotDaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rt.Created) != 1 || rt.Created[0].Network != TrustedNetwork || !rt.Created[0].DisableIPv6 {
+	if len(rt.Created) != 1 || rt.Created[0].Network != NoNetwork || !rt.Created[0].DisableIPv6 {
 		t.Fatalf("trusted network %#v", rt.Created)
 	}
 	if _, err := d.Setup(id, "hash"); err != nil {

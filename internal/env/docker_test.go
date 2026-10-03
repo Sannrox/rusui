@@ -56,12 +56,12 @@ func TestDockerCLIRecordsCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := string(logb)
-	for _, want := range []string{"network inspect rusui-trusted", "network create rusui-trusted", "run -d", "--network rusui-trusted", "--add-host rusui.plane:host-gateway", "--sysctl net.ipv6.conf.all.disable_ipv6=1", "--cpus 0.500", "--memory 67108864", "alpine:3", "stop 0123456789abcdef", "start 0123456789abcdef", "exec -i", "cp "} {
+	for _, want := range []string{"run -d", "--network none", "--add-host rusui.plane:127.0.0.2", "--sysctl net.ipv6.conf.all.disable_ipv6=1", "--cpus 0.500", "--memory 67108864", "alpine:3", "stop 0123456789abcdef", "start 0123456789abcdef", "exec -i", "cp "} {
 		if !strings.Contains(log, want) {
 			t.Fatalf("missing %q in %s", want, log)
 		}
 	}
-	if strings.Contains(log, "chdir") {
+	if strings.Contains(log, "chdir") || strings.Contains(log, "network create") {
 		t.Fatal(log)
 	}
 }
@@ -141,7 +141,7 @@ func TestDockerCLIParsesIDAfterPullLogs(t *testing.T) {
 	}
 	t.Setenv("STUB_LOG", logPath)
 	d := DockerCLI{Bin: bin}
-	id, err := d.CreateAndStart(Spec{Name: "box", Image: "alpine:3"})
+	id, err := d.CreateAndStart(Spec{Name: "box", Image: "alpine:3", Network: TrustedNetwork})
 	if err != nil || id != "0123456789abcdef" {
 		t.Fatalf("id %q err %v", id, err)
 	}
@@ -181,7 +181,7 @@ func TestDockerCLIFailsClosedWhenNetworkCreateFails(t *testing.T) {
 	}
 	t.Setenv("STUB_LOG", logPath)
 	d := DockerCLI{Bin: bin}
-	if _, err := d.CreateAndStart(Spec{Name: "box", Image: "alpine:3"}); err == nil {
+	if _, err := d.CreateAndStart(Spec{Name: "box", Image: "alpine:3", Network: TrustedNetwork}); err == nil {
 		t.Fatal("expected network create failure")
 	}
 	logb, err := os.ReadFile(logPath)
@@ -220,7 +220,7 @@ func TestDockerCLINetworkCreateRace(t *testing.T) {
 	}
 	t.Setenv("STUB_LOG", logPath)
 	d := DockerCLI{Bin: bin}
-	id, err := d.CreateAndStart(Spec{Name: "box", Image: "alpine:3"})
+	id, err := d.CreateAndStart(Spec{Name: "box", Image: "alpine:3", Network: TrustedNetwork})
 	if err != nil || id != "0123456789abcdef" {
 		t.Fatalf("id %q err %v", id, err)
 	}

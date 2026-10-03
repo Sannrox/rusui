@@ -266,6 +266,12 @@ func OneACPTurnWithOutcome(ctx context.Context, c *Client, host ACPHost) (ClaimO
 		runCtx, cancel = context.WithDeadline(ctx, a.ExecutionDeadline.UTC())
 	}
 	defer cancel()
+	runCtx, unlink, err := startTurnLink(runCtx, c, a)
+	if err != nil {
+		_ = c.Fail(a)
+		return outcome, err
+	}
+	defer unlink()
 	steers := make(chan engine.Steer, 1)
 	stopHB := make(chan struct{})
 	defer close(stopHB)

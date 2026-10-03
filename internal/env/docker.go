@@ -128,8 +128,10 @@ func (d DockerCLI) CreateAndStart(spec Spec) (string, error) {
 	if spec.Network == "" {
 		ApplyTrustedNetwork(&spec)
 	}
-	if err := d.ensureNetwork(spec.Network); err != nil {
-		return "", err
+	if spec.Network != NoNetwork {
+		if err := d.ensureNetwork(spec.Network); err != nil {
+			return "", err
+		}
 	}
 	args := []string{"run", "-d"}
 	args = append(args, TrustedRunArgs(spec)...)
@@ -193,98 +195,130 @@ func isContainerID(id string) bool {
 	return true
 }
 
-// sidecarForwardJS is a long-lived TCP proxy in a published sidecar.
-// argv: destHost destPort listenPort
-const sidecarForwardJS = `const n=require("net");const dest=process.argv[1];const dport=+process.argv[2];const lport=+process.argv[3];n.createServer(c=>{const s=n.connect({host:dest,port:dport});c.pipe(s);s.pipe(c);s.on("error",()=>c.destroy());c.on("error",()=>s.destroy());}).listen(lport,"0.0.0.0");`
-
-type dockerFwd struct {
-	addr    string
-	sidecar string
+// previewLink is the plane's inbound-only guest link to one container:
+// one host listener per forwarded guest port, each accepted connection a
+// stream to that port on the guest's loopback (ADR 0047). A link is
+// started outside mu so a guest that never becomes ready cannot hold up
+// other previews or environment lifecycle.
+type previewLink struct {
+	mu        sync.Mutex
+	link      *Link
+	starting  chan struct{}
+	closed    bool
+	listeners map[int]net.Listener
 }
 
-var dockerForwards sync.Map // id/port -> dockerFwd
+var dockerForwards sync.Map // container id -> *previewLink
 
+// GuestAddr returns a plane-local address that reaches port on the
+// guest's loopback through the guest link. A link that has ended is
+// restarted on the next connection.
 func (d DockerCLI) GuestAddr(id string, port int) (string, error) {
+	return guestAddr(d, id, port)
+}
+
+func guestAddr(x StdioExecutor, id string, port int) (string, error) {
 	if err := validGuestPort(port); err != nil {
 		return "", err
 	}
 	if id == "" {
 		return "", fmt.Errorf("env: empty handle")
 	}
-	key := id + "/" + strconv.Itoa(port)
-	if v, ok := dockerForwards.Load(key); ok {
-		return v.(dockerFwd).addr, nil
+	v, _ := dockerForwards.LoadOrStore(id, &previewLink{listeners: map[int]net.Listener{}})
+	p := v.(*previewLink)
+	if _, err := p.current(x, id); err != nil {
+		return "", err
 	}
-	netw, ip, image, err := d.inspectForward(id)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return "", fmt.Errorf("env: guest link closed")
+	}
+	if ln, ok := p.listeners[port]; ok {
+		return ln.Addr().String(), nil
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return "", err
 	}
-	short := id
-	if len(short) > 12 {
-		short = short[:12]
-	}
-	sidecar := "rusui-fwd-" + short + "-" + strconv.Itoa(port)
-	ps := strconv.Itoa(port)
-	args := []string{
-		"run", "-d", "--rm", "--name", sidecar, "--network", netw,
-		"-p", "127.0.0.1:0:" + ps,
-		"--entrypoint", "node", image, "-e", sidecarForwardJS, ip, ps, ps,
-	}
-	if _, err := d.run(args...); err != nil {
-		return "", err
-	}
-	out, err := d.run("port", sidecar, ps)
-	if err != nil {
-		_, _ = d.run("rm", "-f", sidecar)
-		return "", err
-	}
-	addr := parseDockerPort(string(out))
-	if addr == "" {
-		_, _ = d.run("rm", "-f", sidecar)
-		return "", fmt.Errorf("env: no published port")
-	}
-	fwd := dockerFwd{addr: addr, sidecar: sidecar}
-	if actual, loaded := dockerForwards.LoadOrStore(key, fwd); loaded {
-		_, _ = d.run("rm", "-f", sidecar)
-		return actual.(dockerFwd).addr, nil
-	}
-	return addr, nil
+	p.listeners[port] = ln
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			l, err := p.current(x, id)
+			if err != nil || l.Forward(c, port) != nil {
+				_ = c.Close()
+			}
+		}
+	}()
+	return ln.Addr().String(), nil
 }
 
-func (d DockerCLI) inspectForward(id string) (network, ip, image string, err error) {
-	out, err := d.run("inspect", "-f", "{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{$v.IPAddress}} {{end}}{{.Config.Image}}", id)
-	if err != nil {
-		return "", "", "", err
+// current returns a live link, starting one if none is live. Concurrent
+// callers wait for a single start.
+func (p *previewLink) current(x StdioExecutor, id string) (*Link, error) {
+	p.mu.Lock()
+	for {
+		if p.closed {
+			p.mu.Unlock()
+			return nil, fmt.Errorf("env: guest link closed")
+		}
+		if p.link != nil {
+			select {
+			case <-p.link.Done():
+			default:
+				l := p.link
+				p.mu.Unlock()
+				return l, nil
+			}
+		}
+		if p.starting == nil {
+			break
+		}
+		ch := p.starting
+		p.mu.Unlock()
+		<-ch
+		p.mu.Lock()
 	}
-	fields := strings.Fields(strings.TrimSpace(string(out)))
-	if len(fields) < 3 {
-		return "", "", "", fmt.Errorf("env: no guest address")
+	ch := make(chan struct{})
+	p.starting = ch
+	p.mu.Unlock()
+	l, err := StartLink(x, id, nil)
+	p.mu.Lock()
+	p.starting = nil
+	close(ch)
+	if err == nil && p.closed {
+		p.mu.Unlock()
+		l.Close()
+		return nil, fmt.Errorf("env: guest link closed")
 	}
-	network, ip, image = fields[0], fields[1], fields[len(fields)-1]
-	if net.ParseIP(ip) == nil || net.ParseIP(ip).IsLoopback() {
-		return "", "", "", fmt.Errorf("env: guest address %s denied", ip)
+	if err == nil {
+		p.link = l
 	}
-	return network, ip, image, nil
+	p.mu.Unlock()
+	return l, err
 }
 
-func parseDockerPort(out string) string {
-	s := strings.TrimSpace(out)
-	if i := strings.LastIndex(s, "->"); i >= 0 {
-		s = strings.TrimSpace(s[i+2:])
-	}
-	if _, _, err := net.SplitHostPort(s); err != nil {
-		return ""
-	}
-	return s
-}
+func (d DockerCLI) closeForwards(id string) { closeForwards(id) }
 
-func (d DockerCLI) closeForwards(id string) {
-	prefix := id + "/"
+func closeForwards(id string) {
 	dockerForwards.Range(func(k, v any) bool {
 		key, _ := k.(string)
-		if id == "" || key == id || strings.HasPrefix(key, prefix) {
-			if fwd, ok := v.(dockerFwd); ok && fwd.sidecar != "" {
-				_, _ = d.run("rm", "-f", fwd.sidecar)
+		if id == "" || key == id {
+			p := v.(*previewLink)
+			p.mu.Lock()
+			p.closed = true
+			for _, ln := range p.listeners {
+				_ = ln.Close()
+			}
+			l := p.link
+			p.link = nil
+			p.mu.Unlock()
+			if l != nil {
+				l.Close()
 			}
 			dockerForwards.Delete(k)
 		}

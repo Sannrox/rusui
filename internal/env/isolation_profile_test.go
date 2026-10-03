@@ -19,7 +19,7 @@ func TestContainerCreateIsTheSupportedIsolationProfile(t *testing.T) {
 		t.Fatalf("created %d", len(rt.Created))
 	}
 	spec := rt.Created[0]
-	if spec.Network != TrustedNetwork {
+	if spec.Network != NoNetwork {
 		t.Fatalf("network %q", spec.Network)
 	}
 	if !spec.DisableIPv6 {

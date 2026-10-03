@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/sannrox/rusui/internal/acp"
+	envpkg "github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/ops"
 	"github.com/sannrox/rusui/internal/server"
 )
@@ -43,6 +44,9 @@ func diagnoseMain(args []string, out io.Writer) int {
 		CAFile:     getenv("RUSUI_PLANE_CA"),
 		Env:        getenv,
 	}, getenv)
+	if rt, err := envpkg.LookRuntime(); err == nil && planeReady(rep) {
+		addCheck(&rep, ops.CheckGuestLink(rt, getenv, planeURL))
+	}
 	enc := json.NewEncoder(out)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(rep); err != nil {
@@ -53,6 +57,23 @@ func diagnoseMain(args []string, out io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// planeReady is whether the plane answered; the guest link check needs it.
+func planeReady(rep ops.Report) bool {
+	for _, c := range rep.Checks {
+		if c.Name == "plane" {
+			return c.Status == ops.StatusReady && c.Blocker
+		}
+	}
+	return false
+}
+
+func addCheck(rep *ops.Report, check ops.Check) {
+	rep.Checks = append(rep.Checks, check)
+	if check.Blocker && check.Status != ops.StatusReady {
+		rep.Ready = false
+	}
 }
 
 func diagnoseWithModel(opt ops.Options, getenv func(string) string) ops.Report {

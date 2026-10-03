@@ -36,8 +36,9 @@ func TestTrustedRunArgsEncodePolicy(t *testing.T) {
 	ApplyTrustedNetwork(&spec)
 	args := strings.Join(TrustedRunArgs(spec), " ")
 	for _, want := range []string{
-		"--network " + TrustedNetwork,
-		"--add-host " + PlaneHost + ":host-gateway",
+		"--network none",
+		"--add-host " + PlaneHost + ":" + GuestPlaneIP,
+		"--add-host github.com:" + GuestGitHubIP,
 		"--sysctl net.ipv6.conf.all.disable_ipv6=1",
 		"-v /etc/rusui/plane.crt:" + GuestCAPath + ":ro",
 	} {

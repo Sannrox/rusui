@@ -454,6 +454,9 @@ func TestGrokHostExecsInContainer(t *testing.T) {
 	if len(rt.Stdio) != 1 || rt.Stdio[0].Handle == "" {
 		t.Fatalf("stdio %#v", rt.Stdio)
 	}
+	if len(rt.Links) != 1 || rt.Links[0].Handle != rt.Stdio[0].Handle {
+		t.Fatalf("turn ran without its guest link: %#v", rt.Links)
+	}
 	joined := strings.Join(rt.Stdio[0].Argv, " ")
 	if !strings.Contains(joined, "agent stdio") || !strings.Contains(joined, "--permission-mode default") {
 		t.Fatalf("argv %q", joined)

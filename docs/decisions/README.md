@@ -55,6 +55,7 @@ Decisions that must outlive a single pull request.
 | [0044](0044-plane-publishes-from-turn-result.md) | The plane publishes from the turn result | Accepted |
 | [0045](0045-local-unattended-promotion-deferred.md) | Local unattended promotion is deferred | Accepted |
 | [0046](0046-workspace-first-sequence.md) | Terminal-first remote workspace sequence | Accepted |
+| [0047](0047-guest-link.md) | Container guests reach the plane only through a stdio guest link | Accepted |
 
 ## When to write an ADR
 
