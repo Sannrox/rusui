@@ -16,6 +16,14 @@ func TestParseHookIDs(t *testing.T) {
 	}
 }
 
+func TestParseLinked(t *testing.T) {
+	body := "see #2 and #2, also other/repo#5 and example/test-repo#3, it&#39;s not #4&#39; done"
+	got := parseLinked(body, 1)
+	if len(got) != 2 || got[0] != 2 || got[1] != 4 {
+		t.Fatalf("linked %v", got)
+	}
+}
+
 func TestAPIGetItemIssueAndPR(t *testing.T) {
 	var sawAuth bool
 	mux := http.NewServeMux()
