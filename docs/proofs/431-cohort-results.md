@@ -86,18 +86,18 @@ fails on the base and passes on the head, and a passing CI build.
    `POST /jobs/claim` timed out client-side after the plane had granted the
    lease. The runner never ran the turn; the lease expired and counted as a
    retry. Three such leases failed C-06 and C-11 without any execution.
-   Claim is not reconciled when its response is lost.
+   Claim is not reconciled when its response is lost (#468).
 2. **A guest-created worktree makes a correct pull request unconfirmed.**
    In C-12 the guest moved its edits into a nested Claude Code worktree and
    pushed from there. The workspace root stayed at the base, so the plane
    compared the base with the pushed head and recorded `unconfirmed`. The
-   plane correctly declined to confirm a head it could not match.
+   plane correctly declined to confirm a head it could not match (#469).
 3. **Fault prompts that ask the guest to waste time are refused.** C-13's
    deadline prompt and C-09's policy prompt were both refused by the guest
    before any tool ran, so neither the run deadline nor the plane's path pin
    was exercised by these rows.
 4. **The `internal/engine` package is close to its CI timeout**, and
-   `TestWakeRestartsServicesYAML` is flaky on `main`.
+   `TestWakeRestartsServicesYAML` is flaky on `main` (#470).
 
 ## Decision: narrow
 
