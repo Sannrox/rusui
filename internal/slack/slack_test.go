@@ -40,6 +40,31 @@ func TestParseFormAndSplit(t *testing.T) {
 	}
 }
 
+func TestSplitItem(t *testing.T) {
+	cases := []struct {
+		name     string
+		in       string
+		wantRepo string
+		wantItem int
+	}{
+		{"bare repo", "o/r", "o/r", 0},
+		{"positive item", "o/r#12", "o/r", 12},
+		{"negative item", "o/r#-3", "o/r", -3},
+		{"malformed suffix", "o/r#12x", "o/r", InvalidItem},
+		{"empty suffix", "o/r#", "o/r", InvalidItem},
+		{"non-numeric suffix", "o/r#abc", "o/r", InvalidItem},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo, item := SplitItem(tc.in)
+			if repo != tc.wantRepo || item != tc.wantItem {
+				t.Fatalf("SplitItem(%q) = (%q, %d), want (%q, %d)",
+					tc.in, repo, item, tc.wantRepo, tc.wantItem)
+			}
+		})
+	}
+}
+
 func TestChallenge(t *testing.T) {
 	ch, ok := Challenge([]byte(`{"type":"url_verification","challenge":"abc"}`))
 	if !ok || ch != "abc" {
