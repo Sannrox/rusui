@@ -388,8 +388,20 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Repo  string   `json:"repo"`
 		Repos []string `json:"repos"`
+		// ClaimToken names this claim attempt. A runner that lost the
+		// response retries with the same token and gets the same lease.
+		ClaimToken string `json:"claim_token"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
+	if len(req.ClaimToken) > 128 {
+		http.Error(w, "claim: claim_token too long", http.StatusBadRequest)
+		return
+	}
+	tokenHash := ""
+	if req.ClaimToken != "" {
+		sum := sha256.Sum256([]byte(req.ClaimToken))
+		tokenHash = hex.EncodeToString(sum[:])
+	}
 	repos := append([]string(nil), req.Repos...)
 	if req.Repo != "" {
 		if len(repos) > 0 {
@@ -404,7 +416,7 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 	}
 	var last *engine.Claim
 	for _, repo := range repos {
-		c, err := s.Eng.Claim(repo)
+		c, err := s.Eng.ClaimToken(repo, tokenHash)
 		if err != nil {
 			if (errors.Is(err, engine.ErrBudget) || errors.Is(err, engine.ErrPaused)) && len(repos) > 1 {
 				continue

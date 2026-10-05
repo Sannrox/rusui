@@ -3,6 +3,8 @@ package runner
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -191,23 +193,54 @@ func (c *Client) configuredRepos() ([]string, error) {
 }
 
 func (c *Client) postClaimRepos(repos []string) (*Assignment, string, error) {
-	body, _ := json.Marshal(map[string]any{"repos": repos})
+	body, _ := json.Marshal(map[string]any{"repos": repos, "claim_token": newClaimToken()})
 	return c.decodeClaim(body, repos)
 }
 
 func (c *Client) claimRepo(repo string) (*Assignment, string, error) {
-	body, _ := json.Marshal(map[string]string{"repo": repo})
+	body, _ := json.Marshal(map[string]string{"repo": repo, "claim_token": newClaimToken()})
 	return c.decodeClaim(body, []string{repo})
 }
 
-func (c *Client) decodeClaim(body []byte, allowed []string) (*Assignment, string, error) {
-	req, err := http.NewRequest("POST", c.Base+"/jobs/claim", bytes.NewReader(body))
-	if err != nil {
-		return nil, "", err
+// claimAttempts bounds how often one claim is sent when its response is
+// lost in transport. Every attempt carries the same claim token, so the
+// plane returns a lease it already granted instead of leaving it orphaned.
+const claimAttempts = 3
+
+// claimRetryDelay is the pause before resending a claim; tests shorten it.
+var claimRetryDelay = time.Second
+
+func newClaimToken() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// postClaim sends one claim, resending the same body after a transport
+// error such as a client timeout.
+func (c *Client) postClaim(body []byte) (*http.Response, error) {
+	var err error
+	for attempt := range claimAttempts {
+		if attempt > 0 {
+			time.Sleep(claimRetryDelay)
+		}
+		var req *http.Request
+		req, err = http.NewRequest("POST", c.Base+"/jobs/claim", bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+c.Bootstrap)
+		req.Header.Set("Content-Type", "application/json")
+		var res *http.Response
+		if res, err = c.http().Do(req); err == nil {
+			return res, nil
+		}
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Bootstrap)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := c.http().Do(req)
+	return nil, err
+}
+
+func (c *Client) decodeClaim(body []byte, allowed []string) (*Assignment, string, error) {
+	res, err := c.postClaim(body)
 	if err != nil {
 		return nil, "", err
 	}

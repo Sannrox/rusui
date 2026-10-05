@@ -695,10 +695,23 @@ func anySlice(xs []string) []any {
 }
 
 func (e *Engine) Claim(repo string) (*Claim, error) {
+	return e.ClaimToken(repo, "")
+}
+
+// ClaimToken claims the next turn for repo on behalf of a runner that names
+// its claim attempt with tokenHash. If a live lease was already granted to
+// that token, the same lease is returned again instead of a new turn: the
+// runner retries with the token after losing the first response (#468).
+func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 	var c *Claim
+	replayed := false
 	reviewCountDay := ""
 	activePolicy := e.PolicySnapshot()
 	err := e.Store.Tx(func(tx *sql.Tx) error {
+		if replay, err := e.replayClaimTx(tx, tokenHash); err != nil || replay != nil {
+			c, replayed = replay, replay != nil
+			return err
+		}
 		paused, err := e.repoPaused(tx, repo)
 		if err != nil {
 			return err
@@ -822,6 +835,9 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		if err := store.UpdateJobTx(tx, j); err != nil {
 			return err
 		}
+		if err := store.SetTurnClaimTokenTx(tx, j.ID, tokenHash); err != nil {
+			return err
+		}
 		if j.Lane == "review" {
 			reviewCountDay = e.now().Format("2006-01-02")
 			if err := store.IncrReviewsToday(tx, repo, reviewCountDay); err != nil {
@@ -835,7 +851,7 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		c = &Claim{Job: j, Snapshot: snap, ItemHash: snapshot.ItemHash(snap), reviewCountDay: reviewCountDay}
 		return nil
 	})
-	if err != nil || c == nil {
+	if err != nil || c == nil || replayed {
 		return c, err
 	}
 	if err := e.EnsureSessionEnvironment(c.Job.ID, c.Snapshot); err != nil {
@@ -859,6 +875,30 @@ func (e *Engine) Claim(repo string) (*Claim, error) {
 		return nil, fmt.Errorf("environment setup failed with environment state %s: %w", state, err)
 	}
 	return c, nil
+}
+
+// replayClaimTx returns the live lease already granted to tokenHash, or
+// nil when there is none. An expired lease or a passed execution deadline
+// is not replayed; the ordinary claim path expires it.
+func (e *Engine) replayClaimTx(tx *sql.Tx, tokenHash string) (*Claim, error) {
+	id, err := store.LeasedTurnByClaimTokenTx(tx, tokenHash)
+	if err != nil || id == 0 {
+		return nil, err
+	}
+	j, err := store.GetJobByIDTx(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	now := e.now()
+	if j.State != "leased" || (j.LeaseExpiresAt != nil && !now.Before(*j.LeaseExpiresAt)) ||
+		(j.ExecutionDeadlineAt != nil && !now.Before(*j.ExecutionDeadlineAt)) {
+		return nil, nil
+	}
+	snap, err := store.LoadSnapshotTx(tx, j.Repo, j.Item, j.ClaimedRevision)
+	if err != nil {
+		return nil, err
+	}
+	return &Claim{Job: j, Snapshot: snap, ItemHash: snapshot.ItemHash(snap)}, nil
 }
 
 func (e *Engine) requeueBusyEnvironmentClaim(c *Claim) error {
