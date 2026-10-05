@@ -76,7 +76,7 @@ func TestSteerInterruptsLiveRunnerAndKeepsGuestSession(t *testing.T) {
 	go func() { _ = agent.Run() }()
 	host := &acp.Client{
 		In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{},
-		Wait: func(ctx context.Context, _ acp.PermissionParams) acp.Decision {
+		Wait: func(ctx context.Context, _ string, _ acp.PermissionParams) acp.Decision {
 			permissionWaiting <- struct{}{}
 			<-ctx.Done()
 			return acp.Decision{}
