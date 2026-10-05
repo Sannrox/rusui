@@ -243,13 +243,17 @@ func bearer(r *http.Request) string {
 }
 
 func (s *Server) turnOK(r *http.Request, turnID int64) bool {
+	ok, err := s.turnCredentialOK(r, turnID)
+	return err == nil && ok
+}
+
+func (s *Server) turnCredentialOK(r *http.Request, turnID int64) (bool, error) {
 	tok := bearer(r)
 	if tok == "" {
-		return false
+		return false, nil
 	}
 	sum := sha256.Sum256([]byte(tok))
-	ok, err := store.TurnCredentialValid(s.Eng.Store, turnID, hex.EncodeToString(sum[:]), s.Eng.Clock.Now())
-	return err == nil && ok
+	return store.TurnCredentialValid(s.Eng.Store, turnID, hex.EncodeToString(sum[:]), s.Eng.Clock.Now())
 }
 
 func (s *Server) runnerOrTurnOK(r *http.Request, turnID int64) bool {
@@ -556,11 +560,21 @@ func (s *Server) commitTrailers(sess *store.Session) []string {
 	return out
 }
 
+// heartbeat answers 409 and 401 only when the lease or its credential is
+// gone; the runner ends the turn on those (#472). A store failure is 500,
+// which the runner retries.
 func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if !s.runnerOrTurnOK(r, id) {
-		http.Error(w, "auth", 401)
-		return
+	if !s.workerOK(r) {
+		ok, err := s.turnCredentialOK(r, id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, "auth", http.StatusUnauthorized)
+			return
+		}
 	}
 	var req struct {
 		LeaseGeneration int     `json:"lease_generation"`
@@ -572,8 +586,12 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	steer, err := s.Eng.HeartbeatSteerReceived(id, req.LeaseGeneration, req.ClaimedRevision, req.AckSteerIDs)
-	if err != nil {
+	if engine.IsLeaseRejected(err) {
 		http.Error(w, err.Error(), 409)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

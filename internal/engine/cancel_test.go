@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
@@ -246,5 +248,143 @@ func TestCancelHoldsEnvironmentUntilGuestIsStopped(t *testing.T) {
 	after, err := h.e.Claim("example/test-repo")
 	if err != nil || after == nil {
 		t.Fatalf("requeued turn not claimable after the cancel: %+v %v", after, err)
+	}
+}
+
+// wakeHeldOpen sleeps the session's environment and starts a wake that holds
+// the environment operation until release is closed, like a wake run by
+// Claim for the turn the cancel is about to stop.
+func wakeHeldOpen(t *testing.T, h *harn, rt *env.FakeRuntime, envID int64) (release chan struct{}, woke chan error) {
+	t.Helper()
+	// The idle sleep stopped the container under the leased turn.
+	cur, err := store.GetEnvironment(h.st, envID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cur.State = store.EnvSleeping
+	if err := store.UpdateEnvironment(h.st, *cur); err != nil {
+		t.Fatal(err)
+	}
+	waking := make(chan struct{})
+	release = make(chan struct{})
+	rt.StartHook = func(string) error {
+		close(waking)
+		<-release
+		return nil
+	}
+	woke = make(chan error, 1)
+	go func() {
+		_, err := h.e.WakeEnvironment(envID)
+		woke <- err
+	}()
+	<-waking
+	return release, woke
+}
+
+func claimOnContainer(t *testing.T, h *harn, rt *env.FakeRuntime, name string) (sid int64, box *store.Environment) {
+	t.Helper()
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	box, err = h.e.ProvisionEnvironment(engine.EnvSpec{Name: name, Kind: env.KindContainer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetSessionEnvironment(h.st, sid, box.ID); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := h.e.Claim("example/test-repo"); err != nil || c == nil {
+		t.Fatal(err)
+	}
+	// Claim may replace the environment for the turn's source.
+	sess, err := store.GetSession(h.st, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	box, err = store.GetEnvironment(h.st, sess.EnvironmentID)
+	if err != nil || box.State != store.EnvReady || box.Handle == "" {
+		t.Fatalf("session environment %+v %v", box, err)
+	}
+	return sid, box
+}
+
+func killedGuest(rt *env.FakeRuntime, handle string) bool {
+	for _, ex := range rt.Execs {
+		if ex[0] == handle && strings.Contains(strings.Join(ex, " "), "kill -TERM $l") {
+			return true
+		}
+	}
+	return false
+}
+
+// A cancel that waited out a claim-time wake judges the environment as it
+// is once the wake is done, not as it was before: the guest is ready and
+// is stopped (#472).
+func TestCancelAfterClaimTimeWakeStopsGuest(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{}
+	sid, box := claimOnContainer(t, h, rt, "box-cancel-wake")
+	release, woke := wakeHeldOpen(t, h, rt, box.ID)
+	cancelled := make(chan error, 1)
+	go func() { cancelled <- h.e.CancelSession(sid) }()
+	// Let the cancel read the sleeping environment and queue behind the wake.
+	time.Sleep(200 * time.Millisecond)
+	close(release)
+	if err := <-woke; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-cancelled; err != nil {
+		t.Fatal(err)
+	}
+	cur, err := store.GetEnvironment(h.st, box.ID)
+	if err != nil || cur.State != store.EnvReady {
+		t.Fatalf("environment %+v %v", cur, err)
+	}
+	if !killedGuest(rt, cur.Handle) {
+		t.Fatalf("guest of %s not killed after the wake: %#v", cur.Handle, rt.Execs)
+	}
+}
+
+// A cancel never stops the guest without holding the environment
+// operation. When another operation outlasts the wait, the cancel still
+// commits, leaves the guest alone, and the runner's heartbeat ends the
+// harness (#472).
+func TestCancelDoesNotStopGuestWithoutHoldingEnvironment(t *testing.T) {
+	h := setup(t)
+	h.e.CancelEnvWait = 100 * time.Millisecond
+	rt := &env.FakeRuntime{}
+	sid, box := claimOnContainer(t, h, rt, "box-cancel-busy")
+	var kills atomic.Int32
+	killing := make(chan struct{})
+	release := make(chan struct{})
+	rt.ExecHook = func(_ string, cmd []string) error {
+		if strings.Contains(strings.Join(cmd, " "), "kill -TERM") && kills.Add(1) == 1 {
+			close(killing)
+			<-release
+		}
+		return nil
+	}
+	// The first cancel holds the environment operation through its kill.
+	first := make(chan error, 1)
+	go func() { first <- h.e.CancelSession(sid) }()
+	<-killing
+	second := make(chan error, 1)
+	go func() { second <- h.e.CancelSession(sid) }()
+	select {
+	case err := <-second:
+		if err != nil {
+			t.Error(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("second cancel did not return while the first held the environment")
+	}
+	close(release)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if n := kills.Load(); n != 1 {
+		t.Fatalf("guest of %s killed %d times; a cancel killed without the environment operation", box.Handle, n)
 	}
 }
