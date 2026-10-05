@@ -496,8 +496,12 @@ expire_lease  (shared; claim and reaper use the same txn)
       state = queued
   do not issue a new lease in this function
 
-claim
+claim(claim_token?)
   in one txn:
+    if claim_token names a turn still leased under it, unexpired and
+        before its deadline: return that same lease (new turn token,
+        same lease_generation; no retry counted). A runner resends the
+        claim with the same token after losing the response
     if paused: reject
     if session project missing from current policy
         OR (review session AND bound repo missing or review == false): reject
@@ -512,6 +516,7 @@ claim
     expires_at = now + heartbeat_timeout
     execution_deadline_at = now + execution_deadline
     increment daily review counter
+    record claim_token on the lease (cleared when the claim has none)
 
 operator_retry(job)   // Slack retry; unchanged revision only
   require state = failed

@@ -119,6 +119,31 @@ func ListDueLeasedJobsTx(tx *sql.Tx, now time.Time, repo, lane string) ([]*Job, 
 	return out, rows.Err()
 }
 
+// SetTurnClaimTokenTx records the hash of the claim token that leased a
+// turn; an empty hash clears it.
+func SetTurnClaimTokenTx(tx *sql.Tx, turnID int64, hash string) error {
+	var v any
+	if hash != "" {
+		v = hash
+	}
+	_, err := tx.Exec(`UPDATE turns SET claim_token_hash=? WHERE id=?`, v, turnID)
+	return err
+}
+
+// LeasedTurnByClaimTokenTx returns the leased turn claimed with the token
+// hash, or 0 when there is none.
+func LeasedTurnByClaimTokenTx(tx *sql.Tx, hash string) (int64, error) {
+	if hash == "" {
+		return 0, nil
+	}
+	var id int64
+	err := tx.QueryRow(`SELECT id FROM turns WHERE claim_token_hash=? AND state='leased' ORDER BY id DESC LIMIT 1`, hash).Scan(&id)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return id, err
+}
+
 func UpdateJobTx(tx *sql.Tx, j *Job) error {
 	var exp, dead any
 	if j.LeaseExpiresAt != nil {
