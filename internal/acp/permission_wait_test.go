@@ -31,7 +31,7 @@ func TestUnmatchedPermissionWaitsThenAllowOnce(t *testing.T) {
 		Out:  clientOut,
 		Rec:  StoreRecorder{Store: st, Repo: "example/test-repo", Item: 1},
 		Perm: DenyUnmatched{},
-		Wait: func(ctx context.Context, p PermissionParams) Decision {
+		Wait: func(ctx context.Context, _ string, p PermissionParams) Decision {
 			waited <- struct{}{}
 			return Decision{Matched: true, Allow: true}
 		},
@@ -69,7 +69,7 @@ func TestUnmatchedPermissionWaitTimeoutRejects(t *testing.T) {
 		In:   clientIn,
 		Out:  clientOut,
 		Perm: DenyUnmatched{},
-		Wait: func(ctx context.Context, p PermissionParams) Decision {
+		Wait: func(ctx context.Context, _ string, p PermissionParams) Decision {
 			<-ctx.Done()
 			return Decision{Matched: false, Allow: false}
 		},

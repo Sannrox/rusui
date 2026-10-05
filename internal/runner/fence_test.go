@@ -22,7 +22,7 @@ func permissionAnswer(t *testing.T, a *Assignment, cmd string) string {
 	go func() { _ = agent.Run() }()
 	t.Cleanup(func() { _ = clientIn.Close(); _ = clientOut.Close(); _ = agentIn.Close(); _ = agentOut.Close() })
 	c := &acp.Client{In: clientIn, Out: clientOut, Perm: permissionGate(a),
-		Wait: func(context.Context, acp.PermissionParams) acp.Decision { return acp.Decision{} }}
+		Wait: func(context.Context, string, acp.PermissionParams) acp.Decision { return acp.Decision{} }}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if _, err := c.Initialize(ctx); err != nil {

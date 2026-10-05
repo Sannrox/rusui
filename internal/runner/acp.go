@@ -26,9 +26,6 @@ type HTTPRecorder struct {
 	Token  string
 	TurnID int64
 	HTTP   *http.Client
-
-	mu     sync.Mutex
-	lastID string
 }
 
 func (r *HTTPRecorder) http() *http.Client {
@@ -38,61 +35,57 @@ func (r *HTTPRecorder) http() *http.Client {
 	return http.DefaultClient
 }
 
-func (r *HTTPRecorder) Record(rec acp.Receipt) error {
+// Record returns the action id the plane created. An approval receipt
+// without one is an error: its permission request has nothing to wait on.
+func (r *HTTPRecorder) Record(rec acp.Receipt) (string, error) {
 	payload, err := json.Marshal(map[string]any{
 		"type":   rec.Type,
 		"reason": rec.Reason,
 		"body":   rec.Body,
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/turns/%d/actions", r.Base, r.TurnID), bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+r.Token)
 	req.Header.Set("Content-Type", "application/json")
 	res, err := r.http().Do(req)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer func() { _ = res.Body.Close() }()
 	b, _ := io.ReadAll(res.Body)
 	if res.StatusCode != http.StatusAccepted {
-		return fmt.Errorf("turn action: %s %s", res.Status, b)
+		return "", fmt.Errorf("turn action: %s %s", res.Status, b)
 	}
 	var out struct {
 		ID string `json:"id"`
 	}
 	_ = json.Unmarshal(b, &out)
-	if rec.Type == acp.ActionApproval && out.ID != "" {
-		r.mu.Lock()
-		r.lastID = out.ID
-		r.mu.Unlock()
+	if rec.Type == acp.ActionApproval && out.ID == "" {
+		return "", fmt.Errorf("turn action: approval recorded without an id")
 	}
-	return nil
+	return out.ID, nil
 }
 
-func (r *HTTPRecorder) lastApprovalID() string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.lastID
-}
-
-func (r *HTTPRecorder) Wait(ctx context.Context, p acp.PermissionParams) acp.Decision {
+// Wait polls the approval id this request's own receipt returned. An empty
+// id denies without waiting.
+func (r *HTTPRecorder) Wait(ctx context.Context, id string, _ acp.PermissionParams) acp.Decision {
+	if id == "" {
+		return acp.Decision{}
+	}
 	tick := time.NewTicker(25 * time.Millisecond)
 	defer tick.Stop()
 	for {
-		id := r.lastApprovalID()
-		if id != "" {
-			d := r.poll(ctx, id)
-			if d.Matched || d.Allow {
-				return d
-			}
-			if r.denied(ctx, id) {
-				return acp.Decision{}
-			}
+		d := r.poll(ctx, id)
+		if d.Matched || d.Allow {
+			return d
+		}
+		if r.denied(ctx, id) {
+			return acp.Decision{}
 		}
 		select {
 		case <-ctx.Done():
@@ -503,18 +496,21 @@ func claudeDecide(a *Assignment, host *acp.Client) provider.Decide {
 			params.Options = append(params.Options, acp.PermOption{OptionID: o.ID})
 		}
 		if host != nil && host.Rec != nil {
-			_ = host.Rec.Record(acp.Receipt{Type: acp.ActionPermission, Reason: acp.ReasonRecorded, Body: params})
+			_, _ = host.Rec.Record(acp.Receipt{Type: acp.ActionPermission, Reason: acp.ReasonRecorded, Body: params})
 		}
 		d := permissionGate(a).Decide(params)
 		if !d.Matched {
+			var id string
+			var err error
 			if host != nil && host.Rec != nil {
-				_ = host.Rec.Record(acp.Receipt{Type: acp.ActionApproval, Reason: acp.ReasonUnmatched, Body: params})
+				id, err = host.Rec.Record(acp.Receipt{Type: acp.ActionApproval, Reason: acp.ReasonUnmatched, Body: params})
 			}
-			if host != nil && host.Wait != nil {
-				d = host.Wait(ctxOrBackground(host.Ctx), params)
+			// A failed approval receipt has no id to wait on: deny (#471).
+			if err == nil && host != nil && host.Wait != nil {
+				d = host.Wait(ctxOrBackground(host.Ctx), id, params)
 			}
 		} else if !d.Allow && host != nil && host.Rec != nil {
-			_ = host.Rec.Record(acp.Receipt{Type: acp.ActionApproval, Reason: acp.ReasonDenied, Body: params})
+			_, _ = host.Rec.Record(acp.Receipt{Type: acp.ActionApproval, Reason: acp.ReasonDenied, Body: params})
 		}
 		if d.Matched && d.Allow && len(options) > 0 {
 			return options[0].ID, true

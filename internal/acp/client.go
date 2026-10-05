@@ -40,8 +40,9 @@ type writeReq struct {
 	err chan error
 }
 
-// UnmatchedWaiter waits on a live unmatched permission RPC.
-type UnmatchedWaiter func(ctx context.Context, p PermissionParams) Decision
+// UnmatchedWaiter waits on a live unmatched permission RPC. approvalID is
+// the action id returned by recording that request's approval receipt.
+type UnmatchedWaiter func(ctx context.Context, approvalID string, p PermissionParams) Decision
 
 func (c *Client) start() {
 	c.once.Do(func() {
@@ -97,7 +98,7 @@ func (c *Client) handleInbound(msg rpcMessage) {
 	case MethodTerminalOutput, MethodTerminalWaitForExit, MethodTerminalKill, MethodTerminalRelease:
 		c.answerTerminal(msg)
 	default:
-		_ = c.record(Receipt{Type: ActionUnknown, Reason: ReasonRecorded, Body: map[string]any{"method": msg.Method, "params": jsonRaw(msg.Params)}})
+		_, _ = c.record(Receipt{Type: ActionUnknown, Reason: ReasonRecorded, Body: map[string]any{"method": msg.Method, "params": jsonRaw(msg.Params)}})
 		if len(msg.ID) > 0 {
 			_ = c.write(context.Background(), rpcMessage{
 				JSONRPC: "2.0",
@@ -117,13 +118,13 @@ func (c *Client) recordUpdate(params json.RawMessage) {
 	if kind != "tool_call" && kind != "tool_call_update" {
 		return
 	}
-	_ = c.record(Receipt{Type: ActionUpdate, Reason: ReasonRecorded, Body: p})
+	_, _ = c.record(Receipt{Type: ActionUpdate, Reason: ReasonRecorded, Body: p})
 }
 
 func (c *Client) answerPermission(msg rpcMessage) {
 	var p PermissionParams
 	_ = json.Unmarshal(msg.Params, &p)
-	_ = c.record(Receipt{Type: ActionPermission, Reason: ReasonRecorded, Body: p})
+	_, _ = c.record(Receipt{Type: ActionPermission, Reason: ReasonRecorded, Body: p})
 	gate := c.Perm
 	if gate == nil {
 		gate = DenyUnmatched{}
@@ -131,17 +132,18 @@ func (c *Client) answerPermission(msg rpcMessage) {
 	d := gate.Decide(p)
 	cancelled := false
 	if !d.Matched {
-		_ = c.record(Receipt{Type: ActionApproval, Reason: ReasonUnmatched, Body: p})
-		if c.Wait != nil {
+		// A failed approval receipt has no id to wait on: deny (#471).
+		id, err := c.record(Receipt{Type: ActionApproval, Reason: ReasonUnmatched, Body: p})
+		if err == nil && c.Wait != nil {
 			waitCtx := c.permissionWaitContext()
-			d = c.Wait(waitCtx, p)
+			d = c.Wait(waitCtx, id, p)
 			cancelled = waitCtx.Err() != nil
 			if cancelled {
 				d = Decision{}
 			}
 		}
 	} else if !d.Allow {
-		_ = c.record(Receipt{Type: ActionApproval, Reason: ReasonDenied, Body: p})
+		_, _ = c.record(Receipt{Type: ActionApproval, Reason: ReasonDenied, Body: p})
 	}
 	allow := d.Matched && d.Allow
 	option := pickOption(p.Options, allow)
@@ -160,7 +162,7 @@ func (c *Client) answerPermission(msg rpcMessage) {
 func (c *Client) answerFSRead(msg rpcMessage) {
 	var p FSReadParams
 	_ = json.Unmarshal(msg.Params, &p)
-	_ = c.record(Receipt{Type: ActionFSRead, Reason: ReasonRecorded, Body: p})
+	_, _ = c.record(Receipt{Type: ActionFSRead, Reason: ReasonRecorded, Body: p})
 	raw, _ := json.Marshal(FSReadResult{Content: ""})
 	_ = c.write(context.Background(), rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})
 }
@@ -168,19 +170,19 @@ func (c *Client) answerFSRead(msg rpcMessage) {
 func (c *Client) answerFSWrite(msg rpcMessage) {
 	var p FSWriteParams
 	_ = json.Unmarshal(msg.Params, &p)
-	_ = c.record(Receipt{Type: ActionFSWrite, Reason: ReasonDenied, Body: p})
+	_, _ = c.record(Receipt{Type: ActionFSWrite, Reason: ReasonDenied, Body: p})
 	_ = c.write(context.Background(), rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: json.RawMessage(`{}`)})
 }
 
 func (c *Client) answerTerminalCreate(msg rpcMessage) {
-	_ = c.record(Receipt{Type: ActionTerminalCreate, Reason: ReasonRecorded, Body: jsonRaw(msg.Params)})
+	_, _ = c.record(Receipt{Type: ActionTerminalCreate, Reason: ReasonRecorded, Body: jsonRaw(msg.Params)})
 	raw, _ := json.Marshal(TerminalIDResult{TerminalID: "term-recorded"})
 	_ = c.write(context.Background(), rpcMessage{JSONRPC: "2.0", ID: msg.ID, Result: raw})
 }
 
 func (c *Client) answerTerminal(msg rpcMessage) {
 	typ := terminalAction(msg.Method)
-	_ = c.record(Receipt{Type: typ, Reason: ReasonRecorded, Body: map[string]any{"method": msg.Method, "params": jsonRaw(msg.Params)}})
+	_, _ = c.record(Receipt{Type: typ, Reason: ReasonRecorded, Body: map[string]any{"method": msg.Method, "params": jsonRaw(msg.Params)}})
 	var result any
 	switch msg.Method {
 	case MethodTerminalOutput:
@@ -209,9 +211,9 @@ func terminalAction(method string) string {
 	}
 }
 
-func (c *Client) record(r Receipt) error {
+func (c *Client) record(r Receipt) (string, error) {
 	if c.Rec == nil {
-		return nil
+		return "", nil
 	}
 	return c.Rec.Record(r)
 }
