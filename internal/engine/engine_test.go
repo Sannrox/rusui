@@ -55,13 +55,47 @@ type harn struct {
 	http *httptest.Server
 }
 
-func setup(t *testing.T) *harn {
+// migratedDB is a database migrated once per test binary. A fresh migration
+// costs about 0.6s under -race, and nearly every test opens a store.
+var migratedDB []byte
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "rusui-engine-test-")
+	if err != nil {
+		panic(err)
+	}
+	path := filepath.Join(dir, "template.db")
+	st, err := store.Open(path)
+	if err != nil {
+		panic(err)
+	}
+	if err := st.Close(); err != nil {
+		panic(err)
+	}
+	if migratedDB, err = os.ReadFile(path); err != nil {
+		panic(err)
+	}
+	_ = os.RemoveAll(dir)
+	os.Exit(m.Run())
+}
+
+// openMigrated opens a copy of the migrated template at path.
+func openMigrated(t *testing.T, path string) *store.Store {
 	t.Helper()
-	dir := t.TempDir()
-	st, err := store.Open(filepath.Join(dir, "t.db"))
+	if err := os.WriteFile(path, migratedDB, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return st
+}
+
+func setup(t *testing.T) *harn {
+	t.Helper()
+	dir := t.TempDir()
+	st := openMigrated(t, filepath.Join(dir, "t.db"))
 	t.Cleanup(func() { st.Close() })
 	pol, err := policy.Parse([]byte(fixture))
 	if err != nil {
