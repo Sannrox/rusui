@@ -41,6 +41,9 @@ func TestDockerCLIRecordsCLI(t *testing.T) {
 	if err := d.PlaceTree(id, src); err != nil {
 		t.Fatal(err)
 	}
+	if err := d.CaptureTree(id, src); err != nil {
+		t.Fatal(err)
+	}
 	in, out, stop, err := d.ExecStdio(id, []string{"agent", "stdio"}, []string{"XAI_API_KEY=tok"})
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +59,7 @@ func TestDockerCLIRecordsCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := string(logb)
-	for _, want := range []string{"run -d", "--network none", "--add-host rusui.plane:127.0.0.2", "--sysctl net.ipv6.conf.all.disable_ipv6=1", "--cpus 0.500", "--memory 67108864", "alpine:3", "stop 0123456789abcdef", "start 0123456789abcdef", "exec -i", "cp "} {
+	for _, want := range []string{"run -d", "--network none", "--add-host rusui.plane:127.0.0.2", "--sysctl net.ipv6.conf.all.disable_ipv6=1", "--cpus 0.500", "--memory 67108864", "alpine:3", "stop 0123456789abcdef", "start 0123456789abcdef", "exec -i", "cp ", "cp 0123456789abcdef:/workspace/. " + src} {
 		if !strings.Contains(log, want) {
 			t.Fatalf("missing %q in %s", want, log)
 		}

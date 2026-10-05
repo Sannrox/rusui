@@ -28,6 +28,15 @@ part of the guest image identity (`source_hash`) or mount it with
 `RUSUI_PLANE_CA`. An untrusted endpoint never receives the grant: TLS
 handshake fails before the bearer is sent.
 
+`.agents/setup` runs once per image and git pin. When it exits zero, the
+plane copies `/workspace` (`.git` included) into the snapshot cache, and
+every later environment for that image and pin, including one created
+after earlier ones expired, starts from that tree without running setup.
+Only `/workspace` is kept; files setup writes elsewhere in the guest are
+not. A setup that exits non-zero stores nothing, so the next environment
+runs it again
+([ADR 0007](decisions/0007-environment-snapshot.md)).
+
 Required for the container driver:
 
 ```bash
