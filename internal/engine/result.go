@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -14,10 +15,15 @@ const ResultSchema = 1
 // TaskResult is the P1/P3 versioned guest result. Agent claims are not
 // trusted verification (ADR 0013).
 type TaskResult struct {
-	SchemaVersion int       `json:"schema_version"`
-	EffortKey     string    `json:"effort_key,omitempty"`
-	SourceHash    string    `json:"source_hash"`
-	CandidateSHA  string    `json:"candidate_sha,omitempty"`
+	SchemaVersion int    `json:"schema_version"`
+	EffortKey     string `json:"effort_key,omitempty"`
+	SourceHash    string `json:"source_hash"`
+	CandidateSHA  string `json:"candidate_sha,omitempty"`
+	// BranchHeads are the local branch tips the runner observes in the
+	// session workspace, including branches checked out in a nested
+	// worktree (#469). A claimed pull request at one of them was produced
+	// in this workspace even when the workspace HEAD is elsewhere.
+	BranchHeads   []string  `json:"branch_heads,omitempty"`
 	Findings      []Finding `json:"findings,omitempty"`
 	ClaimedChecks []string  `json:"claimed_checks,omitempty"`
 	BlockedReason string    `json:"blocked_reason,omitempty"`
@@ -99,6 +105,11 @@ func (e *Engine) observeResult(art *Artifact) {
 		}
 		r.PublishedSHA = pr.HeadSHA
 		if r.CandidateSHA != "" && pr.HeadSHA == r.CandidateSHA {
+			r.Outcome = OutcomePublished
+		} else if pr.HeadSHA != "" && slices.Contains(r.BranchHeads, pr.HeadSHA) {
+			// The guest committed on a branch of this workspace other than
+			// its HEAD, such as one checked out in a nested worktree.
+			r.CandidateSHA = pr.HeadSHA
 			r.Outcome = OutcomePublished
 		}
 	case r.BlockedReason != "":

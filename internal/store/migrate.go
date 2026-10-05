@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 31
+const CurrentSchema = 32
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -437,7 +437,32 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 32 {
+		if err := migrateV32(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 32); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV32 records which runner claim token leased a turn (#468), so a
+// runner whose claim response was lost can retry with the same token and
+// receive the lease it was already granted.
+func migrateV32(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('turns') WHERE name='claim_token_hash'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := db.Exec(`ALTER TABLE turns ADD COLUMN claim_token_hash TEXT`); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec(`CREATE INDEX IF NOT EXISTS turns_claim_token ON turns(claim_token_hash)`)
+	return err
 }
 
 // migrateV31 indexes the transcript by session (#430). A followed read

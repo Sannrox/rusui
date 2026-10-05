@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/sannrox/rusui/internal/engine"
@@ -102,14 +103,36 @@ func collectResult(x StdioExec, a *Assignment, cwd, sourceHash string) *engine.T
 		git = append(git, "-c", "safe.directory="+rusuienv.WorkspaceDir)
 	}
 	head, _ := guestOutput(x, a, cwd, append(git, "rev-parse", "--verify", "HEAD")...)
+	refs, _ := guestOutput(x, a, cwd, append(git, "for-each-ref", "--format=%(objectname)", "refs/heads")...)
 	return &engine.TaskResult{
 		SchemaVersion: engine.ResultSchema,
 		SourceHash:    sourceHash,
 		CandidateSHA:  strings.TrimSpace(string(head)),
+		BranchHeads:   branchHeads(refs),
 		PullRequest:   max(claim.PullRequest, 0),
 		BlockedReason: claim.BlockedReason,
 		Publish:       claim.Publish,
 	}
+}
+
+// maxBranchHeads bounds the branch tips a result reports.
+const maxBranchHeads = 64
+
+// branchHeads parses `git for-each-ref --format=%(objectname)` output into
+// distinct commit ids, keeping at most maxBranchHeads.
+func branchHeads(out []byte) []string {
+	var heads []string
+	for line := range strings.SplitSeq(string(out), "\n") {
+		sha := strings.TrimSpace(line)
+		if len(sha) < 40 || slices.Contains(heads, sha) {
+			continue
+		}
+		heads = append(heads, sha)
+		if len(heads) == maxBranchHeads {
+			break
+		}
+	}
+	return heads
 }
 
 // guestOutput runs argv where the guest runs: inside its container (in the
