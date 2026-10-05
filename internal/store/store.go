@@ -855,15 +855,6 @@ func TurnCredentialValid(s *Store, turnID int64, tokenHash string, now time.Time
 	return now.Before(t), nil
 }
 
-func HasPreparedSourceHash(s *Store, hash string) (bool, error) {
-	if hash == "" {
-		return false, nil
-	}
-	var n int
-	err := s.DB.QueryRow(`SELECT COUNT(*) FROM environments WHERE source_hash=? AND IFNULL(handle,'')!='' AND state!=?`, hash, EnvExpired).Scan(&n)
-	return n > 0, err
-}
-
 func SetSessionEnvironment(s *Store, sessionID, envID int64) error {
 	_, err := s.DB.Exec(`UPDATE sessions SET environment_id=? WHERE id=?`, envID, sessionID)
 	return err

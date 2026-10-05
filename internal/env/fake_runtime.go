@@ -257,6 +257,35 @@ func (f *FakeRuntime) PlaceTree(id, srcDir string) error {
 	})
 }
 
+// CaptureTree writes the fake workspace into destDir. A path known only
+// through Files is written empty.
+func (f *FakeRuntime) CaptureTree(id, destDir string) error {
+	f.mu.Lock()
+	files := map[string][]byte{}
+	for path, ok := range f.Files[id] {
+		if ok {
+			files[path] = nil
+		}
+	}
+	for path, data := range f.Contents[id] {
+		files[path] = append([]byte(nil), data...)
+	}
+	f.mu.Unlock()
+	for path, data := range files {
+		if !filepath.IsLocal(path) {
+			continue
+		}
+		out := filepath.Join(destDir, path)
+		if err := os.MkdirAll(filepath.Dir(out), 0o700); err != nil {
+			return err
+		}
+		if err := os.WriteFile(out, data, 0o600); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (f *FakeRuntime) SetFileContent(id, path string, data []byte) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

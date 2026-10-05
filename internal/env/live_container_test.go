@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -322,5 +324,53 @@ func TestLiveWorkspaceSnapshot(t *testing.T) {
 	}
 	if _, err := in.WorkspaceSnapshot(id, 256, 1<<20); !errors.Is(err, ErrWorkspaceReplaced) {
 		t.Fatalf("replaced root err %v", err)
+	}
+}
+
+// TestLiveCaptureTreeRoundTrip proves the tree after setup, .git
+// included, comes back to the host and places into a new guest (#512).
+func TestLiveCaptureTreeRoundTrip(t *testing.T) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("docker required for live proof")
+	}
+	rt, err := LookRuntime()
+	if err != nil {
+		t.Skip(err)
+	}
+	d := Container{RT: rt, Image: "alpine:3.20"}
+	create := func(prefix string) string {
+		id, err := d.Create(fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()%1_000_000_000))
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+				t.Skipf("container runtime unavailable: %v", err)
+			}
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = d.Destroy(id) })
+		return id
+	}
+	id := create("cap")
+	setup := `cd /workspace && mkdir -p .git out && printf 'ref\n' > .git/HEAD && printf 'built\n' > out/built.txt && ln -s /etc/passwd link`
+	if err := d.RT.Exec(id, []string{"sh", "-c", setup}); err != nil {
+		t.Fatal(err)
+	}
+	dest := t.TempDir()
+	if err := d.CaptureTree(id, dest); err != nil {
+		t.Fatal(err)
+	}
+	for rel, want := range map[string]string{".git/HEAD": "ref\n", "out/built.txt": "built\n"} {
+		if b, err := os.ReadFile(filepath.Join(dest, rel)); err != nil || string(b) != want {
+			t.Fatalf("%s = %q %v", rel, b, err)
+		}
+	}
+	if target, err := os.Readlink(filepath.Join(dest, "link")); err != nil || target != "/etc/passwd" {
+		t.Fatalf("link %q %v", target, err)
+	}
+	next := create("place")
+	if err := d.PlaceTree(next, dest); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := d.RT.ReadFile(next, "out/built.txt"); err != nil || string(b) != "built\n" {
+		t.Fatalf("placed %q %v", b, err)
 	}
 }
