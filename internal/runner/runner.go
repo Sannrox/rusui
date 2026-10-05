@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -321,6 +322,11 @@ func (c *Client) Heartbeat(a *Assignment) error {
 	return err
 }
 
+// ErrLeaseLost is a heartbeat the plane refused: the lease is no longer
+// current (cancelled, expired, or past its deadline, 409) or the turn
+// credential was replaced by a new claim of the turn (401).
+var ErrLeaseLost = errors.New("turn lease lost")
+
 func (c *Client) PollHeartbeat(a *Assignment) (*engine.Steer, error) {
 	state := a.steerReceiptState()
 	state.mu.Lock()
@@ -347,6 +353,9 @@ func (c *Client) PollHeartbeat(a *Assignment) (*engine.Steer, error) {
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(res.Body)
+		if res.StatusCode == http.StatusConflict || res.StatusCode == http.StatusUnauthorized {
+			return nil, fmt.Errorf("%w: /jobs/%d/heartbeat: %s %s", ErrLeaseLost, a.TurnID, res.Status, b)
+		}
 		return nil, fmt.Errorf("/jobs/%d/heartbeat: %s %s", a.TurnID, res.Status, b)
 	}
 	var out struct {

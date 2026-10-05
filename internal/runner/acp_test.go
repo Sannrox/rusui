@@ -415,7 +415,7 @@ func TestHeartbeatSteersRenewsLeaseWhileDeliveryIsBlocked(t *testing.T) {
 	stop := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
-		client.heartbeatSteers(context.Background(), assignment, steers, stop)
+		client.heartbeatSteers(context.Background(), assignment, steers, stop, func(error) {})
 		close(done)
 	}()
 	for want := int32(1); want <= 3; want++ {
@@ -525,5 +525,68 @@ func TestSteerClearsInterruptedRunResult(t *testing.T) {
 	}
 	if result := collectResult(nil, a, dir, art.SnapshotHash); result != nil {
 		t.Fatalf("interrupted prompt's stale report was accepted: %+v", result)
+	}
+}
+
+// Only a refused heartbeat ends the turn: 409 (lease not current) and 401
+// (turn credential replaced by a new claim). A plane error or an
+// unreachable plane keeps the harness running (#472).
+func TestHeartbeatSteersEndsTurnOnlyWhenLeaseIsGone(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+	}{
+		{name: "lease rejected", status: http.StatusConflict},
+		{name: "credential replaced", status: http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch calls.Add(1) {
+				case 1:
+					// Transport failure: the connection drops without a response.
+					hj, ok := w.(http.Hijacker)
+					if !ok {
+						t.Error("no hijacker")
+						return
+					}
+					conn, _, err := hj.Hijack()
+					if err == nil {
+						_ = conn.Close()
+					}
+				case 2:
+					http.Error(w, "database is locked", http.StatusInternalServerError)
+				case 3:
+					http.Error(w, "unavailable", http.StatusServiceUnavailable)
+				default:
+					http.Error(w, "reject", tc.status)
+				}
+			}))
+			defer server.Close()
+			client := &Client{Base: server.URL, HTTP: server.Client()}
+			a := &Assignment{TurnID: 1, LeaseGeneration: 1, ClaimedRevision: 1, TurnToken: "turn-token"}
+			lost := make(chan error, 4)
+			done := make(chan struct{})
+			go func() {
+				client.heartbeatSteers(context.Background(), a, make(chan engine.Steer), make(chan struct{}), func(err error) { lost <- err })
+				close(done)
+			}()
+			select {
+			case err := <-lost:
+				if !errors.Is(err, ErrLeaseLost) {
+					t.Fatalf("lost err %v", err)
+				}
+				if n := calls.Load(); n != 4 {
+					t.Fatalf("turn ended after heartbeat %d, want the refused fourth", n)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatalf("refused heartbeat did not end the turn after %d heartbeats", calls.Load())
+			}
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("heartbeat loop kept running after the lease was lost")
+			}
+		})
 	}
 }

@@ -30,11 +30,20 @@ func (e *Engine) CancelSession(sessionID int64) error {
 	// environment under an operation, so a turn the cancel requeues cannot
 	// start a harness that the kill then hits (#446).
 	envRow, envErr := store.GetEnvironment(e.Store, sess.EnvironmentID)
+	held := false
 	if envErr == nil && envRow.Handle != "" {
-		if release, ok := e.waitEnvironmentOperation(envRow.ID, cancelEnvWait); ok {
+		if release, ok := e.waitEnvironmentOperation(envRow.ID, e.cancelEnvWait()); ok {
 			defer release()
+			held = true
+			// The wait may have outlasted a wake run by Claim, so the
+			// state read before it is stale (#472).
+			envRow, envErr = store.GetEnvironment(e.Store, envRow.ID)
 		} else {
-			e.exception(fmt.Sprintf("cancel session=%d: environment %d stayed busy for %s; cancelling without holding it", sessionID, envRow.ID, cancelEnvWait))
+			// The guest is not stopped without the operation: the kill
+			// could hit a harness started for a requeued turn. The runner
+			// ends the cancelled turn's harness when its heartbeat is
+			// refused (#472).
+			e.exception(fmt.Sprintf("cancel session=%d: environment %d stayed busy for %s; cancelling without stopping the guest", sessionID, envRow.ID, e.cancelEnvWait()))
 		}
 	}
 	err = e.Store.Tx(func(tx *sql.Tx) error {
@@ -50,7 +59,7 @@ func (e *Engine) CancelSession(sessionID int64) error {
 	}
 	// Only a ready environment can run a guest; a sleeping or failed one
 	// has nothing to kill and no services to restart (#448).
-	if envErr != nil || envRow.Handle == "" || envRow.State != store.EnvReady {
+	if !held || envErr != nil || envRow.Handle == "" || envRow.State != store.EnvReady {
 		return nil
 	}
 	// The environment's own driver: a container session is killed by
@@ -74,9 +83,16 @@ func (e *Engine) CancelSession(sessionID int64) error {
 	return nil
 }
 
-// cancelEnvWait bounds how long a cancel waits for another environment
+// defaultCancelEnvWait bounds how long a cancel waits for another environment
 // operation, so a stuck one cannot hang the cancel request.
-const cancelEnvWait = 30 * time.Second
+const defaultCancelEnvWait = 30 * time.Second
+
+func (e *Engine) cancelEnvWait() time.Duration {
+	if e.CancelEnvWait > 0 {
+		return e.CancelEnvWait
+	}
+	return defaultCancelEnvWait
+}
 
 // waitEnvironmentOperation takes the environment operation, waiting up to
 // limit for one in progress (sleep, wake, or another cancel) to finish.

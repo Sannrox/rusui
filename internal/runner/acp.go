@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -265,10 +266,18 @@ func OneACPTurnWithOutcome(ctx context.Context, c *Client, host ACPHost) (ClaimO
 		return outcome, err
 	}
 	defer unlink()
+	// A refused heartbeat ends the turn: a cancel that landed before the
+	// harness started killed nothing in the guest (#472).
+	runCtx, loseLease := context.WithCancelCause(runCtx)
+	defer loseLease(nil)
 	steers := make(chan engine.Steer, 1)
 	stopHB := make(chan struct{})
 	defer close(stopHB)
-	go c.heartbeatSteers(runCtx, a, steers, stopHB)
+	go c.heartbeatSteers(runCtx, a, steers, stopHB, loseLease)
+	if runCtx.Err() != nil {
+		_ = c.Fail(a)
+		return outcome, context.Cause(runCtx)
+	}
 	ac, stop, err := host(a, dir)
 	if err != nil {
 		_ = c.Fail(a)
@@ -280,6 +289,9 @@ func OneACPTurnWithOutcome(ctx context.Context, c *Client, host ACPHost) (ClaimO
 		cwd = env.WorkspaceDir // the guest runs in the container, not on the host
 	}
 	art, steerIDs, err := hostACP(runCtx, a, ac, cwd, steers, c.Exec)
+	if cause := context.Cause(runCtx); errors.Is(cause, ErrLeaseLost) {
+		err = cause
+	}
 	if err != nil {
 		_ = c.Fail(a)
 		return outcome, err
@@ -295,7 +307,10 @@ func HostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string) (
 	return art, err
 }
 
-func (c *Client) heartbeatSteers(ctx context.Context, a *Assignment, steers chan<- engine.Steer, stop <-chan struct{}) {
+// heartbeatSteers renews the lease and delivers steers until stop. A
+// heartbeat the plane refuses (ErrLeaseLost) is reported to lost and ends
+// the loop; any other failure is retried on the next tick.
+func (c *Client) heartbeatSteers(ctx context.Context, a *Assignment, steers chan<- engine.Steer, stop <-chan struct{}, lost func(error)) {
 	tick := time.NewTicker(200 * time.Millisecond)
 	defer tick.Stop()
 	var queued []engine.Steer
@@ -315,6 +330,10 @@ func (c *Client) heartbeatSteers(ctx context.Context, a *Assignment, steers chan
 			queued = queued[1:]
 		case <-tick.C:
 			steer, err := c.PollHeartbeat(a)
+			if errors.Is(err, ErrLeaseLost) {
+				lost(err)
+				return
+			}
 			if err != nil {
 				continue
 			}

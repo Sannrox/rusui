@@ -64,6 +64,7 @@ type Engine struct {
 	Container      env.Driver
 	EnvTTL         time.Duration
 	EnvIdleSleep   time.Duration
+	CancelEnvWait  time.Duration
 	Tree           TreeSource
 	SnapshotRoot   string
 	refreshMu      sync.Mutex
@@ -995,6 +996,10 @@ func (e *Engine) HeartbeatSteerReceived(jobID int64, gen, claimed int, receivedS
 }
 
 var errReject = fmt.Errorf("reject")
+
+// IsLeaseRejected reports a lease that is not current: superseded,
+// expired, past its deadline, or no longer leased.
+func IsLeaseRejected(err error) bool { return errors.Is(err, errReject) }
 
 type Artifact struct {
 	SchemaVersion   int              `json:"schema_version"`
