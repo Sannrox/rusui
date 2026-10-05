@@ -178,3 +178,55 @@ func TestBlockedFollowUpKeepsThePublishedPullRequest(t *testing.T) {
 		t.Fatalf("result %+v", got.Result)
 	}
 }
+
+func completedResult(t *testing.T, h *harn, result func(c *engine.Claim) *engine.TaskResult) *engine.TaskResult {
+	t.Helper()
+	if _, err := h.e.StartRun("test", "do the thing", ""); err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	a := art(c, "keep", "", "")
+	a.Result = result(c)
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a); err != nil {
+		t.Fatal(err)
+	}
+	p, err := store.LatestReviewJSON(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got engine.Artifact
+	if err := json.Unmarshal([]byte(p), &got); err != nil || got.Result == nil {
+		t.Fatal(err)
+	}
+	return got.Result
+}
+
+// A guest that commits from a nested worktree leaves the workspace HEAD at
+// the base; its branch is still a branch of the session workspace (#469).
+func TestPublishedWhenPullRequestHeadIsAWorkspaceBranch(t *testing.T) {
+	h := setup(t)
+	h.f.Put(snapshot.Item{Repo: "example/test-repo", Item: 9, ItemKind: "pull", State: "open", HeadSHA: "worktree-head"})
+	got := completedResult(t, h, func(c *engine.Claim) *engine.TaskResult {
+		return &engine.TaskResult{
+			SchemaVersion: engine.ResultSchema, SourceHash: c.ItemHash, PullRequest: 9,
+			CandidateSHA: "base", BranchHeads: []string{"base", "worktree-head"},
+		}
+	})
+	if got.Outcome != engine.OutcomePublished || got.CandidateSHA != "worktree-head" || got.PublishedSHA != "worktree-head" {
+		t.Fatalf("result %+v", got)
+	}
+}
+
+func TestUnconfirmedWhenPullRequestHeadIsNotInTheWorkspace(t *testing.T) {
+	h := setup(t)
+	h.f.Put(snapshot.Item{Repo: "example/test-repo", Item: 9, ItemKind: "pull", State: "open", HeadSHA: "elsewhere"})
+	got := completedResult(t, h, func(c *engine.Claim) *engine.TaskResult {
+		return &engine.TaskResult{
+			SchemaVersion: engine.ResultSchema, SourceHash: c.ItemHash, PullRequest: 9,
+			CandidateSHA: "base", BranchHeads: []string{"base", "worktree-head"},
+		}
+	})
+	if got.Outcome != engine.OutcomeUnconfirmed || got.CandidateSHA != "base" {
+		t.Fatalf("result %+v", got)
+	}
+}

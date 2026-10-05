@@ -62,8 +62,11 @@ sqlite3 -readonly "$STATE/rusui.db" \
   "SELECT json_extract(payload, '$.result.outcome') AS plane_outcome, json_extract(payload, '$.result.pull_request') AS pull_request, json_extract(payload, '$.result.candidate_sha') AS candidate_sha, json_extract(payload, '$.result.published_sha') AS published_sha FROM review_revisions WHERE job_id = $TURN_ID ORDER BY id DESC LIMIT 1;"
 ```
 
-`published` means the plane saw the pull request at the candidate SHA. A
-missing row, `unconfirmed`, or `blocked` is not a published PR. Merging stays
+`published` means the plane saw the pull request at the candidate SHA: the
+workspace HEAD, or the tip of another local branch in the session workspace,
+such as one the agent checked out in a nested worktree. A pull request head
+that is neither stays `unconfirmed`. A missing row, `unconfirmed`, or
+`blocked` is not a published PR. Merging stays
 with a human maintainer.
 
 ## Agent publication
