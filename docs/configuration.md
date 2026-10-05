@@ -218,7 +218,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/jobs/{id}/complete` | same |
 | `POST` | `/jobs/{id}/fail` | same |
 | `POST` | `/sessions/{id}/turns` | operator or worker token; follow-up prompt or steer (`rusui prompt`) |
-| `POST` | `/sessions/{id}/cancel` | worker secret |
+| `POST` | `/sessions/{id}/cancel` | operator or worker token; ends the turn and stops the guest's processes |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
 | `*` | `/model-proxy/` | per-turn grant (HTTPS for container guests) |
 | `*` | `/git-proxy/github.com/` | prepare or turn grant; push only with a turn grant on the session ref prefix |
@@ -312,11 +312,20 @@ Project `budgets` may set `max_concurrent_leases` (integer ≥ 1, default 1).
 Any other budget key fails closed at parse.
 
 Project `permissions` answer the guest's `session/request_permission`
-(the tool fence). A rule matches on `tool`, `kind`, and a `command`
-substring; empty fields are wildcards. `action` is `allow` (the default) or
-`reject`. Any matching reject rule wins over allow rules; a reject rule
-must name at least one field. Unmatched requests wait for an operator
-approval.
+(the tool fence). A rule matches on `tool`, `kind`, and `command`; empty
+fields are wildcards. `action` is `allow` (the default) or `reject`. Any
+matching reject rule wins over allow rules; a reject rule must name at
+least one field. Unmatched requests wait for an operator approval.
+
+`command` is a list of words, compared case-insensitively with the
+request's command line after it is lexed like the implement fence below
+(quotes and escapes removed; `;`, `&&`, `||`, `|`, `&`, newlines,
+subshells, and `$(…)` or backtick substitutions split it into separate
+commands). Command rules allow a line only if every command in it starts
+with the words of some matching allow rule, and none redirects output
+(`>`). A reject rule matches if any command in the line has its first word
+(or a path ending in it) followed, in order, by its other words, so
+`npm --tag x publish` and `env CI=1 npm publish` still match `npm publish`.
 
 `kind` is the ACP tool kind: `read`, `edit`, `search`, `execute`, `fetch`,
 `think`, `switch_mode`, or `other`. Claude Code tools are classified by
@@ -332,6 +341,10 @@ projects:
       - command: npm publish
         action: reject
 ```
+
+Here `npm test && npm run lint` is allowed, `npm test; rm -rf .git` and
+`npm test > log` wait for approval, and `npm  publish`, `'npm' publish`,
+and `npm test && npm publish` are rejected.
 
 Implement sessions also apply a built-in reject set, whatever policy
 allows ([ADR 0017](decisions/0017-claude-guest-and-model-upstream.md) D3):
@@ -351,7 +364,8 @@ The Claude guest asks before every shell command, including ones Claude
 Code would otherwise run without asking because it considers them
 read-only (`ls`, `cat`, `uname`): rusui starts it with an ask rule for
 `Bash`. Allow such commands with a rule, for example `kind: execute`
-with `command: ls`, or approve them.
+with `command: ls` (which allows `ls -la` but not `ls; rm -rf .git` or
+`lsblk`), or approve them.
 
 These rules see only the permission requests the guest makes. A bare
 `git push` while the current branch is `main`, a command inside a script

@@ -61,7 +61,7 @@ func TestHostACPReturnsWhenGuestStopsReading(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	go stallAfterSession(agentIn, agentOut)
-	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 		return acp.Decision{}
 	}}
 	deadline := time.Now().Add(200 * time.Millisecond)
@@ -125,7 +125,7 @@ func TestHostACPClaudeReadsStreamJSONInit(t *testing.T) {
 			}
 		}
 	}()
-	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 		return acp.Decision{}
 	}}
 	in, _ := json.Marshal(map[string]string{"body": "do the thing"})
@@ -181,7 +181,7 @@ func TestHostACPClaudeFollowUpStartsNewConversation(t *testing.T) {
 			_, _ = agentOut.Write(append(raw, '\n'))
 		}
 	}()
-	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 		return acp.Decision{}
 	}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -259,7 +259,7 @@ func TestOneACPTurnFailsWhenGuestStopsReading(t *testing.T) {
 			_ = clientOut.Close()
 			_ = agentIn.Close()
 		}
-		return &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+		return &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 			return acp.Decision{}
 		}}, stop, nil
 	}
@@ -294,7 +294,7 @@ func TestHostACPLoadsOrCreatesGuestSession(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut}).Run() }()
-	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 		return acp.Decision{}
 	}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -320,7 +320,7 @@ func TestHostACPReusesGuestSession(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut}).Run() }()
-	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, acp.PermissionParams) acp.Decision {
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 		return acp.Decision{}
 	}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -359,13 +359,14 @@ func TestHTTPRecorderWaitCancelsBlockedApprovalPoll(t *testing.T) {
 		server.Close()
 	}()
 	recorder := &HTTPRecorder{Base: server.URL, Token: "turn-token", TurnID: 1, HTTP: server.Client()}
-	if err := recorder.Record(acp.Receipt{Type: acp.ActionApproval}); err != nil {
+	id, err := recorder.Record(acp.Receipt{Type: acp.ActionApproval})
+	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan acp.Decision, 1)
-	go func() { done <- recorder.Wait(ctx, acp.PermissionParams{}) }()
+	go func() { done <- recorder.Wait(ctx, id, acp.PermissionParams{}) }()
 	select {
 	case <-pollStarted:
 	case <-time.After(time.Second):

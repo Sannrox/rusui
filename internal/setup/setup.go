@@ -97,11 +97,20 @@ func PathsFor(dir string) Paths {
 // generatedSecrets are local-only values setup creates once.
 var generatedSecrets = []string{"RUSUI_WORKER_SECRET", "RUSUI_WEBHOOK_SECRET", "RUSUI_SLACK_SECRET", "RUSUI_OPERATOR_TOKEN"}
 
-// externalKeys are secrets or settings only the operator can supply.
-var externalKeys = []string{
-	"RUSUI_GITHUB_TOKEN", "RUSUI_AGENT_GITHUB_TOKEN", "RUSUI_GUEST", "RUSUI_GUEST_IMAGE",
-	"RUSUI_MODEL_UPSTREAM", "RUSUI_GUEST_MODEL", "RUSUI_ANTHROPIC_API_KEY", "RUSUI_XAI_API_KEY",
+// modelCredentialKeys are the provider keys ModelConfigFromEnv accepts
+// (docs/configuration.md): either alias satisfies "model access", regardless
+// of which guest is selected.
+var modelCredentialKeys = []string{
+	"RUSUI_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY",
+	"RUSUI_XAI_API_KEY", "XAI_API_KEY",
+	"RUSUI_OPENAI_API_KEY", "OPENAI_API_KEY",
 }
+
+// externalKeys are secrets or settings only the operator can supply.
+var externalKeys = append([]string{
+	"RUSUI_GITHUB_TOKEN", "RUSUI_AGENT_GITHUB_TOKEN", "RUSUI_GUEST", "RUSUI_GUEST_IMAGE",
+	"RUSUI_MODEL_UPSTREAM", "RUSUI_GUEST_MODEL",
+}, modelCredentialKeys...)
 
 // Plan reports what Apply would do and changes nothing.
 func Plan(o Options) ([]Step, error) { return run(o, false) }
@@ -257,13 +266,23 @@ func needsYou(vals map[string]string) [][2]string {
 	if vals["RUSUI_GITHUB_TOKEN"] == "" {
 		out = append(out, [2]string{"RUSUI_GITHUB_TOKEN", "read-only token for intake; e.g. a fine-grained token, or `gh auth token`"})
 	}
-	if vals["RUSUI_MODEL_UPSTREAM"] == "" && vals["RUSUI_ANTHROPIC_API_KEY"] == "" && vals["RUSUI_XAI_API_KEY"] == "" {
-		out = append(out, [2]string{"model access", "set RUSUI_ANTHROPIC_API_KEY or RUSUI_XAI_API_KEY, or RUSUI_MODEL_UPSTREAM for a CLI proxy you logged in to"})
+	if vals["RUSUI_MODEL_UPSTREAM"] == "" && !hasModelCredential(vals) {
+		out = append(out, [2]string{"model access", "set RUSUI_ANTHROPIC_API_KEY/ANTHROPIC_API_KEY, RUSUI_XAI_API_KEY/XAI_API_KEY, or RUSUI_OPENAI_API_KEY/OPENAI_API_KEY, or RUSUI_MODEL_UPSTREAM for a CLI proxy you logged in to"})
 	}
 	if vals["RUSUI_GUEST_IMAGE"] == "" {
 		out = append(out, [2]string{"RUSUI_GUEST_IMAGE", "guest image tag; setup builds the reference image when Docker or Podman is installed"})
 	}
 	return out
+}
+
+// hasModelCredential reports whether any documented provider key is set.
+func hasModelCredential(vals map[string]string) bool {
+	for _, k := range modelCredentialKeys {
+		if vals[k] != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func ensureEnv(p Paths, apply bool) (Step, error) {

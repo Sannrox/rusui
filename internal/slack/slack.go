@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -106,12 +107,28 @@ func Reply(text string) []byte {
 	return b
 }
 
+// InvalidItem is the item SplitItem returns for a malformed "#item" suffix,
+// such as "o/r#12x". It is never a real item number (operator sessions use
+// small negative numbers; GitHub issues and PRs use small positive ones), so
+// callers that branch on `item == 0` to mean "bare repository, every failed
+// job" route InvalidItem into their item-specific lookup instead, which then
+// fails to find a matching job rather than silently acting on every job in
+// the repository.
+const InvalidItem = math.MinInt
+
+// SplitItem splits a "repo" or "repo#item" argument. A bare repo (no "#")
+// returns item 0, meaning "every failed job in the repository". A malformed
+// item returns InvalidItem, distinguishable from both a bare repository and
+// any real item. Negative items are valid: operator sessions use them.
 func SplitItem(s string) (repo string, item int) {
 	i := strings.LastIndex(s, "#")
 	if i < 0 {
 		return s, 0
 	}
-	n, _ := strconv.Atoi(s[i+1:])
+	n, err := strconv.Atoi(s[i+1:])
+	if err != nil {
+		return s[:i], InvalidItem
+	}
 	return s[:i], n
 }
 

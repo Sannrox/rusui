@@ -47,7 +47,7 @@ func TestSessionCancelCancelsPendingPermission(t *testing.T) {
 		In:   clientIn,
 		Out:  clientOut,
 		Perm: DenyUnmatched{},
-		Wait: func(ctx context.Context, _ PermissionParams) Decision {
+		Wait: func(ctx context.Context, _ string, _ PermissionParams) Decision {
 			<-ctx.Done()
 			return Decision{}
 		},

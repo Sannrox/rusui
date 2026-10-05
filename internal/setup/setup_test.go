@@ -288,6 +288,27 @@ func TestNeedsYouHonoursProcessEnvironment(t *testing.T) {
 	}
 }
 
+func TestNeedsYouAcceptsEveryDocumentedModelCredential(t *testing.T) {
+	for _, key := range modelCredentialKeys {
+		t.Run(key, func(t *testing.T) {
+			dir := t.TempDir()
+			getenv := func(k string) string {
+				if k == key {
+					return "secret"
+				}
+				return ""
+			}
+			steps, err := Apply(Options{StateDir: dir, Getenv: getenv})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := actions(steps)["model access"]; ok {
+				t.Fatalf("model access reported although %s exported", key)
+			}
+		})
+	}
+}
+
 func TestRotateTightensLooseKeysAndAppendKeepsLastLine(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := Apply(Options{StateDir: dir}); err != nil {

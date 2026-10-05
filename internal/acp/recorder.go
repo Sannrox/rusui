@@ -17,8 +17,10 @@ type Receipt struct {
 	Body   any
 }
 
+// Recorder persists a receipt and returns the created action id. A
+// permission request waits only on the id its own approval receipt returned.
 type Recorder interface {
-	Record(Receipt) error
+	Record(Receipt) (string, error)
 }
 
 type StoreRecorder struct {
@@ -29,16 +31,17 @@ type StoreRecorder struct {
 	TurnID    *int64
 }
 
-func (r StoreRecorder) Record(rec Receipt) error {
+func (r StoreRecorder) Record(rec Receipt) (string, error) {
 	if r.Store == nil {
-		return fmt.Errorf("acp: store required")
+		return "", fmt.Errorf("acp: store required")
 	}
 	body, err := json.Marshal(rec.Body)
 	if err != nil {
-		return err
+		return "", err
 	}
-	return store.InsertAction(r.Store, store.Action{
-		ID:            newActionID(),
+	id := newActionID()
+	err = store.InsertAction(r.Store, store.Action{
+		ID:            id,
 		SessionID:     r.SessionID,
 		TurnID:        r.TurnID,
 		Repo:          r.Repo,
@@ -49,6 +52,10 @@ func (r StoreRecorder) Record(rec Receipt) error {
 		LimitSentence: LimitSentence,
 		Body:          string(body),
 	})
+	if err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
 func newActionID() string {

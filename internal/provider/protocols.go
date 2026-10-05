@@ -167,7 +167,7 @@ func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide
 			var options []Option
 			_ = json.Unmarshal(raw, &options)
 			optionID, allow := rejectMissing(options, decide, line)
-			replyID := fmt.Sprint(msg["id"])
+			replyID := msg["id"]
 			if !allow {
 				optionID = "deny"
 			}
@@ -214,7 +214,7 @@ func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide
 	}
 }
 
-func writePermission(w io.Writer, kind, id, optionID string, allow bool) error {
+func writePermission(w io.Writer, kind string, id any, optionID string, allow bool) error {
 	if !allow {
 		optionID = "deny"
 	}
@@ -222,11 +222,7 @@ func writePermission(w io.Writer, kind, id, optionID string, allow bool) error {
 	case "codex":
 		return writeJSON(w, map[string]any{"id": id, "result": map[string]any{"optionId": optionID}})
 	default:
-		idRaw, err := json.Marshal(id)
-		if err != nil {
-			return err
-		}
-		return writeJSON(w, map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(idRaw), "result": map[string]any{"outcome": map[string]any{"outcome": "selected", "optionId": optionID}}})
+		return writeJSON(w, map[string]any{"jsonrpc": "2.0", "id": id, "result": map[string]any{"outcome": map[string]any{"outcome": "selected", "optionId": optionID}}})
 	}
 }
 
