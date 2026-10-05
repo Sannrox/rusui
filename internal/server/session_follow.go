@@ -2,6 +2,7 @@ package server
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -59,13 +61,33 @@ type followStatus struct {
 	Revision int    `json:"revision,omitempty"`
 }
 
+// Turn record states. A turn record is a machine-readable notice that a
+// turn needs the operator or has finished; it is sent next to the state,
+// never instead of it (#491).
+const (
+	turnReady   = "ready"
+	turnWaiting = "waiting"
+	turnBlocked = "blocked"
+)
+
+// followTurn is the turn record of a followed read. ApprovalSeq is the
+// transcript seq of the approval a waiting turn needs answered.
+type followTurn struct {
+	SessionID   int64  `json:"session_id"`
+	TurnID      int64  `json:"turn_id"`
+	State       string `json:"state"`
+	Revision    int    `json:"revision,omitempty"`
+	ApprovalSeq int64  `json:"approval_seq,omitempty"`
+}
+
 func (f followStatus) done() bool {
 	return f.State == followCompleted || f.State == followFailed || f.State == followCancelled
 }
 
 // followSessionRead streams what a plain read shows of the transcript and
 // then keeps streaming: every entry appended after the after cursor, in
-// append order, and the session state when it changes. A client that
+// append order, the session state when it changes, and after it the turn
+// record when that changes (followTurnRecord). A client that
 // reconnects with the seq of the last entry it received resumes without
 // a gap or a repeat. The stream ends after a completed, failed, or
 // cancelled state. It never carries terminal bytes or the workspace diff.
@@ -119,6 +141,7 @@ func (s *Server) followSessionRead(w http.ResponseWriter, r *http.Request) {
 	fl.Flush()
 
 	var last followStatus
+	var lastRecord followTurn
 	lastWrite := time.Now()
 	lastToken := ""
 	wait := followPoll
@@ -178,6 +201,16 @@ func (s *Server) followSessionRead(w http.ResponseWriter, r *http.Request) {
 		if status != last {
 			last = status
 			writeSSE(w, "state", status)
+			fl.Flush()
+			lastWrite = time.Now()
+		}
+		record, ok, err := s.followTurnRecord(sess.ID, status)
+		if err != nil {
+			return
+		}
+		if ok && record != lastRecord {
+			lastRecord = record
+			writeSSE(w, "turn", record)
 			fl.Flush()
 			lastWrite = time.Now()
 		}
@@ -248,6 +281,50 @@ func (s *Server) followState(id int64) (followStatus, error) {
 		out.State = turns[len(turns)-1].State
 	}
 	return out, nil
+}
+
+// followTurnRecord is the turn record for a followed state, if it has
+// one. A waiting state names its oldest pending approval, so each approval
+// request gives one record. A completed state is blocked when the turn's
+// newest review has a blocked verdict or a result the plane recorded as
+// blocked, and ready otherwise. Queued, running, open, failed, and
+// cancelled states have no record. The record depends only on durable
+// state, so a reconnect resends the current record unchanged and a client
+// drops it as a repeat.
+func (s *Server) followTurnRecord(sessionID int64, status followStatus) (followTurn, bool, error) {
+	switch status.State {
+	case followWaiting:
+		seq, turnID, revision, ok, err := store.OldestPendingApproval(s.Eng.Store, sessionID)
+		if err != nil || !ok {
+			return followTurn{}, false, err
+		}
+		return followTurn{SessionID: sessionID, TurnID: turnID, State: turnWaiting, Revision: revision, ApprovalSeq: seq}, true, nil
+	case followCompleted:
+		out := followTurn{SessionID: sessionID, TurnID: status.TurnID, State: turnReady, Revision: status.Revision}
+		payload, err := store.LatestReviewJSON(s.Eng.Store, status.TurnID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return out, true, nil
+		}
+		if err != nil {
+			return followTurn{}, false, err
+		}
+		var art engine.Artifact
+		if json.Unmarshal([]byte(payload), &art) == nil && artifactBlocked(art) {
+			out.State = turnBlocked
+		}
+		return out, true, nil
+	}
+	return followTurn{}, false, nil
+}
+
+// artifactBlocked reads a turn's result outcome when it has one: a run
+// artifact carries verdict blocked even when it published, so only a
+// review artifact is judged by its verdict.
+func artifactBlocked(art engine.Artifact) bool {
+	if art.Result != nil {
+		return art.Result.Outcome == engine.OutcomeBlocked
+	}
+	return art.Verdict == turnBlocked
 }
 
 func writeSSEID(w http.ResponseWriter, id int64, event string, v any) {

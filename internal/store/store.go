@@ -808,6 +808,20 @@ WHERE a.session_id=? AND a.action_type='acp.approval' AND a.reason_code='permiss
 	return n, err
 }
 
+// OldestPendingApproval is the oldest approval request CountPendingApprovals
+// counts: its transcript seq, its turn, and the revision that turn runs.
+func OldestPendingApproval(s *Store, sessionID int64) (seq, turnID int64, revision int, ok bool, err error) {
+	err = s.DB.QueryRow(`SELECT a.rowid, t.id, t.claimed_revision FROM actions a
+JOIN turns t ON t.id=a.turn_id AND t.state='leased'
+LEFT JOIN approval_decisions d ON d.action_id=a.action_id
+WHERE a.session_id=? AND a.action_type='acp.approval' AND a.reason_code='permission_unmatched' AND d.action_id IS NULL
+ORDER BY a.rowid LIMIT 1`, sessionID).Scan(&seq, &turnID, &revision)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, 0, false, nil
+	}
+	return seq, turnID, revision, err == nil, err
+}
+
 func GetSession(s *Store, id int64) (*Session, error) {
 	var sess Session
 	var created string
