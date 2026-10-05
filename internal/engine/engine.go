@@ -67,6 +67,7 @@ type Engine struct {
 	CancelEnvWait  time.Duration
 	Tree           TreeSource
 	SnapshotRoot   string
+	snapshotMu     sync.Mutex
 	refreshMu      sync.Mutex
 	policyMu       sync.RWMutex
 	sumikaMu       sync.Mutex

@@ -59,7 +59,6 @@ func TestContainerDriverLifecycleAndScripts(t *testing.T) {
 		t.Fatalf("resume execs %#v", rt.Execs)
 	}
 
-	// Same source hash on a new environment still sets up (new handle).
 	// Wake must not re-run setup on the first handle.
 	setups := 0
 	for _, ex := range rt.Execs {
@@ -81,8 +80,10 @@ func TestContainerDriverLifecycleAndScripts(t *testing.T) {
 			setups++
 		}
 	}
-	if setups != 1 {
-		t.Fatalf("setup ran %d times, want once per source hash", setups)
+	// Without a git pin there is no snapshot to start from, so a new
+	// environment with the same source hash sets up again (#512).
+	if setups != 2 {
+		t.Fatalf("setup ran %d times, want again without a snapshot", setups)
 	}
 
 	got, err := store.GetEnvironment(h.st, created.ID)
