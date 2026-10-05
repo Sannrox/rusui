@@ -90,12 +90,13 @@ func (s *sseStream) next() sseEvent {
 	return sseEvent{}
 }
 
-// expect skips heartbeats and returns the next event, which must be want.
+// expect skips heartbeats, and turn records unless want is one, and
+// returns the next event, which must be want.
 func (s *sseStream) expect(want string) sseEvent {
 	s.t.Helper()
 	for {
 		ev := s.next()
-		if ev.event == "comment" {
+		if ev.event == "comment" || ev.event == "turn" && want != "turn" {
 			continue
 		}
 		if ev.event != want {
@@ -172,6 +173,25 @@ func stateOf(t *testing.T, ev sseEvent) followStatus {
 		t.Fatal(err)
 	}
 	return st
+}
+
+func turnOf(t *testing.T, ev sseEvent) followTurn {
+	t.Helper()
+	var tr followTurn
+	if err := json.Unmarshal([]byte(ev.data), &tr); err != nil {
+		t.Fatal(err)
+	}
+	return tr
+}
+
+// nextNonComment is the next event other than a heartbeat.
+func (s *sseStream) nextNonComment() sseEvent {
+	s.t.Helper()
+	for {
+		if ev := s.next(); ev.event != "comment" {
+			return ev
+		}
+	}
 }
 
 func TestFollowReadStreamsHistoryThenLiveEventsAndOutcome(t *testing.T) {
@@ -414,5 +434,159 @@ func TestFollowReadIdleDoesNotRereadState(t *testing.T) {
 	setTurns(t, e, sid, "leased")
 	if st := stateOf(t, s.expect("state")); st.State != followRunning {
 		t.Fatalf("state after change %+v", st)
+	}
+}
+
+func onlyTurn(t *testing.T, e *engine.Engine, sid int64) store.Turn {
+	t.Helper()
+	turns, err := store.ListTurnsForSession(e.Store, sid)
+	if err != nil || len(turns) != 1 {
+		t.Fatalf("turns %v %v", turns, err)
+	}
+	return turns[0]
+}
+
+// A completed turn is followed by one ready record, after its state and
+// before the end (#491).
+func TestFollowReadTurnRecordReady(t *testing.T) {
+	_, hs, e := consoleEnv(t)
+	sid := createRunSession(t, hs, "p")
+	turn := onlyTurn(t, e, sid)
+	s, _ := openFollow(t, hs, sid, 0, "op-tok")
+	s.expect("session")
+	if ev := s.nextNonComment(); ev.event != "state" {
+		t.Fatalf("queued turn sent %q %s", ev.event, ev.data)
+	}
+	setTurns(t, e, sid, "completed")
+	if st := stateOf(t, s.nextNonComment()); st.State != followCompleted {
+		t.Fatalf("state %+v", st)
+	}
+	ev := s.nextNonComment()
+	if ev.event != "turn" {
+		t.Fatalf("event %q %s, want turn", ev.event, ev.data)
+	}
+	if got := turnOf(t, ev); got != (followTurn{SessionID: sid, TurnID: turn.ID, State: turnReady, Revision: turn.PendingRevision}) {
+		t.Fatalf("turn record %+v", got)
+	}
+	if ev := s.nextNonComment(); ev.event != "end" {
+		t.Fatalf("event %q %s, want end", ev.event, ev.data)
+	}
+	s.closed()
+}
+
+// An approval that becomes pending sends one waiting record that names
+// the approval entry; answering it sends no further record (#491).
+func TestFollowReadTurnRecordWaiting(t *testing.T) {
+	_, hs, e := consoleEnv(t)
+	sid := createRunSession(t, hs, "p")
+	turn := onlyTurn(t, e, sid)
+	setTurns(t, e, sid, "leased")
+	s, _ := openFollow(t, hs, sid, 0, "op-tok")
+	s.expect("session")
+	if st := stateOf(t, s.nextNonComment()); st.State != followRunning {
+		t.Fatalf("state %+v", st)
+	}
+	addApproval(t, e, sid, "approve-1", acp.ReasonUnmatched)
+	approval := entryOf(t, s.expect("entry"))
+	if st := stateOf(t, s.nextNonComment()); st.State != followWaiting {
+		t.Fatalf("state %+v", st)
+	}
+	ev := s.nextNonComment()
+	if ev.event != "turn" {
+		t.Fatalf("event %q %s, want turn", ev.event, ev.data)
+	}
+	want := followTurn{SessionID: sid, TurnID: turn.ID, State: turnWaiting, Revision: turn.PendingRevision, ApprovalSeq: approval.Seq}
+	if got := turnOf(t, ev); got != want {
+		t.Fatalf("turn record %+v, want %+v", got, want)
+	}
+	if err := store.PutApprovalDecision(e.Store, "approve-1", "allow"); err != nil {
+		t.Fatal(err)
+	}
+	if ev := s.nextNonComment(); ev.event != "state" || stateOf(t, ev).State != followRunning {
+		t.Fatalf("after answer %q %s", ev.event, ev.data)
+	}
+
+	// A reconnect while the approval waits resends the same record, so a
+	// client can tell it already has it.
+	addApproval(t, e, sid, "approve-2", acp.ReasonUnmatched)
+	second := entryOf(t, s.expect("entry"))
+	s.expect("state")
+	first := turnOf(t, s.expect("turn"))
+	if first.ApprovalSeq != second.Seq {
+		t.Fatalf("second waiting %+v for entry %d", first, second.Seq)
+	}
+	s.cancel()
+	again, _ := openFollow(t, hs, sid, second.Seq, "op-tok")
+	again.expect("session")
+	again.expect("state")
+	if got := turnOf(t, again.expect("turn")); got != first {
+		t.Fatalf("resent %+v, want %+v", got, first)
+	}
+}
+
+// A completed turn whose result the plane recorded as blocked sends a
+// blocked record instead of ready (#491).
+func TestFollowReadTurnRecordBlocked(t *testing.T) {
+	_, hs, e := consoleEnv(t)
+	sid := createRunSession(t, hs, "p")
+	turn := onlyTurn(t, e, sid)
+	payload, err := json.Marshal(engine.Artifact{ItemKind: "run", Verdict: "keep", Result: &engine.TaskResult{BlockedReason: "no access", Outcome: engine.OutcomeBlocked}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Store.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?,?,?,?,?)`, turn.ID, turn.PendingRevision, "h", "m", string(payload)); err != nil {
+		t.Fatal(err)
+	}
+	setTurns(t, e, sid, "completed")
+	s, _ := openFollow(t, hs, sid, 0, "op-tok")
+	s.expect("session")
+	if st := stateOf(t, s.nextNonComment()); st.State != followCompleted {
+		t.Fatalf("state %+v", st)
+	}
+	if got := turnOf(t, s.expect("turn")); got != (followTurn{SessionID: sid, TurnID: turn.ID, State: turnBlocked, Revision: turn.PendingRevision}) {
+		t.Fatalf("turn record %+v", got)
+	}
+	s.expect("end")
+	s.closed()
+}
+
+// A run artifact carries verdict blocked even when the turn published;
+// only its result outcome decides the record.
+func TestFollowReadTurnRecordReadyForPublishedRun(t *testing.T) {
+	_, hs, e := consoleEnv(t)
+	sid := createRunSession(t, hs, "p")
+	turn := onlyTurn(t, e, sid)
+	payload, err := json.Marshal(engine.Artifact{ItemKind: "run", Verdict: "blocked", Result: &engine.TaskResult{PullRequest: 7, Outcome: engine.OutcomePublished}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Store.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?,?,?,?,?)`, turn.ID, turn.PendingRevision, "h", "m", string(payload)); err != nil {
+		t.Fatal(err)
+	}
+	setTurns(t, e, sid, "completed")
+	s, _ := openFollow(t, hs, sid, 0, "op-tok")
+	s.expect("session")
+	if st := stateOf(t, s.nextNonComment()); st.State != followCompleted {
+		t.Fatalf("state %+v", st)
+	}
+	if got := turnOf(t, s.expect("turn")); got.State != turnReady {
+		t.Fatalf("published run turn record %+v, want ready", got)
+	}
+	s.expect("end")
+	s.closed()
+}
+
+// Failed, cancelled, queued, and running turns send no turn record.
+func TestFollowReadNoTurnRecordOnFailure(t *testing.T) {
+	_, hs, e := consoleEnv(t)
+	sid := createRunSession(t, hs, "p")
+	setTurns(t, e, sid, "failed")
+	s, _ := openFollow(t, hs, sid, 0, "op-tok")
+	s.expect("session")
+	if ev := s.nextNonComment(); ev.event != "state" {
+		t.Fatalf("event %q", ev.event)
+	}
+	if ev := s.nextNonComment(); ev.event != "end" {
+		t.Fatalf("event %q %s, want end", ev.event, ev.data)
 	}
 }

@@ -82,6 +82,18 @@ recorded meanwhile are printed once. A rejected token, a missing session, or
 a plane without this stream (`GET /sessions/{id}/read/follow?after=SEQ`)
 ends it with an error instead of a retry.
 
+To notify without reading transcript text, match the turn record. It is
+one line after the state line, `turn: STATE session=ID turn=ID revision=N`,
+with `approval=SEQ` added for a waiting turn; the stream carries it as an
+`event: turn` with the JSON fields `session_id`, `turn_id`, `state`,
+`revision`, and `approval_seq`. `waiting` is printed once for each approval
+request when it becomes the oldest one without a decision; `ready` and
+`blocked` are printed once when a turn completes, `blocked` when the
+plane recorded its result or verdict as blocked. A failed or cancelled
+session has no turn record. The record describes the session now: the
+plane resends it after a reconnect and the command prints it once, but an
+approval answered while the command was disconnected is not printed.
+
 ```bash
 rusui read -follow [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_ID
 ```
