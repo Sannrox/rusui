@@ -295,13 +295,21 @@ func isBot(typ, login string) bool {
 	return strings.HasSuffix(strings.ToLower(login), "[bot]")
 }
 
-var hashNum = regexp.MustCompile(`#(\d+)`)
+var hashNum = regexp.MustCompile(`([\w.-]+/[\w.-]+)?#(\d+)`)
 
 func parseLinked(body string, self int) []int {
 	seen := map[int]bool{self: true}
 	var out []int
-	for _, m := range hashNum.FindAllStringSubmatch(body, -1) {
-		n, _ := strconv.Atoi(m[1])
+	for _, m := range hashNum.FindAllStringSubmatchIndex(body, -1) {
+		if m[2] != -1 {
+			// owner/repo#N: a cross-repository reference, not same-repo.
+			continue
+		}
+		if m[0] > 0 && body[m[0]-1] == '&' {
+			// &#N;: an HTML numeric character entity, not an issue link.
+			continue
+		}
+		n, _ := strconv.Atoi(body[m[4]:m[5]])
 		if n == 0 || seen[n] {
 			continue
 		}
