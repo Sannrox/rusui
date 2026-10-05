@@ -2,6 +2,7 @@ package engine
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -33,6 +34,7 @@ func (e *Engine) StepSchedules(now time.Time) error {
 		return err
 	}
 	now = now.UTC()
+	var errs []error
 	for _, sc := range list {
 		if sc.EverySeconds <= 0 {
 			continue
@@ -40,10 +42,10 @@ func (e *Engine) StepSchedules(now time.Time) error {
 		bucket := now.Unix() / int64(sc.EverySeconds)
 		idem := fmt.Sprintf("sched/%d/%d", sc.ID, bucket)
 		if _, err := e.StartScheduled(sc, idem); err != nil && err != errPaused {
-			return err
+			errs = append(errs, fmt.Errorf("schedule %d: %w", sc.ID, err))
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (e *Engine) StartScheduled(sc store.Schedule, idem string) (int64, error) {
