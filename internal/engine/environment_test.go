@@ -127,7 +127,13 @@ func TestWakeRestartsServicesYAML(t *testing.T) {
 	if _, err := h.e.SleepEnvironment(created.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := syscall.Kill(pid, 0); err == nil {
-		t.Fatal("still running after sleep")
+	// SIGKILL is delivered asynchronously and the service stays a zombie until
+	// its waiter reaps it, so allow the exit a moment to land.
+	deadline := time.Now().Add(5 * time.Second)
+	for syscall.Kill(pid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("still running after sleep")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
