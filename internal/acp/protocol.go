@@ -100,8 +100,10 @@ type SessionCancelParams struct {
 }
 
 type PromptBlock struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
+	Data     string `json:"data,omitempty"`
 }
 
 type PromptResult struct {

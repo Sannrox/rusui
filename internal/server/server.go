@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -480,6 +481,17 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 	}
 	if turn, err := store.GetTurn(s.Eng.Store, c.Job.ID); err == nil {
 		out["session_id"] = turn.SessionID
+		if atts, err := store.ListPromptAttachments(s.Eng.Store, turn.SessionID, c.Job.ClaimedRevision); err == nil && len(atts) > 0 {
+			listed := make([]map[string]any, 0, len(atts))
+			for _, a := range atts {
+				listed = append(listed, map[string]any{
+					"name": a.Name,
+					"mime": a.MIME,
+					"data": base64.StdEncoding.EncodeToString(a.Body),
+				})
+			}
+			out["attachments"] = listed
+		}
 		if sess, err := store.GetSession(s.Eng.Store, turn.SessionID); err == nil {
 			out["guest_session_id"] = sess.GuestSessionID
 			if envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID); err == nil {

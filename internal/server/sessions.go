@@ -2,6 +2,7 @@ package server
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -308,10 +310,15 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, int64(env.WorkspaceUploadCap)+int64(env.WorkspaceUploadCap)/2+1<<20)
 	var req struct {
-		Prompt string `json:"prompt"`
-		Steer  bool   `json:"steer"`
-		Queued bool   `json:"queued"`
+		Prompt      string `json:"prompt"`
+		Steer       bool   `json:"steer"`
+		Queued      bool   `json:"queued"`
+		Attachments []struct {
+			Name    string `json:"name"`
+			Content string `json:"content"`
+		} `json:"attachments"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -320,6 +327,19 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 	if req.Steer && req.Queued {
 		http.Error(w, "steer and queued are exclusive", http.StatusBadRequest)
 		return
+	}
+	if req.Steer && len(req.Attachments) > 0 {
+		http.Error(w, "attachments are not a steer", http.StatusBadRequest)
+		return
+	}
+	var files []store.PromptFile
+	for _, a := range req.Attachments {
+		raw, err := base64.StdEncoding.DecodeString(a.Content)
+		if err != nil {
+			http.Error(w, "attachment", http.StatusBadRequest)
+			return
+		}
+		files = append(files, store.PromptFile{Name: a.Name, Body: raw})
 	}
 	if req.Prompt != "" {
 		if _, ok := s.wakeForOperator(w, id, "operator prompt"); !ok {
@@ -339,12 +359,17 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 		}
 	case req.Queued:
 		delivery = "queued"
-		turnID, pending, held, err = s.Eng.PromptQueued(id, req.Prompt)
+		turnID, pending, held, err = s.Eng.PromptQueuedFiles(id, req.Prompt, files)
 	default:
-		turnID, pending, err = s.Eng.PromptFollowUp(id, req.Prompt)
+		turnID, pending, err = s.Eng.PromptFollowUpFiles(id, req.Prompt, files)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
+		switch err.Error() {
+		case "oversize", "path", "attachment empty":
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, err.Error(), http.StatusConflict)
+		}
 		return
 	}
 	out := map[string]any{"turn_id": turnID, "pending_revision": pending, "delivery": delivery}

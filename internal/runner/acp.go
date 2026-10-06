@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -402,6 +403,7 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 	if a.ResultPath != "" {
 		prompt += resultInstructionsFor(a)
 	}
+	useAtts := true
 	var currentSteerID int64
 	var deliveredSteerIDs []int64
 	type promptResponse struct {
@@ -423,10 +425,15 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 	for {
 		result := make(chan promptResponse, 1)
 		submitted := make(chan struct{})
-		go func(text string) {
-			pr, err := host.SessionPromptSubmitted(ctx, sid, text, submitted)
+		blocks := []acp.PromptBlock{{Type: "text", Text: prompt}}
+		if useAtts {
+			blocks = promptBlocks(a, prompt)
+			useAtts = false
+		}
+		go func(blocks []acp.PromptBlock) {
+			pr, err := host.SessionPromptSubmittedBlocks(ctx, sid, blocks, submitted)
 			result <- promptResponse{prompt: pr, err: err}
-		}(prompt)
+		}(blocks)
 		select {
 		case <-submitted:
 			if currentSteerID > 0 {
@@ -467,6 +474,21 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 			currentSteerID = steer.ID
 		}
 	}
+}
+
+func promptBlocks(a *Assignment, text string) []acp.PromptBlock {
+	blocks := []acp.PromptBlock{{Type: "text", Text: text}}
+	if a == nil {
+		return blocks
+	}
+	for _, att := range a.Attachments {
+		typ := "resource"
+		if strings.HasPrefix(att.MIME, "image/") {
+			typ = "image"
+		}
+		blocks = append(blocks, acp.PromptBlock{Type: typ, MimeType: att.MIME, Data: att.Data})
+	}
+	return blocks
 }
 
 func promptFromInput(raw json.RawMessage) string {

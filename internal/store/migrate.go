@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 39
+const CurrentSchema = 40
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -501,7 +501,34 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 40 {
+		if err := migrateV40(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 40); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV40 stores prompt attachments outside the repository (#508).
+func migrateV40(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS prompt_attachments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  seq INTEGER NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 0,
+  name TEXT NOT NULL,
+  digest TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  body BLOB NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS prompt_attachments_rev ON prompt_attachments(session_id, revision);
+`)
+	return err
 }
 
 // migrateV39 lets a session own a signed webhook (ADR 0070, #510).
