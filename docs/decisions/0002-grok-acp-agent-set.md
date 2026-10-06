@@ -1,6 +1,6 @@
 # ADR 0002: P1 agent set is Grok CLI over ACP
 
-- Status: Accepted
+- Status: Accepted; amended by 0025, 0060
 - Date: 2026-09-14
 - Amends: [ADR 0001](0001-environment-plane.md) D2 (chosen agent set and
   how tool calls become receipts). D2's "ACP is the only agent interface"
@@ -8,6 +8,8 @@
 - Resolves: [#6](https://github.com/Sannrox/rusui/issues/6)
 - Amended by: [ADR 0025](0025-provider-boundary.md). Grok, Claude, and
   Codex share one Go provider boundary. Grok stays ACP protocolVersion 1.
+  [ADR 0060](0060-shikigami-acp-guest-pin.md) pins `shikigami acp`.
+  Spawn stays [#507](https://github.com/Sannrox/rusui/issues/507).
 - Unblocks: [#10](https://github.com/Sannrox/rusui/issues/10)
 - Discussion: none. GitHub Discussions are disabled; the pull request that
   adds this file is the review venue. Merging with status Accepted is the
@@ -43,6 +45,8 @@ with Cursor's documented `agent` binary).
   `session/update`, and `session/request_permission`.
 - **shikigami** still needs an ACP server before it is a P1 guest. Until
   then its `serve` intake stays the interim family path (ROADMAP A5).
+  Amended by 0060: the ACP server exists; the pin is recorded; spawn
+  is #507.
 - **Receipts.** Grok executes tools inside the agent process. `fs/*` and
   `terminal/*` did not appear as client methods in the probe, even when
   the client advertised no filesystem or terminal capability. The plane
