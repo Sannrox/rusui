@@ -18,6 +18,14 @@ func TestSplitRepoRefusesProjectKey(t *testing.T) {
 	}
 }
 
+func TestParseWebhookRefusesCheckRun(t *testing.T) {
+	body := []byte(`{"action":"completed","check_run":{"conclusion":"failure","html_url":"https://github.com/example/test-repo/actions/runs/1"},"repository":{"full_name":"example/test-repo"}}`)
+	_, _, _, err := ParseWebhook(body)
+	if err == nil {
+		t.Fatal("check_run started a review item")
+	}
+}
+
 func TestParseHookIDs(t *testing.T) {
 	m := ParseHookIDs("example/test-repo=42, other/r=9")
 	if m["example/test-repo"] != "42" || m["other/r"] != "9" {

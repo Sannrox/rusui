@@ -65,6 +65,7 @@ Decisions that must outlive a single pull request.
 | [0054](0054-repository-hooks-only.md) | Setup and resume stay repository hooks | Accepted |
 | [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Accepted |
 | [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Accepted |
+| [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Accepted |
 
 ## When to write an ADR
 
