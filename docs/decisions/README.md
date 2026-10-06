@@ -37,7 +37,7 @@ Decisions that must outlive a single pull request.
 | [0026](0026-harness-model-upstream.md) | Harness, model, and upstream are independent | Accepted; amended by 0061 |
 | [0027](0027-guest-reachability-ask.md) | The guest image does not declare reachability yet | Accepted |
 | [0028](0028-container-isolation-profile.md) | The supported machine isolation profile remains the container | Accepted |
-| [0029](0029-single-host-runner.md) | The supported runner topology remains one host | Accepted |
+| [0029](0029-single-host-runner.md) | The supported runner topology remains one host | Accepted; amended by 0064 |
 | [0030](0030-schedule-new-session.md) | A schedule fire starts a new session | Accepted; amended by 0056 |
 | [0031](0031-cli-command-tree.md) | The rusui CLI stays a flat verb list | Accepted |
 | [0032](0032-named-services.md) | Named services declare a port and a health path | Accepted |
@@ -59,7 +59,7 @@ Decisions that must outlive a single pull request.
 | [0048](0048-pinless-run-session.md) | A project without a repository runs pinless sessions claimed by project key | Accepted |
 | [0049](0049-idle-environment-expiry-retained.md) | Idle environment expiry remains 72 hours | Superseded by 0063 |
 | [0050](0050-guest-toolchain-in-image.md) | Bake guest toolchain into the image; add no destinations | Accepted |
-| [0051](0051-fail-on-full-lease-budget-retained.md) | Admission still fails when the lease budget is full | Accepted |
+| [0051](0051-fail-on-full-lease-budget-retained.md) | Admission still fails when the lease budget is full | Superseded by 0064 |
 | [0052](0052-separate-attach-and-guest-shells.md) | Attach and the guest keep separate shells | Accepted |
 | [0053](0053-wake-secret-injection-refused.md) | The guest still holds only the per-turn grant | Accepted |
 | [0054](0054-repository-hooks-only.md) | Setup and resume stay repository hooks | Accepted |
@@ -72,6 +72,7 @@ Decisions that must outlive a single pull request.
 | [0061](0061-one-model-upstream-retained.md) | One model upstream retained | Accepted |
 | [0062](0062-guest-link-desktop-podman-deferred.md) | Docker Desktop and Podman stay unverified for the guest link | Accepted |
 | [0063](0063-keep-environment-until-archive.md) | Keep the environment until the operator archives it | Accepted |
+| [0064](0064-session-size-and-admission-queue.md) | Session size and a wait when the lease budget is full | Accepted |
 
 ## When to write an ADR
 
