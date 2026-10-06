@@ -23,7 +23,9 @@ const (
 	EnvReady    = "ready"
 	EnvSleeping = "sleeping"
 	EnvExpired  = "expired"
-	EnvTTL      = 72 * time.Hour
+	// EnvTTL is the activity window used to schedule idle sleep. It is
+	// not an environment destroy timer (ADR 0063).
+	EnvTTL = 72 * time.Hour
 )
 
 type Runner struct {
@@ -47,6 +49,8 @@ type Session struct {
 	Project          string
 	Prompt           string
 	GuestSessionID   string
+	Archived         bool       `json:"archived"`
+	ArchivedAt       *time.Time `json:"archived_at,omitempty"`
 	CreatedAt        time.Time
 }
 

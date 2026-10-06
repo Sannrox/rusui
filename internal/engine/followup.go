@@ -17,6 +17,9 @@ func (e *Engine) PromptFollowUp(sessionID int64, prompt string) (int64, int, err
 	if err != nil {
 		return 0, 0, err
 	}
+	if sess.Archived {
+		return 0, 0, errArchived
+	}
 	turns, err := store.ListTurnsForSession(e.Store, sessionID)
 	if err != nil {
 		return 0, 0, err
@@ -60,6 +63,9 @@ func (e *Engine) PromptQueued(sessionID int64, prompt string) (int64, int, bool,
 	sess, err := store.GetSession(e.Store, sessionID)
 	if err != nil {
 		return 0, 0, false, err
+	}
+	if sess.Archived {
+		return 0, 0, false, errArchived
 	}
 	turns, err := store.ListTurnsForSession(e.Store, sessionID)
 	if err != nil {
@@ -149,6 +155,9 @@ func (e *Engine) PromptSteer(sessionID int64, prompt string) (int64, int, bool, 
 	sess, err := store.GetSession(e.Store, sessionID)
 	if err != nil {
 		return 0, 0, false, err
+	}
+	if sess.Archived {
+		return 0, 0, false, errArchived
 	}
 	turns, err := store.ListTurnsForSession(e.Store, sessionID)
 	if err != nil {

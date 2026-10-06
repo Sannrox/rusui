@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 33
+const CurrentSchema = 34
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -451,6 +451,37 @@ func (s *Store) migrate() error {
 		}
 		if err := stamp(s.DB, 33); err != nil {
 			return err
+		}
+	}
+	if ver < 34 {
+		if err := migrateV34(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 34); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// migrateV34 records whether the operator archived the session (#499).
+// Archive sleeps the environment and refuses prompts; the row stays.
+func migrateV34(db *sql.DB) error {
+	for _, col := range []struct {
+		name string
+		ddl  string
+	}{
+		{"archived", "ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0"},
+		{"archived_at", "ALTER TABLE sessions ADD COLUMN archived_at TEXT"},
+	} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name=?`, col.name).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			if _, err := db.Exec(col.ddl); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

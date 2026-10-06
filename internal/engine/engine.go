@@ -774,7 +774,7 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 		// A queued run is leased before older review or scheduled turns.
 		// Turns in the same class stay in id order, so catch-up reviews
 		// are still claimed once no run is waiting.
-		rows, err := tx.Query(`SELECT t.id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo=? AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
+		rows, err := tx.Query(`SELECT t.id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo=? AND COALESCE(s.archived, 0)=0 AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
 			append([]any{repo}, anySlice(lanes)...)...)
 		if err != nil {
 			return err
@@ -931,11 +931,13 @@ type Claim struct {
 }
 
 var (
-	errPaused = fmt.Errorf("paused")
-	errPolicy = fmt.Errorf("policy")
-	errBudget = fmt.Errorf("budget")
-	ErrBudget = errBudget
-	ErrPaused = errPaused
+	errPaused   = fmt.Errorf("paused")
+	errPolicy   = fmt.Errorf("policy")
+	errBudget   = fmt.Errorf("budget")
+	errArchived = fmt.Errorf("archived")
+	ErrBudget   = errBudget
+	ErrPaused   = errPaused
+	ErrArchived = errArchived
 )
 
 func (e *Engine) Heartbeat(jobID int64, gen, claimed int) error {

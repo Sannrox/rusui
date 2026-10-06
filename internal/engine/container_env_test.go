@@ -3,7 +3,6 @@ package engine_test
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -240,7 +239,7 @@ func TestWakeFailureFailsClaimWithoutReplacingEnvironment(t *testing.T) {
 	}
 }
 
-func TestExpiredSleepingEnvironmentIsNotRenewedByFailedWake(t *testing.T) {
+func TestSleepingEnvironmentWakesAfterTTL(t *testing.T) {
 	h := setup(t)
 	rt := &env.FakeRuntime{DefaultFiles: map[string]bool{env.ResumePath: true}}
 	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
@@ -271,22 +270,20 @@ func TestExpiredSleepingEnvironmentIsNotRenewedByFailedWake(t *testing.T) {
 	if _, err := h.e.SleepEnvironment(envRow.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := h.e.PromptFollowUp(sess.ID, "wake after expiry"); err != nil {
+	if _, _, err := h.e.PromptFollowUp(sess.ID, "wake after ttl"); err != nil {
 		t.Fatal(err)
 	}
 	h.clk.Advance(24*time.Hour + 500*time.Millisecond)
-	for attempt := range 2 {
-		claim, err := h.e.Claim("example/test-repo")
-		if err == nil || claim != nil || !strings.Contains(err.Error(), "environment state sleeping") {
-			t.Fatalf("attempt %d claim=%+v err=%v", attempt+1, claim, err)
-		}
-		got, err := store.GetEnvironment(h.st, envRow.ID)
-		if err != nil || got.State != store.EnvSleeping || got.Handle != envRow.Handle || got.ExpiresAt == nil || !got.ExpiresAt.Equal(expiresAt) {
-			t.Fatalf("attempt %d renewed expired environment: %+v err=%v", attempt+1, got, err)
-		}
+	claim, err := h.e.Claim("example/test-repo")
+	if err != nil || claim == nil {
+		t.Fatalf("claim after ttl %+v err=%v", claim, err)
 	}
-	if len(rt.Created) != 1 || len(rt.Started) != 0 {
-		t.Fatalf("expired environment was replaced or started: created=%v started=%v", rt.Created, rt.Started)
+	got, err := store.GetEnvironment(h.st, envRow.ID)
+	if err != nil || got.State != store.EnvReady || got.Handle != envRow.Handle || got.ExpiresAt == nil || !got.ExpiresAt.After(expiresAt) {
+		t.Fatalf("wake after ttl %+v err=%v", got, err)
+	}
+	if len(rt.Created) != 1 || len(rt.Started) != 1 || rt.Started[0] != envRow.Handle {
+		t.Fatalf("wake after ttl created=%v started=%v", rt.Created, rt.Started)
 	}
 }
 
@@ -592,10 +589,9 @@ func TestConcurrentOperatorWakesShareOneWake(t *testing.T) {
 	}
 }
 
-// An expired session environment is replaced, not refilled: the next turn
-// gets a new environment id, and receipts record the expiry and the
-// replacement (#415).
-func TestExpiredSessionEnvironmentIsReplacedWithReceipts(t *testing.T) {
+// An unarchived session keeps the same environment past the old idle TTL
+// (#499, ADR 0063). Replacement on source-hash change is unchanged.
+func TestSessionEnvironmentSurvivesPastTTL(t *testing.T) {
 	h := setup(t)
 	rt := &env.FakeRuntime{DefaultFiles: map[string]bool{env.SetupPath: true}}
 	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
@@ -624,31 +620,11 @@ func TestExpiredSessionEnvironmentIsReplacedWithReceipts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sess.EnvironmentID == first.ID {
-		t.Fatal("expired environment id reused for a new guest")
+	if sess.EnvironmentID != first.ID {
+		t.Fatalf("environment id %d, want %d", sess.EnvironmentID, first.ID)
 	}
-	old, err := store.GetEnvironment(h.st, first.ID)
-	if err != nil || old.State != store.EnvExpired || old.Handle != "" {
-		t.Fatalf("old env %+v %v", old, err)
-	}
-	replacement, err := store.GetEnvironment(h.st, sess.EnvironmentID)
-	if err != nil || replacement.State != store.EnvReady || replacement.Handle == "" || replacement.Handle == first.Handle ||
-		replacement.Name != first.Name+"-r"+strconv.FormatInt(first.ID, 10) {
-		t.Fatalf("replacement %+v %v", replacement, err)
-	}
-	receipts, err := store.ListEnvironmentReceipts(h.st, sess.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got []string
-	for _, r := range receipts {
-		got = append(got, fmt.Sprintf("%d %s %s", r.EnvironmentID, r.Kind, r.Detail))
-	}
-	want := []string{
-		fmt.Sprintf("%d expire time to live elapsed", first.ID),
-		fmt.Sprintf("%d replace replaced by environment %d", first.ID, replacement.ID),
-	}
-	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Fatalf("receipts %q want %q", got, want)
+	got, err := store.GetEnvironment(h.st, first.ID)
+	if err != nil || got.State != store.EnvReady || got.Handle != first.Handle {
+		t.Fatalf("env after ttl %+v %v", got, err)
 	}
 }

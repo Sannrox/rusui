@@ -678,7 +678,7 @@ func ListSessions(s *Store, project string, limit int) ([]Session, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.created_at
+	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.archived, s.archived_at, s.created_at
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	args := []any{}
 	if project != "" {
@@ -696,11 +696,13 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	for rows.Next() {
 		var sess Session
 		var created string
-		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &created); err != nil {
+		var archived int
+		var archivedAt sql.NullString
+		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &archived, &archivedAt, &created); err != nil {
 			return nil, err
 		}
-		if t, err := time.Parse(time.RFC3339Nano, created); err == nil {
-			sess.CreatedAt = t
+		if err := applySessionArchive(&sess, archived, archivedAt, created); err != nil {
+			return nil, err
 		}
 		out = append(out, sess)
 	}
@@ -825,16 +827,49 @@ ORDER BY a.rowid LIMIT 1`, sessionID).Scan(&seq, &turnID, &revision)
 func GetSession(s *Store, id int64) (*Session, error) {
 	var sess Session
 	var created string
-	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.created_at
+	var archived int
+	var archivedAt sql.NullString
+	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.archived, s.archived_at, s.created_at
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id WHERE s.id=?`, id).Scan(
-		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &created)
+		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &archived, &archivedAt, &created)
 	if err != nil {
 		return nil, err
+	}
+	if err := applySessionArchive(&sess, archived, archivedAt, created); err != nil {
+		return nil, err
+	}
+	return &sess, nil
+}
+
+func applySessionArchive(sess *Session, archived int, archivedAt sql.NullString, created string) error {
+	sess.Archived = archived != 0
+	if archivedAt.Valid && archivedAt.String != "" {
+		t, err := time.Parse(time.RFC3339Nano, archivedAt.String)
+		if err != nil {
+			return err
+		}
+		sess.ArchivedAt = &t
 	}
 	if t, err := time.Parse(time.RFC3339Nano, created); err == nil {
 		sess.CreatedAt = t
 	}
-	return &sess, nil
+	return nil
+}
+
+// SetSessionArchived records or clears archive. The session row stays.
+func SetSessionArchived(s *Store, id int64, archived bool, now time.Time) error {
+	if archived {
+		_, err := s.DB.Exec(`UPDATE sessions SET archived=1, archived_at=? WHERE id=?`,
+			now.UTC().Format(time.RFC3339Nano), id)
+		return err
+	}
+	_, err := s.DB.Exec(`UPDATE sessions SET archived=0, archived_at=NULL WHERE id=?`, id)
+	return err
+}
+
+func RevokePreviewGrantsForEnvironment(s *Store, envID int64) error {
+	_, err := s.DB.Exec(`UPDATE preview_grants SET revoked=1 WHERE environment_id=? AND revoked=0`, envID)
+	return err
 }
 
 func TurnTokenSession(s *Store, tokenHash string, now time.Time) (sessionID, turnID int64, ok bool, err error) {
@@ -906,24 +941,6 @@ func UpdateEnvironment(s *Store, e Environment) error {
 	_, err := s.DB.Exec(`UPDATE environments SET driver=?, state=?, handle=?, source_hash=?, expires_at=?, slept_at=?, cpu_millis=?, memory_bytes=? WHERE id=?`,
 		e.Driver, e.State, e.Handle, e.SourceHash, exp, slept, e.CPUMillis, e.MemoryBytes, e.ID)
 	return err
-}
-
-func ListExpiredEnvironments(s *Store, now time.Time) ([]Environment, error) {
-	rows, err := s.DB.Query(`SELECT id, name, driver, state, handle, source_hash, expires_at, slept_at, cpu_millis, memory_bytes, created_at FROM environments WHERE name!=? AND state!=? AND expires_at IS NOT NULL AND expires_at<=?`,
-		LocalEnvironmentName, EnvExpired, now.UTC().Format(time.RFC3339Nano))
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	var out []Environment
-	for rows.Next() {
-		env, err := scanEnvironment(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, *env)
-	}
-	return out, rows.Err()
 }
 
 func scanEnvironment(row interface{ Scan(...any) error }) (*Environment, error) {

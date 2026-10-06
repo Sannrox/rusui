@@ -279,6 +279,9 @@ func (e *Engine) WakeSessionEnvironment(sessionID int64, cause string) (*store.E
 	if err != nil {
 		return nil, err
 	}
+	if sess.Archived {
+		return nil, errArchived
+	}
 	deadline := time.Now().Add(operatorWakeWait)
 	for {
 		envRow, err := store.GetEnvironment(e.Store, sess.EnvironmentID)
@@ -322,9 +325,6 @@ func (e *Engine) wakeEnvironment(id int64, detail string) (*store.Environment, e
 	}
 	if envRow.State != store.EnvSleeping {
 		return nil, fmt.Errorf("env: wake requires sleeping, have %s", envRow.State)
-	}
-	if envRow.ExpiresAt != nil && !e.now().Before(*envRow.ExpiresAt) {
-		return nil, fmt.Errorf("env: expired")
 	}
 	d, err := e.driverFor(envRow.Driver)
 	if err != nil {
@@ -431,31 +431,10 @@ func (e *Engine) environmentOperationInProgress(id int64) bool {
 	return ok
 }
 
+// ReapEnvironments no longer destroys an environment because a TTL
+// elapsed (ADR 0063). Archive sleeps; it does not destroy. Recover still
+// calls this so a later destroy rule can hook the same path.
 func (e *Engine) ReapEnvironments() error {
-	stale, err := store.ListExpiredEnvironments(e.Store, e.now())
-	if err != nil {
-		return err
-	}
-	for _, envRow := range stale {
-		d, err := e.driverFor(envRow.Driver)
-		if err != nil {
-			e.exception("expire environment " + envRow.Name + ": " + err.Error())
-			continue
-		}
-		_ = stopServices(d, envRow.Handle)
-		if err := d.Destroy(envRow.Handle); err != nil {
-			e.exception("expire environment " + envRow.Name + ": " + err.Error())
-			continue
-		}
-		envRow.State = store.EnvExpired
-		envRow.Handle = ""
-		if err := store.UpdateEnvironment(e.Store, envRow); err != nil {
-			return err
-		}
-		if err := store.InsertEnvironmentReceipt(e.Store, envRow.ID, "expire", "succeeded", "time to live elapsed", e.now()); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -485,6 +464,9 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	sess, err := store.GetSession(e.Store, turn.SessionID)
 	if err != nil {
 		return err
+	}
+	if sess.Archived {
+		return errArchived
 	}
 	if sess.EnvironmentID == store.DefaultEnvironmentID {
 		return nil

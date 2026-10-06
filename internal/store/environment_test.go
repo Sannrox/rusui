@@ -125,3 +125,61 @@ func TestIdleSleepReservationRechecksRecentActivity(t *testing.T) {
 		t.Fatalf("recent environment %+v err=%v", got, err)
 	}
 }
+
+func TestIdleSleepListsPastTTL(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "idle-ttl.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	now := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
+	ttl, idle := 72*time.Hour, 5*time.Minute
+	expired := now.Add(-time.Hour)
+	envID, err := InsertEnvironment(s, Environment{
+		Name: "idle-past", Driver: "container", State: EnvReady,
+		Handle: "ctr-past", ExpiresAt: &expired, CreatedAt: now.Add(-80 * time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidates, err := ListIdleContainerEnvironments(s, now, ttl, idle)
+	if err != nil || len(candidates) != 1 || candidates[0].ID != envID {
+		t.Fatalf("past-ttl idle candidates %+v err=%v", candidates, err)
+	}
+	if reserved, err := ReserveIdleEnvironmentSleep(s, envID, now, ttl, idle); err != nil || !reserved {
+		t.Fatalf("past-ttl idle reserve reserved=%v err=%v", reserved, err)
+	}
+}
+
+func TestSessionArchiveRoundTrip(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "archive.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	now := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
+	res, err := s.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
+VALUES (1, 'run', 'example/test-repo', 1, 'issue', 'open', ?)`, now.Format(time.RFC3339Nano))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SetSessionArchived(s, id, true, now); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetSession(s, id)
+	if err != nil || !got.Archived || got.ArchivedAt == nil || !got.ArchivedAt.Equal(now) {
+		t.Fatalf("archived %+v %v", got, err)
+	}
+	if err := SetSessionArchived(s, id, false, now); err != nil {
+		t.Fatal(err)
+	}
+	got, err = GetSession(s, id)
+	if err != nil || got.Archived || got.ArchivedAt != nil {
+		t.Fatalf("unarchived %+v %v", got, err)
+	}
+}

@@ -102,20 +102,20 @@ func TestSecondEnvironmentGetsSetupWritesWithoutSetup(t *testing.T) {
 	}
 }
 
-func TestEnvironmentAfterExpiryGetsSetupWritesWithoutSetup(t *testing.T) {
+func TestEnvironmentAfterTTLStillReusesSetupWrites(t *testing.T) {
 	b := newSetupBox(t)
 	first := b.mustProvision(t, "box-1", "aaa")
 	b.h.clk.T = first.ExpiresAt.Add(time.Minute)
 	if err := b.h.e.ReapEnvironments(); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := store.GetEnvironment(b.h.st, first.ID); err != nil || got.State != store.EnvExpired {
+	if got, err := store.GetEnvironment(b.h.st, first.ID); err != nil || got.State != store.EnvReady || got.Handle != first.Handle {
 		t.Fatalf("first env %+v %v", got, err)
 	}
 	later := b.mustProvision(t, "box-2", "aaa")
 	b.wantBuilt(t, later.Handle, "built from pin-a\n")
 	if n := b.setupRuns(); n != 1 {
-		t.Fatalf("setup ran %d times after expiry, want 1", n)
+		t.Fatalf("setup ran %d times after ttl, want 1", n)
 	}
 }
 

@@ -32,6 +32,12 @@ func TestConfigurationHTTPTableDocumentsPostReviews(t *testing.T) {
 	if !strings.Contains(table, "`POST` | `/sessions/{id}/cancel` | operator or worker token") {
 		t.Fatal("HTTP table missing POST /sessions/{id}/cancel with operator or worker auth")
 	}
+	if !strings.Contains(table, "`POST` | `/sessions/{id}/archive` | operator or worker token") {
+		t.Fatal("HTTP table missing POST /sessions/{id}/archive with operator or worker auth")
+	}
+	if !strings.Contains(table, "`POST` | `/sessions/{id}/unarchive` | operator or worker token") {
+		t.Fatal("HTTP table missing POST /sessions/{id}/unarchive with operator or worker auth")
+	}
 	if !strings.Contains(table, "`DELETE` | `/sessions/{id}/queued` | operator or worker token") {
 		t.Fatal("HTTP table missing DELETE /sessions/{id}/queued with operator or worker auth")
 	}
