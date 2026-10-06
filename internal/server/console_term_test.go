@@ -125,6 +125,25 @@ func TestTerminalWriteLeaseAndGuestExec(t *testing.T) {
 	}
 }
 
+func TestRunSessionHasNoTerminalLease(t *testing.T) {
+	_, _, e := consoleEnv(t)
+	sid, err := e.StartRun("test", "term", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(e.Store, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, held, err := store.GetTerminalLease(e.Store, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if held {
+		t.Fatal("run session started with an attach lease")
+	}
+}
+
 func TestTerminalExpiredEnvironment(t *testing.T) {
 	s, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "term", "")
