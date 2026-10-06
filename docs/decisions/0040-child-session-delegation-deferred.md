@@ -1,10 +1,12 @@
 # ADR 0040: Child-session delegation is deferred
 
-- Status: Accepted
+- Status: Accepted; amended by 0058
 - Date: 2026-09-29
 - Amends: none. [ADR 0006](0006-session-start.md) stands: one session,
   one environment. [ADR 0035](0035-live-environment-fork-deferred.md)
   stands: a second session starts from a snapshot.
+- Amended by: [ADR 0058](0058-child-session-delegation-retained.md).
+  Child-session delegation stays deferred. #122 stays blocked.
 - Resolves: [#121](https://github.com/Sannrox/rusui/issues/121)
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0001](0001-environment-plane.md) D1 and D4,

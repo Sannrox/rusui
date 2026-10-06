@@ -48,7 +48,7 @@ Decisions that must outlive a single pull request.
 | [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Accepted |
 | [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
 | [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted |
-| [0040](0040-child-session-delegation-deferred.md) | Child-session delegation is deferred | Accepted |
+| [0040](0040-child-session-delegation-deferred.md) | Child-session delegation is deferred | Accepted; amended by 0058 |
 | [0041](0041-ha-plane-deferred.md) | An HA plane is deferred | Accepted |
 | [0042](0042-disconnected-execution-deferred.md) | Disconnected execution is deferred | Accepted |
 | [0043](0043-extension-contract-deferred.md) | An extension contract is deferred | Accepted |
@@ -66,6 +66,7 @@ Decisions that must outlive a single pull request.
 | [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Accepted |
 | [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Accepted |
 | [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Accepted |
+| [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Accepted |
 
 ## When to write an ADR
 
