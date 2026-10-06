@@ -15,7 +15,7 @@ Decisions that must outlive a single pull request.
 | [0004](0004-rusui-services-yaml.md) | services.yaml is `.rusui/services.yaml` only | Accepted |
 | [0005](0005-policy-v2-project.md) | Policy v2 is keyed by project | Accepted |
 | [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted |
-| [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048, 0049, 0054, 0063 |
+| [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048, 0049, 0054, 0063, 0067 |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066 |
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
@@ -62,7 +62,7 @@ Decisions that must outlive a single pull request.
 | [0051](0051-fail-on-full-lease-budget-retained.md) | Admission still fails when the lease budget is full | Superseded by 0064 |
 | [0052](0052-separate-attach-and-guest-shells.md) | Attach and the guest keep separate shells | Superseded by 0065 |
 | [0053](0053-wake-secret-injection-refused.md) | The guest still holds only the per-turn grant | Superseded by 0066 |
-| [0054](0054-repository-hooks-only.md) | Setup and resume stay repository hooks | Accepted |
+| [0054](0054-repository-hooks-only.md) | Setup and resume stay repository hooks | Superseded by 0067 |
 | [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Accepted |
 | [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Accepted |
 | [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Accepted |
@@ -75,6 +75,7 @@ Decisions that must outlive a single pull request.
 | [0064](0064-session-size-and-admission-queue.md) | Session size and a wait when the lease budget is full | Accepted |
 | [0065](0065-one-environment-terminal.md) | One terminal session inside the environment | Accepted |
 | [0066](0066-inject-secret-at-wake.md) | Inject a short-lived secret at wake | Accepted |
+| [0067](0067-plane-stored-pre-hooks.md) | Plane-stored pre-clone and pre-setup hooks | Accepted |
 
 ## When to write an ADR
 
