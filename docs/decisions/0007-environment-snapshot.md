@@ -16,8 +16,10 @@
   zero bound repositories may start a pinless run or scheduled session
   whose snapshot is the image identity and whose claim key is
   `project:<slug>`.
-  [ADR 0049](0049-idle-environment-expiry-retained.md) retains the
-  72-hour idle expiry; keep-until-archive is rejected.
+  [ADR 0049](0049-idle-environment-expiry-retained.md) retained the
+  72-hour idle expiry; superseded by
+  [ADR 0063](0063-keep-environment-until-archive.md), which keeps the
+  environment until the operator archives the session.
   [ADR 0054](0054-repository-hooks-only.md) retains repository
   `.agents/setup` and `.agents/resume`; plane-stored pre-clone and
   pre-setup hooks are refused.

@@ -15,7 +15,7 @@ Decisions that must outlive a single pull request.
 | [0004](0004-rusui-services-yaml.md) | services.yaml is `.rusui/services.yaml` only | Accepted |
 | [0005](0005-policy-v2-project.md) | Policy v2 is keyed by project | Accepted |
 | [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted |
-| [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048, 0049, 0054 |
+| [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048, 0049, 0054, 0063 |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053 |
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
@@ -57,7 +57,7 @@ Decisions that must outlive a single pull request.
 | [0046](0046-workspace-first-sequence.md) | Terminal-first remote workspace sequence | Accepted |
 | [0047](0047-guest-link.md) | Container guests reach the plane only through a stdio guest link | Accepted; amended by 0050, 0062 |
 | [0048](0048-pinless-run-session.md) | A project without a repository runs pinless sessions claimed by project key | Accepted |
-| [0049](0049-idle-environment-expiry-retained.md) | Idle environment expiry remains 72 hours | Accepted |
+| [0049](0049-idle-environment-expiry-retained.md) | Idle environment expiry remains 72 hours | Superseded by 0063 |
 | [0050](0050-guest-toolchain-in-image.md) | Bake guest toolchain into the image; add no destinations | Accepted |
 | [0051](0051-fail-on-full-lease-budget-retained.md) | Admission still fails when the lease budget is full | Accepted |
 | [0052](0052-separate-attach-and-guest-shells.md) | Attach and the guest keep separate shells | Accepted |
@@ -71,6 +71,7 @@ Decisions that must outlive a single pull request.
 | [0060](0060-shikigami-acp-guest-pin.md) | Pin shikigami acp as a supported guest | Accepted |
 | [0061](0061-one-model-upstream-retained.md) | One model upstream retained | Accepted |
 | [0062](0062-guest-link-desktop-podman-deferred.md) | Docker Desktop and Podman stay unverified for the guest link | Accepted |
+| [0063](0063-keep-environment-until-archive.md) | Keep the environment until the operator archives it | Accepted |
 
 ## When to write an ADR
 
