@@ -46,8 +46,19 @@ func TestRetryRequeuesFailedReviewForOperator(t *testing.T) {
 	if code := post("op-tok", "example/test-repo#99"); code != http.StatusConflict {
 		t.Fatalf("unknown item %d", code)
 	}
-	if code := post("op-tok", "example/test-repo#5"); code != http.StatusOK {
-		t.Fatalf("retry %d", code)
+	req, err := http.NewRequest(http.MethodPost, hs.URL+"/retry", strings.NewReader(`{"target":"example/test-repo#5"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer op-tok")
+	req.Header.Set("X-Member-Id", "alice")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("retry %d", res.StatusCode)
 	}
 	var state, actor string
 	if err := e.Store.DB.QueryRow(`SELECT state FROM jobs WHERE item=5 AND lane='review'`).Scan(&state); err != nil || state != "queued" {

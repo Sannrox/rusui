@@ -1,6 +1,6 @@
 # ADR 0012: Single-operator access for terminal and preview
 
-- Status: Accepted
+- Status: Accepted; amended by 0032, 0036, 0039, 0059
 - Date: 2026-09-20
 - Amends: [ADR 0003](0003-operator-surface.md) reachability (credential
   classes, browser session, preview origin). The API-first, CLI-first,
@@ -15,6 +15,8 @@
   desktop; terminal and preview remain the operator's views.
   [ADR 0039](0039-shared-operator-governance-deferred.md) keeps a single
   local operator token; shared-operator governance is deferred.
+  [ADR 0059](0059-unattributed-operator-retained.md) keeps operator
+  calls unattributed; a caller-supplied member id is not identity.
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
   Objects: operator credential, worker credential, turn grant, browser

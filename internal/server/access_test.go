@@ -23,6 +23,19 @@ func TestClassifyBearerSeparatesOperatorAndWorker(t *testing.T) {
 	}
 }
 
+func TestOperatorBrowserIgnoresMemberHeader(t *testing.T) {
+	s := &Server{OperatorTok: "op-tok", WorkerSec: "wsec"}
+	req, _ := http.NewRequest("GET", "/sessions", nil)
+	req.Header.Set("X-Member-Id", "alice")
+	if s.OperatorBrowserOK(req) {
+		t.Fatal("member header authenticated")
+	}
+	req.Header.Set("Authorization", "Bearer op-tok")
+	if !s.OperatorBrowserOK(req) {
+		t.Fatal("operator plus member header rejected")
+	}
+}
+
 func TestOperatorBrowserRejectsWorkerSecret(t *testing.T) {
 	s := &Server{OperatorTok: "op-tok", WorkerSec: "wsec"}
 	req, _ := http.NewRequest("GET", "/sessions", nil)

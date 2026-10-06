@@ -20,7 +20,7 @@ Decisions that must outlive a single pull request.
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053 |
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
-| [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted |
+| [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059 |
 | [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
 | [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Superseded by 0023 |
 | [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted; amended by 0055 |
@@ -47,7 +47,7 @@ Decisions that must outlive a single pull request.
 | [0036](0036-environment-desktop-deferred.md) | A graphical desktop in the environment is deferred | Accepted |
 | [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Accepted |
 | [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
-| [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted |
+| [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted; amended by 0059 |
 | [0040](0040-child-session-delegation-deferred.md) | Child-session delegation is deferred | Accepted; amended by 0058 |
 | [0041](0041-ha-plane-deferred.md) | An HA plane is deferred | Accepted |
 | [0042](0042-disconnected-execution-deferred.md) | Disconnected execution is deferred | Accepted |
@@ -67,6 +67,7 @@ Decisions that must outlive a single pull request.
 | [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Accepted |
 | [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Accepted |
 | [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Accepted |
+| [0059](0059-unattributed-operator-retained.md) | Plane calls stay one unattributed operator | Accepted |
 
 ## When to write an ADR
 
