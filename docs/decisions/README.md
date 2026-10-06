@@ -23,7 +23,7 @@ Decisions that must outlive a single pull request.
 | [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted |
 | [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
 | [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Superseded by 0023 |
-| [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted |
+| [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted; amended by 0055 |
 | [0016](0016-local-interactive-runtime.md) | Local interactive runtime boundary with Sumika | Accepted |
 | [0017](0017-claude-guest-and-model-upstream.md) | Claude Code guest, operator model upstream, and a fenced self-test | Accepted |
 | [0018](0018-rusui-setup.md) | `rusui setup` provisions a host; `rusui diagnose` verifies it | Accepted |
@@ -63,6 +63,7 @@ Decisions that must outlive a single pull request.
 | [0052](0052-separate-attach-and-guest-shells.md) | Attach and the guest keep separate shells | Accepted |
 | [0053](0053-wake-secret-injection-refused.md) | The guest still holds only the per-turn grant | Accepted |
 | [0054](0054-repository-hooks-only.md) | Setup and resume stay repository hooks | Accepted |
+| [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Accepted |
 
 ## When to write an ADR
 
