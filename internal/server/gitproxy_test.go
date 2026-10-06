@@ -8,11 +8,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/sannrox/rusui/internal/clock"
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/policy"
+	"github.com/sannrox/rusui/internal/store"
 )
 
 func pkt(payload string) string {
@@ -243,6 +249,94 @@ func TestGitProxyRejectsUnapprovedHostExpiredCrossSessionAndPreparePush(t *testi
 	_ = resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Fatalf("prepare fetch %d", resp.StatusCode)
+	}
+}
+
+func leasedImplementTurn(t *testing.T, ship string) (*engine.Engine, string, int64) {
+	t.Helper()
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	raw := strings.Replace(slackPol, "implement: false", "implement: true", 1)
+	if ship != "" {
+		raw = strings.Replace(raw, "test:\n", "test:\n    ship: "+ship+"\n", 1)
+	}
+	p, err := policy.Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	clk := &clock.Fake{T: time.Unix(1_700_000_000, 0).UTC()}
+	e := engine.New(st, p, gh.NewFake(), clk)
+	e.Env = env.Process{Root: t.TempDir()}
+	e.ReloadPolicy(p)
+	task, err := e.StartTask("test", engine.TaskSpec{
+		EffortKey: "effort-1", Prompt: "open a pull request", Repo: "example/test-repo",
+		Ref: "main", BaseSHA: "aaa", AllowedPaths: []string{"docs"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := e.Claim("example/test-repo")
+	if err != nil || c == nil {
+		t.Fatalf("claim %v", err)
+	}
+	tok, _, err := issueTurnToken(e.Store, c.Job.ID, c.Job.LeaseGeneration, clk.T)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e, tok, task.SessionID
+}
+
+func receivePack(t *testing.T, hs *httptest.Server, tok, ref string) int {
+	t.Helper()
+	old := strings.Repeat("0", 40)
+	nw := strings.Repeat("a", 40)
+	body := pkt(old+" "+nw+" "+ref+"\x00report-status") + "0000"
+	req, _ := http.NewRequest("POST", hs.URL+"/git-proxy/github.com/example/test-repo.git/git-receive-pack", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode
+}
+
+func TestGitProxyPushBaseAllowsDefaultBranchAndPullRequestStillForbids(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(up.Close)
+	origin, _ := url.Parse(up.URL)
+
+	ePR, tokPR, sidPR := leasedImplementTurn(t, "")
+	hsPR := httptest.NewServer((&Server{Eng: ePR, GitHubToken: "plane-pat", GitOrigin: origin}).Handler())
+	t.Cleanup(hsPR.Close)
+	if code := receivePack(t, hsPR, tokPR, "refs/heads/main"); code != http.StatusForbidden {
+		t.Fatalf("omitted ship main %d", code)
+	}
+	if code := receivePack(t, hsPR, tokPR, fmt.Sprintf("refs/heads/rusui/%d/work", sidPR)); code != 200 {
+		t.Fatalf("omitted ship session ref %d", code)
+	}
+
+	ePush, tokPush, _ := leasedImplementTurn(t, policy.ShipPushBase)
+	hsPush := httptest.NewServer((&Server{Eng: ePush, GitHubToken: "plane-pat", GitOrigin: origin}).Handler())
+	t.Cleanup(hsPush.Close)
+	if code := receivePack(t, hsPush, tokPush, "refs/heads/main"); code != 200 {
+		t.Fatalf("push-base main %d", code)
+	}
+	if code := receivePack(t, hsPush, tokPush, "refs/heads/master"); code != http.StatusForbidden {
+		t.Fatalf("push-base master %d", code)
+	}
+
+	eRun, clk, tokRun := leasedTurn(t)
+	hsRun := httptest.NewServer((&Server{Eng: eRun, GitHubToken: "plane-pat", GitOrigin: origin}).Handler())
+	t.Cleanup(hsRun.Close)
+	_ = clk
+	if code := receivePack(t, hsRun, tokRun, "refs/heads/main"); code != http.StatusForbidden {
+		t.Fatalf("review main %d", code)
 	}
 }
 

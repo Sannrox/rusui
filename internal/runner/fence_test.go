@@ -61,4 +61,11 @@ func TestImplementSessionFenceOverridesPolicyAllow(t *testing.T) {
 	if got := permissionAnswer(t, ordinary, "gh pr merge 7 --squash"); got != "allow-once" {
 		t.Fatalf("non-implement session should follow policy, answered %q", got)
 	}
+	pushBase := &Assignment{GitHubToken: "tok", Permissions: allowAll, Ship: "push-base", ShipBase: "main"}
+	if got := permissionAnswer(t, pushBase, "git push origin HEAD:main"); got != "allow-once" {
+		t.Fatalf("push-base push answered %q", got)
+	}
+	if got := permissionAnswer(t, pushBase, "gh pr create --fill"); got != "reject-once" {
+		t.Fatalf("push-base create answered %q", got)
+	}
 }

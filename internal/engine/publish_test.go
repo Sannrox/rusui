@@ -10,17 +10,23 @@ import (
 
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
 )
 
-// fakePublisher records the plane's pull-request writes.
+// fakePublisher records the plane's pull-request and push-base writes.
 type fakePublisher struct {
 	mu      sync.Mutex
 	specs   []gh.PullSpec
+	bases   []pushBaseCall
 	err     error
 	entered chan struct{} // when set, signalled on each call
 	release chan struct{} // when set, each call waits for it
+}
+
+type pushBaseCall struct {
+	repo, branch, sha string
 }
 
 func (f *fakePublisher) PublishPull(repo string, s gh.PullSpec) (int, error) {
@@ -37,6 +43,13 @@ func (f *fakePublisher) PublishPull(repo string, s gh.PullSpec) (int, error) {
 		return 0, f.err
 	}
 	return 7, nil
+}
+
+func (f *fakePublisher) PushBase(repo, branch, sha string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.bases = append(f.bases, pushBaseCall{repo, branch, sha})
+	return f.err
 }
 
 // completePublish completes the claimed turn with a publish request and
@@ -75,11 +88,14 @@ func TestPlanePublishesImplementTurnAndUpdatesOnFollowUp(t *testing.T) {
 	h.f.Put(snapshot.Item{Repo: "example/test-repo", Item: 7, ItemKind: "pull", State: "open", HeadSHA: "sha-a"})
 
 	r := completePublish(t, h, h.claim(), branch, "sha-a")
-	if r.PullRequest != 7 || r.Publisher != engine.PublisherPlane || r.Outcome != engine.OutcomePublished {
+	if r.PullRequest != 7 || r.Publisher != engine.PublisherPlane || r.Outcome != engine.OutcomePublished || r.PushedRef != "" {
 		t.Fatalf("result %+v", r)
 	}
 	if len(pub.specs) != 1 || pub.specs[0] != (gh.PullSpec{Head: branch, SHA: "sha-a", Base: "main", Title: "fix the pin"}) {
 		t.Fatalf("specs %+v", pub.specs)
+	}
+	if len(pub.bases) != 0 {
+		t.Fatalf("pushed default branch %+v", pub.bases)
 	}
 
 	if _, _, err := h.e.PromptFollowUp(task.SessionID, "narrow it"); err != nil {
@@ -292,5 +308,70 @@ func TestPlanePublicationBlocksWhenHeadIsNotTheCandidate(t *testing.T) {
 	r := completePublish(t, h, h.claim(), fmt.Sprintf("rusui/%d/pin", task.SessionID), "sha-a")
 	if r.Outcome != engine.OutcomeBlocked || !strings.Contains(r.BlockedReason, "not the candidate commit") || r.PullRequest != 0 {
 		t.Fatalf("result %+v", r)
+	}
+}
+
+func reloadShip(t *testing.T, h *harn, ship string) {
+	t.Helper()
+	raw := implementFixture
+	if ship != "" {
+		raw = strings.Replace(implementFixture, "test:\n", "test:\n    ship: "+ship+"\n", 1)
+	}
+	pol, err := policy.Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.ReloadPolicy(pol)
+}
+
+func TestPlanePushBaseFastForwardsDefaultBranchAndDoesNotOpenPullRequest(t *testing.T) {
+	h := setupImplement(t)
+	reloadShip(t, h, policy.ShipPushBase)
+	pub := &fakePublisher{}
+	h.e.Publisher = pub
+	task, err := h.e.StartTask("test", pin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	branch := fmt.Sprintf("rusui/%d/pin", task.SessionID)
+	r := completePublish(t, h, h.claim(), branch, "sha-a")
+	if r.PullRequest != 0 || r.Publisher != engine.PublisherPlane || r.Outcome != engine.OutcomePublished || r.PushedRef != "refs/heads/main" {
+		t.Fatalf("result %+v", r)
+	}
+	if len(pub.specs) != 0 {
+		t.Fatalf("opened pull request %+v", pub.specs)
+	}
+	if len(pub.bases) != 1 || pub.bases[0] != (pushBaseCall{repo: "example/test-repo", branch: "main", sha: "sha-a"}) {
+		t.Fatalf("push-base %+v", pub.bases)
+	}
+}
+
+func TestPushRefAllowedDefaultBranchOnlyForImplementPushBase(t *testing.T) {
+	h := setupImplement(t)
+	task, err := h.e.StartTask("test", pin())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sid := task.SessionID
+	sessionRef := fmt.Sprintf("refs/heads/rusui/%d/work", sid)
+	if !h.e.PushRefAllowed(sid, sessionRef) {
+		t.Fatal("session ref denied")
+	}
+	if h.e.PushRefAllowed(sid, "refs/heads/main") {
+		t.Fatal("omitted ship allowed main")
+	}
+	reloadShip(t, h, policy.ShipPushBase)
+	if !h.e.PushRefAllowed(sid, "refs/heads/main") {
+		t.Fatal("push-base denied main")
+	}
+	if h.e.PushRefAllowed(sid, "refs/heads/master") {
+		t.Fatal("other branch allowed")
+	}
+	runID, err := h.e.StartRun("test", "ordinary", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.e.PushRefAllowed(runID, "refs/heads/main") {
+		t.Fatal("ordinary run allowed main")
 	}
 }

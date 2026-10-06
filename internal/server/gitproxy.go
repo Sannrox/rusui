@@ -11,8 +11,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-
-	"github.com/sannrox/rusui/internal/engine"
 )
 
 func (s *Server) githubAuthToken() string {
@@ -123,7 +121,7 @@ func (s *Server) gitProxy(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			for _, ref := range refs {
-				if !engine.SessionRefAllowed(g.SessionID, ref) {
+				if s.Eng == nil || !s.Eng.PushRefAllowed(g.SessionID, ref) {
 					http.Error(w, "ref not allowed", http.StatusForbidden)
 					return
 				}

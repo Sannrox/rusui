@@ -34,11 +34,14 @@ type TaskResult struct {
 	// Publish asks the plane to publish the pushed session branch
 	// (ADR 0044). Only honored when plane publication is on.
 	Publish *PublishRequest `json:"publish,omitempty"`
-	// PublishedSHA, Outcome, and Publisher are observed by the plane on
-	// Complete; values sent by the runner or guest are discarded.
+	// PublishedSHA, Outcome, Publisher, and PushedRef are observed by
+	// the plane on Complete; values sent by the runner or guest are discarded.
 	PublishedSHA string `json:"published_sha,omitempty"`
 	Outcome      string `json:"outcome,omitempty"`
 	Publisher    string `json:"publisher,omitempty"`
+	// PushedRef is the default branch the plane fast-forwarded for
+	// ship=push-base (ADR 0068). Empty when publication is a pull request.
+	PushedRef string `json:"pushed_ref,omitempty"`
 }
 
 // Turn outcomes the plane records for a run result.
@@ -93,7 +96,13 @@ func (e *Engine) observeResult(art *Artifact) {
 		return
 	}
 	r.PublishedSHA, r.Outcome = "", ""
+	pushed := r.PushedRef
+	r.PushedRef = ""
 	switch {
+	case pushed != "" && r.Publisher == PublisherPlane && r.CandidateSHA != "":
+		r.PushedRef = pushed
+		r.PublishedSHA = r.CandidateSHA
+		r.Outcome = OutcomePublished
 	case r.PullRequest > 0:
 		r.Outcome = OutcomeUnconfirmed
 		if e.GitHub == nil {

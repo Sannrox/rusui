@@ -16,6 +16,9 @@ import (
 // publication.
 type PullPublisher interface {
 	PublishPull(repo string, s gh.PullSpec) (int, error)
+	// PushBase fast-forwards the repository default branch to sha.
+	// It does not open a pull request (ADR 0068).
+	PushBase(repo, branch, sha string) error
 }
 
 // PublishRequest is the agent's ask, in its turn result, that the plane
@@ -53,10 +56,45 @@ func (e *Engine) ImplementTask(sess *store.Session) (*store.Task, bool) {
 }
 
 // SessionRefAllowed reports whether ref (refs/heads/...) is under the
-// session's own prefix, the only refs a session may push or publish.
+// session's own prefix, the only refs a session may push or publish
+// unless the project ship is push-base.
 func SessionRefAllowed(sessionID int64, ref string) bool {
 	prefix := fmt.Sprintf("refs/heads/rusui/%d", sessionID)
 	return ref == prefix || strings.HasPrefix(ref, prefix+"/")
+}
+
+// PushRefAllowed reports whether the session may receive-pack ref.
+// Session branches are always allowed. The default branch is allowed
+// only for an implement session whose project ship is push-base.
+func (e *Engine) PushRefAllowed(sessionID int64, ref string) bool {
+	if SessionRefAllowed(sessionID, ref) {
+		return true
+	}
+	sess, err := store.GetSession(e.Store, sessionID)
+	if err != nil {
+		return false
+	}
+	task, ok := e.ImplementTask(sess)
+	if !ok {
+		return false
+	}
+	p, ok := e.PolicySnapshot().Project(sess.Project)
+	if !ok || p.Ship != policy.ShipPushBase {
+		return false
+	}
+	base := strings.TrimPrefix(task.Ref, "refs/heads/")
+	if base == "" {
+		return false
+	}
+	return ref == "refs/heads/"+base
+}
+
+// projectShip is the project's ship behavior, default pull-request.
+func (e *Engine) projectShip(project string) string {
+	if p, ok := e.PolicySnapshot().Project(project); ok && p.Ship != "" {
+		return p.Ship
+	}
+	return policy.ShipPullRequest
 }
 
 // publishResult performs the plane's one GitHub write for a run result
@@ -83,10 +121,6 @@ func (e *Engine) publishResult(jobID int64, gen, claimed int, art *Artifact) {
 		return
 	}
 	req := r.Publish
-	if e.Publisher == nil {
-		block("plane publication is off")
-		return
-	}
 	var sessionID int64
 	err := e.Store.Tx(func(tx *sql.Tx) error {
 		j, err := store.GetJobByIDTx(tx, jobID)
@@ -116,6 +150,12 @@ func (e *Engine) publishResult(jobID int64, gen, claimed int, art *Artifact) {
 		return
 	}
 	task, ok := e.ImplementTask(sess)
+	if e.Publisher == nil {
+		if !ok || e.projectShip(sess.Project) != policy.ShipPushBase {
+			block("plane publication is off")
+			return
+		}
+	}
 	switch {
 	case !ok:
 		block("not an implement session")
@@ -133,9 +173,34 @@ func (e *Engine) publishResult(jobID int64, gen, claimed int, art *Artifact) {
 		block("candidate commit required")
 		return
 	}
+	base := strings.TrimPrefix(task.Ref, "refs/heads/")
+	if e.projectShip(sess.Project) == policy.ShipPushBase {
+		if e.Publisher == nil {
+			// Agent publication: the guest pushed the default branch.
+			r.PullRequest = 0
+			return
+		}
+		if err := e.Publisher.PushBase(task.Repo, base, r.CandidateSHA); err != nil {
+			if errors.Is(err, gh.ErrHeadMismatch) {
+				block("branch head is not the candidate commit")
+				return
+			}
+			e.exception(fmt.Sprintf("publish job=%d: %v", jobID, err))
+			block("github write failed")
+			return
+		}
+		r.PullRequest = 0
+		r.Publisher = PublisherPlane
+		r.PushedRef = "refs/heads/" + base
+		return
+	}
+	if e.Publisher == nil {
+		block("plane publication is off")
+		return
+	}
 	// The publisher writes only while the branch points at the candidate,
 	// so a pull request never goes live on a commit the turn did not report.
-	spec := gh.PullSpec{Head: req.Branch, SHA: r.CandidateSHA, Base: strings.TrimPrefix(task.Ref, "refs/heads/"), Title: req.Title, Body: req.Body}
+	spec := gh.PullSpec{Head: req.Branch, SHA: r.CandidateSHA, Base: base, Title: req.Title, Body: req.Body}
 	if prev, ok := priorPublication(e.Store, jobID); ok {
 		switch {
 		case prev.Publisher != PublisherPlane:

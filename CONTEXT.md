@@ -152,5 +152,5 @@ A `run` session started for an open pinned implementation task on a bound reposi
 _Avoid_: ordinary run session, scheduled session, review session as a publisher
 
 **Publication**:
-A pull request for an `implement` session. By default the agent opens or updates it with the operator's GitHub credential via `git` and `gh` (ADR 0015). With `RUSUI_PUBLICATION=plane` the guest holds no credential and the plane opens or updates it as the GitHub App from the turn result's `publish` request (ADR 0044). Commits carry `Co-authored-by: rusui` and `Rusui-Session` trailers. No proof gates it. Human merge is required.
-_Avoid_: guest-callable publish endpoint, agent merge or close, trailer as authorization
+A pull request for an `implement` session, or a fast-forward of the default branch when the project `ship` is `push-base`. Omitted or `pull-request` keeps today's path: the agent opens or updates a pull request with the operator's GitHub credential via `git` and `gh` (ADR 0015), or with `RUSUI_PUBLICATION=plane` the guest holds no credential and the plane opens or updates it as the GitHub App from the turn result's `publish` request (ADR 0044). `push-base` pushes only that default branch and does not open a pull request. Commits carry `Co-authored-by: rusui` and `Rusui-Session` trailers. No proof gates it. Human merge is required for `pull-request`. Live merge, comment, and close stay unauthorized.
+_Avoid_: guest-callable publish endpoint, agent merge or close, trailer as authorization, defaulting dogfood to `push-base`

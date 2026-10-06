@@ -488,10 +488,22 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 					out["git_proxy_url"] = gitProxyBaseURL(r, envRow.Driver)
 				}
 			}
-			if tok := s.agentGitHubToken(sess); tok != "" {
-				out["github_token"] = tok
-			} else if _, ok := s.Eng.ImplementTask(sess); ok && s.RepoTokens != nil {
-				out["publication"] = "plane"
+			if task, ok := s.Eng.ImplementTask(sess); ok {
+				ship := policy.ShipPullRequest
+				if p, pok := s.Eng.PolicySnapshot().Project(sess.Project); pok && p.Ship != "" {
+					ship = p.Ship
+				}
+				out["ship"] = ship
+				if ship == policy.ShipPushBase {
+					if base := strings.TrimPrefix(task.Ref, "refs/heads/"); base != "" {
+						out["ship_base"] = base
+					}
+				}
+				if tok := s.agentGitHubToken(sess); tok != "" {
+					out["github_token"] = tok
+				} else if s.RepoTokens != nil {
+					out["publication"] = "plane"
+				}
 			}
 			if t := s.commitTrailers(sess); len(t) > 0 {
 				out["commit_trailers"] = t

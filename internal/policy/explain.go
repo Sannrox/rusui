@@ -44,7 +44,7 @@ func (e *Effective) ExplainRepo(name string) (RepoExplanation, bool, error) {
 	}
 	sources["never_release"] = "enforced by v2 parser"
 	sources["never_leak_private_to_public"] = "enforced by v2 parser"
-	for _, field := range []string{"session_kinds", "egress", "size"} {
+	for _, field := range []string{"session_kinds", "egress", "size", "ship"} {
 		sources[field] = projectSource(field, project, defaults)
 	}
 	budgets := mappingValue(project, "budgets")
