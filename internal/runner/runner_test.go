@@ -570,6 +570,9 @@ func TestUnknownGuestFailsClosed(t *testing.T) {
 	if _, err := acp.SpawnArgsFor("cursor"); err == nil {
 		t.Fatal("unknown guest accepted")
 	}
+	if _, err := acp.SpawnArgsFor("shikigami"); err == nil {
+		t.Fatal("shikigami spawn landed before #507")
+	}
 	if argv, err := acp.SpawnArgsFor(""); err != nil || strings.Join(argv, " ") != acp.GrokStdio {
 		t.Fatalf("default %v %v", argv, err)
 	}

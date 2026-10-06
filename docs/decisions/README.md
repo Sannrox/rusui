@@ -10,7 +10,7 @@ Decisions that must outlive a single pull request.
 | ADR | Title | Status |
 | --- | --- | --- |
 | [0001](0001-environment-plane.md) | rusui becomes the environment plane for coding agents | Accepted |
-| [0002](0002-grok-acp-agent-set.md) | P1 agent set is Grok CLI over ACP | Accepted |
+| [0002](0002-grok-acp-agent-set.md) | P1 agent set is Grok CLI over ACP | Accepted; amended by 0025, 0060 |
 | [0003](0003-operator-surface.md) | Operator surfaces are views of one object API | Accepted |
 | [0004](0004-rusui-services-yaml.md) | services.yaml is `.rusui/services.yaml` only | Accepted |
 | [0005](0005-policy-v2-project.md) | Policy v2 is keyed by project | Accepted |
@@ -68,6 +68,7 @@ Decisions that must outlive a single pull request.
 | [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Accepted |
 | [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Accepted |
 | [0059](0059-unattributed-operator-retained.md) | Plane calls stay one unattributed operator | Accepted |
+| [0060](0060-shikigami-acp-guest-pin.md) | Pin shikigami acp as a supported guest | Accepted |
 
 ## When to write an ADR
 
