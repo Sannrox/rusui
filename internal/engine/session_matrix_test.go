@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,7 +15,6 @@ import (
 	"time"
 
 	"github.com/sannrox/rusui/internal/acp"
-	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -283,8 +281,8 @@ func TestD6SessionWorkflowMatrix(t *testing.T) {
 		h.putRefresh(issue(2))
 		_ = h.claim()
 		c2, err := h.e.Claim("example/test-repo")
-		if !errors.Is(err, engine.ErrBudget) || c2 != nil {
-			t.Fatalf("second claim %v %v", c2, err)
+		if err != nil || c2 != nil {
+			t.Fatalf("second claim queued, got %v %v", c2, err)
 		}
 	})
 }

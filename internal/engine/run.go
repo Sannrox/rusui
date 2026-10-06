@@ -10,9 +10,18 @@ import (
 )
 
 func (e *Engine) StartRun(project, prompt, idem string) (int64, error) {
+	return e.StartRunSize(project, prompt, idem, "")
+}
+
+func (e *Engine) StartRunSize(project, prompt, idem, size string) (int64, error) {
 	p, ok := e.PolicySnapshot().Project(project)
 	if !ok || !p.AllowsKind(policy.KindRun) {
 		return 0, fmt.Errorf("policy")
+	}
+	if size != "" {
+		if NormalizeSize(size) == "" || size != NormalizeSize(size) {
+			return 0, fmt.Errorf("size")
+		}
 	}
 	if prompt == "" {
 		return 0, fmt.Errorf("prompt required")
@@ -39,6 +48,13 @@ func (e *Engine) StartRun(project, prompt, idem string) (int64, error) {
 		}
 		sid, item, err := store.InsertRunSessionTx(tx, project, repo, prompt)
 		if err != nil {
+			return err
+		}
+		resolved := size
+		if resolved == "" {
+			resolved = p.Size
+		}
+		if err := store.SetSessionSizeTx(tx, sid, NormalizeSize(resolved)); err != nil {
 			return err
 		}
 		it := snapshot.Item{

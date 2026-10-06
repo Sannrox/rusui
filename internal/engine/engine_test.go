@@ -3,7 +3,6 @@ package engine_test
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -434,7 +433,7 @@ func TestClaimDoesNotBlockOtherQueuedItem(t *testing.T) {
 		t.Fatalf("second claim item %d", c2.Job.Item)
 	}
 	c3, err := h.e.Claim("example/test-repo")
-	if err != nil && !errors.Is(err, engine.ErrBudget) {
+	if err != nil {
 		t.Fatal(err)
 	}
 	if c3 != nil {

@@ -2,7 +2,6 @@ package engine_test
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -35,7 +34,7 @@ func TestClaimTokenReplaysTheLeaseItWasGranted(t *testing.T) {
 	// A different token never receives that lease; with the lease cap at one
 	// it gets no turn at all.
 	other, err := h.e.ClaimToken("example/test-repo", "tok-b")
-	if other != nil || !errors.Is(err, engine.ErrBudget) {
+	if other != nil || err != nil {
 		t.Fatalf("other token claimed %+v %v", other, err)
 	}
 }

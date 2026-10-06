@@ -106,8 +106,12 @@ Operator action that stops a live guest and fails the claimed turn without autom
 _Avoid_: pause, expire environment
 
 **Concurrent-lease meter**:
-Project `budgets.max_concurrent_leases` (default 1). Unnamed budget keys fail closed at parse.
+Project `budgets.max_concurrent_leases` (default 1). Unnamed budget keys fail closed at parse. A session past the cap waits (`wait: lease`); it does not 409.
 _Avoid_: token or dollar limits (unavailable)
+
+**Session size**:
+Named container CPU and memory: `small` (1 CPU, 2 GiB), `medium` (2 CPU, 4 GiB), `large` (4 CPU, 8 GiB). Project `size` is the default; a run may override it.
+_Avoid_: hypervisor, second host
 
 **Per-turn grant**:
 The only credential in a P1 guest outside `implement` sessions (ADR 0015): D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets. The plane mints no third-party identity beside it ([ADR 0033](docs/decisions/0033-third-party-identity-deferred.md)).

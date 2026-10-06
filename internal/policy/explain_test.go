@@ -45,6 +45,7 @@ func TestExplainRepoReportsEffectiveSources(t *testing.T) {
 		"never_leak_private_to_public":     "enforced by v2 parser",
 		"session_kinds":                    "defaults",
 		"egress":                           "defaults",
+		"size":                             "schema default",
 		"budgets.max_concurrent_leases":    "project",
 		"permissions":                      "schema default",
 		"local_runtime":                    "schema default",

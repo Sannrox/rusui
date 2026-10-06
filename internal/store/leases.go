@@ -34,7 +34,19 @@ WHERE t.state='leased' ORDER BY t.id`)
 	return out, rows.Err()
 }
 
+func CountLeasedTurns(s *Store, project string, repos []string) (int, error) {
+	return countLeasedTurns(s.DB, project, repos)
+}
+
 func CountLeasedTurnsTx(tx *sql.Tx, project string, repos []string) (int, error) {
+	return countLeasedTurns(tx, project, repos)
+}
+
+type leasedCounter interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func countLeasedTurns(q leasedCounter, project string, repos []string) (int, error) {
 	args := []any{project}
 	var b strings.Builder
 	b.WriteString(`SELECT COUNT(*) FROM turns t JOIN sessions s ON s.id=t.session_id WHERE t.state='leased' AND (s.project=?`)
@@ -51,7 +63,7 @@ func CountLeasedTurnsTx(tx *sql.Tx, project string, repos []string) (int, error)
 	}
 	b.WriteString(`)`)
 	var n int
-	err := tx.QueryRow(b.String(), args...).Scan(&n)
+	err := q.QueryRow(b.String(), args...).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("leased turns: %w", err)
 	}

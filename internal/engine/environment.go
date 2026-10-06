@@ -517,20 +517,25 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 		if len(suffix) > 12 {
 			suffix = suffix[:12]
 		}
-		return e.replaceSessionEnvironment(sess.ID, envRow, EnvSpec{Name: envRow.Name + "-" + suffix, Kind: kind, SourceHash: hash, Repo: item.Repo, Pin: pin})
+		spec := EnvSpec{Name: envRow.Name + "-" + suffix, Kind: kind, SourceHash: hash, Repo: item.Repo, Pin: pin}
+		e.applySessionSize(&spec, sess)
+		return e.replaceSessionEnvironment(sess.ID, envRow, spec)
 	}
 	if envRow.State == store.EnvExpired {
 		// An expired environment is never refilled: its id named the old
 		// guest, so the session moves to a new environment (#415).
-		return e.replaceSessionEnvironment(sess.ID, envRow, EnvSpec{Name: replacementName(envRow.Name, envRow.ID), Kind: kind, SourceHash: hash, Repo: item.Repo, Pin: pin})
+		spec := EnvSpec{Name: replacementName(envRow.Name, envRow.ID), Kind: kind, SourceHash: hash, Repo: item.Repo, Pin: pin}
+		e.applySessionSize(&spec, sess)
+		return e.replaceSessionEnvironment(sess.ID, envRow, spec)
 	}
 	d, err := e.driverFor(kind)
 	if err != nil {
 		return err
 	}
+	cpu, mem := SizeLimits(e.SessionSize(sess))
 	var handle string
 	if sc, ok := d.(env.SpecCreator); ok {
-		handle, err = sc.CreateSpec(env.Spec{Name: envRow.Name})
+		handle, err = sc.CreateSpec(env.Spec{Name: envRow.Name, CPUMillis: cpu, MemoryBytes: mem})
 	} else {
 		handle, err = d.Create(envRow.Name)
 	}
@@ -556,7 +561,15 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	envRow.Handle = handle
 	envRow.SourceHash = hash
 	envRow.ExpiresAt = &exp
+	envRow.CPUMillis = cpu
+	envRow.MemoryBytes = mem
 	return store.UpdateEnvironment(e.Store, *envRow)
+}
+
+func (e *Engine) applySessionSize(spec *EnvSpec, sess *store.Session) {
+	cpu, mem := SizeLimits(e.SessionSize(sess))
+	spec.CPUMillis = cpu
+	spec.MemoryBytes = mem
 }
 
 // replaceSessionEnvironment provisions spec as a new environment and moves

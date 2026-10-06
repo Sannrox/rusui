@@ -16,6 +16,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Kind         string   `json:"kind"`
 		Prompt       string   `json:"prompt"`
+		Size         string   `json:"size"`
 		EffortKey    string   `json:"effort_key"`
 		Repo         string   `json:"repo"`
 		Ref          string   `json:"ref"`
@@ -76,7 +77,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	id, err := s.Eng.StartRun(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"))
+	id, err := s.Eng.StartRunSize(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return

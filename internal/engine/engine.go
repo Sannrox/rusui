@@ -816,8 +816,9 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 			return err
 		}
 		if leased >= proj.MaxConcurrentLeases() {
-			e.exception(fmt.Sprintf("concurrent lease cap exhausted for project %s", proj.Slug))
-			return errBudget
+			// The turn stays queued. Claim returns no work so the runner
+			// retries without 409 (ADR 0064 D2/D3).
+			return nil
 		}
 		now := e.now()
 		exp := now.Add(Liveness)

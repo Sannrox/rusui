@@ -49,6 +49,8 @@ type Session struct {
 	Project          string
 	Prompt           string
 	GuestSessionID   string
+	Size             string     `json:"size,omitempty"`
+	Wait             string     `json:"wait,omitempty"`
 	Archived         bool       `json:"archived"`
 	ArchivedAt       *time.Time `json:"archived_at,omitempty"`
 	CreatedAt        time.Time
