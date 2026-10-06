@@ -23,7 +23,7 @@ Decisions that must outlive a single pull request.
 | [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059 |
 | [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
 | [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Superseded by 0023 |
-| [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted; amended by 0055 |
+| [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted; amended by 0055, 0068 |
 | [0016](0016-local-interactive-runtime.md) | Local interactive runtime boundary with Sumika | Accepted |
 | [0017](0017-claude-guest-and-model-upstream.md) | Claude Code guest, operator model upstream, and a fenced self-test | Accepted |
 | [0018](0018-rusui-setup.md) | `rusui setup` provisions a host; `rusui diagnose` verifies it | Accepted |
@@ -63,7 +63,7 @@ Decisions that must outlive a single pull request.
 | [0052](0052-separate-attach-and-guest-shells.md) | Attach and the guest keep separate shells | Superseded by 0065 |
 | [0053](0053-wake-secret-injection-refused.md) | The guest still holds only the per-turn grant | Superseded by 0066 |
 | [0054](0054-repository-hooks-only.md) | Setup and resume stay repository hooks | Superseded by 0067 |
-| [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Accepted |
+| [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Superseded by 0068 |
 | [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Accepted |
 | [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Accepted |
 | [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Accepted |
@@ -76,6 +76,7 @@ Decisions that must outlive a single pull request.
 | [0065](0065-one-environment-terminal.md) | One terminal session inside the environment | Accepted |
 | [0066](0066-inject-secret-at-wake.md) | Inject a short-lived secret at wake | Accepted |
 | [0067](0067-plane-stored-pre-hooks.md) | Plane-stored pre-clone and pre-setup hooks | Accepted |
+| [0068](0068-project-ship-behavior.md) | Project ship behavior is pull-request or push-base | Accepted |
 
 ## When to write an ADR
 
