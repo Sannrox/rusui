@@ -233,6 +233,13 @@ func TestPlaneLinkTargetsAddGitHubOnlyForAgentPublication(t *testing.T) {
 	if len(implement) != 3 || implement[1].Dial != "github.com:443" || implement[2].Dial != "api.github.com:443" {
 		t.Fatalf("implement %+v", implement)
 	}
+	for _, tgt := range append(plain, implement...) {
+		switch tgt.Dial {
+		case "127.0.0.1:8080", "github.com:443", "api.github.com:443":
+		default:
+			t.Fatalf("unexpected destination %q", tgt.Dial)
+		}
+	}
 }
 
 // scriptedGuest is a guest side the test drives frame by frame.

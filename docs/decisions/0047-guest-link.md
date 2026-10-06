@@ -11,6 +11,11 @@
   to GitHub), [ADR 0029](0029-single-host-runner.md) (one host),
   [ADR 0044](0044-plane-publishes-from-turn-result.md) (plane
   publication), [#429 results](../proofs/429-managed-rerun-results.md).
+- Amended by: [ADR 0050](0050-guest-toolchain-in-image.md). The guest
+  link still forwards only the plane and, in implement sessions,
+  GitHub. Toolchain and a headless browser are baked into the image
+  ([#500](https://github.com/Sannrox/rusui/issues/500)); no new
+  destinations.
 - Discussion: none. Merging with this status changed to Accepted is the
   acceptance act.
 
