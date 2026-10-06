@@ -7,8 +7,9 @@
   into the guest image. [ADR 0033](0033-third-party-identity-deferred.md)
   defers a plane-minted third-party identity; the brokered guest holds
   no credential beyond the grant.
-  [ADR 0053](0053-wake-secret-injection-refused.md) retains that
-  refusal: the plane does not inject a third-party secret at wake.
+  [ADR 0053](0053-wake-secret-injection-refused.md) retained that
+  refusal; superseded by [ADR 0066](0066-inject-secret-at-wake.md),
+  which injects allowed secret ids at wake and removes them on sleep.
 - Date: 2026-09-15
 - Amends: [ADR 0001](0001-environment-plane.md) D5 (how the plane
   redeems secrets). D3’s per-turn credential (32 bytes, ten-minute
