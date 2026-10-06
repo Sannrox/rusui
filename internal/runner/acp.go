@@ -470,7 +470,8 @@ func promptFromInput(raw json.RawMessage) string {
 // Claude init event before writing a user message. ACP initialize is not sent.
 // Resume is deferred on this host: the spawn has no --resume, so no Cursor
 // is passed and every turn is a new conversation. The init session id is
-// still recorded as the cursor. Provider events are not forwarded.
+// still recorded as the cursor. Assistant text and tool calls are recorded
+// as they arrive, redacted (#495).
 func hostClaude(ctx context.Context, a *Assignment, host *acp.Client, cwd string) (engine.Artifact, error) {
 	if ctx.Err() != nil {
 		return engine.Artifact{}, ctx.Err()
@@ -493,9 +494,11 @@ func hostClaude(ctx context.Context, a *Assignment, host *acp.Client, cwd string
 		case <-stop:
 		}
 	}()
+	transcript := newClaudeRecorder(a, host.Rec)
 	res, err := provider.Run(ctx, provider.KindClaude, provider.Instance{}, rw, provider.Turn{
 		Prompt:    prompt,
 		Workspace: cwd,
+		Observe:   transcript.Observe,
 	}, claudeDecide(a, host))
 	if err != nil {
 		if ctx.Err() != nil {
