@@ -25,6 +25,9 @@ func TestEnvironmentCreateSleepWakeExpire(t *testing.T) {
 	if created.State != store.EnvReady || created.Driver != env.KindProcess || created.Handle == "" {
 		t.Fatalf("create: %+v", created)
 	}
+	if created.CPUMillis != 0 || created.MemoryBytes != 0 {
+		t.Fatalf("default size cpu=%d mem=%d", created.CPUMillis, created.MemoryBytes)
+	}
 	if _, err := os.Stat(filepath.Join(created.Handle, ".rusui-env")); err != nil {
 		t.Fatal(err)
 	}

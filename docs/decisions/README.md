@@ -59,6 +59,7 @@ Decisions that must outlive a single pull request.
 | [0048](0048-pinless-run-session.md) | A project without a repository runs pinless sessions claimed by project key | Accepted |
 | [0049](0049-idle-environment-expiry-retained.md) | Idle environment expiry remains 72 hours | Accepted |
 | [0050](0050-guest-toolchain-in-image.md) | Bake guest toolchain into the image; add no destinations | Accepted |
+| [0051](0051-fail-on-full-lease-budget-retained.md) | Admission still fails when the lease budget is full | Accepted |
 
 ## When to write an ADR
 

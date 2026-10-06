@@ -69,6 +69,22 @@ func TestDockerCLIRecordsCLI(t *testing.T) {
 	}
 }
 
+func TestDockerCLIOmitsLimitsWhenUnset(t *testing.T) {
+	bin, logPath := stubDocker(t)
+	d := DockerCLI{Bin: bin}
+	if _, err := d.CreateAndStart(Spec{Name: "box", Image: "alpine:3"}); err != nil {
+		t.Fatal(err)
+	}
+	logb, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(logb)
+	if strings.Contains(log, "--cpus") || strings.Contains(log, "--memory") {
+		t.Fatalf("unset limits still passed: %s", log)
+	}
+}
+
 func TestDockerCLIExecStdioKeepsValuesOffArgv(t *testing.T) {
 	bin, logPath := stubDocker(t)
 	envLog := filepath.Join(t.TempDir(), "env")
