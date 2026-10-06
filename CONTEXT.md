@@ -34,6 +34,10 @@ _Avoid_: GitHub issue, turn, environment, child session, parent session
 One leased attempt on an unattended session. A local session has no Turn.
 _Avoid_: session, job (as the product noun)
 
+**Prompt attachment**:
+A file the operator attaches to a turn prompt. The plane stores it outside the repository. The guest receives it as an ACP prompt part. `rusui read` records the name and digest, not the bytes.
+_Avoid_: workspace upload, git blob, image generation
+
 **Environment**:
 The machine a session runs on. One session, one Rusui Environment record. For
 the experimental local profile, this identifies the operator's host and does

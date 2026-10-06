@@ -80,7 +80,16 @@ type Assignment struct {
 	ExecutionDeadline *time.Time        `json:"execution_deadline"`
 	Input             json.RawMessage   `json:"input"`
 	GuestSessionID    string            `json:"guest_session_id,omitempty"`
-	steerReceipts     *steerReceiptState
+	// Attachments are prompt files stored outside the workspace (#508).
+	Attachments   []PromptAttachment `json:"attachments,omitempty"`
+	steerReceipts *steerReceiptState
+}
+
+// PromptAttachment is one ACP prompt part the guest may read.
+type PromptAttachment struct {
+	Name string `json:"name"`
+	MIME string `json:"mime"`
+	Data string `json:"data"`
 }
 
 type steerReceiptState struct {

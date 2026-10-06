@@ -298,6 +298,11 @@ func (c *Client) SessionPrompt(ctx context.Context, sessionID, text string) (*Pr
 
 // SessionPromptSubmitted closes submitted after the session/prompt request is written.
 func (c *Client) SessionPromptSubmitted(ctx context.Context, sessionID, text string, submitted chan<- struct{}) (*PromptResult, error) {
+	return c.SessionPromptSubmittedBlocks(ctx, sessionID, []PromptBlock{{Type: "text", Text: text}}, submitted)
+}
+
+// SessionPromptSubmittedBlocks sends text and attachment parts on session/prompt.
+func (c *Client) SessionPromptSubmittedBlocks(ctx context.Context, sessionID string, blocks []PromptBlock, submitted chan<- struct{}) (*PromptResult, error) {
 	permissionParent := c.Ctx
 	if permissionParent == nil {
 		permissionParent = ctx
@@ -329,7 +334,7 @@ func (c *Client) SessionPromptSubmitted(ctx context.Context, sessionID, text str
 	}
 	err := c.call(ctx, MethodSessionPrompt, PromptParams{
 		SessionID: sessionID,
-		Prompt:    []PromptBlock{{Type: "text", Text: text}},
+		Prompt:    blocks,
 	}, &out, signal)
 	return &out, err
 }

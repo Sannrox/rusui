@@ -1,17 +1,34 @@
 package engine
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"time"
 
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
 )
 
 func (e *Engine) PromptFollowUp(sessionID int64, prompt string) (int64, int, error) {
+	return e.promptFollowUp(sessionID, prompt, nil)
+}
+
+// PromptFollowUpFiles is PromptFollowUp with attachments stored outside
+// the repository (#508).
+func (e *Engine) PromptFollowUpFiles(sessionID int64, prompt string, files []store.PromptFile) (int64, int, error) {
+	return e.promptFollowUp(sessionID, prompt, files)
+}
+
+func (e *Engine) promptFollowUp(sessionID int64, prompt string, files []store.PromptFile) (int64, int, error) {
 	if prompt == "" {
 		return 0, 0, fmt.Errorf("prompt required")
+	}
+	if err := validatePromptFiles(files); err != nil {
+		return 0, 0, err
 	}
 	sess, err := store.GetSession(e.Store, sessionID)
 	if err != nil {
@@ -41,7 +58,7 @@ func (e *Engine) PromptFollowUp(sessionID int64, prompt string) (int64, int, err
 		if err != nil {
 			return err
 		}
-		if _, err := enqueuePromptTx(tx, j, sessionID, prompt, false); err != nil {
+		if _, err := enqueuePromptTx(tx, j, sessionID, prompt, false, files, e.now()); err != nil {
 			return err
 		}
 		turnID = j.ID
@@ -57,8 +74,19 @@ func (e *Engine) PromptFollowUp(sessionID int64, prompt string) (int64, int, err
 // cancel can still drop it. held reports that it waits; false means no
 // turn was running and the prompt is already the pending revision.
 func (e *Engine) PromptQueued(sessionID int64, prompt string) (int64, int, bool, error) {
+	return e.promptQueued(sessionID, prompt, nil)
+}
+
+func (e *Engine) PromptQueuedFiles(sessionID int64, prompt string, files []store.PromptFile) (int64, int, bool, error) {
+	return e.promptQueued(sessionID, prompt, files)
+}
+
+func (e *Engine) promptQueued(sessionID int64, prompt string, files []store.PromptFile) (int64, int, bool, error) {
 	if prompt == "" {
 		return 0, 0, false, fmt.Errorf("prompt required")
+	}
+	if err := validatePromptFiles(files); err != nil {
+		return 0, 0, false, err
 	}
 	sess, err := store.GetSession(e.Store, sessionID)
 	if err != nil {
@@ -89,7 +117,7 @@ func (e *Engine) PromptQueued(sessionID int64, prompt string) (int64, int, bool,
 		if err != nil {
 			return err
 		}
-		seq, err := enqueuePromptTx(tx, j, sessionID, prompt, true)
+		seq, err := enqueuePromptTx(tx, j, sessionID, prompt, true, files, e.now())
 		if err != nil {
 			return err
 		}
@@ -194,7 +222,7 @@ func (e *Engine) PromptSteer(sessionID int64, prompt string) (int64, int, bool, 
 			pending = j.PendingRevision
 			return insertOperatorSteerTx(tx, id, sess, j, prompt, "steer")
 		}
-		seq, err := enqueuePromptTx(tx, j, sessionID, prompt, false)
+		seq, err := enqueuePromptTx(tx, j, sessionID, prompt, false, nil, e.now())
 		if err != nil {
 			return err
 		}
@@ -226,15 +254,75 @@ func hasUnclaimedFollowUp(j *store.Job) bool {
 	return j.ClaimedRevision != 0 || j.PendingRevision != 1
 }
 
+func validatePromptFiles(files []store.PromptFile) error {
+	var total int
+	for i := range files {
+		name, err := store.AttachmentName(files[i].Name)
+		if err != nil {
+			return err
+		}
+		files[i].Name = name
+		n := len(files[i].Body)
+		if n == 0 {
+			return fmt.Errorf("attachment empty")
+		}
+		if n > env.WorkspaceUploadCap {
+			return fmt.Errorf("oversize")
+		}
+		total += n
+		if total > env.WorkspaceUploadCap {
+			return fmt.Errorf("oversize")
+		}
+	}
+	return nil
+}
+
+func insertPromptFileReceiptsTx(tx *sql.Tx, sess *store.Session, j *store.Job, files []store.PromptFile) error {
+	sid, tid := sess.ID, j.ID
+	for _, f := range files {
+		id, err := newActionID()
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(f.Body)
+		body, err := json.Marshal(map[string]any{
+			"name":   f.Name,
+			"digest": hex.EncodeToString(sum[:]),
+			"size":   len(f.Body),
+			"mime":   store.AttachmentMIME(f.Name, f.Body),
+		})
+		if err != nil {
+			return err
+		}
+		if err := store.InsertActionTx(tx, store.Action{
+			ID: id, SessionID: &sid, TurnID: &tid,
+			Repo: sess.Repo, Item: sess.Item, Type: "prompt.attachment", ReasonCode: "recorded",
+			EvidenceClass: "plane_observed",
+			LimitSentence: "Prompt attachment name and digest; bytes stay off the transcript.",
+			Body:          string(body),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // enqueuePromptTx appends the prompt to the session FIFO, then lets the
 // FIFO head become the pending revision when nothing is ahead of it.
-func enqueuePromptTx(tx *sql.Tx, j *store.Job, sessionID int64, prompt string, queued bool) (int, error) {
+func enqueuePromptTx(tx *sql.Tx, j *store.Job, sessionID int64, prompt string, queued bool, files []store.PromptFile, now time.Time) (int, error) {
 	enqueue := store.EnqueueFollowUpTx
 	if queued {
 		enqueue = store.EnqueueQueuedPromptTx
 	}
 	seq, err := enqueue(tx, sessionID, prompt)
 	if err != nil {
+		return 0, err
+	}
+	if err := store.InsertPromptAttachmentsTx(tx, sessionID, seq, files, now); err != nil {
+		return 0, err
+	}
+	sess := &store.Session{ID: sessionID, Repo: j.Repo, Item: j.Item}
+	if err := insertPromptFileReceiptsTx(tx, sess, j, files); err != nil {
 		return 0, err
 	}
 	if err := promoteFollowUpTx(tx, j, sessionID); err != nil {
@@ -289,7 +377,7 @@ func applyFollowUpTx(tx *sql.Tx, j *store.Job, sessionID int64, seq int, prompt 
 	}
 	j.PendingRevision = rev
 	j.RetryCount = 0
-	return nil
+	return store.BindPromptAttachmentsTx(tx, sessionID, seq, rev)
 }
 
 func applyNextFollowUpTx(tx *sql.Tx, j *store.Job) error {
