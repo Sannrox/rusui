@@ -143,6 +143,7 @@ func GuestHost(c *Client) ACPHost {
 	return func(a *Assignment, dir string) (*acp.Client, func(), error) {
 		env := DriverEnv(a, dir, os.Getenv("PATH"))
 		rec := &HTTPRecorder{Base: c.Base, Token: a.TurnToken, TurnID: a.TurnID, HTTP: c.HTTP}
+		term := guestTermOutput(rec, a.SessionID)
 		if a.Driver == "container" && a.Handle != "" {
 			if c.Exec == nil {
 				return nil, nil, fmt.Errorf("container exec required")
@@ -155,7 +156,7 @@ func GuestHost(c *Client) ACPHost {
 			if err != nil {
 				return nil, nil, err
 			}
-			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait}, stop, nil
+			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait, TermOutput: term}, stop, nil
 		}
 		cmd, err := acp.GuestCommand(a.Guest)
 		if err != nil {
@@ -181,7 +182,33 @@ func GuestHost(c *Client) ACPHost {
 			}
 			_ = cmd.Wait()
 		}
-		return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait}, stop, nil
+		return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait, TermOutput: term}, stop, nil
+	}
+}
+
+func guestTermOutput(rec *HTTPRecorder, sessionID int64) func() string {
+	return func() string {
+		if rec == nil || rec.Base == "" || rec.Token == "" || sessionID < 1 {
+			return ""
+		}
+		req, err := http.NewRequest("GET", fmt.Sprintf("%s/sessions/%d/terminal", rec.Base, sessionID), nil)
+		if err != nil {
+			return ""
+		}
+		req.Header.Set("Authorization", "Bearer "+rec.Token)
+		res, err := rec.http().Do(req)
+		if err != nil {
+			return ""
+		}
+		defer func() { _ = res.Body.Close() }()
+		if res.StatusCode != http.StatusOK {
+			return ""
+		}
+		var out struct {
+			Output string `json:"output"`
+		}
+		_ = json.NewDecoder(res.Body).Decode(&out)
+		return out.Output
 	}
 }
 

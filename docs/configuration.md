@@ -202,6 +202,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/readyz` | none; JSON topology report; 200 ready / 503 not ready |
 | `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`) |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
+| `GET` | `/sessions/{id}/terminal` | operator, worker, or turn token; current environment terminal output; not the transcript |
 | `GET` | `/sessions/{id}/envlog` | operator token; last setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
 | `POST` | `/sessions/{id}/workspace` | operator token; multipart `file` plus `path` query; 32 MiB cap; workspace-relative only |
 | `GET` | `/sessions/{id}?include=receipts[&receipt_after_id={id}][&process_receipt_after_id={id}]` | operator or worker token; up to 100 environment and 100 local process receipts in ID order; follow `environment_receipts_next_after_id` and `process_receipts_next_after_id` when present |

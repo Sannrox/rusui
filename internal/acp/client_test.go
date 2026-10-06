@@ -1,12 +1,15 @@
 package acp
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -100,6 +103,37 @@ func TestConformanceFakeAgent(t *testing.T) {
 			t.Log(err)
 		}
 	default:
+	}
+}
+
+func TestTerminalOutputReadsEnvironmentSession(t *testing.T) {
+	clientIn, guestOut := io.Pipe()
+	guestIn, clientOut := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = guestIn.Close()
+		_ = guestOut.Close()
+	})
+	c := &Client{
+		In:         clientIn,
+		Out:        clientOut,
+		TermOutput: func() string { return "still-running\n" },
+	}
+	c.start()
+	go func() {
+		_, _ = io.WriteString(guestOut, `{"jsonrpc":"2.0","id":1,"method":"terminal/output","params":{"terminalId":"environment"}}`+"\n")
+	}()
+	sc := bufio.NewScanner(guestIn)
+	if !sc.Scan() {
+		t.Fatalf("no reply: %v", sc.Err())
+	}
+	var msg rpcMessage
+	if err := json.Unmarshal(sc.Bytes(), &msg); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(msg.Result), "still-running") {
+		t.Fatalf("guest output %s", msg.Result)
 	}
 }
 

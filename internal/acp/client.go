@@ -21,6 +21,9 @@ type Client struct {
 	Perm PermissionGate
 	Wait UnmatchedWaiter
 	Ctx  context.Context
+	// TermOutput is the one environment terminal the guest can read
+	// (ADR 0065). Write still takes the operator lease.
+	TermOutput func() string
 
 	mu           sync.Mutex
 	pending      map[string]chan rpcMessage
@@ -186,7 +189,11 @@ func (c *Client) answerTerminal(msg rpcMessage) {
 	var result any
 	switch msg.Method {
 	case MethodTerminalOutput:
-		result = map[string]any{"output": "", "truncated": false}
+		output := ""
+		if c.TermOutput != nil {
+			output = c.TermOutput()
+		}
+		result = map[string]any{"output": output, "truncated": false}
 	case MethodTerminalWaitForExit:
 		result = map[string]any{"exitCode": 0, "signal": nil}
 	default:
