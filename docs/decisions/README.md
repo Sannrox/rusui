@@ -34,7 +34,7 @@ Decisions that must outlive a single pull request.
 | [0023](0023-p8-pilot-narrow.md) | P8 ten-task live pilot is narrow | Accepted |
 | [0024](0024-session-surface.md) | The CLI and the console open a session | Accepted |
 | [0025](0025-provider-boundary.md) | One Go provider boundary for Grok, Claude, and Codex | Accepted |
-| [0026](0026-harness-model-upstream.md) | Harness, model, and upstream are independent | Accepted |
+| [0026](0026-harness-model-upstream.md) | Harness, model, and upstream are independent | Accepted; amended by 0061 |
 | [0027](0027-guest-reachability-ask.md) | The guest image does not declare reachability yet | Accepted |
 | [0028](0028-container-isolation-profile.md) | The supported machine isolation profile remains the container | Accepted |
 | [0029](0029-single-host-runner.md) | The supported runner topology remains one host | Accepted |
@@ -69,6 +69,7 @@ Decisions that must outlive a single pull request.
 | [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Accepted |
 | [0059](0059-unattributed-operator-retained.md) | Plane calls stay one unattributed operator | Accepted |
 | [0060](0060-shikigami-acp-guest-pin.md) | Pin shikigami acp as a supported guest | Accepted |
+| [0061](0061-one-model-upstream-retained.md) | One model upstream retained | Accepted |
 
 ## When to write an ADR
 

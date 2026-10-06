@@ -128,6 +128,7 @@ projects:
 `,
 		strings.Replace(good, "rusui:", "Rusui:", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    ship: push-base\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    connections: {xai: http://127.0.0.1:1}\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    budgets: {tokens: 1}\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    budgets: {dollars: 1}\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    budgets: {max_concurrent_leases: 0}\n", 1),

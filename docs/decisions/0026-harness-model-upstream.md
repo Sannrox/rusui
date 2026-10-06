@@ -1,6 +1,6 @@
 # ADR 0026: Harness, model, and upstream are independent
 
-- Status: Accepted
+- Status: Accepted; amended by 0061
 - Date: 2026-09-27
 - Amends: [ADR 0017](0017-claude-guest-and-model-upstream.md) D1–D2. The
   guest selects the harness and the proxy protocol. It does not imply a
@@ -11,6 +11,8 @@
   [#293](https://github.com/Sannrox/rusui/issues/293).
   [ADR 0042](0042-disconnected-execution-deferred.md) keeps the proxy
   path; a disconnected profile is deferred.
+- Amended by: [ADR 0061](0061-one-model-upstream-retained.md). One
+  `RUSUI_MODEL_UPSTREAM`. Named connections stay refused.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context
