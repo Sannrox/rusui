@@ -13,7 +13,7 @@ import (
 
 const MinScheduleEvery = time.Minute
 
-func (e *Engine) CreateSchedule(project, name, every, prompt string) (int64, error) {
+func (e *Engine) CreateSchedule(project, name, every, prompt string, sessionID int64) (int64, error) {
 	p, ok := e.PolicySnapshot().Project(project)
 	if !ok || !p.AllowsKind(policy.KindScheduled) {
 		return 0, fmt.Errorf("policy")
@@ -25,7 +25,29 @@ func (e *Engine) CreateSchedule(project, name, every, prompt string) (int64, err
 	if err != nil || d < MinScheduleEvery {
 		return 0, fmt.Errorf("every must be a duration >= 1m")
 	}
-	return store.InsertSchedule(e.Store, project, name, int(d.Seconds()), prompt)
+	if sessionID != 0 {
+		sess, err := store.GetSession(e.Store, sessionID)
+		if err != nil {
+			return 0, fmt.Errorf("schedule session: %w", err)
+		}
+		if sess.Project != project {
+			return 0, fmt.Errorf("schedule session project mismatch")
+		}
+		if sess.Archived {
+			return 0, fmt.Errorf("schedule session archived")
+		}
+		if sess.Kind != store.SessionKindRun && sess.Kind != store.SessionKindScheduled {
+			return 0, fmt.Errorf("schedule session kind")
+		}
+	}
+	return store.InsertSchedule(e.Store, project, name, int(d.Seconds()), prompt, sessionID)
+}
+
+func (e *Engine) DeleteSchedule(project string, id int64) error {
+	if _, ok := e.PolicySnapshot().Project(project); !ok {
+		return fmt.Errorf("policy")
+	}
+	return store.DeleteSchedule(e.Store, project, id)
 }
 
 func (e *Engine) StepSchedules(now time.Time) error {
@@ -55,6 +77,7 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string) (int64, error) {
 	}
 	repo, sha := e.operatorSessionPin(p)
 	var sessionID int64
+	already := false
 	err := e.Store.Tx(func(tx *sql.Tx) error {
 		paused, err := store.Paused(tx, sc.Project)
 		if err != nil {
@@ -70,8 +93,30 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string) (int64, error) {
 			}
 			if ok {
 				sessionID = id
+				already = true
 				return nil
 			}
+		}
+		if sc.SessionID != 0 {
+			var project string
+			var archived int
+			err := tx.QueryRow(`SELECT project, archived FROM sessions WHERE id=?`, sc.SessionID).Scan(&project, &archived)
+			if err != nil {
+				return err
+			}
+			if project != sc.Project {
+				return fmt.Errorf("schedule session project mismatch")
+			}
+			if archived != 0 {
+				already = true
+			}
+			if idem != "" {
+				if err := store.PutIdempotencyTx(tx, idem, sc.SessionID); err != nil {
+					return err
+				}
+			}
+			sessionID = sc.SessionID
+			return nil
 		}
 		live, err := store.ScheduleHasLiveSession(tx, sc.ID)
 		if err != nil {
@@ -99,5 +144,9 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string) (int64, error) {
 		sessionID = sid
 		return nil
 	})
-	return sessionID, err
+	if err != nil || already || sc.SessionID == 0 {
+		return sessionID, err
+	}
+	_, _, _, qerr := e.PromptQueued(sessionID, sc.Prompt)
+	return sessionID, qerr
 }

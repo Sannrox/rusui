@@ -266,9 +266,9 @@ func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt strin
 	return sessionID, item, err
 }
 
-func InsertSchedule(s *Store, project, name string, everySeconds int, prompt string) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO schedules(project, name, every_seconds, prompt, created_at) VALUES(?,?,?,?,?)`,
-		project, name, everySeconds, prompt, time.Now().UTC().Format(time.RFC3339Nano))
+func InsertSchedule(s *Store, project, name string, everySeconds int, prompt string, sessionID int64) (int64, error) {
+	res, err := s.DB.Exec(`INSERT INTO schedules(project, name, every_seconds, prompt, session_id, created_at) VALUES(?,?,?,?,?,?)`,
+		project, name, everySeconds, prompt, sessionID, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return 0, err
 	}
@@ -276,7 +276,7 @@ func InsertSchedule(s *Store, project, name string, everySeconds int, prompt str
 }
 
 func ListSchedules(s *Store) ([]Schedule, error) {
-	rows, err := s.DB.Query(`SELECT id, project, name, every_seconds, prompt FROM schedules`)
+	rows, err := s.DB.Query(`SELECT id, project, name, every_seconds, prompt, session_id FROM schedules`)
 	if err != nil {
 		return nil, err
 	}
@@ -284,12 +284,27 @@ func ListSchedules(s *Store) ([]Schedule, error) {
 	var out []Schedule
 	for rows.Next() {
 		var sc Schedule
-		if err := rows.Scan(&sc.ID, &sc.Project, &sc.Name, &sc.EverySeconds, &sc.Prompt); err != nil {
+		if err := rows.Scan(&sc.ID, &sc.Project, &sc.Name, &sc.EverySeconds, &sc.Prompt, &sc.SessionID); err != nil {
 			return nil, err
 		}
 		out = append(out, sc)
 	}
 	return out, rows.Err()
+}
+
+func DeleteSchedule(s *Store, project string, id int64) error {
+	res, err := s.DB.Exec(`DELETE FROM schedules WHERE id=? AND project=?`, id, project)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("schedule not found")
+	}
+	return nil
 }
 
 func ScheduleHasLiveSession(tx *sql.Tx, scheduleID int64) (bool, error) {

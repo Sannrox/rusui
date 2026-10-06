@@ -181,4 +181,5 @@ type Schedule struct {
 	Name         string
 	EverySeconds int
 	Prompt       string
+	SessionID    int64
 }
