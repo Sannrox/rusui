@@ -12,6 +12,10 @@
   per source hash; sleep = stop) and D8 (content-addressed snapshots
   on local disk) stand.
 - Resolves: [#42](https://github.com/Sannrox/rusui/issues/42)
+- Amended by: [ADR 0048](0048-pinless-run-session.md). A project with
+  zero bound repositories may start a pinless run or scheduled session
+  whose snapshot is the image identity and whose claim key is
+  `project:<slug>`.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context
