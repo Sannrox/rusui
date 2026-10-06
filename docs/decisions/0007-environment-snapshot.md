@@ -20,9 +20,10 @@
   72-hour idle expiry; superseded by
   [ADR 0063](0063-keep-environment-until-archive.md), which keeps the
   environment until the operator archives the session.
-  [ADR 0054](0054-repository-hooks-only.md) retains repository
-  `.agents/setup` and `.agents/resume`; plane-stored pre-clone and
-  pre-setup hooks are refused.
+  [ADR 0054](0054-repository-hooks-only.md) retained repository
+  hooks only; superseded by
+  [ADR 0067](0067-plane-stored-pre-hooks.md), which adds plane-stored
+  pre-clone and pre-setup.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context

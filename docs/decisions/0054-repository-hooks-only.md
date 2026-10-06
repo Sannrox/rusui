@@ -1,6 +1,6 @@
 # ADR 0054: Setup and resume stay repository hooks
 
-- Status: Accepted
+- Status: Superseded by [ADR 0067](0067-plane-stored-pre-hooks.md)
 - Date: 2026-10-06
 - Amends: [ADR 0007](0007-environment-snapshot.md) (prepare runs
   `.agents/setup` from the pin; wake runs `.agents/resume` only).
