@@ -53,7 +53,9 @@ The owned directory is removed unless `-keep`. Walkthrough:
 
 `rusui drain -url URL -token TOKEN` POSTs `/drain` (worker auth), pauses new
 claims, and lists leased turns. `rusui resume [-project P]` POSTs `/resume`
-(worker auth) and lifts that pause. `rusui restore -db PATH` restores a copied
+(worker auth) and lifts that pause. `rusui archive SESSION` sleeps that
+session's environment and refuses prompts until `rusui unarchive SESSION`.
+`rusui restore -db PATH` restores a copied
 database offline and prints its inventory. Do not open `rusui.db` while the
 plane holds it.
 `rusui diagnostics` writes a redacted bundle (`diagnostics.json`).
@@ -222,6 +224,8 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/sessions/{id}/turns` | operator or worker token; follow-up prompt, steer (`steer`), or queued prompt (`queued`) that starts after the current turn ends (`rusui prompt`) |
 | `DELETE` | `/sessions/{id}/queued` | operator or worker token; drops queued prompts that have not started and returns `dropped`; the current turn keeps running (`rusui prompt -drop-queue`) |
 | `POST` | `/sessions/{id}/cancel` | operator or worker token; ends the turn, drops queued prompts, and stops the guest's processes |
+| `POST` | `/sessions/{id}/archive` | operator or worker token; sleeps the environment, refuses prompts, and keeps the session row (`rusui archive`) |
+| `POST` | `/sessions/{id}/unarchive` | operator or worker token; allows prompts again on the same environment (`rusui unarchive`) |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
 | `*` | `/model-proxy/` | per-turn grant (HTTPS for container guests) |
 | `*` | `/git-proxy/github.com/` | prepare or turn grant; push only with a turn grant on the session ref prefix |

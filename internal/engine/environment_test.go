@@ -82,11 +82,11 @@ func TestEnvironmentCreateSleepWakeExpire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.State != store.EnvExpired {
-		t.Fatalf("reap state %s", got.State)
+	if got.State != store.EnvReady || got.Handle != created.Handle {
+		t.Fatalf("reap after ttl %+v", got)
 	}
-	if _, err := os.Stat(created.Handle); !os.IsNotExist(err) {
-		t.Fatalf("handle still present: %v", err)
+	if _, err := os.Stat(created.Handle); err != nil {
+		t.Fatalf("handle gone after ttl: %v", err)
 	}
 
 	local, err := store.GetEnvironment(h.st, store.DefaultEnvironmentID)
@@ -95,7 +95,7 @@ func TestEnvironmentCreateSleepWakeExpire(t *testing.T) {
 	}
 }
 
-func TestRecoverReapsExpiredEnvironments(t *testing.T) {
+func TestRecoverKeepsEnvironmentPastTTL(t *testing.T) {
 	h := setup(t)
 	h.e.Env = env.Process{Root: t.TempDir()}
 	created, err := h.e.CreateEnvironment("ws-reap")
@@ -110,8 +110,8 @@ func TestRecoverReapsExpiredEnvironments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.State != store.EnvExpired {
-		t.Fatalf("recover state %s", got.State)
+	if got.State != store.EnvReady || got.Handle != created.Handle {
+		t.Fatalf("recover state %+v", got)
 	}
 }
 

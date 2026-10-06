@@ -16,8 +16,8 @@ func ListIdleContainerEnvironments(s *Store, now time.Time, ttl, idle time.Durat
 	}
 	cutoff := now.Add(ttl - idle).UTC().Format(time.RFC3339Nano)
 	rows, err := s.DB.Query(`SELECT id, name, driver, state, handle, source_hash, expires_at, slept_at, cpu_millis, memory_bytes, created_at
-FROM environments WHERE name!=? AND driver='container' AND state=? AND expires_at>? AND expires_at<=? ORDER BY id`,
-		LocalEnvironmentName, EnvReady, now.UTC().Format(time.RFC3339Nano), cutoff)
+FROM environments WHERE name!=? AND driver='container' AND state=? AND expires_at IS NOT NULL AND expires_at<=? ORDER BY id`,
+		LocalEnvironmentName, EnvReady, cutoff)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func reserveEnvironmentSleep(s *Store, id int64, now time.Time, ttl, idle time.D
 			if err != nil {
 				return err
 			}
-			if !now.Before(lastActivityExpiry) || lastActivityExpiry.After(now.Add(ttl-idle)) {
+			if lastActivityExpiry.After(now.Add(ttl - idle)) {
 				return nil
 			}
 		}
