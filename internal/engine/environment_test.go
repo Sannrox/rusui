@@ -28,6 +28,9 @@ func TestEnvironmentCreateSleepWakeExpire(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(created.Handle, ".rusui-env")); err != nil {
 		t.Fatal(err)
 	}
+	if store.EnvTTL != 72*time.Hour {
+		t.Fatalf("EnvTTL %s, want 72h", store.EnvTTL)
+	}
 	if created.ExpiresAt == nil || !created.ExpiresAt.Equal(h.clk.T.Add(store.EnvTTL)) {
 		t.Fatalf("ttl %+v", created.ExpiresAt)
 	}
@@ -51,6 +54,21 @@ func TestEnvironmentCreateSleepWakeExpire(t *testing.T) {
 	}
 	if woke.State != store.EnvReady || woke.SleptAt != nil {
 		t.Fatalf("wake: %+v", woke)
+	}
+
+	h.clk.T = woke.ExpiresAt.Add(-time.Second)
+	if err := h.e.ReapEnvironments(); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.GetEnvironment(h.st, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if live.State != store.EnvReady {
+		t.Fatalf("reap before ttl: %s", live.State)
+	}
+	if _, err := os.Stat(created.Handle); err != nil {
+		t.Fatalf("handle gone before ttl: %v", err)
 	}
 
 	h.clk.T = woke.ExpiresAt.Add(time.Minute)

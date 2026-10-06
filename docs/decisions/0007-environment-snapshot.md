@@ -16,6 +16,8 @@
   zero bound repositories may start a pinless run or scheduled session
   whose snapshot is the image identity and whose claim key is
   `project:<slug>`.
+  [ADR 0049](0049-idle-environment-expiry-retained.md) retains the
+  72-hour idle expiry; keep-until-archive is rejected.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context
