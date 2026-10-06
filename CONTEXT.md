@@ -61,7 +61,7 @@ The prepared, reusable tree identified by `source_hash` (base image digest, git 
 _Avoid_: environment, GitHub item snapshot hash, image tag
 
 **Schedule**:
-A named trigger on a project with a UTC cadence and a prompt. It may bind to one session; a fire then appends that prompt on the same session and environment, waiting if a turn is live ([ADR 0069](docs/decisions/0069-schedule-binds-a-session.md)). An unbound schedule still mints a new session per fire and skips while live ([ADR 0030](docs/decisions/0030-schedule-new-session.md)). Deleting the schedule stops later fires and does not cancel a running turn.
+A named trigger on a project with a UTC cadence and a prompt. It may bind to one session; a fire then appends that prompt on the same session and environment, waiting if a turn is live ([ADR 0069](docs/decisions/0069-schedule-binds-a-session.md)). An unbound schedule still mints a new session per fire and skips while live ([ADR 0030](docs/decisions/0030-schedule-new-session.md)). Deleting the schedule stops later fires and does not cancel a running turn. The guest may request set, replace, or clear of its own session's bound schedule; the plane receipts the request. The guest still cannot write policy.yaml.
 _Avoid_: review fan-out, cron in policy.yaml, steer of a live turn
 
 **Session webhook**:

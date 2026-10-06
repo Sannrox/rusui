@@ -275,6 +275,45 @@ func InsertSchedule(s *Store, project, name string, everySeconds int, prompt str
 	return res.LastInsertId()
 }
 
+func InsertScheduleTx(tx *sql.Tx, project, name string, everySeconds int, prompt string, sessionID int64, now time.Time) (int64, error) {
+	res, err := tx.Exec(`INSERT INTO schedules(project, name, every_seconds, prompt, session_id, created_at) VALUES(?,?,?,?,?,?)`,
+		project, name, everySeconds, prompt, sessionID, now.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func ScheduleByNameTx(tx *sql.Tx, project, name string) (*Schedule, error) {
+	var sc Schedule
+	err := tx.QueryRow(`SELECT id, project, name, every_seconds, prompt, session_id FROM schedules WHERE project=? AND name=?`, project, name).Scan(
+		&sc.ID, &sc.Project, &sc.Name, &sc.EverySeconds, &sc.Prompt, &sc.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	return &sc, nil
+}
+
+func UpdateScheduleTx(tx *sql.Tx, id int64, everySeconds int, prompt string) error {
+	_, err := tx.Exec(`UPDATE schedules SET every_seconds=?, prompt=? WHERE id=?`, everySeconds, prompt, id)
+	return err
+}
+
+func DeleteScheduleTx(tx *sql.Tx, project string, id int64) error {
+	res, err := tx.Exec(`DELETE FROM schedules WHERE id=? AND project=?`, id, project)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("schedule not found")
+	}
+	return nil
+}
+
 func ListSchedules(s *Store) ([]Schedule, error) {
 	rows, err := s.DB.Query(`SELECT id, project, name, every_seconds, prompt, session_id FROM schedules`)
 	if err != nil {
