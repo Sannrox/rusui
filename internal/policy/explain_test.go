@@ -49,6 +49,7 @@ func TestExplainRepoReportsEffectiveSources(t *testing.T) {
 		"budgets.max_concurrent_leases":    "project",
 		"permissions":                      "schema default",
 		"local_runtime":                    "schema default",
+		"secrets":                          "schema default",
 	}
 	for field, want := range wantSources {
 		if got := explanation.Sources[field]; got != want {

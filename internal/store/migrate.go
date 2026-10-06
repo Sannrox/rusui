@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 35
+const CurrentSchema = 36
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -469,7 +469,44 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 36 {
+		if err := migrateV36(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 36); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV36 lets environment receipts name an injected secret id (#503).
+// SQLite cannot alter a CHECK, so the table is rebuilt.
+func migrateV36(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`
+CREATE TABLE environment_receipts_v36 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  environment_id INTEGER NOT NULL,
+  session_id INTEGER,
+  kind TEXT NOT NULL CHECK (kind IN ('sleep', 'wake', 'expire', 'replace', 'secret')),
+  state TEXT NOT NULL CHECK (state IN ('succeeded', 'failed')),
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+INSERT INTO environment_receipts_v36 (id, environment_id, session_id, kind, state, detail, created_at)
+  SELECT id, environment_id, session_id, kind, state, detail, created_at FROM environment_receipts;
+DROP TABLE environment_receipts;
+ALTER TABLE environment_receipts_v36 RENAME TO environment_receipts;
+CREATE INDEX IF NOT EXISTS environment_receipts_session ON environment_receipts(session_id, id);
+`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // migrateV35 records the session size name (ADR 0064, #501). Empty means

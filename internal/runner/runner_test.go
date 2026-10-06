@@ -370,6 +370,14 @@ func TestDeadlineKillsProcessGroup(t *testing.T) {
 	}
 }
 
+func TestDriverEnvIncludesAssignedSecrets(t *testing.T) {
+	a := &runner.Assignment{TurnToken: "tok", Secrets: map[string]string{"npm_token": "sekrit"}}
+	joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
+	if !strings.Contains(joined, "NPM_TOKEN=sekrit") {
+		t.Fatal(joined)
+	}
+}
+
 func TestDriverEnvHasTurnTokenNotPlaneSecret(t *testing.T) {
 	a := &runner.Assignment{TurnID: 9, TurnToken: "tok"}
 	env := runner.DriverEnv(a, "/tmp/home", "/bin")

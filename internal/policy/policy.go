@@ -55,6 +55,8 @@ type ProjectYAML struct {
 	Size         string              `yaml:"size"`
 	Budgets      map[string]int      `yaml:"budgets"`
 	Permissions  []AllowRule         `yaml:"permissions"`
+	// Secrets is the project allowlist of plane secret ids injected at wake.
+	Secrets []string `yaml:"secrets"`
 }
 
 type LocalRuntimeYAML struct {
@@ -100,7 +102,9 @@ type Project struct {
 	Size         string
 	Budgets      map[string]int
 	Permissions  []AllowRule
-	Repos        []string
+	// Secrets is the project allowlist of plane secret ids injected at wake.
+	Secrets []string
+	Repos   []string
 }
 
 type LocalRuntime struct {
@@ -185,6 +189,10 @@ func Parse(raw []byte) (*Effective, error) {
 		if err != nil {
 			return nil, err
 		}
+		secrets, err := validSecrets(slug, y.Secrets)
+		if err != nil {
+			return nil, err
+		}
 		p := Project{
 			Slug:         slug,
 			SessionKinds: kinds,
@@ -193,6 +201,7 @@ func Parse(raw []byte) (*Effective, error) {
 			Size:         size,
 			Budgets:      budgets,
 			Permissions:  y.Permissions,
+			Secrets:      secrets,
 		}
 		for name, ry := range y.Repos {
 			if _, ok := out.Repos[name]; ok {
@@ -330,6 +339,50 @@ func validEgress(slug, egress string) error {
 	default:
 		return fmt.Errorf("policy: %s invalid egress %q", slug, egress)
 	}
+}
+
+func validSecrets(slug string, ids []string) ([]string, error) {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !ValidSecretID(id) {
+			return nil, fmt.Errorf("policy: %s invalid secret id %q", slug, id)
+		}
+		if seen[id] {
+			return nil, fmt.Errorf("policy: %s duplicate secret id %q", slug, id)
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+// ValidSecretID is a plane secret id: lowercase, env-safe, short.
+func ValidSecretID(id string) bool {
+	if id == "" || len(id) > 32 {
+		return false
+	}
+	for i, c := range id {
+		ok := c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || (c == '_' && i > 0)
+		if !ok {
+			return false
+		}
+	}
+	return id[0] >= 'a' && id[0] <= 'z'
+}
+
+// AllowSecrets reports whether every requested id is in the project allowlist.
+func AllowSecrets(allow, want []string) error {
+	set := map[string]bool{}
+	for _, id := range allow {
+		set[id] = true
+	}
+	for _, id := range want {
+		if !set[id] {
+			return fmt.Errorf("secret %s", id)
+		}
+	}
+	return nil
 }
 
 func validSize(slug, size string) (string, error) {

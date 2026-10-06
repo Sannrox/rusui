@@ -42,6 +42,10 @@ Also required to start: `RUSUI_GITHUB_TOKEN` or `GITHUB_TOKEN` (read-only).
 `RUSUI_SLACK_USERS` is the inbound allowlist (Slack user ids). An empty
 allowlist 403s every slash command.
 
+Optional project secrets are plane env vars `RUSUI_SECRET_<ID>` matching
+a `secrets:` allowlist in `policy.yaml`. They are injected at wake and
+removed on sleep. Do not put those values in the guest image.
+
 Never commit tokens, webhook secrets, worker secrets, Slack secrets, local
 SQLite databases, `.version`, or `_output/`.
 

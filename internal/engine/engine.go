@@ -75,6 +75,14 @@ type Engine struct {
 	envOperations  map[int64]struct{}
 	completeMu     sync.Mutex
 	completing     map[int64]*completeLock
+
+	// Secrets are plane-held values keyed by policy secret id (ADR 0066).
+	// Production loads them from RUSUI_SECRET_<ID> via SecretsFromEnv.
+	Secrets map[string]string
+	// RequestedSecrets, when non-empty, must be a subset of the project's
+	// allowlist or claim refuses before the lease. Empty means inject the
+	// allowlist. Tests set this; production leaves it empty.
+	RequestedSecrets []string
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {
@@ -820,6 +828,9 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 			// retries without 409 (ADR 0064 D2/D3).
 			return nil
 		}
+		if err := e.checkRequestedSecrets(proj); err != nil {
+			return err
+		}
 		now := e.now()
 		exp := now.Add(Liveness)
 		dead := now.Add(e.execDeadline())
@@ -936,9 +947,11 @@ var (
 	errPolicy   = fmt.Errorf("policy")
 	errBudget   = fmt.Errorf("budget")
 	errArchived = fmt.Errorf("archived")
+	errSecret   = fmt.Errorf("secret")
 	ErrBudget   = errBudget
 	ErrPaused   = errPaused
 	ErrArchived = errArchived
+	ErrSecret   = errSecret
 )
 
 func (e *Engine) Heartbeat(jobID int64, gen, claimed int) error {

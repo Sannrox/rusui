@@ -468,6 +468,7 @@ func TestGuestFilesystemOmitsProviderSecrets(t *testing.T) {
 	const planeXAI = "xai-plane-secret-value"
 	const planeGH = "github-plane-secret-value"
 	rt := &env.FakeRuntime{}
+	h.e.Secrets = map[string]string{"xai": planeXAI, "github": planeGH}
 	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
 	h.e.SnapshotRoot = t.TempDir()
 	h.e.Tree = &engine.MemoryTree{Files: map[string][]byte{"README": []byte("ok\n")}}
@@ -482,6 +483,9 @@ func TestGuestFilesystemOmitsProviderSecrets(t *testing.T) {
 		if strings.Contains(s, planeXAI) || strings.Contains(s, planeGH) {
 			t.Fatalf("provider secret in %s", path)
 		}
+	}
+	if _, ok := rt.LookupSecret(created.Handle, "xai"); ok {
+		t.Fatal("unlist secret injected")
 	}
 	envv := runner.DriverEnv(&runner.Assignment{
 		TurnToken: "turn-grant-only", ModelBaseURL: "https://rusui.plane:8080/model-proxy",

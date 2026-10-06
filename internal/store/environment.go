@@ -107,6 +107,15 @@ func RestoreEnvironmentReady(s *Store, id int64) error {
 	return err
 }
 
+func GetSessionByEnvironment(s *Store, envID int64) (*Session, error) {
+	var id int64
+	err := s.DB.QueryRow(`SELECT id FROM sessions WHERE environment_id=? ORDER BY id LIMIT 1`, envID).Scan(&id)
+	if err != nil {
+		return nil, err
+	}
+	return GetSession(s, id)
+}
+
 func InsertEnvironmentReceipt(s *Store, envID int64, kind, state, detail string, now time.Time) error {
 	_, err := s.DB.Exec(`INSERT INTO environment_receipts (environment_id, session_id, kind, state, detail, created_at)
 VALUES (?, (SELECT id FROM sessions WHERE environment_id=? ORDER BY id LIMIT 1), ?, ?, ?, ?)`,

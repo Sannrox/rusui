@@ -70,11 +70,12 @@ type Assignment struct {
 	CommitHooksDir string `json:"-"`
 	// ResultPath is where a run turn's guest writes its structured result
 	// (PrepareResult).
-	ResultPath        string          `json:"-"`
-	Permissions       []acp.Rule      `json:"permissions"`
-	ExecutionDeadline *time.Time      `json:"execution_deadline"`
-	Input             json.RawMessage `json:"input"`
-	GuestSessionID    string          `json:"guest_session_id,omitempty"`
+	ResultPath        string            `json:"-"`
+	Permissions       []acp.Rule        `json:"permissions"`
+	Secrets           map[string]string `json:"secrets,omitempty"`
+	ExecutionDeadline *time.Time        `json:"execution_deadline"`
+	Input             json.RawMessage   `json:"input"`
+	GuestSessionID    string            `json:"guest_session_id,omitempty"`
 	steerReceipts     *steerReceiptState
 }
 
@@ -456,6 +457,16 @@ func DriverEnv(a *Assignment, home, path string) []string {
 	}
 	if a.ResultPath != "" {
 		env = append(env, "RUSUI_RESULT="+a.ResultPath)
+	}
+	if len(a.Secrets) > 0 {
+		ids := make([]string, 0, len(a.Secrets))
+		for id := range a.Secrets {
+			ids = append(ids, id)
+		}
+		slices.Sort(ids)
+		for _, id := range ids {
+			env = append(env, strings.ToUpper(id)+"="+a.Secrets[id])
+		}
 	}
 	var git [][2]string
 	if a.GitHubToken != "" {

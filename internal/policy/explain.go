@@ -63,6 +63,11 @@ func (e *Effective) ExplainRepo(name string) (RepoExplanation, bool, error) {
 	} else {
 		sources["local_runtime"] = "schema default"
 	}
+	if effectiveSetting(mappingValue(project, "secrets"), "secrets", false) {
+		sources["secrets"] = "project"
+	} else {
+		sources["secrets"] = "schema default"
+	}
 	return RepoExplanation{Repository: name, Repo: r, Project: p, Sources: sources}, true, nil
 }
 
@@ -92,7 +97,7 @@ func effectiveSetting(node *yaml.Node, field string, repoOverride bool) bool {
 		return false
 	}
 	switch field {
-	case "session_kinds":
+	case "session_kinds", "secrets":
 		return node.Kind == yaml.SequenceNode && len(node.Content) > 0
 	case "egress", "visibility":
 		return node.Value != ""

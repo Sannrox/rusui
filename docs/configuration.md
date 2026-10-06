@@ -326,6 +326,21 @@ GiB, 2 CPU / 4 GiB, or 4 CPU / 8 GiB. A run may override it with
 `{"size":"large"}` or `rusui run -size large`. The container runtime
 enforces those limits.
 
+Project `secrets` is an allowlist of plane secret ids (`^[a-z][a-z0-9_]{0,31}$`).
+At wake the plane injects ids that also have a `RUSUI_SECRET_<ID>` value
+into `/run/rusui/secrets/<id>` and the guest environment as uppercase
+`ID`. On sleep those values are removed. A requested id outside the
+allowlist is refused before the turn starts. Durable values stay on the
+plane ([ADR 0009](decisions/0009-credential-broker.md),
+[ADR 0066](decisions/0066-inject-secret-at-wake.md)). The receipt names
+the id, not the value.
+
+```yaml
+projects:
+  rusui:
+    secrets: [npm_token]
+```
+
 Project `permissions` answer the guest's `session/request_permission`
 (the tool fence). A rule matches on `tool`, `kind`, and `command`; empty
 fields are wildcards. `action` is `allow` (the default) or `reject`. Any

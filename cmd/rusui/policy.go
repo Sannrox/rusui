@@ -248,6 +248,11 @@ func printPolicyExplanation(out io.Writer, effective *policy.Effective, explanat
 	printPolicyField(out, "size", size, explanation.Sources["size"])
 	printPolicyField(out, "budgets.max_concurrent_leases", fmt.Sprint(explanation.Project.MaxConcurrentLeases()), explanation.Sources["budgets.max_concurrent_leases"])
 	printPolicyField(out, "permissions", fmt.Sprintf("%d rules", len(explanation.Project.Permissions)), explanation.Sources["permissions"])
+	secrets := "none"
+	if len(explanation.Project.Secrets) > 0 {
+		secrets = strings.Join(explanation.Project.Secrets, ", ")
+	}
+	printPolicyField(out, "secrets", secrets, explanation.Sources["secrets"])
 	for _, rule := range explanation.Project.Permissions {
 		action := rule.Action
 		if action == "" {
