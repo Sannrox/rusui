@@ -107,6 +107,54 @@ func TestRunnerReachesAnHTTPSPlaneWithTheCA(t *testing.T) {
 	}
 }
 
+func TestRunnerProjectFlagClaimsProjectKey(t *testing.T) {
+	bin := t.TempDir() + "/rusui-runner"
+	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	claimed := make(chan []string, 2)
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/jobs/claim" {
+			var request struct {
+				Repo  string   `json:"repo"`
+				Repos []string `json:"repos"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode claim request: %v", err)
+			}
+			repos := request.Repos
+			if request.Repo != "" {
+				repos = []string{request.Repo}
+			}
+			claimed <- repos
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(hs.Close)
+
+	cmd := exec.Command(bin, "-url", hs.URL, "-project", "empty", "-acp", "-once", "-token", "wsec")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("runner: %v\n%s", err, out)
+	}
+	select {
+	case repos := <-claimed:
+		if len(repos) != 1 || repos[0] != "project:empty" {
+			t.Fatalf("claim %q, want [project:empty]", repos)
+		}
+	default:
+		t.Fatalf("runner never claimed:\n%s", out)
+	}
+
+	cmd = exec.Command(bin, "-url", hs.URL, "-project", "empty", "-repo", "o/r", "-acp", "-once", "-token", "wsec")
+	out, err = cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "exclusive") {
+		t.Fatalf("project and repo together: %v\n%s", err, out)
+	}
+}
+
 func TestRunnerOnceExitsNonZeroWhenClaimFails(t *testing.T) {
 	bin := t.TempDir() + "/rusui-runner"
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {

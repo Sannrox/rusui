@@ -151,6 +151,10 @@ workspace. Existing single-`-repo` commands continue to work:
   -acp
 ```
 
+A project with no bound repository is claimed with `-project SLUG` instead
+of `-repo` ([ADR 0048](decisions/0048-pinless-run-session.md)). `-project`
+and `-repo` are exclusive.
+
 Every listed repository must still be enabled by the plane policy. An
 unconfigured repository fails closed; the runner never enumerates or claims
 repositories outside its explicit `-repo` list.

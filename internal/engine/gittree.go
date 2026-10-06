@@ -34,7 +34,7 @@ func (g GitFetcher) Fetch(repo, pin, dest string) error {
 	if repo == "" || pin == "" || dest == "" {
 		return fmt.Errorf("git: repo, pin, and dest required")
 	}
-	if strings.Contains(repo, "..") || strings.ContainsAny(repo, " \t\n") {
+	if strings.Contains(repo, "..") || strings.ContainsAny(repo, " \t\n") || strings.Contains(repo, ":") {
 		return fmt.Errorf("git: invalid repo %q", repo)
 	}
 	bin := g.Git

@@ -66,6 +66,9 @@ func ParseHookIDs(s string) map[string]string {
 }
 
 func splitRepo(repo string) (owner, name string, err error) {
+	if strings.Contains(repo, ":") {
+		return "", "", fmt.Errorf("github: bad repo %q", repo)
+	}
 	owner, name, ok := strings.Cut(repo, "/")
 	if !ok || owner == "" || name == "" {
 		return "", "", fmt.Errorf("github: bad repo %q", repo)

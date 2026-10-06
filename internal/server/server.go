@@ -21,6 +21,7 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/slack"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -480,7 +481,9 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 					out["workspace"] = envRow.Handle
 				}
 				out["model_base_url"] = modelBaseURL(r, envRow.Driver)
-				out["git_proxy_url"] = gitProxyBaseURL(r, envRow.Driver)
+				if !policy.IsProjectKey(c.Job.Repo) {
+					out["git_proxy_url"] = gitProxyBaseURL(r, envRow.Driver)
+				}
 			}
 			if tok := s.agentGitHubToken(sess); tok != "" {
 				out["github_token"] = tok
@@ -503,7 +506,7 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 	if _, ok := out["model_base_url"]; !ok {
 		out["model_base_url"] = modelBaseURL(r, "")
 	}
-	if _, ok := out["git_proxy_url"]; !ok {
+	if _, ok := out["git_proxy_url"]; !ok && !policy.IsProjectKey(c.Job.Repo) {
 		out["git_proxy_url"] = gitProxyBaseURL(r, "")
 	}
 	_ = json.NewEncoder(w).Encode(out)

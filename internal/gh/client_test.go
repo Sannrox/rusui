@@ -9,6 +9,15 @@ import (
 	"testing"
 )
 
+func TestSplitRepoRefusesProjectKey(t *testing.T) {
+	if _, _, err := splitRepo("project:empty"); err == nil {
+		t.Fatal("expected error")
+	}
+	if _, _, err := splitRepo("example/test-repo"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestParseHookIDs(t *testing.T) {
 	m := ParseHookIDs("example/test-repo=42, other/r=9")
 	if m["example/test-repo"] != "42" || m["other/r"] != "9" {

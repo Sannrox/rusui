@@ -58,6 +58,21 @@ func TestGitFetcherProxyRequiresGrant(t *testing.T) {
 	}
 }
 
+func TestGitFetcherRefusesProjectKey(t *testing.T) {
+	bin, logPath := stubGit(t)
+	g := GitFetcher{Git: bin, Token: "plane-tok"}
+	if err := g.Fetch("project:empty", "abc", t.TempDir()); err == nil {
+		t.Fatal("expected invalid repo")
+	}
+	b, err := os.ReadFile(logPath)
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if len(b) != 0 {
+		t.Fatalf("git invoked: %s", b)
+	}
+}
+
 func stubGit(t *testing.T) (bin, logPath string) {
 	t.Helper()
 	dir := t.TempDir()
