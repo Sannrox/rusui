@@ -27,7 +27,7 @@ Decisions that must outlive a single pull request.
 | [0016](0016-local-interactive-runtime.md) | Local interactive runtime boundary with Sumika | Accepted |
 | [0017](0017-claude-guest-and-model-upstream.md) | Claude Code guest, operator model upstream, and a fenced self-test | Accepted |
 | [0018](0018-rusui-setup.md) | `rusui setup` provisions a host; `rusui diagnose` verifies it | Accepted |
-| [0019](0019-rusui-attach-client.md) | One Rusui attach command selects the runtime-owned transport | Accepted; amended by 0052 |
+| [0019](0019-rusui-attach-client.md) | One Rusui attach command selects the runtime-owned transport | Accepted; amended by 0052, 0065 |
 | [0020](0020-turn-scoped-github-publication.md) | Turn-scoped GitHub publication stays behind the plane | Accepted |
 | [0021](0021-gitlab-intake.md) | First GitLab intake is GitLab.com project issues only | Accepted |
 | [0022](0022-public-repo-isolation.md) | Public-repository unattended sessions default to the container driver | Accepted |
@@ -60,7 +60,7 @@ Decisions that must outlive a single pull request.
 | [0049](0049-idle-environment-expiry-retained.md) | Idle environment expiry remains 72 hours | Superseded by 0063 |
 | [0050](0050-guest-toolchain-in-image.md) | Bake guest toolchain into the image; add no destinations | Accepted |
 | [0051](0051-fail-on-full-lease-budget-retained.md) | Admission still fails when the lease budget is full | Superseded by 0064 |
-| [0052](0052-separate-attach-and-guest-shells.md) | Attach and the guest keep separate shells | Accepted |
+| [0052](0052-separate-attach-and-guest-shells.md) | Attach and the guest keep separate shells | Superseded by 0065 |
 | [0053](0053-wake-secret-injection-refused.md) | The guest still holds only the per-turn grant | Accepted |
 | [0054](0054-repository-hooks-only.md) | Setup and resume stay repository hooks | Accepted |
 | [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Accepted |
@@ -73,6 +73,7 @@ Decisions that must outlive a single pull request.
 | [0062](0062-guest-link-desktop-podman-deferred.md) | Docker Desktop and Podman stay unverified for the guest link | Accepted |
 | [0063](0063-keep-environment-until-archive.md) | Keep the environment until the operator archives it | Accepted |
 | [0064](0064-session-size-and-admission-queue.md) | Session size and a wait when the lease budget is full | Accepted |
+| [0065](0065-one-environment-terminal.md) | One terminal session inside the environment | Accepted |
 
 ## When to write an ADR
 

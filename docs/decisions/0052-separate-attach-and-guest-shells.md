@@ -1,6 +1,6 @@
 # ADR 0052: Attach and the guest keep separate shells
 
-- Status: Accepted
+- Status: Superseded by [ADR 0065](0065-one-environment-terminal.md)
 - Date: 2026-10-06
 - Amends: [ADR 0019](0019-rusui-attach-client.md) (attach is the
   operator terminal transport; it is not the guest's shell).

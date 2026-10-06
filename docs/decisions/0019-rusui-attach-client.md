@@ -9,9 +9,10 @@
   [ADR 0016](0016-local-interactive-runtime.md)
 - Narrowed by: [ADR 0024](0024-session-surface.md). `rusui attach` remains
   the runtime-owned terminal transport. It is not how a session is read.
-- Amended by: [ADR 0052](0052-separate-attach-and-guest-shells.md).
-  Attach and the guest keep separate shells. One shared terminal
-  session is refused.
+- Amended by: [ADR 0052](0052-separate-attach-and-guest-shells.md)
+  (separate shells; superseded by
+  [ADR 0065](0065-one-environment-terminal.md), which joins attach to
+  the one environment terminal).
 
 ## Context
 
