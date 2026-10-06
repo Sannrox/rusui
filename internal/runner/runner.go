@@ -412,7 +412,13 @@ func DriverEnv(a *Assignment, home, path string) []string {
 		"RUSUI_TURN_TOKEN=" + a.TurnToken,
 		"RUSUI_TURN_ID=" + fmt.Sprint(a.TurnID),
 	}
-	if a.Guest == acp.GuestClaude {
+	switch a.Guest {
+	case acp.GuestShikigami:
+		env = append(env, "OPENAI_API_KEY="+a.TurnToken, "SHIKIGAMI_MODEL_ADAPTER=http")
+		if a.ModelBaseURL != "" {
+			env = append(env, "OPENAI_BASE_URL="+a.ModelBaseURL)
+		}
+	case acp.GuestClaude:
 		// Claude Code talks to the plane model proxy with the grant; its
 		// config dir is fresh, so no operator login is found (ADR 0017 D1).
 		configDir := "/tmp/rusui-claude"
@@ -442,7 +448,7 @@ func DriverEnv(a *Assignment, home, path string) []string {
 				"ANTHROPIC_DEFAULT_HAIKU_MODEL="+a.GuestModel,
 			)
 		}
-	} else {
+	default:
 		env = append(env, "XAI_API_KEY="+a.TurnToken)
 		if a.ModelBaseURL != "" {
 			env = append(env, "GROK_XAI_API_BASE_URL="+a.ModelBaseURL)

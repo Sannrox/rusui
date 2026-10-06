@@ -279,9 +279,14 @@ func TestModelConfigFromEnv(t *testing.T) {
 	if _, err := ModelConfigFromEnv(env(map[string]string{"RUSUI_GUEST_MODEL": "bad model"})); !errors.Is(err, ErrInvalidGuestModel) || (err != nil && strings.Contains(err.Error(), "bad model")) {
 		t.Fatalf("invalid model: %v", err)
 	}
+	c, err = ModelConfigFromEnv(env(map[string]string{
+		"RUSUI_GUEST": "shikigami", "OPENAI_API_KEY": "k",
+	}))
+	if err != nil || c.Guest != "shikigami" || c.Provider != ProviderOpenAI || c.Key != "k" {
+		t.Fatalf("shikigami %+v %v", c, err)
+	}
 	for _, bad := range []map[string]string{
 		{"RUSUI_GUEST": "cursor"},
-		{"RUSUI_GUEST": "shikigami"},
 		{"RUSUI_MODEL_UPSTREAM": "127.0.0.1:8317"},
 		{"RUSUI_MODEL_UPSTREAM": "file:///etc/passwd"},
 	} {

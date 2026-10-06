@@ -7,10 +7,11 @@ import (
 	"strings"
 )
 
-// Supported guests (ADR 0002, ADR 0017 D1).
+// Supported guests (ADR 0002, ADR 0017 D1, ADR 0060).
 const (
-	GuestGrok   = "grok"
-	GuestClaude = "claude"
+	GuestGrok      = "grok"
+	GuestClaude    = "claude"
+	GuestShikigami = "shikigami"
 )
 
 // ClaudeStdio is the pinned Claude Code CLI session (ADR 0025). The
@@ -25,6 +26,10 @@ const (
 const ClaudeStdio = "claude --print --input-format stream-json --output-format stream-json --verbose --permission-mode default --permission-prompt-tool stdio --settings " + claudeAskSettings
 
 const claudeAskSettings = `{"permissions":{"ask":["Bash"]}}`
+
+// ShikigamiStdio is the ADR 0060 pin. --state is inside the environment
+// (the spawn cwd). --always-approve is not the spawn.
+const ShikigamiStdio = "shikigami --state ./state acp"
 
 // GrokCommand builds the ADR 0002 spawn. PATH must contain `agent`.
 func GrokCommand() (*exec.Cmd, error) {
@@ -52,6 +57,7 @@ func SpawnArgs() []string {
 
 // SpawnArgsFor is the stdio argv for a guest. Empty means Grok; an unknown
 // guest fails closed. Claude and Codex use their own CLIs (ADR 0025).
+// Shikigami uses the ADR 0060 pin (#507).
 func SpawnArgsFor(guest string) ([]string, error) {
 	switch guest {
 	case "", GuestGrok:
@@ -60,6 +66,8 @@ func SpawnArgsFor(guest string) ([]string, error) {
 		return strings.Fields(ClaudeStdio), nil
 	case "codex":
 		return []string{"codex", "app-server", "--listen", "stdio://"}, nil
+	case GuestShikigami:
+		return strings.Fields(ShikigamiStdio), nil
 	default:
 		return nil, fmt.Errorf("acp: unknown guest %q", guest)
 	}

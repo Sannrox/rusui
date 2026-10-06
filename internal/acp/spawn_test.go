@@ -2,6 +2,7 @@ package acp
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -29,4 +30,20 @@ func TestClaudeSpawnAsksBeforeEveryShellCommand(t *testing.T) {
 		}
 	}
 	t.Fatalf("no --settings in %q", argv)
+}
+
+func TestShikigamiSpawnIsThePin(t *testing.T) {
+	argv, err := SpawnArgsFor(GuestShikigami)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(argv, " ")
+	if got != ShikigamiStdio {
+		t.Fatalf("spawn %q", got)
+	}
+	for _, a := range argv {
+		if strings.Contains(a, "always-approve") {
+			t.Fatalf("always-approve in %q", argv)
+		}
+	}
 }

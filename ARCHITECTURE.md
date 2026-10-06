@@ -627,7 +627,8 @@ the guest per turn (`RUSUI_GUEST`): Grok (default) spawns
 `agent --permission-mode default agent stdio` at ACP protocolVersion 1;
 Claude Code spawns the `claude` CLI at stream-json with
 `@anthropic-ai/claude-code` 2.1.283; Codex spawns
-`codex app-server --listen stdio://` at protocol `app-server-2026-04-15`.
+`codex app-server --listen stdio://` at protocol `app-server-2026-04-15`;
+shikigami spawns `shikigami --state ./state acp` ([ADR 0060](docs/decisions/0060-shikigami-acp-guest-pin.md)).
 `claude-agent-acp` is not spawned. `internal/acp` remains the Grok ACP
 client and the editor shim.
 Every inbound `fs/*`, `terminal/*`, and `session/request_permission`
@@ -647,9 +648,10 @@ not the unattended spawn.
 Credentials ([ADR 0009](docs/decisions/0009-credential-broker.md)):
 git smart-HTTP and model egress proxies run on the **plane**. The
 guest holds only the per-turn grant (Grok's `XAI_API_KEY`, Claude Code's
-`ANTHROPIC_AUTH_TOKEN`, and git HTTP auth are that grant). The guest is
-pointed at the plane model proxy (`GROK_XAI_API_BASE_URL` or
-`ANTHROPIC_BASE_URL`); the runner **execs** it inside the container.
+`ANTHROPIC_AUTH_TOKEN`, shikigami's `OPENAI_API_KEY`, and git HTTP auth
+are that grant). The guest is
+pointed at the plane model proxy (`GROK_XAI_API_BASE_URL`,
+`ANTHROPIC_BASE_URL`, or shikigami's `OPENAI_BASE_URL`); the runner **execs** it inside the container.
 Claude Code runs with a fresh `CLAUDE_CONFIG_DIR`, never the operator's
 login. Guest egress
 `trusted` is plane proxies only. GitHub REST stays on the plane.

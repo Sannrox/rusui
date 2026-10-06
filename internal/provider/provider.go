@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	KindGrok   = "grok"
-	KindClaude = "claude"
-	KindCodex  = "codex"
+	KindGrok      = "grok"
+	KindClaude    = "claude"
+	KindCodex     = "codex"
+	KindShikigami = "shikigami"
 
 	// Pinned protocol versions. A guest that answers with another version
 	// is unsupported.
@@ -42,6 +43,8 @@ func Argv(kind string) ([]string, error) {
 		return []string{"claude", "--print", "--input-format", ClaudeStreamProto, "--output-format", ClaudeStreamProto, "--verbose", "--permission-mode", "default", "--permission-prompt-tool", "stdio", "--settings", `{"permissions":{"ask":["Bash"]}}`}, nil
 	case KindCodex:
 		return []string{"codex", "app-server", "--listen", "stdio://"}, nil
+	case KindShikigami:
+		return []string{"shikigami", "--state", "./state", "acp"}, nil
 	default:
 		return nil, fmt.Errorf("provider: unknown guest %q", kind)
 	}
@@ -56,6 +59,8 @@ func ProbeArgv(kind string) ([]string, error) {
 		return []string{"claude", "--version"}, nil
 	case KindCodex:
 		return []string{"codex", "--version"}, nil
+	case KindShikigami:
+		return []string{"shikigami", "--version"}, nil
 	default:
 		return nil, fmt.Errorf("provider: unknown guest %q", kind)
 	}
@@ -70,6 +75,8 @@ func PinnedVersion(kind string) (string, error) {
 		return ClaudeCodeVersion, nil
 	case KindCodex:
 		return CodexAppServerProto, nil
+	case KindShikigami:
+		return "acp", nil
 	default:
 		return "", fmt.Errorf("provider: unknown guest %q", kind)
 	}

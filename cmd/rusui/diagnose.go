@@ -209,11 +209,11 @@ func checkModelGuest(getenv func(string) string) ops.Check {
 	if model.Guest != acp.GuestClaude {
 		if model.GuestModel != "" {
 			check.Status = ops.StatusMisconfigured
-			check.Detail = "RUSUI_GUEST_MODEL is sent by the Claude guest; leave it unset for Grok and Codex"
+			check.Detail = "RUSUI_GUEST_MODEL is sent by the Claude guest; leave it unset for Grok, Codex, and shikigami"
 			return check
 		}
 		check.Status = ops.StatusReady
-		check.Detail = "Grok guest does not take a named model"
+		check.Detail = "guest does not take a named model"
 		return check
 	}
 	if model.GuestModel == "" {
