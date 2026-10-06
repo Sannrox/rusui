@@ -387,6 +387,11 @@ func TestDriverEnvHasTurnTokenNotPlaneSecret(t *testing.T) {
 	if !strings.Contains(joined, "url.http://rusui.plane:8080/git-proxy/github.com/.insteadof") {
 		t.Fatal(joined)
 	}
+	for _, banned := range []string{"AWS_SECRET", "NPM_TOKEN", "DOCKER_TOKEN"} {
+		if strings.Contains(joined, banned) {
+			t.Fatalf("injected secret %s in\n%s", banned, joined)
+		}
+	}
 	if !strings.Contains(joined, "Authorization: Bearer tok") {
 		t.Fatal(joined)
 	}

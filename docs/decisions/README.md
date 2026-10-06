@@ -17,7 +17,7 @@ Decisions that must outlive a single pull request.
 | [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted |
 | [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048, 0049 |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
-| [0009](0009-credential-broker.md) | P1 credential broker | Accepted |
+| [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053 |
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
 | [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted |
@@ -61,6 +61,7 @@ Decisions that must outlive a single pull request.
 | [0050](0050-guest-toolchain-in-image.md) | Bake guest toolchain into the image; add no destinations | Accepted |
 | [0051](0051-fail-on-full-lease-budget-retained.md) | Admission still fails when the lease budget is full | Accepted |
 | [0052](0052-separate-attach-and-guest-shells.md) | Attach and the guest keep separate shells | Accepted |
+| [0053](0053-wake-secret-injection-refused.md) | The guest still holds only the per-turn grant | Accepted |
 
 ## When to write an ADR
 
