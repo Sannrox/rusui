@@ -1,6 +1,6 @@
 # ADR 0058: Child-session delegation stays deferred
 
-- Status: Accepted
+- Status: Superseded by [ADR 0071](0071-bounded-child-session.md)
 - Date: 2026-10-06
 - Amends: [ADR 0040](0040-child-session-delegation-deferred.md)
   (child-session delegation is deferred; one session, one environment).

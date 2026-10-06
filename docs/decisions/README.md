@@ -14,7 +14,7 @@ Decisions that must outlive a single pull request.
 | [0003](0003-operator-surface.md) | Operator surfaces are views of one object API | Accepted |
 | [0004](0004-rusui-services-yaml.md) | services.yaml is `.rusui/services.yaml` only | Accepted |
 | [0005](0005-policy-v2-project.md) | Policy v2 is keyed by project | Accepted |
-| [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted; amended by 0069 |
+| [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted; amended by 0069, 0071 |
 | [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048, 0049, 0054, 0063, 0067 |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066 |
@@ -48,7 +48,7 @@ Decisions that must outlive a single pull request.
 | [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Accepted |
 | [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
 | [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted; amended by 0059 |
-| [0040](0040-child-session-delegation-deferred.md) | Child-session delegation is deferred | Accepted; amended by 0058 |
+| [0040](0040-child-session-delegation-deferred.md) | Child-session delegation is deferred | Superseded by 0071 |
 | [0041](0041-ha-plane-deferred.md) | An HA plane is deferred | Accepted |
 | [0042](0042-disconnected-execution-deferred.md) | Disconnected execution is deferred | Accepted |
 | [0043](0043-extension-contract-deferred.md) | An extension contract is deferred | Accepted |
@@ -66,7 +66,7 @@ Decisions that must outlive a single pull request.
 | [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Superseded by 0068 |
 | [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Superseded by 0069 |
 | [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Superseded by 0070 |
-| [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Accepted |
+| [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Superseded by 0071 |
 | [0059](0059-unattributed-operator-retained.md) | Plane calls stay one unattributed operator | Accepted |
 | [0060](0060-shikigami-acp-guest-pin.md) | Pin shikigami acp as a supported guest | Accepted |
 | [0061](0061-one-model-upstream-retained.md) | One model upstream retained | Accepted |
@@ -79,6 +79,7 @@ Decisions that must outlive a single pull request.
 | [0068](0068-project-ship-behavior.md) | Project ship behavior is pull-request or push-base | Accepted |
 | [0069](0069-schedule-binds-a-session.md) | A schedule may bind to one session | Accepted |
 | [0070](0070-session-owned-webhook.md) | A session may own a signed webhook | Accepted |
+| [0071](0071-bounded-child-session.md) | Bounded child-session delegation | Accepted |
 
 ## When to write an ADR
 

@@ -1,6 +1,6 @@
 # ADR 0040: Child-session delegation is deferred
 
-- Status: Accepted; amended by 0058
+- Status: Superseded by [ADR 0071](0071-bounded-child-session.md)
 - Date: 2026-09-29
 - Amends: none. [ADR 0006](0006-session-start.md) stands: one session,
   one environment. [ADR 0035](0035-live-environment-fork-deferred.md)
