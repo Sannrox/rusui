@@ -55,9 +55,10 @@ Decisions that must outlive a single pull request.
 | [0044](0044-plane-publishes-from-turn-result.md) | The plane publishes from the turn result | Accepted |
 | [0045](0045-local-unattended-promotion-deferred.md) | Local unattended promotion is deferred | Accepted |
 | [0046](0046-workspace-first-sequence.md) | Terminal-first remote workspace sequence | Accepted |
-| [0047](0047-guest-link.md) | Container guests reach the plane only through a stdio guest link | Accepted |
+| [0047](0047-guest-link.md) | Container guests reach the plane only through a stdio guest link | Accepted; amended by 0050 |
 | [0048](0048-pinless-run-session.md) | A project without a repository runs pinless sessions claimed by project key | Accepted |
 | [0049](0049-idle-environment-expiry-retained.md) | Idle environment expiry remains 72 hours | Accepted |
+| [0050](0050-guest-toolchain-in-image.md) | Bake guest toolchain into the image; add no destinations | Accepted |
 
 ## When to write an ADR
 

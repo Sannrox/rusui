@@ -22,6 +22,9 @@ func TestGuestDialAllowedTrustedPlaneOnly(t *testing.T) {
 		{"api.x.ai", false},
 		{"github.com", false},
 		{"api.github.com", false},
+		{"registry.npmjs.org", false},
+		{"pypi.org", false},
+		{"deb.debian.org", false},
 		{"evil.proxy.example", false},
 	}
 	for _, tc := range cases {
