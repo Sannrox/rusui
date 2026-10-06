@@ -102,7 +102,7 @@ reported and exits successfully.
 | `RUSUI_GUEST_IMAGE` | container guests | Guest image identity. Empty fails closed. |
 | `XAI_API_KEY` or `RUSUI_XAI_API_KEY` | model proxy (Grok) | Plane secret; never copied into the guest. |
 | `RUSUI_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY` | model proxy (Claude Code) | Plane secret, sent upstream as `x-api-key`; never copied into the guest. |
-| `RUSUI_GUEST` | no | `grok` (default), `claude`, or `codex` ([ADR 0025](decisions/0025-provider-boundary.md)). |
+| `RUSUI_GUEST` | no | `grok` (default), `claude`, `codex`, or `shikigami` ([ADR 0025](decisions/0025-provider-boundary.md), [ADR 0060](decisions/0060-shikigami-acp-guest-pin.md)). `shikigami` spawns `shikigami --state ./state acp`; the binary must be on `PATH`. |
 | `RUSUI_GUEST_VERSION` | no | Pinned guest version recorded on a Turn measurement when set. Unset stays unknown. |
 | `RUSUI_OTEL_ENDPOINT` | no | Optional collector URL. Unset: measurements stay on the plane and nothing is exported. A collector that is down does not fail the Turn. |
 | `RUSUI_GUEST_MODEL` | Claude guest | Model id the Claude guest sends as `ANTHROPIC_MODEL`. Unset, `model_guest` is misconfigured. A model list does not prove this id can prompt. The Grok harness does not take this id. |
@@ -138,13 +138,15 @@ RUSUI_MODEL_UPSTREAM=http://127.0.0.1:8317     # CLI proxy on the plane host
 RUSUI_ANTHROPIC_API_KEY=<the proxy's client key>
 ```
 
-`RUSUI_GUEST` names the provider (`grok`, `claude`, or `codex`). Each
+`RUSUI_GUEST` names the provider (`grok`, `claude`, `codex`, or
+`shikigami`). Each
 account is one instance directory created by rusui: `CLAUDE_CONFIG_DIR`
 for Claude, `CODEX_HOME` for Codex, and `RUSUI_PROVIDER_INSTANCE` for
 Grok. A `HOME` that points at another directory is refused, and a
 directory copied from another home is refused. The pinned CLIs are Grok
 `agent` at ACP protocolVersion 1, Claude Code 2.1.283 over `stream-json`,
-and `codex app-server` at `app-server-2026-04-15`.
+`codex app-server` at `app-server-2026-04-15`, and
+`shikigami --state ./state acp`.
 
 `RUSUI_GUEST` names the harness (the guest process and the proxy
 protocol). `RUSUI_GUEST_MODEL` names the model id. `RUSUI_MODEL_UPSTREAM`

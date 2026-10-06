@@ -12,7 +12,7 @@ combinations are not claimed:
 | Host OS | Linux or macOS |
 | Runner | one `rusui-runner` on the same host as the plane ([ADR 0029](decisions/0029-single-host-runner.md)) |
 | Runtime | Docker or Podman CLI (`docker`/`podman` on `PATH`) |
-| Guest | `$RUSUI_GUEST_IMAGE` (Grok ACP, Claude Code CLI 2.1.283, or Codex app-server) |
+| Guest | `$RUSUI_GUEST_IMAGE` (Grok ACP, Claude Code CLI 2.1.283, or Codex app-server). `RUSUI_GUEST=shikigami` spawns `shikigami --state ./state acp`; the reference image does not bake that binary. |
 | Egress | `trusted`: HTTPS to `rusui.plane` only |
 | Listen | loopback `127.0.0.1` |
 

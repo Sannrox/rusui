@@ -47,9 +47,10 @@ Use the [implement session how-to](implement-sessions.md).
 - A tunnel or webhook relay if GitHub or Slack must reach the process.
 - For review turns: `-acp` (the plane's guest: Grok by default; for
   `RUSUI_GUEST=claude` the image or `PATH` needs the Claude Code CLI
-  2.1.283; for `codex`, the `codex` CLI) or a process driver command
-  (`-driver`) that prints review JSON on stdout. There is no
-  in-tree `review-driver` binary.
+  2.1.283; for `codex`, the `codex` CLI; for `shikigami`, `shikigami`
+  on `PATH` speaking `shikigami --state ./state acp`) or a process
+  driver command (`-driver`) that prints review JSON on stdout. There
+  is no in-tree `review-driver` binary.
 
 ## Set up with `rusui setup`
 

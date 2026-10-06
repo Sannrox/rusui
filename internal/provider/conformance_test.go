@@ -27,7 +27,7 @@ func TestClaudeArgvRequiresPrint(t *testing.T) {
 }
 
 func TestArgvMatchesRunnerSpawn(t *testing.T) {
-	for _, kind := range []string{KindGrok, KindClaude, KindCodex} {
+	for _, kind := range []string{KindGrok, KindClaude, KindCodex, KindShikigami} {
 		want, err := Argv(kind)
 		if err != nil {
 			t.Fatal(err)

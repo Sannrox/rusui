@@ -75,8 +75,13 @@ func ModelConfigFromEnv(getenv func(string) string) (ModelConfig, error) {
 	case "codex":
 		c.Guest, c.Provider = "codex", ProviderOpenAI
 		c.Key = firstNonEmpty(getenv("RUSUI_OPENAI_API_KEY"), getenv("OPENAI_API_KEY"))
+	case acp.GuestShikigami:
+		// Shikigami's HTTP model uses OpenAI-compatible Chat Completions
+		// and OPENAI_API_KEY (ADR 0060: credentials from the environment).
+		c.Guest, c.Provider = acp.GuestShikigami, ProviderOpenAI
+		c.Key = firstNonEmpty(getenv("RUSUI_OPENAI_API_KEY"), getenv("OPENAI_API_KEY"), getenv("XAI_API_KEY"), getenv("RUSUI_XAI_API_KEY"))
 	default:
-		return c, fmt.Errorf("RUSUI_GUEST %q: want grok, claude, or codex", g)
+		return c, fmt.Errorf("RUSUI_GUEST %q: want grok, claude, codex, or shikigami", g)
 	}
 	if id := strings.TrimSpace(getenv("RUSUI_GUEST_MODEL")); id != "" {
 		if !acp.ValidGuestModel(id) {

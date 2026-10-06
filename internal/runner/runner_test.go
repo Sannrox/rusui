@@ -570,11 +570,25 @@ func TestUnknownGuestFailsClosed(t *testing.T) {
 	if _, err := acp.SpawnArgsFor("cursor"); err == nil {
 		t.Fatal("unknown guest accepted")
 	}
-	if _, err := acp.SpawnArgsFor("shikigami"); err == nil {
-		t.Fatal("shikigami spawn landed before #507")
-	}
 	if argv, err := acp.SpawnArgsFor(""); err != nil || strings.Join(argv, " ") != acp.GrokStdio {
 		t.Fatalf("default %v %v", argv, err)
+	}
+}
+
+func TestShikigamiGuestEnvHoldsOnlyTheGrant(t *testing.T) {
+	a := &runner.Assignment{TurnID: 9, TurnToken: "grant", Guest: acp.GuestShikigami, ModelBaseURL: "http://127.0.0.1:8080/model-proxy"}
+	t.Setenv("OPENAI_API_KEY", "sk-operator")
+	t.Setenv("XAI_API_KEY", "xai-operator")
+	joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
+	if !strings.Contains(joined, "OPENAI_API_KEY=grant") || !strings.Contains(joined, "OPENAI_BASE_URL=http://127.0.0.1:8080/model-proxy") || !strings.Contains(joined, "SHIKIGAMI_MODEL_ADAPTER=http") {
+		t.Fatalf("shikigami env:\n%s", joined)
+	}
+	if strings.Contains(joined, "sk-operator") || strings.Contains(joined, "xai-operator") || strings.Contains(joined, "XAI_API_KEY=") {
+		t.Fatalf("operator key leaked:\n%s", joined)
+	}
+	argv, err := acp.SpawnArgsFor(acp.GuestShikigami)
+	if err != nil || strings.Join(argv, " ") != acp.ShikigamiStdio {
+		t.Fatalf("spawn %v %v", argv, err)
 	}
 }
 
