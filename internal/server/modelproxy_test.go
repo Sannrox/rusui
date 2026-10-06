@@ -269,6 +269,13 @@ func TestModelConfigFromEnv(t *testing.T) {
 	if err != nil || c.GuestModel != "glm-5.3" {
 		t.Fatalf("guest model %+v %v", c, err)
 	}
+	c, err = ModelConfigFromEnv(env(map[string]string{
+		"RUSUI_MODEL_UPSTREAM":    "http://127.0.0.1:8317",
+		"RUSUI_MODEL_CONNECTIONS": "xai=http://127.0.0.1:1",
+	}))
+	if err != nil || c.Origin == nil || c.Origin.String() != "http://127.0.0.1:8317" {
+		t.Fatalf("one upstream %+v %v", c, err)
+	}
 	if _, err := ModelConfigFromEnv(env(map[string]string{"RUSUI_GUEST_MODEL": "bad model"})); !errors.Is(err, ErrInvalidGuestModel) || (err != nil && strings.Contains(err.Error(), "bad model")) {
 		t.Fatalf("invalid model: %v", err)
 	}
