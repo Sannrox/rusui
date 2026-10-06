@@ -68,7 +68,7 @@ platform default), plane TLS (a local CA and a certificate for
 generated worker, webhook, Slack, and operator secrets, a policy skeleton
 when none exists, and, when Docker or Podman is installed, the
 `rusui-trusted` network and the reference guest image. The image
-(`build/guest-image`: git, `gh`, Node.js 22, Claude Code CLI 2.1.283) is
+(`build/guest-image`: git, `gh`, Node.js 22, Go 1.26.6, Chromium, Claude Code CLI 2.1.283) is
 tagged by its image ID, so the tag names the bits the guest runs (the
 Dockerfile hash is only the build cache key); `-rebuild-image` rebuilds it
 with `--pull --no-cache`. Setup records the tag as `RUSUI_GUEST_IMAGE`

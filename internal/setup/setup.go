@@ -350,7 +350,7 @@ func ensureGuestImage(p Paths, rt Network, apply, rebuild bool) ([]Step, error) 
 	case built:
 		steps = append(steps, Step{Rotate, "guest image", "rebuild " + cache + " with --pull --no-cache"})
 	default:
-		steps = append(steps, Step{Create, "guest image", "build " + cache + " (git, gh, Node.js, Claude Code CLI)"})
+		steps = append(steps, Step{Create, "guest image", "build " + cache + " (git, gh, Node.js, Go, Chromium, Claude Code CLI)"})
 	}
 	if apply && (!built || rebuild) {
 		if err := rt.BuildImage(cache, guestimage.Dockerfile, rebuild); err != nil {

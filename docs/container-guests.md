@@ -13,7 +13,10 @@ harness ([ADR 0047](decisions/0047-guest-link.md)). An implement session
 under agent publication also reaches `github.com` and `api.github.com`
 through its link. Direct addresses, IPv6, host loopback, DNS, and other
 names are unreachable, so `.agents/setup` cannot download from the
-internet; put dependencies in the image or the snapshot. Preview reaches
+internet; put dependencies in the image or the snapshot. The reference
+image bakes Go, make, a C toolchain, and headless Chromium so a session
+can run the project's tests and capture a page without extra destinations
+([ADR 0050](decisions/0050-guest-toolchain-in-image.md)). Preview reaches
 a guest port through the same kind of link. The guest image must include
 Node, which runs the guest side of the link. `rusui diagnose` checks the
 path with a throwaway guest (`guest_link`). The plane keeps listening on

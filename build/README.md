@@ -48,9 +48,11 @@ passing `-addr 0.0.0.0:8080`.
 
 ## Guest image
 
-`build/guest-image/Dockerfile` is the reference rusui guest (ADR 0018 D4):
-pinned Node.js 22 base, git, `gh` (checksum-verified), and
-`@agentclientprotocol/claude-agent-acp`. `make guest-image` builds it with the cache tag
+`build/guest-image/Dockerfile` is the reference rusui guest (ADR 0018 D4,
+ADR 0050): pinned Node.js 22 base, git, `gh` (checksum-verified), pinned
+Go matching `.go-version`, make, a C toolchain, headless Chromium, and the
+pinned Claude Code CLI. `claude-agent-acp` is not installed. The image adds
+no guest-link destinations. `make guest-image` builds it with the cache tag
 `rusui-guest:build-<first 16 hex of the Dockerfile sha256>`, then tags the
 result `rusui-guest:<first 16 hex of the image ID>` and prints that tag, the
 same one `rusui setup apply` records. The plane CA is mounted at run time.
