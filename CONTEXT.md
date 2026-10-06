@@ -57,7 +57,7 @@ not selected ([ADR 0001](docs/decisions/0001-environment-plane.md) D8, [ADR 0041
 _Avoid_: Postgres, leader lease, active-active, second writer
 
 **Snapshot**:
-The prepared, reusable tree identified by `source_hash` (base image digest, git pin, `.agents/setup` bytes). Two sessions may share a snapshot; they never share an environment. A second session starts from a snapshot, never from a live fork ([ADR 0035](docs/decisions/0035-live-environment-fork-deferred.md)).
+The prepared, reusable tree identified by `source_hash` (base image digest, git pin, `.agents/setup` bytes). Two sessions may share a snapshot; they never share an environment. A second session starts from a snapshot, never from a live fork ([ADR 0035](docs/decisions/0035-live-environment-fork-deferred.md)). A snapshot hit skips plane pre-clone, pre-setup, and `.agents/setup`.
 _Avoid_: environment, GitHub item snapshot hash, image tag
 
 **Schedule**:
@@ -122,6 +122,10 @@ _Avoid_: PAT, installation token, `auth.json`, xAI API key, registry or cloud ke
 **Wake secret**:
 A project `secrets` allowlist of plane ids. At wake the plane injects values from `RUSUI_SECRET_<ID>` at `/run/rusui/secrets/<id>` and as uppercase env. On sleep they are gone. The receipt names the id, session, and turn, not the value ([ADR 0066](docs/decisions/0066-inject-secret-at-wake.md)).
 _Avoid_: long-lived token in the image, OIDC (ADR 0033)
+
+**Plane hook**:
+A project script stored next to `policy.yaml` at `hooks/<slug>/pre-clone` and `hooks/<slug>/pre-setup`. Pre-clone runs before the git pin is placed. Pre-setup runs immediately before `.agents/setup`. A non-zero exit leaves no environment. Output is in `rusui envlog`. The hook environment does not receive the operator token or a provider key. Wake still runs `.agents/resume` only ([ADR 0067](docs/decisions/0067-plane-stored-pre-hooks.md)).
+_Avoid_: services file from another product, operator token in hook env
 
 **Plane proxy**:
 Git smart-HTTP and model egress on the plane, which redeem a grant for the real token. GitHub REST stays plane-internal. The guest may reach only these endpoints under egress `trusted`. HTTPS to `rusui.plane`; plane CA at `/usr/local/share/ca-certificates/rusui-plane.crt`. Snapshot prepare uses a read-only grant on the same git proxy. A disconnected or local-inference session profile is not selected ([ADR 0042](docs/decisions/0042-disconnected-execution-deferred.md)).

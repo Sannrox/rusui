@@ -161,6 +161,11 @@ func main() {
 	}
 	eng := engine.New(st, p, api, clock.Real{})
 	eng.Secrets = engine.SecretsFromEnv(os.Environ())
+	if pre, setup, err := engine.ReadPlaneHooks(filepath.Join(filepath.Dir(*pol), "hooks")); err != nil {
+		log.Fatal(err)
+	} else {
+		eng.PreCloneHooks, eng.PreSetupHooks = pre, setup
+	}
 	// Plane publication (ADR 0044) needs the App: implement guests hold no
 	// GitHub credential, so the plane is the only publisher.
 	var repoTokens *gh.InstallationTokens

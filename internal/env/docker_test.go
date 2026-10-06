@@ -111,6 +111,30 @@ func TestDockerCLIPutSecretKeepsValueOffArgv(t *testing.T) {
 	}
 }
 
+func TestDockerCLIExecScriptKeepsScriptOffArgv(t *testing.T) {
+	bin, logPath := stubDocker(t)
+	d := DockerCLI{Bin: bin}
+	const script = "echo plane-hook-secret"
+	out, truncated, err := d.ExecScript("0123456789abcdef", script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated || len(out) != 0 {
+		t.Fatalf("out %q truncated=%v", out, truncated)
+	}
+	logb, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(logb)
+	if strings.Contains(log, script) {
+		t.Fatalf("script on argv: %s", log)
+	}
+	if !strings.Contains(log, "exec -i -w "+workspaceDir+" 0123456789abcdef /bin/sh") {
+		t.Fatalf("cli %s", log)
+	}
+}
+
 func TestDockerCLIExecStdioKeepsValuesOffArgv(t *testing.T) {
 	bin, logPath := stubDocker(t)
 	envLog := filepath.Join(t.TempDir(), "env")

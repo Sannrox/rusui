@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/sannrox/rusui/internal/acp"
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -36,10 +37,10 @@ func (s *Server) sessionLogs(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(acts)
 }
 
-// sessionEnvlog returns the stored setup, resume, and service output of
-// the session's environment (#334). It is distinct from the action
-// receipts of /logs. Like the transcript, it is operator-only: hook output
-// may hold workspace secrets.
+// sessionEnvlog returns the stored pre-clone, pre-setup, setup, resume,
+// and service output of the session's environment (#334, #504). It is
+// distinct from the action receipts of /logs. Like the transcript, it is
+// operator-only: hook output may hold workspace secrets.
 func (s *Server) sessionEnvlog(w http.ResponseWriter, r *http.Request) {
 	if !s.OperatorBrowserOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
@@ -55,7 +56,9 @@ func (s *Server) sessionEnvlog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kind := r.URL.Query().Get("kind")
-	if kind != "" && kind != "setup" && kind != "resume" && kind != "service" {
+	switch kind {
+	case "", env.CaptureSetup, env.CaptureResume, env.CaptureService, env.CapturePreClone, env.CapturePreSetup:
+	default:
 		http.Error(w, "kind", http.StatusBadRequest)
 		return
 	}

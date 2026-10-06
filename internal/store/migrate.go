@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 36
+const CurrentSchema = 37
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -477,7 +477,44 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 37 {
+		if err := migrateV37(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 37); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV37 lets environment captures store plane pre-clone and pre-setup
+// output (#504). SQLite cannot alter a CHECK, so the table is rebuilt.
+func migrateV37(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`
+CREATE TABLE environment_captures_v37 (
+  environment_id INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('setup', 'resume', 'service', 'pre-clone', 'pre-setup')),
+  name TEXT NOT NULL DEFAULT '',
+  output BLOB NOT NULL,
+  truncated INTEGER NOT NULL DEFAULT 0,
+  failed INTEGER NOT NULL DEFAULT 0,
+  recorded_at TEXT NOT NULL,
+  PRIMARY KEY (environment_id, kind, name)
+);
+INSERT INTO environment_captures_v37 (environment_id, kind, name, output, truncated, failed, recorded_at)
+  SELECT environment_id, kind, name, output, truncated, failed, recorded_at FROM environment_captures;
+DROP TABLE environment_captures;
+ALTER TABLE environment_captures_v37 RENAME TO environment_captures;
+`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // migrateV36 lets environment receipts name an injected secret id (#503).

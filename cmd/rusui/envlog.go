@@ -11,13 +11,14 @@ import (
 	"time"
 )
 
-// envlogCLI prints the stored setup, resume, and service output of a
-// session's environment (#334). `rusui logs` stays the action receipts (ADR 0031).
+// envlogCLI prints the stored pre-clone, pre-setup, setup, resume, and
+// service output of a session's environment (#334, #504). `rusui logs`
+// stays the action receipts (ADR 0031).
 func envlogCLI(args []string) {
 	fs := flag.NewFlagSet("envlog", flag.ExitOnError)
 	base := fs.String("url", "http://127.0.0.1:8080", "plane URL")
 	token := fs.String("token", os.Getenv("RUSUI_OPERATOR_TOKEN"), "operator token")
-	kind := fs.String("kind", "", "filter by kind (setup, resume, service)")
+	kind := fs.String("kind", "", "filter by kind (pre-clone, pre-setup, setup, resume, service)")
 	name := fs.String("name", "", "filter by service name")
 	omitBody := fs.Bool("omit-body", false, "list captures without output bodies")
 	_ = fs.Parse(args)

@@ -87,6 +87,37 @@ func TestReplaceEnvironmentCapturesSkipsUnchangedBlobs(t *testing.T) {
 	}
 }
 
+func TestListSessionCapturesOrdersPlaneHooks(t *testing.T) {
+	s, envID, sessionID := captureFixture(t)
+	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
+	for _, row := range []struct {
+		kind, out string
+	}{
+		{"service", "svc\n"},
+		{"resume", "resume\n"},
+		{"setup", "setup\n"},
+		{"pre-setup", "pre-setup\n"},
+		{"pre-clone", "pre-clone\n"},
+	} {
+		if err := ReplaceEnvironmentCaptures(s, envID, row.kind, []CaptureRow{{Output: []byte(row.out)}}, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	caps, err := ListSessionCaptures(s, sessionID, CaptureListFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(caps) != 5 {
+		t.Fatalf("caps %+v", caps)
+	}
+	want := []string{"pre-clone", "pre-setup", "setup", "resume", "service"}
+	for i, kind := range want {
+		if caps[i].Kind != kind {
+			t.Fatalf("order[%d]=%s want %s (%+v)", i, caps[i].Kind, kind, caps)
+		}
+	}
+}
+
 func TestListSessionCapturesFiltersAndOmitsBodies(t *testing.T) {
 	s, envID, sessionID := captureFixture(t)
 	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)

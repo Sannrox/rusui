@@ -1,19 +1,23 @@
 package env
 
-// CaptureLimit bounds one stored setup, resume, or service capture (#334).
-// A longer capture keeps its last CaptureLimit bytes.
+// CaptureLimit bounds one stored pre-clone, pre-setup, setup, resume, or
+// service capture (#334, #504). A longer capture keeps its last CaptureLimit
+// bytes.
 const CaptureLimit = 1 << 20
 
 // Capture kinds.
 const (
-	CaptureSetup   = "setup"
-	CaptureResume  = "resume"
-	CaptureService = "service"
+	CaptureSetup    = "setup"
+	CaptureResume   = "resume"
+	CaptureService  = "service"
+	CapturePreClone = "pre-clone"
+	CapturePreSetup = "pre-setup"
 )
 
-// Capture is the combined stdout and stderr of one setup, resume, or
-// declared-service start. Ran is false when the hook file is absent.
-// Name is the service name for CaptureService and empty otherwise.
+// Capture is the combined stdout and stderr of one pre-clone, pre-setup,
+// setup, resume, or declared-service start. Ran is false when the hook
+// file is absent. Name is the service name for CaptureService and empty
+// otherwise.
 type Capture struct {
 	Kind      string
 	Name      string

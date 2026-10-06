@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// EnvironmentCapture is the stored output of the last setup, resume, or
-// declared-service start of an environment (#334). Output is UTF-8 with
-// invalid bytes replaced; it is text, never markup.
+// EnvironmentCapture is the stored output of the last pre-clone, pre-setup,
+// setup, resume, or declared-service start of an environment (#334, #504).
+// Output is UTF-8 with invalid bytes replaced; it is text, never markup.
 type EnvironmentCapture struct {
 	Kind       string    `json:"kind"`
 	Name       string    `json:"name,omitempty"`
@@ -120,8 +120,8 @@ func ReplaceEnvironmentCaptures(s *Store, envID int64, kind string, rows []Captu
 }
 
 // ListSessionCaptures returns the captures of the session's environment in
-// setup, resume, service order. Filter Kind and Name narrow the rows;
-// OmitBody skips the output BLOB.
+// pre-clone, pre-setup, setup, resume, service order. Filter Kind and Name
+// narrow the rows; OmitBody skips the output BLOB.
 func ListSessionCaptures(s *Store, sessionID int64, filter CaptureListFilter) ([]EnvironmentCapture, error) {
 	q := `SELECT c.kind, c.name, c.output, c.truncated, c.failed, c.recorded_at
 FROM environment_captures c JOIN sessions se ON se.environment_id = c.environment_id
@@ -140,7 +140,7 @@ WHERE se.id=?`
 		q += ` AND c.name=?`
 		args = append(args, filter.Name)
 	}
-	q += ` ORDER BY CASE c.kind WHEN 'setup' THEN 0 WHEN 'resume' THEN 1 ELSE 2 END, c.name`
+	q += ` ORDER BY CASE c.kind WHEN 'pre-clone' THEN 0 WHEN 'pre-setup' THEN 1 WHEN 'setup' THEN 2 WHEN 'resume' THEN 3 ELSE 4 END, c.name`
 	rows, err := s.DB.Query(q, args...)
 	if err != nil {
 		return nil, err
