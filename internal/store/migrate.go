@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 38
+const CurrentSchema = 39
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -493,7 +493,36 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 39 {
+		if err := migrateV39(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 39); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV39 lets a session own a signed webhook (ADR 0070, #510).
+func migrateV39(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS session_webhooks (
+  session_id INTEGER PRIMARY KEY,
+  secret TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS session_webhook_deliveries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  delivery_id TEXT NOT NULL,
+  accepted INTEGER NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(session_id, delivery_id)
+);
+`)
+	return err
 }
 
 // migrateV38 lets a schedule bind to one session (ADR 0069, #506).

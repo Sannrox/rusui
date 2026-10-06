@@ -58,6 +58,10 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('schedules') WHERE name='session_id'`).Scan(&schedSessionCol); err != nil || schedSessionCol != 1 {
 		t.Fatalf("schedules.session_id missing after upgrade: %d %v", schedSessionCol, err)
 	}
+	var sessionHooks int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_webhooks'`).Scan(&sessionHooks); err != nil || sessionHooks != 1 {
+		t.Fatalf("session_webhooks missing after upgrade: %d %v", sessionHooks, err)
+	}
 	var pubs int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='publication_attempts'`).Scan(&pubs); err != nil || pubs != 1 {
 		t.Fatalf("publication_attempts missing after upgrade: %d %v", pubs, err)
