@@ -27,7 +27,7 @@ Decisions that must outlive a single pull request.
 | [0016](0016-local-interactive-runtime.md) | Local interactive runtime boundary with Sumika | Accepted |
 | [0017](0017-claude-guest-and-model-upstream.md) | Claude Code guest, operator model upstream, and a fenced self-test | Accepted |
 | [0018](0018-rusui-setup.md) | `rusui setup` provisions a host; `rusui diagnose` verifies it | Accepted |
-| [0019](0019-rusui-attach-client.md) | One Rusui attach command selects the runtime-owned transport | Accepted |
+| [0019](0019-rusui-attach-client.md) | One Rusui attach command selects the runtime-owned transport | Accepted; amended by 0052 |
 | [0020](0020-turn-scoped-github-publication.md) | Turn-scoped GitHub publication stays behind the plane | Accepted |
 | [0021](0021-gitlab-intake.md) | First GitLab intake is GitLab.com project issues only | Accepted |
 | [0022](0022-public-repo-isolation.md) | Public-repository unattended sessions default to the container driver | Accepted |
@@ -60,6 +60,7 @@ Decisions that must outlive a single pull request.
 | [0049](0049-idle-environment-expiry-retained.md) | Idle environment expiry remains 72 hours | Accepted |
 | [0050](0050-guest-toolchain-in-image.md) | Bake guest toolchain into the image; add no destinations | Accepted |
 | [0051](0051-fail-on-full-lease-budget-retained.md) | Admission still fails when the lease budget is full | Accepted |
+| [0052](0052-separate-attach-and-guest-shells.md) | Attach and the guest keep separate shells | Accepted |
 
 ## When to write an ADR
 
