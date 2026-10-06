@@ -728,26 +728,15 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 		if err != nil {
 			return err
 		}
-		access := activePolicy.ReviewAccess(repo, paused)
-		if access.Reason == policy.ReviewReasonPaused {
-			return errPaused
-		}
-		if access.Reason == policy.ReviewReasonInvalidRepo || access.Reason == policy.ReviewReasonUnboundRepo || access.Reason == policy.ReviewReasonMissingProject {
-			return errPolicy
-		}
-		repoPolicy, ok := activePolicy.Repo(repo)
-		if !ok {
-			return errPolicy
-		}
-		proj, ok := activePolicy.Project(repoPolicy.Project)
-		if !ok {
-			return errPolicy
+		proj, repoPolicy, err := e.claimScope(repo, paused)
+		if err != nil {
+			return err
 		}
 		// Each lane has its own gate: review needs review policy and budget;
 		// run and scheduled need the project to admit that session kind.
 		var lanes []string
 		budgetOut := false
-		if repoPolicy.Review {
+		if repoPolicy != nil && repoPolicy.Review {
 			day := e.now().Format("2006-01-02")
 			n, err := store.CountReviewsToday(tx, repo, day)
 			if err != nil {
@@ -822,12 +811,12 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 		if err != nil {
 			return err
 		}
-		leased, err := store.CountLeasedTurnsTx(tx, repoPolicy.Project, proj.Repos)
+		leased, err := store.CountLeasedTurnsTx(tx, proj.Slug, proj.Repos)
 		if err != nil {
 			return err
 		}
 		if leased >= proj.MaxConcurrentLeases() {
-			e.exception(fmt.Sprintf("concurrent lease cap exhausted for project %s", repoPolicy.Project))
+			e.exception(fmt.Sprintf("concurrent lease cap exhausted for project %s", proj.Slug))
 			return errBudget
 		}
 		now := e.now()
@@ -1578,10 +1567,44 @@ func (e *Engine) ApplyAttempt(repo string, item int) error {
 
 func (e *Engine) repoPaused(tx *sql.Tx, repo string) (bool, error) {
 	slug := ""
-	if r, ok := e.PolicySnapshot().Repo(repo); ok {
+	if s, ok := policy.ParseProjectKey(repo); ok {
+		slug = s
+	} else if r, ok := e.PolicySnapshot().Repo(repo); ok {
 		slug = r.Project
 	}
 	return store.Paused(tx, slug)
+}
+
+// claimScope is the policy that admits a claim key. A project key is only
+// valid for a project with zero bound repositories (ADR 0048).
+func (e *Engine) claimScope(repo string, paused bool) (policy.Project, *policy.Repo, error) {
+	active := e.PolicySnapshot()
+	if slug, ok := policy.ParseProjectKey(repo); ok {
+		if paused {
+			return policy.Project{}, nil, errPaused
+		}
+		p, ok := active.Project(slug)
+		if !ok || len(p.Repos) != 0 {
+			return policy.Project{}, nil, errPolicy
+		}
+		return p, nil, nil
+	}
+	access := active.ReviewAccess(repo, paused)
+	if access.Reason == policy.ReviewReasonPaused {
+		return policy.Project{}, nil, errPaused
+	}
+	if access.Reason == policy.ReviewReasonInvalidRepo || access.Reason == policy.ReviewReasonUnboundRepo || access.Reason == policy.ReviewReasonMissingProject {
+		return policy.Project{}, nil, errPolicy
+	}
+	rp, ok := active.Repo(repo)
+	if !ok {
+		return policy.Project{}, nil, errPolicy
+	}
+	p, ok := active.Project(rp.Project)
+	if !ok {
+		return policy.Project{}, nil, errPolicy
+	}
+	return p, &rp, nil
 }
 
 func (e *Engine) SetPause(project string, on bool) error {

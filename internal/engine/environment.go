@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -474,7 +475,7 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 		return nil
 	}
 	pin := item.GitPin()
-	if pin == "" {
+	if pin == "" && !policy.IsProjectKey(item.Repo) {
 		return nil
 	}
 	turn, err := store.GetTurn(e.Store, turnID)

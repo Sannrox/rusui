@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/policy"
 )
 
 // TreeSource fetches a git pin onto the host. Implementations must not write
@@ -65,6 +66,10 @@ func snapshotStamp(hash string) []byte {
 // hash (ADR 0007). Without a pin there is no snapshot, so setup runs on
 // every new environment. The capture is nil when setup was not attempted.
 func (e *Engine) prepareWorkspace(d env.Driver, handle, repo, pin, hash string) (*env.Capture, error) {
+	if policy.IsProjectKey(repo) {
+		// Empty workspace, no .git, no setup (ADR 0048).
+		return nil, nil
+	}
 	if e.Tree == nil || repo == "" || pin == "" || hash == "" {
 		return runSetup(d, handle, hash)
 	}

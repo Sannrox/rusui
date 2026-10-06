@@ -41,6 +41,7 @@ func main() {
 	base := flag.String("url", "http://127.0.0.1:8080", "plane URL")
 	var repos repoFlags
 	flag.Var(&repos, "repo", "repository to claim (repeat to serve multiple repositories)")
+	project := flag.String("project", "", "project slug to claim (exclusive with -repo; ADR 0048)")
 	token := flag.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "runner bootstrap token")
 	name := flag.String("name", "local", "runner name")
 	driver := flag.String("driver", "", "process driver command (space-separated)")
@@ -53,8 +54,18 @@ func main() {
 		fmt.Printf("rusui-runner %s commit=%s time=%s\n", Version, GitCommit, BuildTime)
 		return
 	}
+	if *project != "" && len(repos) > 0 {
+		fmt.Fprintln(os.Stderr, "-project and -repo are exclusive")
+		os.Exit(1)
+	}
+	if *project != "" {
+		if err := repos.Set("project:" + *project); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
 	if len(repos) == 0 || (*driver == "" && !*acpHost) {
-		fmt.Fprintln(os.Stderr, "need at least one -repo and -driver, or -repo and -acp")
+		fmt.Fprintln(os.Stderr, "need at least one -repo or -project, and -driver or -acp")
 		os.Exit(1)
 	}
 	c := &runner.Client{Base: *base, Bootstrap: *token, Repos: append([]string(nil), repos...), Name: *name}

@@ -125,6 +125,9 @@ func (f *Fake) CallCount() int {
 }
 
 func (f *Fake) DefaultSHA(repo string) (string, error) {
+	if strings.Contains(repo, ":") {
+		return "", fmt.Errorf("github: bad repo %q", repo)
+	}
 	f.Mu.Lock()
 	defer f.Mu.Unlock()
 	for _, rec := range f.Items {
@@ -136,6 +139,9 @@ func (f *Fake) DefaultSHA(repo string) (string, error) {
 }
 
 func (f *Fake) GetItem(repo string, item int, kind string) (snapshot.Item, error) {
+	if strings.Contains(repo, ":") {
+		return snapshot.Item{}, fmt.Errorf("github: bad repo %q", repo)
+	}
 	f.Mu.Lock()
 	delay, hang := f.FetchDelay, f.FetchHang
 	block := f.BlockFetch

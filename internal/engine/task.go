@@ -43,6 +43,9 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 	if spec.EffortKey == "" || spec.Prompt == "" || spec.Repo == "" || spec.Ref == "" || spec.BaseSHA == "" {
 		return nil, fmt.Errorf("%w: missing pin", ErrTaskBlocked)
 	}
+	if len(p.Repos) == 0 || policy.IsProjectKey(spec.Repo) {
+		return nil, fmt.Errorf("%w: project-key session has no implement pin", ErrTaskBlocked)
+	}
 	if !slices.Contains(p.Repos, spec.Repo) {
 		return nil, fmt.Errorf("%w: repo not bound", ErrTaskBlocked)
 	}

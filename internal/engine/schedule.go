@@ -53,10 +53,7 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string) (int64, error) {
 	if !ok || !p.AllowsKind(policy.KindScheduled) {
 		return 0, fmt.Errorf("policy")
 	}
-	if len(p.Repos) == 0 {
-		return 0, fmt.Errorf("project has no bound repo")
-	}
-	repo := p.Repos[0]
+	repo, sha := e.operatorSessionPin(p)
 	var sessionID int64
 	err := e.Store.Tx(func(tx *sql.Tx) error {
 		paused, err := store.Paused(tx, sc.Project)
@@ -86,12 +83,6 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string) (int64, error) {
 		sid, item, err := store.InsertScheduledSessionTx(tx, sc.Project, repo, sc.Prompt, sc.ID)
 		if err != nil {
 			return err
-		}
-		sha := ""
-		if d, ok := e.GitHub.(interface {
-			DefaultSHA(string) (string, error)
-		}); ok {
-			sha, _ = d.DefaultSHA(repo)
 		}
 		it := snapshot.Item{
 			Repo: repo, Item: item, ItemKind: "scheduled", State: "open",
