@@ -1,8 +1,10 @@
 # ADR 0039: Shared-operator governance is deferred
 
-- Status: Accepted
+- Status: Accepted; amended by 0059
 - Date: 2026-09-29
 - Amends: none. [ADR 0012](0012-operator-access.md) stands unchanged.
+- Amended by: [ADR 0059](0059-unattributed-operator-retained.md).
+  Operator calls stay unattributed. A member id is not identity.
 - Resolves: [#127](https://github.com/Sannrox/rusui/issues/127)
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0003](0003-operator-surface.md) (Slack is notify and approve;
