@@ -1,6 +1,6 @@
 # ADR 0053: The guest still holds only the per-turn grant
 
-- Status: Accepted
+- Status: Superseded by [ADR 0066](0066-inject-secret-at-wake.md)
 - Date: 2026-10-06
 - Amends: [ADR 0009](0009-credential-broker.md) (durable secrets stay
   on the plane; the guest holds only the per-turn grant).

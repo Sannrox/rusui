@@ -17,7 +17,7 @@ Decisions that must outlive a single pull request.
 | [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted |
 | [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048, 0049, 0054, 0063 |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
-| [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053 |
+| [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066 |
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
 | [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059 |
@@ -61,7 +61,7 @@ Decisions that must outlive a single pull request.
 | [0050](0050-guest-toolchain-in-image.md) | Bake guest toolchain into the image; add no destinations | Accepted |
 | [0051](0051-fail-on-full-lease-budget-retained.md) | Admission still fails when the lease budget is full | Superseded by 0064 |
 | [0052](0052-separate-attach-and-guest-shells.md) | Attach and the guest keep separate shells | Superseded by 0065 |
-| [0053](0053-wake-secret-injection-refused.md) | The guest still holds only the per-turn grant | Accepted |
+| [0053](0053-wake-secret-injection-refused.md) | The guest still holds only the per-turn grant | Superseded by 0066 |
 | [0054](0054-repository-hooks-only.md) | Setup and resume stay repository hooks | Accepted |
 | [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Accepted |
 | [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Accepted |
@@ -74,6 +74,7 @@ Decisions that must outlive a single pull request.
 | [0063](0063-keep-environment-until-archive.md) | Keep the environment until the operator archives it | Accepted |
 | [0064](0064-session-size-and-admission-queue.md) | Session size and a wait when the lease budget is full | Accepted |
 | [0065](0065-one-environment-terminal.md) | One terminal session inside the environment | Accepted |
+| [0066](0066-inject-secret-at-wake.md) | Inject a short-lived secret at wake | Accepted |
 
 ## When to write an ADR
 
