@@ -93,7 +93,9 @@ A live client connection to a Process or managed terminal. Sumika owns local
 Attach and enforces one writer by stealing the previous Attach; detach leaves
 the Process running. Rusui keeps separate Attach generation observations with
 stale-disconnect fencing. They are not client connections or Turn state.
-Rusui's managed terminal keeps its own write lease.
+A managed environment has one terminal session. Attach joins it. The guest
+can read its output. A write still takes the exclusive lease
+([ADR 0065](docs/decisions/0065-one-environment-terminal.md)).
 _Avoid_: session, turn, process ownership
 
 **Extension**:

@@ -195,9 +195,10 @@ It attaches directly to Sumika; `Ctrl+]` detaches and terminal resizes follow
 the local terminal. For a managed Session, input remains
 line-oriented and the CLI acquires an audited write lease when available. If a
 browser or another CLI already holds that lease, this CLI connects read-only.
-It releases only the lease generation it acquired. Typing renews the lease; after
-an idle period longer than the lease TTL, input fails with `no write lease`
-and the command must be run again.
+It releases only the lease generation it acquired. Detach leaves the
+environment shell running; the guest can read that same session's output.
+Typing renews the lease; after an idle period longer than the lease TTL,
+input fails with `no write lease` and the command must be run again.
 Managed attachment replays the existing Session, Turn, and action transcript
 events to stderr while terminal output stays on stdout. It reconnects by the
 existing session id and environment; it does not create either object.

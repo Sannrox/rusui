@@ -27,6 +27,7 @@ type termSess struct {
 	stop   func()
 	buf    []byte
 	handle string
+	dead   bool
 }
 
 func (s *Server) consoleTerminal(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +103,6 @@ func (s *Server) consoleTermLease(w http.ResponseWriter, r *http.Request) {
 	gen := 1
 	if held {
 		gen = lease.Generation + 1
-		s.stopTerm(envRow.ID)
 	}
 	if err := s.ensureTerm(envRow); err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
@@ -152,7 +152,6 @@ func (s *Server) consoleTermRevoke(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "stale generation", http.StatusConflict)
 		return
 	}
-	s.stopTerm(envRow.ID)
 	lease.ExpiresAt = time.Now().UTC().Add(-time.Second)
 	_ = store.PutTerminalLease(s.Eng.Store, *lease)
 	_ = store.InsertTerminalAccess(s.Eng.Store, envRow.ID, sess.ID, "revoke", "")
@@ -317,22 +316,40 @@ func (s *Server) ensureTerm(envRow *store.Environment) error {
 	if s.terms == nil {
 		s.terms = map[int64]*termSess{}
 	}
-	if ts, ok := s.terms[envRow.ID]; ok && ts.handle == envRow.Handle {
-		s.termMu.Unlock()
+	ts := s.terms[envRow.ID]
+	s.termMu.Unlock()
+	if ts != nil && ts.live(envRow.Handle) {
 		return nil
 	}
-	s.termMu.Unlock()
 	s.stopTerm(envRow.ID)
 	stdin, stdout, stop, err := s.openShell(envRow)
 	if err != nil {
 		return err
 	}
-	ts := &termSess{stdin: stdin, stdout: stdout, stop: stop, handle: envRow.Handle}
+	ts = &termSess{stdin: stdin, stdout: stdout, stop: stop, handle: envRow.Handle}
 	go ts.pump()
 	s.termMu.Lock()
 	s.terms[envRow.ID] = ts
 	s.termMu.Unlock()
 	return nil
+}
+
+func (s *Server) termSnapshot(envID int64) string {
+	s.termMu.Lock()
+	ts := s.terms[envID]
+	s.termMu.Unlock()
+	if ts == nil {
+		return ""
+	}
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	return string(ts.buf)
+}
+
+func (t *termSess) live(handle string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.handle == handle && !t.dead
 }
 
 func (s *Server) stopTerm(envID int64) {
@@ -396,6 +413,9 @@ func (t *termSess) pump() {
 			t.mu.Unlock()
 		}
 		if err != nil {
+			t.mu.Lock()
+			t.dead = true
+			t.mu.Unlock()
 			return
 		}
 	}
