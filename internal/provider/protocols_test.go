@@ -18,7 +18,8 @@ func TestClaudeLoopDropsTranscriptBodies(t *testing.T) {
 		}
 		_, _ = fmt.Fprintln(pw, `{"type":"result","session_id":"sess-1"}`)
 	}()
-	res, err := readProviderLoop(bufio.NewReader(pr), io.Discard, "sess-1", nil, "claude")
+	observed := 0
+	res, err := readProviderLoop(bufio.NewReader(pr), io.Discard, "sess-1", nil, "claude", func(Event) { observed++ })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,6 +28,9 @@ func TestClaudeLoopDropsTranscriptBodies(t *testing.T) {
 	}
 	if len(res.Events) != 0 {
 		t.Fatalf("claude host keeps Cursor only, events %+v", res.Events)
+	}
+	if observed != 50 {
+		t.Fatalf("observed %d transcript events, want 50", observed)
 	}
 }
 
@@ -52,7 +56,7 @@ func TestPermissionReplyEchoesNumericIDUnchanged(t *testing.T) {
 			decide := func(options []Option, raw json.RawMessage) (string, bool) {
 				return "reject-once", false
 			}
-			if _, err := readProviderLoop(bufio.NewReader(pr), &out, "", decide, tc.kind); err != nil {
+			if _, err := readProviderLoop(bufio.NewReader(pr), &out, "", decide, tc.kind, nil); err != nil {
 				t.Fatal(err)
 			}
 			line, _, _ := strings.Cut(out.String(), "\n")

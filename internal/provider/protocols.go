@@ -53,7 +53,7 @@ func runGrok(rw io.ReadWriteCloser, turn Turn, decide Decide) (Result, error) {
 	}); err != nil {
 		return Result{}, err
 	}
-	return readProviderLoop(r, rw, opened.Result.SessionID, decide, "grok")
+	return readProviderLoop(r, rw, opened.Result.SessionID, decide, "grok", turn.Observe)
 }
 
 // runClaude drives one Claude Code stream-json turn. Claude Code emits
@@ -84,7 +84,7 @@ func runClaude(rw io.ReadWriteCloser, turn Turn, decide Decide) (Result, error) 
 	if turn.Cursor != "" && init.Session != turn.Cursor {
 		return Result{}, fmt.Errorf("provider: claude resume cursor mismatch")
 	}
-	res, err := readProviderLoop(r, rw, init.Session, decide, "claude")
+	res, err := readProviderLoop(r, rw, init.Session, decide, "claude", turn.Observe)
 	if err != nil {
 		return Result{}, err
 	}
@@ -136,12 +136,18 @@ func runCodex(rw io.ReadWriteCloser, inst Instance, turn Turn, decide Decide) (R
 	}); err != nil {
 		return Result{}, err
 	}
-	return readProviderLoop(r, rw, opened.Result.ThreadID, decide, "codex")
+	return readProviderLoop(r, rw, opened.Result.ThreadID, decide, "codex", turn.Observe)
 }
 
-func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide, kind string) (Result, error) {
+func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide, kind string, observe func(Event)) (Result, error) {
 	var res Result
 	res.Cursor = cursor
+	emit := func(ev Event) {
+		res.Events = append(res.Events, ev)
+		if observe != nil {
+			observe(ev)
+		}
+	}
 	for {
 		line, err := r.ReadBytes('\n')
 		if err != nil {
@@ -156,7 +162,7 @@ func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide
 			if err != nil {
 				return res, err
 			}
-			res.Events = append(res.Events, ev)
+			emit(ev)
 			continue
 		}
 		if msg["method"] == "session/request_permission" || msg["method"] == "item/permission" {
@@ -174,20 +180,20 @@ func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide
 			if err := writePermission(w, kind, replyID, optionID, allow); err != nil {
 				return res, err
 			}
-			res.Events = append(res.Events, Event{Kind: "permission", Body: optionID, OptionID: optionID})
+			emit(Event{Kind: "permission", Body: optionID, OptionID: optionID})
 			continue
 		}
 		if msg["type"] == "rate_limit_event" || msg["method"] == "item/usageLimit" {
 			reset, _ := msg["resets_at"].(string)
 			ev := Event{Kind: "usage_limit", Reset: reset, ResetMissing: reset == ""}
-			res.Events = append(res.Events, ev)
+			emit(ev)
 			continue
 		}
 		if msg["method"] == "item/question" {
 			params, _ := msg["params"].(map[string]any)
 			id, _ := params["id"].(string)
 			body, _ := params["body"].(string)
-			res.Events = append(res.Events, Event{Kind: "question", Body: body, OptionID: id})
+			emit(Event{Kind: "question", Body: body, OptionID: id})
 			continue
 		}
 		if msg["type"] == "result" || msg["method"] == "turn/completed" || msg["method"] == "session/prompt" && msg["result"] != nil {
@@ -200,6 +206,13 @@ func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide
 			}
 		}
 		if kind == "claude" {
+			// Observed only: Result.Events keeps no transcript bodies, so a
+			// long turn does not hold them all (#344).
+			if observe != nil {
+				for _, ev := range claudeStreamEvents(line) {
+					observe(ev)
+				}
+			}
 			continue
 		}
 		text := string(line)
@@ -207,7 +220,7 @@ func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide
 		if strings.Contains(text, "tool_call") || strings.Contains(text, "tool_use") || msg["method"] == "item/tool" {
 			kindName = "tool_call"
 		}
-		res.Events = append(res.Events, Event{Kind: kindName, Body: strings.TrimSpace(text)})
+		emit(Event{Kind: kindName, Body: strings.TrimSpace(text)})
 		if msg["type"] == "result" {
 			return res, nil
 		}
@@ -287,4 +300,77 @@ func answerClaudeControl(w io.Writer, line []byte, decide Decide) (Event, error)
 		"response": map[string]any{"subtype": "success", "request_id": req.RequestID, "response": decision},
 	})
 	return Event{Kind: "permission", Body: optionID, OptionID: optionID}, err
+}
+
+// claudeInputFields are the tool input fields a transcript keeps: what a
+// call runs or where it looks. File bodies, edit strings, and prompts are
+// left out; they can be large and can carry secrets. The recorder redacts
+// and bounds what is kept.
+var claudeInputFields = []string{
+	"command", "description", "file_path", "notebook_path", "path",
+	"pattern", "glob", "url", "query", "subagent_type", "skill", "title",
+}
+
+// claudeStreamEvents is the transcript of one Claude Code stream-json
+// line. An assistant message's text blocks are transcript events and its
+// tool_use blocks are pending tool calls; a user message's tool_result
+// blocks are those calls' outcomes, without the result content. Thinking
+// and any other line are not recorded.
+func claudeStreamEvents(line []byte) []Event {
+	var msg struct {
+		Type    string `json:"type"`
+		Message struct {
+			Content json.RawMessage `json:"content"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(line, &msg); err != nil || (msg.Type != "assistant" && msg.Type != "user") {
+		return nil
+	}
+	var blocks []struct {
+		Type      string         `json:"type"`
+		Text      string         `json:"text"`
+		ID        string         `json:"id"`
+		Name      string         `json:"name"`
+		Input     map[string]any `json:"input"`
+		ToolUseID string         `json:"tool_use_id"`
+		IsError   bool           `json:"is_error"`
+	}
+	// A user message's content may be a plain string: nothing to record.
+	if err := json.Unmarshal(msg.Message.Content, &blocks); err != nil {
+		return nil
+	}
+	var out []Event
+	for _, b := range blocks {
+		switch {
+		case msg.Type == "assistant" && b.Type == "text" && strings.TrimSpace(b.Text) != "":
+			out = append(out, Event{Kind: "transcript", Body: b.Text})
+		case msg.Type == "assistant" && b.Type == "tool_use":
+			kind, ok := claudeToolKinds[b.Name]
+			if !ok {
+				kind = "other"
+			}
+			out = append(out, Event{Kind: "tool_call", Body: b.Name, Tool: &ToolCall{
+				ID: b.ID, Name: b.Name, Kind: kind, Input: claudeInputSummary(b.Input), Status: "pending",
+			}})
+		case msg.Type == "user" && b.Type == "tool_result":
+			status := "completed"
+			if b.IsError {
+				status = "failed"
+			}
+			out = append(out, Event{Kind: "tool_call", Body: status, Tool: &ToolCall{ID: b.ToolUseID, Status: status}})
+		}
+	}
+	return out
+}
+
+func claudeInputSummary(input map[string]any) map[string]string {
+	out := map[string]string{}
+	for _, key := range claudeInputFields {
+		v, ok := input[key].(string)
+		if !ok || v == "" {
+			continue
+		}
+		out[key] = v
+	}
+	return out
 }

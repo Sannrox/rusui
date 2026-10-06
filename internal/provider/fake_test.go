@@ -122,16 +122,15 @@ func fakeClaude(in io.Reader, out io.Writer) error {
 	content, _ := msg["content"].(string)
 	resume := content == "resume"
 	if resume {
-		if err := writeJSON(out, map[string]any{"type": "assistant", "text": "resumed"}); err != nil {
+		if _, err := io.WriteString(out, claudeTextLine("resumed")); err != nil {
 			return err
 		}
 		return writeJSON(out, map[string]any{"type": "result"})
 	}
-	if err := writeJSON(out, map[string]any{"type": "assistant", "text": "hello-claude"}); err != nil {
-		return err
-	}
-	if err := writeJSON(out, map[string]any{"type": "assistant", "tool_use": "shell"}); err != nil {
-		return err
+	for _, line := range []string{claudeTextLine("hello-claude"), claudeToolUseLine, claudeToolResultLine} {
+		if _, err := io.WriteString(out, line); err != nil {
+			return err
+		}
 	}
 	if err := writeJSON(out, map[string]any{"type": "rate_limit_event"}); err != nil {
 		return err
@@ -153,6 +152,19 @@ func fakeClaude(in io.Reader, out io.Writer) error {
 	}
 	return writeJSON(out, map[string]any{"type": "result"})
 }
+
+// Claude Code 2.1.283 stream-json lines: an assistant message holds content
+// blocks, and a tool's result comes back as a user message.
+func claudeTextLine(text string) string {
+	raw, _ := json.Marshal(text)
+	return `{"type":"assistant","message":{"id":"msg_01Text","type":"message","role":"assistant","model":"claude-sonnet-5","content":[{"type":"text","text":` +
+		string(raw) + `}],"stop_reason":null,"usage":{"input_tokens":12,"output_tokens":4}},"parent_tool_use_id":null,"session_id":"claude-sess","uuid":"4f1c0e2a-0001"}` + "\n"
+}
+
+const (
+	claudeToolUseLine    = `{"type":"assistant","message":{"id":"msg_01Tool","type":"message","role":"assistant","model":"claude-sonnet-5","content":[{"type":"tool_use","id":"toolu_01ABC","name":"Bash","input":{"command":"ls -la","description":"List files"}}],"stop_reason":null,"usage":{"input_tokens":20,"output_tokens":9}},"parent_tool_use_id":null,"session_id":"claude-sess","uuid":"4f1c0e2a-0002"}` + "\n"
+	claudeToolResultLine = `{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01ABC","type":"tool_result","content":"keep.txt","is_error":false}]},"parent_tool_use_id":null,"session_id":"claude-sess","uuid":"4f1c0e2a-0003","tool_use_result":{"stdout":"keep.txt","stderr":"","interrupted":false,"isImage":false}}` + "\n"
+)
 
 func fakeCodex(in io.Reader, out io.Writer) error {
 	r := bufio.NewReader(in)

@@ -82,7 +82,7 @@ func runConformance(t *testing.T, kind string) {
 	if !hasKind(history, "permission") {
 		t.Fatalf("events %+v", history)
 	}
-	if kind != KindClaude && (!hasKind(history, "tool_call") || !hasKind(history, "transcript")) {
+	if !hasKind(history, "tool_call") || !hasKind(history, "transcript") {
 		t.Fatalf("events %+v", history)
 	}
 	// Grok and Codex may omit a reject option, so the adapter must deny;
@@ -255,6 +255,10 @@ func drive(t *testing.T, kind string, turn Turn, wantDeny bool) Result {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 	}()
+	// History is what an observer saw live; the Claude result keeps no
+	// transcript bodies (#344).
+	var observed []Event
+	turn.Observe = func(ev Event) { observed = append(observed, ev) }
 	res, err := Run(context.Background(), kind, Instance{Kind: kind, ID: "t", Dir: t.TempDir()}, stdio{Reader: stdout, WriteCloser: stdin}, turn, func(options []Option, _ json.RawMessage) (string, bool) {
 		if len(options) == 0 {
 			return "", false
@@ -264,6 +268,7 @@ func drive(t *testing.T, kind string, turn Turn, wantDeny bool) Result {
 	if err != nil {
 		t.Fatalf("%s run %v", kind, err)
 	}
+	res.Events = observed
 	if wantDeny && kind != KindClaude {
 		ok := false
 		for _, ev := range res.Events {
@@ -402,5 +407,72 @@ func TestClaudeControlRequestUsesGateAndReplies(t *testing.T) {
 				t.Fatalf("reply %s event %+v", out.String(), ev)
 			}
 		})
+	}
+}
+
+// Claude's assistant text, tool calls, and tool results become transcript
+// and tool_call events as they are read, in stream order. Thinking is not
+// recorded, a tool input keeps only locator fields, and a tool result
+// keeps no content.
+func TestClaudeStreamRecordsTextAndToolCalls(t *testing.T) {
+	stream := claudeTextLine("I'll look at the files.") +
+		`{"type":"assistant","message":{"id":"msg_01Think","type":"message","role":"assistant","content":[{"type":"thinking","thinking":"private plan","signature":"sig"}]},"parent_tool_use_id":null,"session_id":"claude-sess","uuid":"u0"}` + "\n" +
+		claudeToolUseLine + claudeToolResultLine +
+		`{"type":"assistant","message":{"id":"msg_01Write","type":"message","role":"assistant","content":[{"type":"tool_use","id":"toolu_02DEF","name":"Write","input":{"file_path":"/workspace/a.txt","content":"file body"}},{"type":"tool_use","id":"toolu_03GHI","name":"mcp__github__create_issue","input":{"title":"new issue","body":"issue body"}}]},"parent_tool_use_id":null,"session_id":"claude-sess","uuid":"u4"}` + "\n" +
+		`{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_02DEF","type":"tool_result","content":[{"type":"text","text":"denied"}],"is_error":true}]},"parent_tool_use_id":null,"session_id":"claude-sess","uuid":"u5"}` + "\n" +
+		`{"type":"result","subtype":"success","is_error":false,"result":"Done.","session_id":"claude-sess"}` + "\n"
+	r, w := io.Pipe()
+	go func() {
+		defer func() { _ = w.Close() }()
+		_, _ = fmt.Fprintf(w, `{"type":"system","subtype":"init","claude_code_version":%q,"session_id":"claude-sess"}`+"\n", ClaudeCodeVersion)
+		_, _ = io.WriteString(w, stream)
+	}()
+	var observed []Event
+	res, err := runClaude(stdio{Reader: r, WriteCloser: nopWriteCloser{io.Discard}}, Turn{Prompt: "x", Observe: func(ev Event) { observed = append(observed, ev) }}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"transcript I'll look at the files.",
+		"tool_call toolu_01ABC Bash execute pending command=ls -la description=List files",
+		"tool_call toolu_01ABC completed",
+		"tool_call toolu_02DEF Write edit pending file_path=/workspace/a.txt",
+		"tool_call toolu_03GHI mcp__github__create_issue other pending",
+		"tool_call toolu_02DEF failed",
+	}
+	got := make([]string, 0, len(observed))
+	for _, ev := range observed {
+		line := ev.Kind
+		if ev.Tool == nil {
+			line += " " + ev.Body
+		} else {
+			line += " " + ev.Tool.ID
+			if ev.Tool.Name != "" {
+				line += " " + ev.Tool.Name + " " + ev.Tool.Kind
+			}
+			line += " " + ev.Tool.Status
+			for _, k := range []string{"command", "description", "file_path"} {
+				if v, ok := ev.Tool.Input[k]; ok {
+					line += " " + k + "=" + v
+				}
+			}
+		}
+		got = append(got, line)
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("events\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if len(res.Events) != 0 {
+		t.Fatalf("result keeps transcript bodies %+v", res.Events)
+	}
+	write := observed[3].Tool.Input
+	if _, ok := write["content"]; ok {
+		t.Fatalf("write body recorded %v", write)
+	}
+	if mcp := observed[4].Tool.Input; len(mcp) != 1 || mcp["title"] != "new issue" {
+		t.Fatalf("mcp input %v", mcp)
+	}
+	if text := eventsText(observed); strings.Contains(text, "private plan") || strings.Contains(text, "keep.txt") || strings.Contains(text, "denied") {
+		t.Fatalf("thinking or tool result content recorded %s", text)
 	}
 }

@@ -101,6 +101,18 @@ type Event struct {
 	OptionID     string
 	Reset        string
 	ResetMissing bool
+	Tool         *ToolCall // set on a parsed tool_call
+}
+
+// ToolCall is one tool call or its outcome in ACP terms. A call carries
+// its name, ACP kind, and a bounded input summary with status "pending";
+// its outcome carries only the id and "completed" or "failed".
+type ToolCall struct {
+	ID     string
+	Name   string
+	Kind   string
+	Input  map[string]string
+	Status string
 }
 
 // Turn is one provider turn against a Rusui session cursor.
@@ -109,6 +121,9 @@ type Turn struct {
 	Cursor      string
 	Workspace   string
 	Attachments []string
+	// Observe, when set, receives each event as it is read, before the
+	// turn ends, so a follower sees it live.
+	Observe func(Event)
 }
 
 // Result is the cursor to store for the next process and the events from
