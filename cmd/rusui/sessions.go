@@ -59,18 +59,32 @@ func promptCLI(args []string) {
 	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
 	token := fs.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "operator/worker token")
 	steer := fs.Bool("steer", false, "interrupt a running turn with this prompt")
+	queue := fs.Bool("queue", false, "start this prompt as the next turn once the current turn ends")
+	dropQueue := fs.Bool("drop-queue", false, "drop queued prompts that have not started; the current turn keeps running")
 	_ = fs.Parse(args)
-	if fs.NArg() < 2 {
-		fmt.Fprintln(os.Stderr, "usage: rusui prompt [-steer] [-url URL] [-token TOKEN] SESSION_ID TEXT")
+	usage := func() {
+		fmt.Fprintln(os.Stderr, "usage: rusui prompt [-steer | -queue] [-url URL] [-token TOKEN] SESSION_ID TEXT\n       rusui prompt -drop-queue [-url URL] [-token TOKEN] SESSION_ID")
 		os.Exit(2)
+	}
+	if (*steer && *queue) || (*dropQueue && (*steer || *queue)) {
+		usage()
+	}
+	if (*dropQueue && fs.NArg() != 1) || (!*dropQueue && fs.NArg() < 2) {
+		usage()
 	}
 	id := fs.Arg(0)
 	if _, err := strconv.ParseInt(id, 10, 64); err != nil {
 		fmt.Fprintln(os.Stderr, "session id")
 		os.Exit(2)
 	}
-	prompt := strings.TrimSpace(strings.Join(fs.Args()[1:], " "))
-	req, err := newPromptRequest(*url, *token, id, prompt, *steer)
+	var req *http.Request
+	var err error
+	if *dropQueue {
+		req, err = newDropQueueRequest(*url, *token, id)
+	} else {
+		prompt := strings.TrimSpace(strings.Join(fs.Args()[1:], " "))
+		req, err = newPromptRequest(*url, *token, id, prompt, *steer, *queue)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -97,8 +111,8 @@ func promptCLI(args []string) {
 	}
 }
 
-func newPromptRequest(planeURL, token, id, prompt string, steer bool) (*http.Request, error) {
-	body, err := json.Marshal(map[string]any{"prompt": prompt, "steer": steer})
+func newPromptRequest(planeURL, token, id, prompt string, steer, queued bool) (*http.Request, error) {
+	body, err := json.Marshal(map[string]any{"prompt": prompt, "steer": steer, "queued": queued})
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +121,17 @@ func newPromptRequest(planeURL, token, id, prompt string, steer bool) (*http.Req
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	return req, nil
+}
+
+func newDropQueueRequest(planeURL, token, id string) (*http.Request, error) {
+	req, err := http.NewRequest(http.MethodDelete, strings.TrimRight(planeURL, "/")+"/sessions/"+id+"/queued", nil)
+	if err != nil {
+		return nil, err
+	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}

@@ -2,12 +2,30 @@ package store
 
 import "database/sql"
 
+// FollowUp is one unconsumed entry of a session's FIFO. Queued marks a
+// prompt held until the current turn ends; it may still be dropped (#492).
+type FollowUp struct {
+	Seq    int
+	Prompt string
+	Queued bool
+}
+
 func EnqueueFollowUpTx(tx *sql.Tx, sessionID int64, prompt string) (int, error) {
+	return enqueueFollowUpTx(tx, sessionID, prompt, false)
+}
+
+// EnqueueQueuedPromptTx appends a prompt that waits for the current turn
+// to end and that DropQueuedPromptsTx or a session cancel can drop.
+func EnqueueQueuedPromptTx(tx *sql.Tx, sessionID int64, prompt string) (int, error) {
+	return enqueueFollowUpTx(tx, sessionID, prompt, true)
+}
+
+func enqueueFollowUpTx(tx *sql.Tx, sessionID int64, prompt string, queued bool) (int, error) {
 	seq, err := nextFollowUpSeqTx(tx, sessionID)
 	if err != nil {
 		return 0, err
 	}
-	_, err = tx.Exec(`INSERT INTO followup_queue (session_id, seq, prompt, consumed) VALUES (?,?,?,0)`, sessionID, seq, prompt)
+	_, err = tx.Exec(`INSERT INTO followup_queue (session_id, seq, prompt, consumed, queued) VALUES (?,?,?,0,?)`, sessionID, seq, prompt, queued)
 	return seq, err
 }
 
@@ -26,15 +44,27 @@ func insertFollowUpAtTx(tx *sql.Tx, sessionID int64, seq int, prompt string) err
 	return err
 }
 
-func NextFollowUpTx(tx *sql.Tx, sessionID int64) (seq int, prompt string, ok bool, err error) {
-	err = tx.QueryRow(`SELECT seq, prompt FROM followup_queue WHERE session_id=? AND consumed=0 ORDER BY seq LIMIT 1`, sessionID).Scan(&seq, &prompt)
+func NextFollowUpTx(tx *sql.Tx, sessionID int64) (FollowUp, bool, error) {
+	var f FollowUp
+	err := tx.QueryRow(`SELECT seq, prompt, queued FROM followup_queue WHERE session_id=? AND consumed=0 ORDER BY seq LIMIT 1`, sessionID).Scan(&f.Seq, &f.Prompt, &f.Queued)
 	if err == sql.ErrNoRows {
-		return 0, "", false, nil
+		return FollowUp{}, false, nil
 	}
 	if err != nil {
-		return 0, "", false, err
+		return FollowUp{}, false, err
 	}
-	return seq, prompt, true, nil
+	return f, true, nil
+}
+
+// DropQueuedPromptsTx consumes every queued prompt not yet started. The
+// rows stay, marked dropped, so their sequence numbers are never reused.
+func DropQueuedPromptsTx(tx *sql.Tx, sessionID int64) (int, error) {
+	res, err := tx.Exec(`UPDATE followup_queue SET consumed=1, dropped=1 WHERE session_id=? AND consumed=0 AND queued=1`, sessionID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	return int(n), err
 }
 
 func ConsumeFollowUpTx(tx *sql.Tx, sessionID int64, seq int) error {

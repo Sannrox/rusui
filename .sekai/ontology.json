@@ -140,6 +140,12 @@
       "properties": []
     },
     {
+      "name": "RusuiQueuedPrompt",
+      "description": "Operator prompt queued until the current Turn completes or fails. It shares the session follow-up FIFO but does not become the pending revision while the turn is leased or awaiting a claim, so DELETE /sessions/{id}/queued (rusui prompt -drop-queue) or session cancel drops it without touching the current turn. Ordinary follow-ups and promoted steers are not dropped.",
+      "superclasses": [],
+      "properties": []
+    },
+    {
       "name": "RusuiUnattendedSession",
       "description": "Rusui Session kind whose execution is mediated by leased Turns, including review, run, and scheduled work. The experimental local kind is excluded.",
       "superclasses": ["RusuiSession"],
@@ -602,6 +608,14 @@
       "transitive": false
     },
     {
+      "name": "rusui_turn_holds_queued_prompt",
+      "description": "An unattended Turn holds operator prompts queued until it ends; the earliest starts as the next revision.",
+      "domain": "RusuiTurn",
+      "range": "RusuiQueuedPrompt",
+      "cardinality": { "min": 0, "max": null },
+      "transitive": false
+    },
+    {
       "name": "sumika_process_has_local_attach",
       "description": "A Sumika Process has at most one current exclusive local Attach; a new Attach steals the previous one.",
       "domain": "SumikaProcess",
@@ -827,6 +841,18 @@
     },
     {
       "subject": "rusui_turn_receives_steer",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#follow-up",
+      "confidence": 1.0
+    },
+    {
+      "subject": "RusuiQueuedPrompt",
+      "source": "ARCHITECTURE.md",
+      "locator": "ARCHITECTURE.md#follow-up",
+      "confidence": 1.0
+    },
+    {
+      "subject": "rusui_turn_holds_queued_prompt",
       "source": "ARCHITECTURE.md",
       "locator": "ARCHITECTURE.md#follow-up",
       "confidence": 1.0

@@ -636,8 +636,18 @@ func (e *Engine) expireLeaseTx(tx *sql.Tx, j *store.Job) error {
 			}
 		}
 	} else if j.ClaimedRevision == j.PendingRevision && j.RetryCount >= RetryLimit {
-		j.State = "failed"
-		e.exception(fmt.Sprintf("review retry_limit exhausted %s#%d until operator retry", j.Repo, j.Item))
+		// An exhausted revision is terminal: a queued prompt held behind
+		// it starts now (#492).
+		if err := applyNextFollowUpTx(tx, j); err != nil {
+			return err
+		}
+		if j.ClaimedRevision < j.PendingRevision {
+			j.RetryCount = 0
+			j.State = "queued"
+		} else {
+			j.State = "failed"
+			e.exception(fmt.Sprintf("review retry_limit exhausted %s#%d until operator retry", j.Repo, j.Item))
+		}
 	} else {
 		j.State = "queued"
 	}
@@ -1317,15 +1327,20 @@ func (e *Engine) finalizeFailureTx(tx *sql.Tx, j *store.Job, gen, claimed int) e
 		return store.UpdateJobTx(tx, j)
 	}
 	j.RetryCount++
-	if steers > 0 {
-		j.RetryCount = 0
-		j.State = "queued"
+	if steers > 0 || j.RetryCount >= RetryLimit {
+		// An exhausted revision is terminal: a queued prompt held behind
+		// it starts now (#492).
+		pending := j.PendingRevision
 		if err := applyNextFollowUpTx(tx, j); err != nil {
 			return err
 		}
-	} else if j.RetryCount >= RetryLimit {
-		j.State = "failed"
-		e.exception(fmt.Sprintf("review retry_limit exhausted %s#%d until operator retry", j.Repo, j.Item))
+		if j.PendingRevision > pending {
+			j.RetryCount = 0
+			j.State = "queued"
+		} else {
+			j.State = "failed"
+			e.exception(fmt.Sprintf("review retry_limit exhausted %s#%d until operator retry", j.Repo, j.Item))
+		}
 	} else {
 		j.State = "queued"
 	}
