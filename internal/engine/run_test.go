@@ -41,6 +41,40 @@ func TestStartRunAndClaim(t *testing.T) {
 	}
 }
 
+func TestStartRunCreatesNoChildSession(t *testing.T) {
+	h := setup(t)
+	id, err := h.e.StartRun("test", "do the thing", "")
+	if err != nil || id == 0 {
+		t.Fatalf("%d %v", id, err)
+	}
+	list, err := store.ListSessions(h.st, "test", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].ID != id {
+		t.Fatalf("start spawned extra sessions %+v", list)
+	}
+	rows, err := h.st.DB.Query(`PRAGMA table_info(sessions)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, typ string
+		var def *string
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &def, &pk); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(name, "parent") || strings.Contains(name, "child") || name == "fan_out" {
+			t.Fatalf("lineage column %s", name)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestStartRunRejectedWithoutKind(t *testing.T) {
 	h := setup(t)
 	if _, err := h.e.StartRun("missing", "x", ""); err == nil {
