@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 34
+const CurrentSchema = 35
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -461,7 +461,29 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 35 {
+		if err := migrateV35(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 35); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV35 records the session size name (ADR 0064, #501). Empty means
+// the project default, then medium.
+func migrateV35(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='size'`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`ALTER TABLE sessions ADD COLUMN size TEXT NOT NULL DEFAULT ''`)
+	return err
 }
 
 // migrateV34 records whether the operator archived the session (#499).

@@ -18,6 +18,7 @@ func runCLI(args []string) {
 	token := fs.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "operator/worker token")
 	idem := fs.String("idempotency-key", "", "idempotency key")
 	effort := fs.String("effort", "", "stable effort key for a pinned implementation task")
+	size := fs.String("size", "", "environment size: small, medium, or large")
 	repo := fs.String("repo", "", "source repository")
 	ref := fs.String("ref", "", "source ref")
 	base := fs.String("base-sha", "", "pinned base commit")
@@ -29,6 +30,9 @@ func runCLI(args []string) {
 		os.Exit(2)
 	}
 	payload := map[string]any{"kind": "run", "prompt": prompt}
+	if *size != "" {
+		payload["size"] = *size
+	}
 	if *effort != "" || *repo != "" || *ref != "" || *base != "" || *paths != "" {
 		payload["effort_key"] = *effort
 		payload["repo"] = *repo

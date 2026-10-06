@@ -17,6 +17,7 @@ defaults:
   max_reviews_per_repo_per_utc_day: 50
 projects:
   rusui:
+    size: medium
     repos:
       Sannrox/rusui:
         visibility: public

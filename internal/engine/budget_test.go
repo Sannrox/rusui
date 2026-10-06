@@ -1,10 +1,8 @@
 package engine_test
 
 import (
-	"errors"
 	"testing"
 
-	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -14,8 +12,8 @@ func TestClaimRespectsConcurrentLeaseCap(t *testing.T) {
 	h.putRefresh(issue(2))
 	c1 := h.claim()
 	c2, err := h.e.Claim("example/test-repo")
-	if !errors.Is(err, engine.ErrBudget) || c2 != nil {
-		t.Fatalf("second claim %v %v", c2, err)
+	if err != nil || c2 != nil {
+		t.Fatalf("second claim queued, got %v %v", c2, err)
 	}
 	turn, err := store.GetTurn(h.st, c1.Job.ID)
 	if err != nil {

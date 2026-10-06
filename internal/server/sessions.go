@@ -29,8 +29,51 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []store.Session{}
 	}
+	s.annotateSessionWait(list)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(list)
+}
+
+func (s *Server) annotateSessionWait(list []store.Session) {
+	for i := range list {
+		s.annotateOneSessionWait(&list[i])
+	}
+}
+
+func (s *Server) annotateOneSessionWait(sess *store.Session) {
+	if sess.Size == "" {
+		sess.Size = s.Eng.SessionSize(sess)
+	}
+	turns, err := store.ListTurnsForSession(s.Eng.Store, sess.ID)
+	if err != nil {
+		return
+	}
+	queued, leased := false, false
+	for _, t := range turns {
+		switch t.State {
+		case "queued":
+			queued = true
+		case "leased":
+			leased = true
+		}
+	}
+	if !queued || leased {
+		return
+	}
+	proj, ok := s.Eng.PolicySnapshot().Project(sess.Project)
+	if !ok {
+		proj, ok = s.Eng.PolicySnapshot().ProjectForRepo(sess.Repo)
+	}
+	if !ok {
+		return
+	}
+	n, err := store.CountLeasedTurns(s.Eng.Store, proj.Slug, proj.Repos)
+	if err != nil {
+		return
+	}
+	if n >= proj.MaxConcurrentLeases() {
+		sess.Wait = "lease"
+	}
 }
 
 func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
@@ -125,6 +168,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.annotateOneSessionWait(sess)
 	response := map[string]any{
 		"session": sess, "turns": turns, "processes": processes,
 		"environment_state": envState, "cancelled": cancelled,

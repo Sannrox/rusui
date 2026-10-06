@@ -241,6 +241,11 @@ func printPolicyExplanation(out io.Writer, effective *policy.Effective, explanat
 	_, _ = fmt.Fprintln(out, "Project policy:")
 	printPolicyField(out, "session_kinds", strings.Join(explanation.Project.SessionKinds, ", "), explanation.Sources["session_kinds"])
 	printPolicyField(out, "egress", explanation.Project.Egress, explanation.Sources["egress"])
+	size := explanation.Project.Size
+	if size == "" {
+		size = "medium"
+	}
+	printPolicyField(out, "size", size, explanation.Sources["size"])
 	printPolicyField(out, "budgets.max_concurrent_leases", fmt.Sprint(explanation.Project.MaxConcurrentLeases()), explanation.Sources["budgets.max_concurrent_leases"])
 	printPolicyField(out, "permissions", fmt.Sprintf("%d rules", len(explanation.Project.Permissions)), explanation.Sources["permissions"])
 	for _, rule := range explanation.Project.Permissions {

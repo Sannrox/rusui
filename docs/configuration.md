@@ -316,7 +316,14 @@ Linux. Rusui connects to Sumika's local Unix socket and never injects managed
 credentials into the local process. See [the local interactive how-to](local-interactive.md).
 
 Project `budgets` may set `max_concurrent_leases` (integer ≥ 1, default 1).
-Any other budget key fails closed at parse.
+Any other budget key fails closed at parse. A session past that cap waits
+instead of failing with 409. `rusui sessions` shows `"wait":"lease"` until
+a lease frees or the operator cancels the waiting session.
+
+Project `size` is `small`, `medium`, or `large` (default medium): 1 CPU / 2
+GiB, 2 CPU / 4 GiB, or 4 CPU / 8 GiB. A run may override it with
+`{"size":"large"}` or `rusui run -size large`. The container runtime
+enforces those limits.
 
 Project `permissions` answer the guest's `session/request_permission`
 (the tool fence). A rule matches on `tool`, `kind`, and `command`; empty

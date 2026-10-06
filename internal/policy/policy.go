@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	EgressNone                = "none"
-	EgressTrusted             = "trusted"
-	EgressCustom              = "custom"
-	EgressFull                = "full"
-	KindReview                = "review"
-	KindRun                   = "run"
-	KindScheduled             = "scheduled"
+	EgressNone    = "none"
+	EgressTrusted = "trusted"
+	EgressCustom  = "custom"
+	EgressFull    = "full"
+	KindReview    = "review"
+	KindRun       = "run"
+	KindScheduled = "scheduled"
 	// Local sessions remain project-opt-in and are never inherited from defaults.
 	KindLocal                 = "local"
 	BudgetMaxConcurrentLeases = "max_concurrent_leases"
@@ -52,6 +52,7 @@ type ProjectYAML struct {
 	SessionKinds []string            `yaml:"session_kinds"`
 	LocalRuntime *LocalRuntimeYAML   `yaml:"local_runtime"`
 	Egress       string              `yaml:"egress"`
+	Size         string              `yaml:"size"`
 	Budgets      map[string]int      `yaml:"budgets"`
 	Permissions  []AllowRule         `yaml:"permissions"`
 }
@@ -96,6 +97,7 @@ type Project struct {
 	SessionKinds []string
 	LocalRuntime *LocalRuntime
 	Egress       string
+	Size         string
 	Budgets      map[string]int
 	Permissions  []AllowRule
 	Repos        []string
@@ -179,11 +181,16 @@ func Parse(raw []byte) (*Effective, error) {
 		if err != nil {
 			return nil, err
 		}
+		size, err := validSize(slug, y.Size)
+		if err != nil {
+			return nil, err
+		}
 		p := Project{
 			Slug:         slug,
 			SessionKinds: kinds,
 			LocalRuntime: localRuntime,
 			Egress:       egress,
+			Size:         size,
 			Budgets:      budgets,
 			Permissions:  y.Permissions,
 		}
@@ -322,6 +329,15 @@ func validEgress(slug, egress string) error {
 		return nil
 	default:
 		return fmt.Errorf("policy: %s invalid egress %q", slug, egress)
+	}
+}
+
+func validSize(slug, size string) (string, error) {
+	switch size {
+	case "", "small", "medium", "large":
+		return size, nil
+	default:
+		return "", fmt.Errorf("policy: %s invalid size %q", slug, size)
 	}
 }
 
