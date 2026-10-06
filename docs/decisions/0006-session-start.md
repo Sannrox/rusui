@@ -3,13 +3,16 @@
 - Status: Accepted; [ADR 0030](0030-schedule-new-session.md) retains
   new session per unbound fire. [ADR 0069](0069-schedule-binds-a-session.md)
   lets a schedule bind to a session id.
+  [ADR 0071](0071-bounded-child-session.md) lets a session start
+  bounded children.
 - Date: 2026-09-15
 - Amends: [ADR 0003](0003-operator-surface.md) (dogfood start API;
   `sync` is not required for P1 dogfood). [ADR 0005](0005-policy-v2-project.md)
   stands: session belongs to one project; review requires a bound repo.
 - Resolves: [#45](https://github.com/Sannrox/rusui/issues/45)
-- Related: [ADR 0040](0040-child-session-delegation-deferred.md) keeps
-  one session, one environment; child-session delegation is deferred.
+- Related: [ADR 0040](0040-child-session-delegation-deferred.md)
+  deferred child-session delegation; superseded by
+  [ADR 0071](0071-bounded-child-session.md).
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context
