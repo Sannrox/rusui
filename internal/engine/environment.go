@@ -225,10 +225,16 @@ func (e *Engine) sleepReservedEnvironment(envRow *store.Environment) (*store.Env
 		recoveryErr := e.startServicesFor(d, envRow.ID, envRow.Handle)
 		return nil, e.failSleep(envRow, err, recoveryErr)
 	}
+	if err := e.stripSecrets(envRow); err != nil {
+		return nil, e.failSleep(envRow, err, nil)
+	}
 	if err := d.Sleep(envRow.Handle); err != nil {
 		recoveryErr := d.Wake(envRow.Handle)
 		if recoveryErr == nil {
 			recoveryErr = e.resumeAndStart(d, envRow.ID, envRow.Handle)
+		}
+		if recoveryErr == nil {
+			recoveryErr = e.injectSecrets(envRow, "", 0)
 		}
 		return nil, e.failSleep(envRow, err, recoveryErr)
 	}
@@ -262,7 +268,7 @@ func (e *Engine) failSleep(envRow *store.Environment, cause, recoveryErr error) 
 }
 
 func (e *Engine) WakeEnvironment(id int64) (*store.Environment, error) {
-	return e.wakeEnvironment(id, "")
+	return e.wakeEnvironment(id, "", 0)
 }
 
 // operatorWakeWait bounds how long an operator action waits for another
@@ -291,7 +297,7 @@ func (e *Engine) WakeSessionEnvironment(sessionID int64, cause string) (*store.E
 		if envRow.State != store.EnvSleeping || envRow.Handle == "" {
 			return envRow, nil
 		}
-		woke, err := e.wakeEnvironment(envRow.ID, cause)
+		woke, err := e.wakeEnvironment(envRow.ID, cause, 0)
 		if err == nil {
 			return woke, nil
 		}
@@ -310,7 +316,7 @@ func (e *Engine) WakeSessionEnvironment(sessionID int64, cause string) (*store.E
 	}
 }
 
-func (e *Engine) wakeEnvironment(id int64, detail string) (*store.Environment, error) {
+func (e *Engine) wakeEnvironment(id int64, detail string, turnID int64) (*store.Environment, error) {
 	release, ok := e.beginEnvironmentOperation(id)
 	if !ok {
 		return nil, store.ErrEnvironmentBusy
@@ -334,6 +340,10 @@ func (e *Engine) wakeEnvironment(id int64, detail string) (*store.Environment, e
 		return nil, e.failWake(envRow, withRollbackError(err, rollbackWake(d, envRow.Handle)))
 	}
 	if err := e.resumeAndStart(d, envRow.ID, envRow.Handle); err != nil {
+		return nil, e.failWake(envRow, withRollbackError(err, rollbackWake(d, envRow.Handle)))
+	}
+	if err := e.injectSecrets(envRow, "", turnID); err != nil {
+		_ = e.stripSecrets(envRow)
 		return nil, e.failWake(envRow, withRollbackError(err, rollbackWake(d, envRow.Handle)))
 	}
 	now := e.now()
@@ -483,7 +493,7 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	if envRow.Handle != "" && envRow.SourceHash == hash {
 		if envRow.State == store.EnvSleeping {
 			started := e.now()
-			_, err := e.WakeEnvironment(envRow.ID)
+			_, err := e.wakeEnvironment(envRow.ID, "", turnID)
 			if err != nil {
 				return err
 			}
@@ -492,6 +502,9 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 		}
 		if envRow.State != store.EnvReady {
 			return fmt.Errorf("env: session environment %d is %s", envRow.ID, envRow.State)
+		}
+		if err := e.injectSecrets(envRow, item.Repo, turnID); err != nil {
+			return err
 		}
 		now := e.now()
 		exp := now.Add(e.envTTL())
@@ -563,6 +576,12 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	envRow.ExpiresAt = &exp
 	envRow.CPUMillis = cpu
 	envRow.MemoryBytes = mem
+	if err := e.injectSecrets(envRow, item.Repo, turnID); err != nil {
+		_ = e.stripSecrets(envRow)
+		_ = stopServices(d, handle)
+		_ = d.Destroy(handle)
+		return err
+	}
 	return store.UpdateEnvironment(e.Store, *envRow)
 }
 
@@ -592,6 +611,9 @@ func (e *Engine) replaceSessionEnvironment(sessionID int64, old *store.Environme
 		}
 		created.State, created.Handle = store.EnvExpired, ""
 		return errors.Join(err, store.UpdateEnvironment(e.Store, *created))
+	}
+	if err := e.injectSecrets(created, spec.Repo, 0); err != nil {
+		return err
 	}
 	return nil
 }

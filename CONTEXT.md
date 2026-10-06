@@ -119,6 +119,10 @@ _Avoid_: hypervisor, second host
 The only credential in a P1 guest outside `implement` sessions (ADR 0015): D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets. The plane mints no third-party identity beside it ([ADR 0033](docs/decisions/0033-third-party-identity-deferred.md)).
 _Avoid_: PAT, installation token, `auth.json`, xAI API key, registry or cloud key (in the guest)
 
+**Wake secret**:
+A project `secrets` allowlist of plane ids. At wake the plane injects values from `RUSUI_SECRET_<ID>` at `/run/rusui/secrets/<id>` and as uppercase env. On sleep they are gone. The receipt names the id, session, and turn, not the value ([ADR 0066](docs/decisions/0066-inject-secret-at-wake.md)).
+_Avoid_: long-lived token in the image, OIDC (ADR 0033)
+
 **Plane proxy**:
 Git smart-HTTP and model egress on the plane, which redeem a grant for the real token. GitHub REST stays plane-internal. The guest may reach only these endpoints under egress `trusted`. HTTPS to `rusui.plane`; plane CA at `/usr/local/share/ca-certificates/rusui-plane.crt`. Snapshot prepare uses a read-only grant on the same git proxy. A disconnected or local-inference session profile is not selected ([ADR 0042](docs/decisions/0042-disconnected-execution-deferred.md)).
 _Avoid_: runner-side proxy, `api.github.com` from the guest, PAT on the runner disk, HTTP to the proxies from a container guest, offline session kind

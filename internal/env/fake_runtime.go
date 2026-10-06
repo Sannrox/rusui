@@ -41,6 +41,9 @@ type FakeRuntime struct {
 	StopHook   func(id string) error
 	GuestAddrs map[string]string
 	alive      map[string]bool
+	// secrets are outside Contents so workspace snapshot, read, and
+	// CaptureTree never observe injected values.
+	secrets map[string]map[string]string
 }
 
 type StdioCall struct {
@@ -211,6 +214,37 @@ func (f *FakeRuntime) ExecStdio(handle string, argv, env []string) (io.WriteClos
 		return nil, nil, nil, fmt.Errorf("env: stdio hook required")
 	}
 	return hook(handle, argv, env)
+}
+
+func (f *FakeRuntime) PutSecret(handle, id, value string) error {
+	if !validSecretFileID(id) {
+		return fmt.Errorf("env: invalid secret id")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.secrets == nil {
+		f.secrets = map[string]map[string]string{}
+	}
+	if f.secrets[handle] == nil {
+		f.secrets[handle] = map[string]string{}
+	}
+	f.secrets[handle][id] = value
+	return nil
+}
+
+func (f *FakeRuntime) DeleteSecrets(handle string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.secrets, handle)
+	return nil
+}
+
+// LookupSecret is a test inspection of values that are not in Contents.
+func (f *FakeRuntime) LookupSecret(handle, id string) (string, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	v, ok := f.secrets[handle][id]
+	return v, ok
 }
 
 func (f *FakeRuntime) SetFile(id, path string) {

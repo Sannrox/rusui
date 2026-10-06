@@ -133,6 +133,9 @@ projects:
 		strings.Replace(good, "rusui:\n", "rusui:\n    budgets: {dollars: 1}\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    budgets: {max_concurrent_leases: 0}\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    size: huge\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    secrets: [NPM]\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    secrets: [npm_token, npm_token]\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    secrets: ['']\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{command: npm, action: warp}]\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{action: reject}]\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{command: npm, verdict: reject}]\n", 1),
@@ -141,6 +144,35 @@ projects:
 		if _, err := Parse([]byte(c)); err == nil {
 			t.Fatalf("case %d accepted", i)
 		}
+	}
+}
+
+func TestParseProjectSecrets(t *testing.T) {
+	raw := []byte(`
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+projects:
+  rusui:
+    secrets: [npm_token, gh_app]
+    repos:
+      Sannrox/rusui:
+        visibility: public
+`)
+	e, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := e.Project("rusui")
+	if !ok || len(p.Secrets) != 2 || p.Secrets[0] != "npm_token" || p.Secrets[1] != "gh_app" {
+		t.Fatalf("project %+v ok=%v", p, ok)
+	}
+	if err := AllowSecrets(p.Secrets, []string{"npm_token"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AllowSecrets(p.Secrets, []string{"aws_key"}); err == nil {
+		t.Fatal("disallowed secret accepted")
 	}
 }
 

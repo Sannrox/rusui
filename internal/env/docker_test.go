@@ -85,6 +85,32 @@ func TestDockerCLIOmitsLimitsWhenUnset(t *testing.T) {
 	}
 }
 
+func TestDockerCLIPutSecretKeepsValueOffArgv(t *testing.T) {
+	bin, logPath := stubDocker(t)
+	d := DockerCLI{Bin: bin}
+	const value = "sekrit-stdin-value"
+	if err := d.PutSecret("0123456789abcdef", "npm_token", value); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.DeleteSecrets("0123456789abcdef"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.PutSecret("0123456789abcdef", "../x", value); err == nil {
+		t.Fatal("escaped id")
+	}
+	logb, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(logb)
+	if strings.Contains(log, value) {
+		t.Fatalf("value on argv: %s", log)
+	}
+	if !strings.Contains(log, "mkdir -p "+SecretDir) || !strings.Contains(log, "exec -i -e RUSUI_SECRET_ID=npm_token") || !strings.Contains(log, "rm -rf "+SecretDir) {
+		t.Fatalf("cli %s", log)
+	}
+}
+
 func TestDockerCLIExecStdioKeepsValuesOffArgv(t *testing.T) {
 	bin, logPath := stubDocker(t)
 	envLog := filepath.Join(t.TempDir(), "env")

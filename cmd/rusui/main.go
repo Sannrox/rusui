@@ -160,6 +160,7 @@ func main() {
 		api.BaseURL = u
 	}
 	eng := engine.New(st, p, api, clock.Real{})
+	eng.Secrets = engine.SecretsFromEnv(os.Environ())
 	// Plane publication (ADR 0044) needs the App: implement guests hold no
 	// GitHub credential, so the plane is the only publisher.
 	var repoTokens *gh.InstallationTokens

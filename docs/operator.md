@@ -120,6 +120,12 @@ the worker secret on **both** the server and `rusui-runner`. A random
 HMAC will fail until you replace it with the Slack app signing secret and
 restart. See [SECURITY.md](../SECURITY.md).
 
+Project `secrets:` names ids the guest may hold while awake. Put each
+value in `RUSUI_SECRET_<ID>` on the plane (`RUSUI_SECRET_NPM_TOKEN` for
+`npm_token`). The guest sees the value at `/run/rusui/secrets/<id>` and
+as `$NPM_TOKEN` during the wake. Sleep removes it. The receipt names the
+id, not the value.
+
 ## 3. Run (loopback)
 
 ```bash

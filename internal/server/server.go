@@ -499,9 +499,15 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 			pol := s.Eng.PolicySnapshot()
 			if p, ok := pol.Project(sess.Project); ok {
 				out["permissions"] = p.Permissions
+				if secrets := s.Eng.AssignmentSecrets(p); len(secrets) > 0 {
+					out["secrets"] = secrets
+				}
 			} else if rr, ok := pol.Repo(c.Job.Repo); ok {
 				if p, ok := pol.Project(rr.Project); ok {
 					out["permissions"] = p.Permissions
+					if secrets := s.Eng.AssignmentSecrets(p); len(secrets) > 0 {
+						out["secrets"] = secrets
+					}
 				}
 			}
 		}
