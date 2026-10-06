@@ -1,6 +1,6 @@
 # ADR 0048: A project without a repository runs pinless sessions claimed by project key
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-06
 - Amends: [ADR 0007](0007-environment-snapshot.md) (P1 snapshots require a
   git pin).

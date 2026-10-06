@@ -15,7 +15,7 @@ Decisions that must outlive a single pull request.
 | [0004](0004-rusui-services-yaml.md) | services.yaml is `.rusui/services.yaml` only | Accepted |
 | [0005](0005-policy-v2-project.md) | Policy v2 is keyed by project | Accepted |
 | [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted |
-| [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048 (proposed) |
+| [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048 |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted |
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
@@ -56,7 +56,7 @@ Decisions that must outlive a single pull request.
 | [0045](0045-local-unattended-promotion-deferred.md) | Local unattended promotion is deferred | Accepted |
 | [0046](0046-workspace-first-sequence.md) | Terminal-first remote workspace sequence | Accepted |
 | [0047](0047-guest-link.md) | Container guests reach the plane only through a stdio guest link | Accepted |
-| [0048](0048-pinless-run-session.md) | A project without a repository runs pinless sessions claimed by project key | Proposed |
+| [0048](0048-pinless-run-session.md) | A project without a repository runs pinless sessions claimed by project key | Accepted |
 
 ## When to write an ADR
 
