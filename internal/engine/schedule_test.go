@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -388,4 +389,256 @@ func countKind(t *testing.T, st *store.Store, kind string) int {
 		t.Fatal(err)
 	}
 	return n
+}
+
+func TestGuestScheduleSetFiresSameSession(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	rec, err := h.e.GuestScheduleRequest(c.Job.ID, engine.ScheduleRequest{Op: "set", Every: "1m", Prompt: "scheduled work"})
+	if err != nil || !rec.Accepted || rec.SessionID != sid || rec.ScheduleID == 0 {
+		t.Fatalf("set %+v %v", rec, err)
+	}
+	if rec.ID == "" {
+		t.Fatal("receipt id")
+	}
+	list, err := store.ListSchedules(h.st)
+	if err != nil || len(list) != 1 || list[0].SessionID != sid || list[0].Prompt != "scheduled work" {
+		t.Fatalf("bound schedule %+v %v", list, err)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c)); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Unix(1_700_000_000, 0).UTC()
+	if err := h.e.StepSchedules(t0); err != nil {
+		t.Fatal(err)
+	}
+	c2, err := h.e.Claim("example/test-repo")
+	if err != nil || c2 == nil || c2.Snapshot.Body != "scheduled work" {
+		t.Fatalf("fire %+v %v", c2, err)
+	}
+	turn, err := store.GetTurn(h.st, c2.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.SessionID != sid {
+		t.Fatalf("session %d want %d", turn.SessionID, sid)
+	}
+	sess2, err := store.GetSession(h.st, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess2.EnvironmentID != sess.EnvironmentID {
+		t.Fatalf("environment %d want %d", sess2.EnvironmentID, sess.EnvironmentID)
+	}
+	acts, err := store.ListActionsForSession(h.st, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, a := range acts {
+		if a.Type == "schedule.request" && a.ReasonCode == "accepted" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("missing accepted receipt")
+	}
+}
+
+func TestGuestScheduleReplaceUpdatesPrompt(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	if _, err := h.e.GuestScheduleRequest(c.Job.ID, engine.ScheduleRequest{Op: "set", Every: "1m", Prompt: "old"}); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := h.e.GuestScheduleRequest(c.Job.ID, engine.ScheduleRequest{Op: "replace", Every: "1m", Prompt: "new"})
+	if err != nil || !rec.Accepted {
+		t.Fatalf("replace %+v %v", rec, err)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c)); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Unix(1_700_000_000, 0).UTC()
+	if err := h.e.StepSchedules(t0); err != nil {
+		t.Fatal(err)
+	}
+	c2, err := h.e.Claim("example/test-repo")
+	if err != nil || c2 == nil || c2.Snapshot.Body != "new" {
+		t.Fatalf("fire %+v %v", c2, err)
+	}
+	turn, err := store.GetTurn(h.st, c2.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.SessionID != sid {
+		t.Fatalf("session %d want %d", turn.SessionID, sid)
+	}
+}
+
+func TestGuestScheduleClearStopsLaterFires(t *testing.T) {
+	h := setup(t)
+	if _, err := h.e.StartRun("test", "first", ""); err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	if _, err := h.e.GuestScheduleRequest(c.Job.ID, engine.ScheduleRequest{Op: "set", Every: "1m", Prompt: "scheduled work"}); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := h.e.GuestScheduleRequest(c.Job.ID, engine.ScheduleRequest{Op: "clear"})
+	if err != nil || !rec.Accepted {
+		t.Fatalf("clear %+v %v", rec, err)
+	}
+	list, err := store.ListSchedules(h.st)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("cleared %+v %v", list, err)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c)); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Unix(1_700_000_000, 0).UTC()
+	if err := h.e.StepSchedules(t0); err != nil {
+		t.Fatal(err)
+	}
+	if c2, err := h.e.Claim("example/test-repo"); err != nil || c2 != nil {
+		t.Fatalf("cleared schedule fired: %+v %v", c2, err)
+	}
+}
+
+func TestGuestScheduleRefusalLeavesPrevious(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := h.e.StartRun("test", "other", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.e.CancelSession(other); err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	if _, err := h.e.GuestScheduleRequest(c.Job.ID, engine.ScheduleRequest{Op: "set", Every: "1m", Prompt: "keep me"}); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := h.e.GuestScheduleRequest(c.Job.ID, engine.ScheduleRequest{Op: "set", SessionID: other, Every: "1m", Prompt: "steal"})
+	if err != nil || rec.Accepted || rec.Detail != "another session" {
+		t.Fatalf("refuse %+v %v", rec, err)
+	}
+	list, err := store.ListSchedules(h.st)
+	if err != nil || len(list) != 1 || list[0].Prompt != "keep me" || list[0].SessionID != sid {
+		t.Fatalf("previous %+v %v", list, err)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c)); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Unix(1_700_000_000, 0).UTC()
+	if err := h.e.StepSchedules(t0); err != nil {
+		t.Fatal(err)
+	}
+	c2, err := h.e.Claim("example/test-repo")
+	if err != nil || c2 == nil || c2.Snapshot.Body != "keep me" {
+		t.Fatalf("previous fire %+v %v", c2, err)
+	}
+	turn, err := store.GetTurn(h.st, c2.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.SessionID != sid {
+		t.Fatalf("session %d want %d", turn.SessionID, sid)
+	}
+}
+
+func TestGuestScheduleAnotherProjectRefuse(t *testing.T) {
+	h := setup(t)
+	two, err := policy.Parse([]byte(twoProjectFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.ReloadPolicy(two)
+	if _, err := h.e.StartRun("test", "first", ""); err != nil {
+		t.Fatal(err)
+	}
+	other, err := h.e.StartRun("test2", "other", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	rec, err := h.e.GuestScheduleRequest(c.Job.ID, engine.ScheduleRequest{Op: "set", SessionID: other, Every: "1m", Prompt: "x"})
+	if err != nil || rec.Accepted || rec.Detail != "another project" {
+		t.Fatalf("project %+v %v", rec, err)
+	}
+	list, err := store.ListSchedules(h.st)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("schedules %+v %v", list, err)
+	}
+}
+
+func TestGuestScheduleKindRefuse(t *testing.T) {
+	h := setup(t)
+	it := issue(42)
+	h.putRefresh(it)
+	c := h.claim()
+	if c.Job.Lane != "review" {
+		t.Fatalf("lane %s", c.Job.Lane)
+	}
+	rec, err := h.e.GuestScheduleRequest(c.Job.ID, engine.ScheduleRequest{Op: "set", Every: "1m", Prompt: "no"})
+	if err != nil || rec.Accepted || rec.Detail != "kind" {
+		t.Fatalf("kind %+v %v", rec, err)
+	}
+	list, err := store.ListSchedules(h.st)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("schedules %+v %v", list, err)
+	}
+}
+
+func TestGuestScheduleHTTPAuth(t *testing.T) {
+	h := setup(t)
+	if _, err := h.e.StartRun("test", "first", ""); err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	do := func(auth, body string) (int, map[string]any) {
+		t.Helper()
+		req, _ := http.NewRequest("POST", h.http.URL+"/turns/"+strconv.FormatInt(c.Job.ID, 10)+"/schedule", strings.NewReader(body))
+		if auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		_ = res.Body.Close()
+		var out map[string]any
+		_ = json.Unmarshal(b, &out)
+		return res.StatusCode, out
+	}
+	code, _ := do("", `{"op":"set","every":"1m","prompt":"scheduled work"}`)
+	if code != 401 {
+		t.Fatalf("unauth %d", code)
+	}
+	code, out := do("Bearer wsec", `{"op":"set","every":"1m","prompt":"scheduled work"}`)
+	if code != 202 || out["accepted"] != true {
+		t.Fatalf("worker %d %v", code, out)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c)); err != nil {
+		t.Fatal(err)
+	}
+	code, _ = do("Bearer wsec", `{"op":"clear"}`)
+	if code != 409 {
+		t.Fatalf("unleased %d", code)
+	}
 }

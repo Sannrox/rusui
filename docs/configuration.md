@@ -220,6 +220,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/runners/hello` | worker secret |
 | `POST` | `/sessions/{id}/events` | turn/session auth |
 | `POST` | `/turns/{id}/actions` | turn auth |
+| `POST` | `/turns/{id}/schedule` | turn or worker token; guest set, replace, or clear of this session's bound schedule; 202 receipt |
 | `POST` | `/jobs/claim` | `Authorization: Bearer` or `X-Worker-Token` |
 | `POST` | `/jobs/{id}/heartbeat` | same |
 | `POST` | `/jobs/{id}/complete` | same |
