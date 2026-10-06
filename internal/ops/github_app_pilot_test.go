@@ -35,6 +35,11 @@ func TestGitHubAppPilotGuideIsReviewOnly(t *testing.T) {
 	if strings.Contains(guide, "include=receipts") {
 		t.Fatal("pilot guide must not fetch environment receipts as the review artifact")
 	}
+	for _, ev := range []string{"check_run", "workflow_run"} {
+		if strings.Contains(guide, ev) {
+			t.Fatalf("pilot guide must not subscribe %q", ev)
+		}
+	}
 	for _, secret := range []string{"ghp_", "ghs_", "BEGIN RSA PRIVATE KEY", "BEGIN PRIVATE KEY"} {
 		if strings.Contains(guide, secret) {
 			t.Fatalf("pilot guide must not embed credential fragment %q", secret)
