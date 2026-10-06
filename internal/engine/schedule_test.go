@@ -37,6 +37,44 @@ func TestStepSchedulesBucketsAndSkipLive(t *testing.T) {
 	}
 }
 
+func TestScheduleFireAfterCompleteMintsNewSession(t *testing.T) {
+	h := setup(t)
+	id, err := h.e.CreateSchedule("test", "hourly", "1m", "scheduled work")
+	if err != nil || id == 0 {
+		t.Fatalf("%d %v", id, err)
+	}
+	t0 := time.Unix(1_700_000_000, 0).UTC()
+	if err := h.e.StepSchedules(t0); err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	turn, err := store.GetTurn(h.st, c.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := turn.SessionID
+	if err := h.e.CancelSession(first); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.e.StepSchedules(t0.Add(61 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if n := countKind(t, h.st, store.SessionKindScheduled); n != 2 {
+		t.Fatalf("after complete fire %d sessions", n)
+	}
+	c2, err := h.e.Claim("example/test-repo")
+	if err != nil || c2 == nil {
+		t.Fatalf("second fire claim %+v %v", c2, err)
+	}
+	turn2, err := store.GetTurn(h.st, c2.Job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn2.SessionID == first {
+		t.Fatal("fire continued the old session")
+	}
+}
+
 const twoProjectFixture = `version: 2
 defaults:
   never_release: true

@@ -8,6 +8,8 @@
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [#75](https://github.com/Sannrox/rusui/issues/75) (project schedules),
   [#81](https://github.com/Sannrox/rusui/issues/81) (follow-up turns).
+- Amended by: [ADR 0056](0056-schedule-still-mints-a-new-session.md).
+  A schedule still mints a new session. Bind-to-session is refused.
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
 

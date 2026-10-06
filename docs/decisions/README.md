@@ -38,7 +38,7 @@ Decisions that must outlive a single pull request.
 | [0027](0027-guest-reachability-ask.md) | The guest image does not declare reachability yet | Accepted |
 | [0028](0028-container-isolation-profile.md) | The supported machine isolation profile remains the container | Accepted |
 | [0029](0029-single-host-runner.md) | The supported runner topology remains one host | Accepted |
-| [0030](0030-schedule-new-session.md) | A schedule fire starts a new session | Accepted |
+| [0030](0030-schedule-new-session.md) | A schedule fire starts a new session | Accepted; amended by 0056 |
 | [0031](0031-cli-command-tree.md) | The rusui CLI stays a flat verb list | Accepted |
 | [0032](0032-named-services.md) | Named services declare a port and a health path | Accepted |
 | [0033](0033-third-party-identity-deferred.md) | Plane-minted third-party identity is deferred | Accepted |
@@ -64,6 +64,7 @@ Decisions that must outlive a single pull request.
 | [0053](0053-wake-secret-injection-refused.md) | The guest still holds only the per-turn grant | Accepted |
 | [0054](0054-repository-hooks-only.md) | Setup and resume stay repository hooks | Accepted |
 | [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Accepted |
+| [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Accepted |
 
 ## When to write an ADR
 
