@@ -98,17 +98,19 @@ approval answered while the command was disconnected is not printed.
 rusui read -follow [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_ID
 ```
 
-Read what `.agents/setup`, `.agents/resume`, and the `.rusui/services.yaml`
-commands printed in a container session. `rusui logs` stays the list of
-action receipts; `rusui envlog` is the hook and service output, so the two
-never mix ([ADR 0031](decisions/0031-cli-command-tree.md)). Each capture is combined stdout and stderr of the last run of
-that hook or service; a new run replaces it. A capture over 1 MiB keeps
-its last 1 MiB and is marked truncated. A hook that is absent has no
-capture, and a session with no output says so. The console session page
-lists the same captures under Environment output without inlining bodies;
-`rusui envlog` reads one kind or name when you pass `-kind` and `-name`.
-Treat the output like the transcript: it may contain what setup printed,
-and it is served only with the operator token.
+Read what plane `pre-clone`/`pre-setup`, `.agents/setup`, `.agents/resume`,
+and the `.rusui/services.yaml` commands printed in a container session.
+`rusui logs` stays the list of action receipts; `rusui envlog` is the hook
+and service output, so the two never mix
+([ADR 0031](decisions/0031-cli-command-tree.md)). Each capture is combined
+stdout and stderr of the last run of that hook or service; a new run
+replaces it. A capture over 1 MiB keeps its last 1 MiB and is marked
+truncated. A hook that is absent has no capture, and a session with no
+output says so. The console session page lists the same captures under
+Environment output without inlining bodies; `rusui envlog` reads one kind
+or name when you pass `-kind` and `-name`. Treat the output like the
+transcript: it may contain what setup printed, and it is served only with
+the operator token.
 
 ```bash
 rusui envlog [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] [-kind KIND] [-name NAME] [-omit-body] SESSION_ID

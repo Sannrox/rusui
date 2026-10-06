@@ -203,7 +203,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`) |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
 | `GET` | `/sessions/{id}/terminal` | operator, worker, or turn token; current environment terminal output; not the transcript |
-| `GET` | `/sessions/{id}/envlog` | operator token; last setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
+| `GET` | `/sessions/{id}/envlog` | operator token; last pre-clone, pre-setup, setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`pre-clone`/`pre-setup`/`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
 | `POST` | `/sessions/{id}/workspace` | operator token; multipart `file` plus `path` query; 32 MiB cap; workspace-relative only |
 | `GET` | `/sessions/{id}?include=receipts[&receipt_after_id={id}][&process_receipt_after_id={id}]` | operator or worker token; up to 100 environment and 100 local process receipts in ID order; follow `environment_receipts_next_after_id` and `process_receipts_next_after_id` when present |
 | `GET` | `/sessions/{id}?view=review-status&turn_id={turn}` | operator or worker token; compact turn state and revisions for polling |
@@ -334,6 +334,15 @@ allowlist is refused before the turn starts. Durable values stay on the
 plane ([ADR 0009](decisions/0009-credential-broker.md),
 [ADR 0066](decisions/0066-inject-secret-at-wake.md)). The receipt names
 the id, not the value.
+
+Plane-stored hooks live next to `policy.yaml` in
+`hooks/<project-slug>/pre-clone` and `hooks/<project-slug>/pre-setup`.
+Pre-clone runs before the git pin is placed. Pre-setup runs immediately
+before `.agents/setup`. A non-zero exit leaves no environment. Output is
+in `rusui envlog`. The hook environment does not receive
+`RUSUI_OPERATOR_TOKEN` or a model-provider key. A snapshot hit skips
+both hooks and setup. Wake still runs `.agents/resume` only
+([ADR 0067](decisions/0067-plane-stored-pre-hooks.md)).
 
 ```yaml
 projects:

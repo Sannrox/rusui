@@ -87,10 +87,10 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 		return nil, err
 	}
 	var caps provisionCaptures
-	caps.setup, err = e.prepareWorkspace(d, handle, spec.Repo, spec.Pin, spec.SourceHash)
+	caps.setup, caps.hooks, err = e.prepareWorkspace(d, handle, spec.Repo, spec.Pin, spec.SourceHash)
 	if err != nil {
 		_ = d.Destroy(handle)
-		if caps.setup == nil {
+		if caps.setup == nil && len(caps.hooks) == 0 {
 			return nil, err
 		}
 		return nil, &ProvisionError{Err: err, captures: caps}
@@ -133,11 +133,15 @@ func (p *ProvisionError) Unwrap() error { return p.Err }
 
 type provisionCaptures struct {
 	setup    *env.Capture
+	hooks    []env.Capture
 	services []env.Capture
 	started  bool
 }
 
 func (e *Engine) recordProvision(envID int64, caps provisionCaptures) {
+	for _, c := range caps.hooks {
+		e.recordCaptures(envID, c.Kind, []env.Capture{c})
+	}
 	if caps.setup != nil {
 		e.recordCaptures(envID, env.CaptureSetup, []env.Capture{*caps.setup})
 	}
@@ -555,7 +559,10 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	if err != nil {
 		return err
 	}
-	setup, err := e.prepareWorkspace(d, handle, item.Repo, pin, hash)
+	setup, hooks, err := e.prepareWorkspace(d, handle, item.Repo, pin, hash)
+	for _, c := range hooks {
+		e.recordCaptures(envRow.ID, c.Kind, []env.Capture{c})
+	}
 	if setup != nil {
 		e.recordCaptures(envRow.ID, env.CaptureSetup, []env.Capture{*setup})
 	}

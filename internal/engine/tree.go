@@ -61,57 +61,70 @@ func snapshotStamp(hash string) []byte {
 }
 
 // prepareWorkspace fills a new environment's workspace. A snapshot hit
-// places the prepared tree and skips setup. A miss places the git pin,
-// runs setup, and stores the workspace after setup as the snapshot for
-// hash (ADR 0007). Without a pin there is no snapshot, so setup runs on
-// every new environment. The capture is nil when setup was not attempted.
-func (e *Engine) prepareWorkspace(d env.Driver, handle, repo, pin, hash string) (*env.Capture, error) {
+// places the prepared tree and skips plane hooks and setup. A miss runs
+// pre-clone, places the git pin, runs pre-setup, then `.agents/setup`,
+// and stores the workspace after setup as the snapshot for hash
+// (ADR 0007, ADR 0067). Without a pin there is no snapshot, so those
+// steps run on every new environment. setup is nil when setup was not
+// attempted.
+func (e *Engine) prepareWorkspace(d env.Driver, handle, repo, pin, hash string) (setup *env.Capture, hooks []env.Capture, err error) {
 	if policy.IsProjectKey(repo) {
 		// Empty workspace, no .git, no setup (ADR 0048).
-		return nil, nil
-	}
-	if e.Tree == nil || repo == "" || pin == "" || hash == "" {
-		return runSetup(d, handle, hash)
+		return nil, nil, nil
 	}
 	root := e.snapshotRoot()
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return nil, err
-	}
 	dir := filepath.Join(root, hash)
-	if snapshotComplete(dir, hash) {
-		return nil, placeTree(d, handle, dir)
+	if e.Tree != nil && repo != "" && pin != "" && hash != "" && snapshotComplete(dir, hash) {
+		return nil, nil, placeTree(d, handle, dir)
+	}
+	slug := e.projectSlug(repo)
+	if err := e.runNamedHook(d, handle, slug, env.CapturePreClone, &hooks); err != nil {
+		return nil, hooks, err
+	}
+	if e.Tree == nil || repo == "" || pin == "" || hash == "" {
+		if err := e.runNamedHook(d, handle, slug, env.CapturePreSetup, &hooks); err != nil {
+			return nil, hooks, err
+		}
+		setup, err = runSetup(d, handle, hash)
+		return setup, hooks, err
+	}
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return nil, hooks, err
 	}
 	staging, err := os.MkdirTemp(root, "prep-")
 	if err != nil {
-		return nil, err
+		return nil, hooks, err
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
 	if err := e.Tree.Fetch(repo, pin, staging); err != nil {
-		return nil, err
+		return nil, hooks, err
 	}
 	if err := placeTree(d, handle, staging); err != nil {
-		return nil, err
+		return nil, hooks, err
+	}
+	if err := e.runNamedHook(d, handle, slug, env.CapturePreSetup, &hooks); err != nil {
+		return nil, hooks, err
 	}
 	c, err := runSetup(d, handle, hash)
 	if err != nil {
-		return c, err
+		return c, hooks, err
 	}
 	tree := staging
 	if c != nil && c.Ran {
 		capturer, ok := d.(env.TreeCapturer)
 		if !ok {
 			e.exception("snapshot " + hash + ": driver cannot capture tree; setup will run again")
-			return c, nil
+			return c, hooks, nil
 		}
 		tree, err = os.MkdirTemp(root, "capture-")
 		if err != nil {
 			e.exception("snapshot " + hash + ": " + err.Error())
-			return c, nil
+			return c, hooks, nil
 		}
 		defer func() { _ = os.RemoveAll(tree) }()
 		if err := capturer.CaptureTree(handle, tree); err != nil {
 			e.exception("snapshot " + hash + ": capture: " + err.Error())
-			return c, nil
+			return c, hooks, nil
 		}
 	}
 	// This environment is already prepared; a snapshot that cannot be
@@ -119,7 +132,54 @@ func (e *Engine) prepareWorkspace(d env.Driver, handle, repo, pin, hash string) 
 	if err := e.storeSnapshot(dir, hash, tree); err != nil {
 		e.exception("snapshot " + hash + ": store: " + err.Error())
 	}
-	return c, nil
+	return c, hooks, nil
+}
+
+func (e *Engine) projectSlug(repo string) string {
+	if p, ok := e.PolicySnapshot().ProjectForRepo(repo); ok {
+		return p.Slug
+	}
+	if slug, ok := policy.ParseProjectKey(repo); ok {
+		return slug
+	}
+	return ""
+}
+
+func (e *Engine) hookScript(slug, kind string) string {
+	var m map[string]string
+	switch kind {
+	case env.CapturePreClone:
+		m = e.PreCloneHooks
+	case env.CapturePreSetup:
+		m = e.PreSetupHooks
+	}
+	if slug == "" || len(m) == 0 {
+		return ""
+	}
+	return m[slug]
+}
+
+func (e *Engine) runNamedHook(d env.Driver, handle, slug, kind string, hooks *[]env.Capture) error {
+	script := e.hookScript(slug, kind)
+	if script == "" {
+		return nil
+	}
+	c, err := runPlaneHook(d, handle, kind, script)
+	*hooks = append(*hooks, c)
+	return err
+}
+
+func runPlaneHook(d env.Driver, handle, kind, script string) (env.Capture, error) {
+	out := env.Capture{Kind: kind, Ran: true}
+	r, ok := d.(env.ScriptRunner)
+	if !ok {
+		out.Failed = true
+		return out, fmt.Errorf("env: driver cannot run plane hook")
+	}
+	var err error
+	out.Output, out.Truncated, err = r.ExecScript(handle, script)
+	out.Failed = err != nil
+	return out, err
 }
 
 func placeTree(d env.Driver, handle, src string) error {

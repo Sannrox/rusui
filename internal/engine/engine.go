@@ -83,6 +83,10 @@ type Engine struct {
 	// allowlist or claim refuses before the lease. Empty means inject the
 	// allowlist. Tests set this; production leaves it empty.
 	RequestedSecrets []string
+	// PreCloneHooks and PreSetupHooks are plane-stored scripts keyed by
+	// project slug (ADR 0067). Production loads them from hooks/<slug>/.
+	PreCloneHooks map[string]string
+	PreSetupHooks map[string]string
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {

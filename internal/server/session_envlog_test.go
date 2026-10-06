@@ -116,6 +116,12 @@ func TestSessionEnvlogServesBoundedHookAndServiceCaptures(t *testing.T) {
 	if status, _ := get("op-tok", "kind=nope"); status != http.StatusBadRequest {
 		t.Fatalf("bad kind %d", status)
 	}
+	if status, filtered := get("op-tok", "kind=pre-clone"); status != http.StatusOK || filtered == nil || len(filtered) != 0 {
+		t.Fatalf("pre-clone kind %d %+v", status, filtered)
+	}
+	if status, filtered := get("op-tok", "kind=pre-setup"); status != http.StatusOK || filtered == nil || len(filtered) != 0 {
+		t.Fatalf("pre-setup kind %d %+v", status, filtered)
+	}
 
 	sleepWake := func() {
 		t.Helper()
