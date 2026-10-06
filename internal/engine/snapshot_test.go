@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -159,5 +160,19 @@ func TestChangedPinRunsSetupAndStoresNewTree(t *testing.T) {
 	b.wantBuilt(t, againA.Handle, "built from pin-a\n")
 	if n := b.setupRuns(); n != 2 {
 		t.Fatalf("setup ran %d times, want no rerun for stored pins", n)
+	}
+}
+
+func TestPrepareRunsOnlyRepositorySetup(t *testing.T) {
+	b := newSetupBox(t)
+	b.mustProvision(t, "box-1", "aaa")
+	if n := b.setupRuns(); n != 1 {
+		t.Fatalf("setup ran %d times", n)
+	}
+	for _, cmd := range b.rt.Execs {
+		joined := strings.Join(cmd, " ")
+		if strings.Contains(joined, "pre-clone") || strings.Contains(joined, "pre-setup") {
+			t.Fatalf("plane hook %q", joined)
+		}
 	}
 }
