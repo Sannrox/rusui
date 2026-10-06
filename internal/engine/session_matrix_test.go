@@ -45,7 +45,7 @@ func TestD6SessionWorkflowMatrix(t *testing.T) {
 	})
 	t.Run("R03_scheduled", func(t *testing.T) {
 		h := setup(t)
-		if _, err := h.e.CreateSchedule("test", "hourly", "1m", "scheduled work"); err != nil {
+		if _, err := h.e.CreateSchedule("test", "hourly", "1m", "scheduled work", 0); err != nil {
 			t.Fatal(err)
 		}
 		t0 := time.Unix(1_700_000_000, 0).UTC()
@@ -240,7 +240,7 @@ func TestD6SessionWorkflowMatrix(t *testing.T) {
 	})
 	t.Run("R18_schedule_skip_live", func(t *testing.T) {
 		h := setup(t)
-		if _, err := h.e.CreateSchedule("test", "hourly", "1m", "scheduled work"); err != nil {
+		if _, err := h.e.CreateSchedule("test", "hourly", "1m", "scheduled work", 0); err != nil {
 			t.Fatal(err)
 		}
 		t0 := time.Unix(1_700_000_000, 0).UTC()

@@ -54,6 +54,10 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if ver != CurrentSchema {
 		t.Fatalf("schema version %d, want %d", ver, CurrentSchema)
 	}
+	var schedSessionCol int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('schedules') WHERE name='session_id'`).Scan(&schedSessionCol); err != nil || schedSessionCol != 1 {
+		t.Fatalf("schedules.session_id missing after upgrade: %d %v", schedSessionCol, err)
+	}
 	var pubs int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='publication_attempts'`).Scan(&pubs); err != nil || pubs != 1 {
 		t.Fatalf("publication_attempts missing after upgrade: %d %v", pubs, err)

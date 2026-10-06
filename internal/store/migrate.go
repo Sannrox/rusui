@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 37
+const CurrentSchema = 38
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -485,7 +485,28 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 38 {
+		if err := migrateV38(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 38); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV38 lets a schedule bind to one session (ADR 0069, #506).
+func migrateV38(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('schedules') WHERE name='session_id'`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`ALTER TABLE schedules ADD COLUMN session_id INTEGER NOT NULL DEFAULT 0`)
+	return err
 }
 
 // migrateV37 lets environment captures store plane pre-clone and pre-setup
