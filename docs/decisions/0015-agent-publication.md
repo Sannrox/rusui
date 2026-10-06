@@ -11,8 +11,11 @@
   [ARCHITECTURE.md](../../ARCHITECTURE.md) current contract (publication).
 - Related: [ADR 0010](0010-hybrid-roadmap-sequence.md) D5 (humans merge
   core delivery).
-- Amended by: [ADR 0055](0055-implement-publication-is-pull-request.md).
-  Implement publication stays a pull request. `push-base` is refused.
+- Amended by: [ADR 0055](0055-implement-publication-is-pull-request.md)
+  (pull-request only; superseded by
+  [ADR 0068](0068-project-ship-behavior.md), which adds a project
+  `ship` field of `pull-request` or `push-base`; dogfood stays
+  pull-request).
 - Discussion: none. GitHub Discussions are disabled. The maintainer chose
   this model directly; merging with this status is the acceptance act.
 - Accepted target amendment: [ADR 0020](0020-turn-scoped-github-publication.md)

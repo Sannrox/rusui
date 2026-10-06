@@ -1,6 +1,6 @@
 # ADR 0055: Implement publication stays a pull request
 
-- Status: Accepted
+- Status: Superseded by [ADR 0068](0068-project-ship-behavior.md)
 - Date: 2026-10-06
 - Amends: [ADR 0015](0015-agent-publication.md) (the agent publishes
   its own pull requests; a push to the default branch is not a
