@@ -18,6 +18,9 @@
   `project:<slug>`.
   [ADR 0049](0049-idle-environment-expiry-retained.md) retains the
   72-hour idle expiry; keep-until-archive is rejected.
+  [ADR 0054](0054-repository-hooks-only.md) retains repository
+  `.agents/setup` and `.agents/resume`; plane-stored pre-clone and
+  pre-setup hooks are refused.
 - Discussion: none. Merging with this status is the acceptance act.
 
 ## Context
