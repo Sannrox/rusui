@@ -9,6 +9,8 @@
 - Resolves: [#123](https://github.com/Sannrox/rusui/issues/123)
 - Amended by: [ADR 0034](0034-operator-host-location-deferred.md) (a
   registered operator host is not a session location either).
+  [ADR 0064](0064-session-size-and-admission-queue.md) queues on this
+  single host when the lease budget is full; a fleet stays refused.
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0001](0001-environment-plane.md) D3,
   [ADR 0028](0028-container-isolation-profile.md) (container isolation

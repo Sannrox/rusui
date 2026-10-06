@@ -1,6 +1,6 @@
 # ADR 0051: Admission still fails when the lease budget is full
 
-- Status: Accepted
+- Status: Superseded by [ADR 0064](0064-session-size-and-admission-queue.md)
 - Date: 2026-10-06
 - Amends: none. [ADR 0029](0029-single-host-runner.md) D3 still
   requires measured queueing or resource pressure before a fleet.
