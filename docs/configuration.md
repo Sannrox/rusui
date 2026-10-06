@@ -214,6 +214,8 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/drain` | worker secret; pause claims and list live turns |
 | `POST` | `/hooks/github` | `X-Hub-Signature-256` |
 | `POST` | `/hooks/events` | `X-Rusui-Signature-256` (same webhook secret); 202 |
+| `GET`/`POST` | `/sessions/{id}/webhook` | operator or worker token; mint or return the session webhook path and signing secret |
+| `POST` | `/hooks/sessions/{id}` | per-session `X-Rusui-Signature-256`; 202 valid, 401 bad signature (stored refusal), 404 missing or archived |
 | `POST` | `/hooks/slack` | Slack HMAC + user allowlist |
 | `POST` | `/runners/hello` | worker secret |
 | `POST` | `/sessions/{id}/events` | turn/session auth |

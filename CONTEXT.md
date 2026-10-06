@@ -64,6 +64,10 @@ _Avoid_: environment, GitHub item snapshot hash, image tag
 A named trigger on a project with a UTC cadence and a prompt. It may bind to one session; a fire then appends that prompt on the same session and environment, waiting if a turn is live ([ADR 0069](docs/decisions/0069-schedule-binds-a-session.md)). An unbound schedule still mints a new session per fire and skips while live ([ADR 0030](docs/decisions/0030-schedule-new-session.md)). Deleting the schedule stops later fires and does not cancel a running turn.
 _Avoid_: review fan-out, cron in policy.yaml, steer of a live turn
 
+**Session webhook**:
+A plane-hosted signed POST URL owned by one session. A valid delivery is stored, wakes that environment, and queues a prompt containing the delivery id. An invalid signature is stored as a refusal and does not wake. Archive makes the URL miss. The guest does not listen on a public port ([ADR 0070](docs/decisions/0070-session-owned-webhook.md)).
+_Avoid_: GitHub review webhook, guest bind, plugin runtime
+
 **Machine isolation**:
 Rusui’s OS boundary for an unattended session. The default for public-repository sessions is a container ([ADR 0022](docs/decisions/0022-public-repo-isolation.md)). The process driver is explicit test/dev opt-in; a missing runtime fails closed (`rusui diagnose` / `GET /readyz`). The supported isolation profile remains that container; a stronger runtime is not selected ([ADR 0028](docs/decisions/0028-container-isolation-profile.md)). Snapshot is the prepared tree, not a hypervisor memory image.
 _Avoid_: tool fence, shikigami sandbox, Sumika local session, microVM
