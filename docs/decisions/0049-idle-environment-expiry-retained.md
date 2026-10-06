@@ -1,6 +1,6 @@
 # ADR 0049: Idle environment expiry remains 72 hours
 
-- Status: Accepted
+- Status: Superseded by [ADR 0063](0063-keep-environment-until-archive.md)
 - Date: 2026-10-06
 - Amends: [ADR 0007](0007-environment-snapshot.md) (Lifetime: idle 72h
   expires the environment; the session row stays; the next turn
