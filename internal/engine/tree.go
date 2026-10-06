@@ -49,48 +49,127 @@ func (e *Engine) snapshotRoot() string {
 	return filepath.Join("environments", ".snapshots")
 }
 
-func (e *Engine) materialize(repo, pin, hash string, d env.Driver, handle string) error {
+// snapshotMarker names the file that marks a complete snapshot. A tree
+// without it, or with an older stamp, is not a hit.
+const snapshotMarker = ".rusui-snapshot"
+
+// snapshotStamp is the marker body. A pin cached before setup's tree was
+// kept wrote only the hash, so it does not match (#512).
+func snapshotStamp(hash string) []byte {
+	return []byte("prepared " + hash + "\n")
+}
+
+// prepareWorkspace fills a new environment's workspace. A snapshot hit
+// places the prepared tree and skips setup. A miss places the git pin,
+// runs setup, and stores the workspace after setup as the snapshot for
+// hash (ADR 0007). Without a pin there is no snapshot, so setup runs on
+// every new environment. The capture is nil when setup was not attempted.
+func (e *Engine) prepareWorkspace(d env.Driver, handle, repo, pin, hash string) (*env.Capture, error) {
 	if e.Tree == nil || repo == "" || pin == "" || hash == "" {
-		return nil
+		return runSetup(d, handle, hash)
 	}
-	cache, err := e.prepareCache(repo, pin, hash)
+	root := e.snapshotRoot()
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(root, hash)
+	if snapshotComplete(dir, hash) {
+		return nil, placeTree(d, handle, dir)
+	}
+	staging, err := os.MkdirTemp(root, "prep-")
 	if err != nil {
-		return err
+		return nil, err
 	}
+	defer func() { _ = os.RemoveAll(staging) }()
+	if err := e.Tree.Fetch(repo, pin, staging); err != nil {
+		return nil, err
+	}
+	if err := placeTree(d, handle, staging); err != nil {
+		return nil, err
+	}
+	c, err := runSetup(d, handle, hash)
+	if err != nil {
+		return c, err
+	}
+	tree := staging
+	if c != nil && c.Ran {
+		capturer, ok := d.(env.TreeCapturer)
+		if !ok {
+			e.exception("snapshot " + hash + ": driver cannot capture tree; setup will run again")
+			return c, nil
+		}
+		tree, err = os.MkdirTemp(root, "capture-")
+		if err != nil {
+			e.exception("snapshot " + hash + ": " + err.Error())
+			return c, nil
+		}
+		defer func() { _ = os.RemoveAll(tree) }()
+		if err := capturer.CaptureTree(handle, tree); err != nil {
+			e.exception("snapshot " + hash + ": capture: " + err.Error())
+			return c, nil
+		}
+	}
+	// This environment is already prepared; a snapshot that cannot be
+	// stored costs the next environment a setup run, not this one.
+	if err := e.storeSnapshot(dir, hash, tree); err != nil {
+		e.exception("snapshot " + hash + ": store: " + err.Error())
+	}
+	return c, nil
+}
+
+func placeTree(d env.Driver, handle, src string) error {
 	placer, ok := d.(interface {
 		PlaceTree(handle, srcDir string) error
 	})
 	if !ok {
 		return fmt.Errorf("env: driver cannot place tree")
 	}
-	return placer.PlaceTree(handle, cache)
+	return placer.PlaceTree(handle, src)
 }
 
-func (e *Engine) prepareCache(repo, pin, hash string) (string, error) {
-	root := e.snapshotRoot()
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return "", err
+// runSetup runs `.agents/setup` when the driver has one.
+func runSetup(d env.Driver, handle, hash string) (*env.Capture, error) {
+	p, ok := d.(env.Preparer)
+	if !ok {
+		return nil, nil
 	}
-	dir := filepath.Join(root, hash)
-	if _, err := os.Stat(filepath.Join(dir, ".rusui-snapshot")); err == nil {
-		return dir, nil
+	c, err := p.Setup(handle, hash)
+	return &c, err
+}
+
+func snapshotComplete(dir, hash string) bool {
+	b, err := os.ReadFile(filepath.Join(dir, snapshotMarker))
+	return err == nil && string(b) == string(snapshotStamp(hash))
+}
+
+// storeSnapshot stamps tree and renames it to dir, so a crash never
+// leaves a partial tree marked complete. When another environment stored
+// the same hash first, tree is left for the caller to remove.
+func (e *Engine) storeSnapshot(dir, hash, tree string) error {
+	marker := filepath.Join(tree, snapshotMarker)
+	// The workspace may carry its own marker, even as a symlink.
+	if err := os.RemoveAll(marker); err != nil {
+		return err
 	}
-	tmp, err := os.MkdirTemp(root, "prep-")
+	f, err := os.OpenFile(marker, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		return "", err
+		return err
 	}
-	defer func() { _ = os.RemoveAll(tmp) }()
-	if err := e.Tree.Fetch(repo, pin, tmp); err != nil {
-		return "", err
+	if _, err := f.Write(snapshotStamp(hash)); err != nil {
+		_ = f.Close()
+		return err
 	}
-	if err := os.WriteFile(filepath.Join(tmp, ".rusui-snapshot"), []byte(hash+"\n"), 0o600); err != nil {
-		return "", err
+	if err := f.Close(); err != nil {
+		return err
 	}
-	if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
-		return "", err
+	e.snapshotMu.Lock()
+	defer e.snapshotMu.Unlock()
+	if snapshotComplete(dir, hash) {
+		return nil
 	}
-	if err := os.Rename(tmp, dir); err != nil {
-		return "", err
+	// An incomplete dir is never placed from, so removing it is safe.
+	if err := os.RemoveAll(dir); err != nil {
+		return err
 	}
-	return dir, nil
+	return os.Rename(tree, dir)
 }

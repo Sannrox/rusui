@@ -297,7 +297,7 @@
     },
     {
       "name": "RusuiSessionFollow",
-      "description": "Operator-authorized SSE read of one session (GET /sessions/{id}/read/follow, rusui read -follow). Streams durable transcript actions in append order after an actions-rowid cursor, then session state changes; ends at completed, failed, or cancelled. Carries no terminal bytes, diff, or credentials. Reconnect resumes after the last received seq.",
+      "description": "Operator-authorized SSE read of one session (GET /sessions/{id}/read/follow, rusui read -follow). Streams durable transcript actions in append order after an actions-rowid cursor, then session state changes, and a turn record (session_id, turn_id, state ready, waiting, or blocked) when a turn completes, waits on an approval, or completes blocked; ends at completed, failed, or cancelled. Carries no terminal bytes, diff, or credentials. Reconnect resumes after the last received seq.",
       "superclasses": [],
       "properties": []
     }

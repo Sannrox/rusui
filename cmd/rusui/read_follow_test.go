@@ -318,3 +318,130 @@ func TestReadFollowStaysConnectedOverHTTPSWhileIdle(t *testing.T) {
 		t.Fatalf("requests %d stderr %s", n.Load(), errOut.String())
 	}
 }
+
+func (p *followPlane) turn() store.Turn {
+	p.t.Helper()
+	turns, err := store.ListTurnsForSession(p.st, p.sid)
+	if err != nil || len(turns) != 1 {
+		p.t.Fatalf("turns %v %v", turns, err)
+	}
+	return turns[0]
+}
+
+func (p *followPlane) approval(id string) {
+	p.t.Helper()
+	tid := p.turn().ID
+	if err := store.InsertAction(p.st, store.Action{
+		ID: id, SessionID: &p.sid, TurnID: &tid, Repo: "example/test-repo", Item: 1,
+		Type: acp.ActionApproval, ReasonCode: acp.ReasonUnmatched,
+		EvidenceClass: acp.EvidenceObserved, LimitSentence: acp.LimitSentence,
+		Body: "may I",
+	}); err != nil {
+		p.t.Error(err)
+	}
+}
+
+func (p *followPlane) review(art engine.Artifact) {
+	p.t.Helper()
+	tr := p.turn()
+	b, err := json.Marshal(art)
+	if err != nil {
+		p.t.Fatal(err)
+	}
+	if _, err := p.st.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?,?,?,?,?)`, tr.ID, tr.PendingRevision, "h", "m", string(b)); err != nil {
+		p.t.Fatal(err)
+	}
+}
+
+// A completed turn prints one ready record after its state (#491).
+func TestReadFollowPrintsReadyRecord(t *testing.T) {
+	p := newFollowPlane(t)
+	p.finish("completed")
+	hs := httptest.NewServer(p.h)
+	t.Cleanup(hs.Close)
+	var out, errOut bytes.Buffer
+	if code := readMain([]string{"-follow", "-url", hs.URL, "-token", "op-tok", p.id}, &out, &errOut); code != 0 {
+		t.Fatalf("follow %d %s", code, errOut.String())
+	}
+	want := fmt.Sprintf("state: completed (turn %d revision 1)\nturn: ready session=%s turn=%d revision=1\n", p.turn().ID, p.id, p.turn().ID)
+	if !strings.HasSuffix(out.String(), want) {
+		t.Fatalf("stdout\n%s\nwant suffix\n%s", out.String(), want)
+	}
+}
+
+// A completed turn whose result is blocked prints a blocked record (#491).
+func TestReadFollowPrintsBlockedRecord(t *testing.T) {
+	p := newFollowPlane(t)
+	p.review(engine.Artifact{ItemKind: "run", Verdict: "keep", Result: &engine.TaskResult{BlockedReason: "no access", Outcome: engine.OutcomeBlocked}})
+	p.finish("completed")
+	hs := httptest.NewServer(p.h)
+	t.Cleanup(hs.Close)
+	var out, errOut bytes.Buffer
+	if code := readMain([]string{"-follow", "-url", hs.URL, "-token", "op-tok", p.id}, &out, &errOut); code != 0 {
+		t.Fatalf("follow %d %s", code, errOut.String())
+	}
+	want := fmt.Sprintf("turn: blocked session=%s turn=%d revision=1\n", p.id, p.turn().ID)
+	if strings.Count(out.String(), "turn: ") != 1 || !strings.HasSuffix(out.String(), want) {
+		t.Fatalf("stdout\n%s\nwant suffix\n%s", out.String(), want)
+	}
+}
+
+// A pending approval prints one waiting record, also when the connection
+// drops after the record and the plane resends it on reconnect (#491).
+func TestReadFollowPrintsWaitingRecordOnceAcrossReconnect(t *testing.T) {
+	fastReconnect(t)
+	p := newFollowPlane(t)
+	p.finish("leased")
+	p.approval("ask-1")
+	var n atomic.Int32
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if n.Add(1) != 1 {
+			p.h.ServeHTTP(w, r)
+			return
+		}
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+		p.h.ServeHTTP(&turnCutWriter{ResponseWriter: w, cancel: cancel}, r.WithContext(ctx))
+	}))
+	t.Cleanup(hs.Close)
+	out := &lockedBuffer{}
+	go func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for (n.Load() < 2 || !strings.Contains(out.String(), "turn: waiting")) && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+		// Give the second connection time to resend the record.
+		time.Sleep(300 * time.Millisecond)
+		p.finish("completed")
+	}()
+	var errOut bytes.Buffer
+	if code := readMain([]string{"-follow", "-url", hs.URL, "-token", "op-tok", p.id}, out, &errOut); code != 0 {
+		t.Fatalf("follow %d %s", code, errOut.String())
+	}
+	got := out.String()
+	tid := p.turn().ID
+	waiting := fmt.Sprintf("turn: waiting session=%s turn=%d revision=1 approval=", p.id, tid)
+	if strings.Count(got, waiting) != 1 || strings.Count(got, "turn: ready") != 1 || !strings.Contains(errOut.String(), "reconnecting") {
+		t.Fatalf("stdout\n%s\nstderr %s", got, errOut.String())
+	}
+	if strings.Index(got, waiting) > strings.Index(got, "turn: ready") {
+		t.Fatalf("records out of order\n%s", got)
+	}
+}
+
+// turnCutWriter ends the response right after the first turn record.
+type turnCutWriter struct {
+	http.ResponseWriter
+	cancel context.CancelFunc
+}
+
+func (c *turnCutWriter) Write(b []byte) (int, error) {
+	n, err := c.ResponseWriter.Write(b)
+	if bytes.Contains(b, []byte("event: turn")) {
+		c.ResponseWriter.(http.Flusher).Flush()
+		c.cancel()
+	}
+	return n, err
+}
+
+func (c *turnCutWriter) Flush() { c.ResponseWriter.(http.Flusher).Flush() }

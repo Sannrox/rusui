@@ -40,6 +40,16 @@ type followStateV struct {
 	Revision int    `json:"revision"`
 }
 
+// followTurnV is a turn record: a turn is ready, waiting on an approval,
+// or blocked (#491).
+type followTurnV struct {
+	SessionID   int64  `json:"session_id"`
+	TurnID      int64  `json:"turn_id"`
+	State       string `json:"state"`
+	Revision    int    `json:"revision"`
+	ApprovalSeq int64  `json:"approval_seq"`
+}
+
 // followRefused is a plane answer that reconnecting cannot change.
 type followRefused struct{ msg string }
 
@@ -57,6 +67,7 @@ type followReader struct {
 	cursor  int64
 	header  bool
 	state   followStateV
+	turn    followTurnV
 	end     *followStateV
 	receive bool
 }
@@ -208,8 +219,30 @@ func (f *followReader) handle(event, data string) error {
 		if event == "end" {
 			f.end = &st
 		}
+	case "turn":
+		var tr followTurnV
+		if err := json.Unmarshal([]byte(data), &tr); err != nil {
+			return fmt.Errorf("decode turn: %w", err)
+		}
+		f.receive = true
+		// A reconnect resends the current record; it is printed once.
+		if tr != f.turn {
+			f.turn = tr
+			_, _ = fmt.Fprintln(f.stdout, formatFollowTurn(tr))
+		}
 	}
 	return nil
+}
+
+// formatFollowTurn is the one line a client can match on without reading
+// transcript text: "turn: STATE session=ID turn=ID revision=N", plus
+// "approval=SEQ" for the approval a waiting turn needs answered.
+func formatFollowTurn(tr followTurnV) string {
+	line := fmt.Sprintf("turn: %s session=%d turn=%d revision=%d", visibleText(tr.State), tr.SessionID, tr.TurnID, tr.Revision)
+	if tr.ApprovalSeq != 0 {
+		line += fmt.Sprintf(" approval=%d", tr.ApprovalSeq)
+	}
+	return line
 }
 
 func formatFollowState(st followStateV) string {

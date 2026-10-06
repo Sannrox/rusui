@@ -124,6 +124,16 @@ func (c Container) PlaceTree(handle, srcDir string) error {
 	return p.PlaceTree(handle, srcDir)
 }
 
+// CaptureTree copies the workspace onto the host at destDir, so the tree
+// after setup can become the snapshot (ADR 0007).
+func (c Container) CaptureTree(handle, destDir string) error {
+	x, ok := c.RT.(TreeCapturer)
+	if !ok {
+		return fmt.Errorf("env: runtime cannot capture tree")
+	}
+	return x.CaptureTree(handle, destDir)
+}
+
 // Setup runs `.agents/setup` when present. The engine calls this only
 // when the environment's source hash is new.
 func (c Container) Setup(handle, _ string) (Capture, error) {
@@ -143,6 +153,12 @@ func (c Container) Resume(handle string) (Capture, error) {
 
 type Preparer interface {
 	Setup(handle, sourceHash string) (Capture, error)
+}
+
+// TreeCapturer copies an environment's workspace into an existing host
+// directory.
+type TreeCapturer interface {
+	CaptureTree(handle, destDir string) error
 }
 
 type Resumer interface {

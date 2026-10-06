@@ -431,6 +431,16 @@ func (d DockerCLI) PlaceTree(handle, srcDir string) error {
 	return err
 }
 
+// CaptureTree copies the container workspace, .git included, into
+// destDir. Symlinks stay links; docker cp does not follow them.
+func (d DockerCLI) CaptureTree(handle, destDir string) error {
+	if handle == "" || destDir == "" {
+		return fmt.Errorf("env: capture tree requires handle and dest")
+	}
+	_, err := d.run("cp", handle+":"+workspaceDir+"/.", destDir)
+	return err
+}
+
 func workspacePath(path string) string {
 	if strings.HasPrefix(path, "/") {
 		return path

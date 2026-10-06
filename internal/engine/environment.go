@@ -85,14 +85,13 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 	if err != nil {
 		return nil, err
 	}
-	if err := e.materialize(spec.Repo, spec.Pin, spec.SourceHash, d, handle); err != nil {
-		_ = d.Destroy(handle)
-		return nil, err
-	}
 	var caps provisionCaptures
-	caps.setup, err = e.maybeSetup(d, handle, spec.SourceHash)
+	caps.setup, err = e.prepareWorkspace(d, handle, spec.Repo, spec.Pin, spec.SourceHash)
 	if err != nil {
 		_ = d.Destroy(handle)
+		if caps.setup == nil {
+			return nil, err
+		}
 		return nil, &ProvisionError{Err: err, captures: caps}
 	}
 	caps.services, caps.started, err = startServices(d, handle)
@@ -459,26 +458,6 @@ func (e *Engine) ReapEnvironments() error {
 	return nil
 }
 
-// maybeSetup runs setup for a new source hash. The capture is nil when
-// setup was not attempted.
-func (e *Engine) maybeSetup(d env.Driver, handle, hash string) (*env.Capture, error) {
-	p, ok := d.(env.Preparer)
-	if !ok {
-		return nil, nil
-	}
-	if hash != "" {
-		prepared, err := store.HasPreparedSourceHash(e.Store, hash)
-		if err != nil {
-			return nil, err
-		}
-		if prepared {
-			return nil, nil
-		}
-	}
-	c, err := p.Setup(handle, hash)
-	return &c, err
-}
-
 func (e *Engine) canProvision() bool {
 	return e.Container != nil || e.Env != nil
 }
@@ -575,11 +554,7 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	if err != nil {
 		return err
 	}
-	if err := e.materialize(item.Repo, pin, hash, d, handle); err != nil {
-		_ = d.Destroy(handle)
-		return err
-	}
-	setup, err := e.maybeSetup(d, handle, hash)
+	setup, err := e.prepareWorkspace(d, handle, item.Repo, pin, hash)
 	if setup != nil {
 		e.recordCaptures(envRow.ID, env.CaptureSetup, []env.Capture{*setup})
 	}
