@@ -65,7 +65,7 @@ Decisions that must outlive a single pull request.
 | [0054](0054-repository-hooks-only.md) | Setup and resume stay repository hooks | Superseded by 0067 |
 | [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Superseded by 0068 |
 | [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Superseded by 0069 |
-| [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Accepted |
+| [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Superseded by 0070 |
 | [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Accepted |
 | [0059](0059-unattributed-operator-retained.md) | Plane calls stay one unattributed operator | Accepted |
 | [0060](0060-shikigami-acp-guest-pin.md) | Pin shikigami acp as a supported guest | Accepted |
@@ -78,6 +78,7 @@ Decisions that must outlive a single pull request.
 | [0067](0067-plane-stored-pre-hooks.md) | Plane-stored pre-clone and pre-setup hooks | Accepted |
 | [0068](0068-project-ship-behavior.md) | Project ship behavior is pull-request or push-base | Accepted |
 | [0069](0069-schedule-binds-a-session.md) | A schedule may bind to one session | Accepted |
+| [0070](0070-session-owned-webhook.md) | A session may own a signed webhook | Accepted |
 
 ## When to write an ADR
 

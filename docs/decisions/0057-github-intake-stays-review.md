@@ -1,6 +1,8 @@
 # ADR 0057: GitHub intake stays issues, pull requests, and comments
 
-- Status: Accepted
+- Status: Superseded by [ADR 0070](0070-session-owned-webhook.md)
+  for the session-owned wake webhook. GitHub review intake is restated
+  in 0070 D4.
 - Date: 2026-10-06
 - Amends: none. [ARCHITECTURE.md](../../ARCHITECTURE.md) GitHub intake
   (issues, pull requests, comments) stands until that file is rewritten.
