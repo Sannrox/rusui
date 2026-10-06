@@ -14,7 +14,7 @@ Decisions that must outlive a single pull request.
 | [0003](0003-operator-surface.md) | Operator surfaces are views of one object API | Accepted |
 | [0004](0004-rusui-services-yaml.md) | services.yaml is `.rusui/services.yaml` only | Accepted |
 | [0005](0005-policy-v2-project.md) | Policy v2 is keyed by project | Accepted |
-| [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted |
+| [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted; amended by 0069 |
 | [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048, 0049, 0054, 0063, 0067 |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066 |
@@ -38,7 +38,7 @@ Decisions that must outlive a single pull request.
 | [0027](0027-guest-reachability-ask.md) | The guest image does not declare reachability yet | Accepted |
 | [0028](0028-container-isolation-profile.md) | The supported machine isolation profile remains the container | Accepted |
 | [0029](0029-single-host-runner.md) | The supported runner topology remains one host | Accepted; amended by 0064 |
-| [0030](0030-schedule-new-session.md) | A schedule fire starts a new session | Accepted; amended by 0056 |
+| [0030](0030-schedule-new-session.md) | A schedule fire starts a new session | Accepted; amended by 0056, 0069 |
 | [0031](0031-cli-command-tree.md) | The rusui CLI stays a flat verb list | Accepted |
 | [0032](0032-named-services.md) | Named services declare a port and a health path | Accepted |
 | [0033](0033-third-party-identity-deferred.md) | Plane-minted third-party identity is deferred | Accepted |
@@ -64,7 +64,7 @@ Decisions that must outlive a single pull request.
 | [0053](0053-wake-secret-injection-refused.md) | The guest still holds only the per-turn grant | Superseded by 0066 |
 | [0054](0054-repository-hooks-only.md) | Setup and resume stay repository hooks | Superseded by 0067 |
 | [0055](0055-implement-publication-is-pull-request.md) | Implement publication stays a pull request | Superseded by 0068 |
-| [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Accepted |
+| [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Superseded by 0069 |
 | [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Accepted |
 | [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Accepted |
 | [0059](0059-unattributed-operator-retained.md) | Plane calls stay one unattributed operator | Accepted |
@@ -77,6 +77,7 @@ Decisions that must outlive a single pull request.
 | [0066](0066-inject-secret-at-wake.md) | Inject a short-lived secret at wake | Accepted |
 | [0067](0067-plane-stored-pre-hooks.md) | Plane-stored pre-clone and pre-setup hooks | Accepted |
 | [0068](0068-project-ship-behavior.md) | Project ship behavior is pull-request or push-base | Accepted |
+| [0069](0069-schedule-binds-a-session.md) | A schedule may bind to one session | Accepted |
 
 ## When to write an ADR
 

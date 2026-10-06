@@ -1,6 +1,6 @@
 # ADR 0056: A schedule fire still mints a new session
 
-- Status: Accepted
+- Status: Superseded by [ADR 0069](0069-schedule-binds-a-session.md)
 - Date: 2026-10-06
 - Amends: [ADR 0030](0030-schedule-new-session.md) (each fire is a new
   session; continuation is follow-up, not a schedule bind).
