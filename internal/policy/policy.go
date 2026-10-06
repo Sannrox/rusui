@@ -25,6 +25,8 @@ const (
 	// Local sessions remain project-opt-in and are never inherited from defaults.
 	KindLocal                 = "local"
 	BudgetMaxConcurrentLeases = "max_concurrent_leases"
+	ShipPullRequest           = "pull-request"
+	ShipPushBase              = "push-base"
 )
 
 type File struct {
@@ -57,6 +59,8 @@ type ProjectYAML struct {
 	Permissions  []AllowRule         `yaml:"permissions"`
 	// Secrets is the project allowlist of plane secret ids injected at wake.
 	Secrets []string `yaml:"secrets"`
+	// Ship is pull-request (default) or push-base (ADR 0068).
+	Ship string `yaml:"ship"`
 }
 
 type LocalRuntimeYAML struct {
@@ -104,7 +108,10 @@ type Project struct {
 	Permissions  []AllowRule
 	// Secrets is the project allowlist of plane secret ids injected at wake.
 	Secrets []string
-	Repos   []string
+	// Ship is pull-request or push-base (ADR 0068). Parse stores the
+	// default as pull-request when the field is omitted.
+	Ship  string
+	Repos []string
 }
 
 type LocalRuntime struct {
@@ -193,6 +200,10 @@ func Parse(raw []byte) (*Effective, error) {
 		if err != nil {
 			return nil, err
 		}
+		ship, err := validShip(slug, y.Ship)
+		if err != nil {
+			return nil, err
+		}
 		p := Project{
 			Slug:         slug,
 			SessionKinds: kinds,
@@ -202,6 +213,7 @@ func Parse(raw []byte) (*Effective, error) {
 			Budgets:      budgets,
 			Permissions:  y.Permissions,
 			Secrets:      secrets,
+			Ship:         ship,
 		}
 		for name, ry := range y.Repos {
 			if _, ok := out.Repos[name]; ok {
@@ -391,6 +403,17 @@ func validSize(slug, size string) (string, error) {
 		return size, nil
 	default:
 		return "", fmt.Errorf("policy: %s invalid size %q", slug, size)
+	}
+}
+
+func validShip(slug, ship string) (string, error) {
+	switch ship {
+	case "", ShipPullRequest:
+		return ShipPullRequest, nil
+	case ShipPushBase:
+		return ShipPushBase, nil
+	default:
+		return "", fmt.Errorf("policy: %s invalid ship %q", slug, ship)
 	}
 }
 

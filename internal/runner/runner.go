@@ -62,7 +62,11 @@ type Assignment struct {
 	GitHubToken     string `json:"github_token,omitempty"`
 	// Publication is "plane" for an implement turn under ADR 0044: the
 	// guest holds no GitHub credential and asks the plane to publish.
-	Publication    string   `json:"publication,omitempty"`
+	Publication string `json:"publication,omitempty"`
+	// Ship is pull-request or push-base for an implement turn (ADR 0068).
+	Ship string `json:"ship,omitempty"`
+	// ShipBase is the default branch a push-base implement turn may push.
+	ShipBase       string   `json:"ship_base,omitempty"`
 	Guest          string   `json:"guest,omitempty"`
 	CommitTrailers []string `json:"commit_trailers,omitempty"`
 	// CommitHooksDir is where PrepareCommitHooks placed the attribution

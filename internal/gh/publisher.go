@@ -24,8 +24,9 @@ type PullSpec struct {
 }
 
 // Publisher creates or updates pull requests as the GitHub App with a
-// token scoped to the one repository (ADR 0020, ADR 0044). It has no
-// merge, close, label, or release call.
+// token scoped to the one repository (ADR 0020, ADR 0044). PushBase
+// fast-forwards the default branch (ADR 0068). It has no merge, close,
+// label, or release call.
 type Publisher struct {
 	Tokens  *InstallationTokens
 	BaseURL string
@@ -89,6 +90,32 @@ func (p *Publisher) PublishPull(repo string, s PullSpec) (int, error) {
 	return out.Number, nil
 }
 
+// PushBase fast-forwards branch to sha with force=false. It does not
+// open a pull request, merge one, comment, or close an issue (ADR 0068).
+func (p *Publisher) PushBase(repo, branch, sha string) error {
+	owner, name, err := splitRepo(repo)
+	if err != nil {
+		return err
+	}
+	tok, err := p.Tokens.RepoToken(repo)
+	if err != nil {
+		return err
+	}
+	if sha == "" {
+		return fmt.Errorf("%w: no commit named", ErrHeadMismatch)
+	}
+	escaped, err := escapeRefHeads(branch)
+	if err != nil {
+		return err
+	}
+	var out struct {
+		Object struct {
+			SHA string `json:"sha"`
+		} `json:"object"`
+	}
+	return p.do(tok, http.MethodPatch, "/repos/"+owner+"/"+name+"/git/refs/heads/"+escaped, map[string]any{"sha": sha, "force": false}, &out)
+}
+
 // ErrHeadMismatch refuses a publication whose branch does not point at
 // the commit the plane was asked to publish.
 var ErrHeadMismatch = errors.New("github: branch head is not the publication commit")
@@ -105,14 +132,11 @@ func (p *Publisher) requireHead(tok, repoPath string, s PullSpec) error {
 			SHA string `json:"sha"`
 		} `json:"object"`
 	}
-	segs := strings.Split(s.Head, "/")
-	for i, seg := range segs {
-		if seg == "" || seg == "." || seg == ".." {
-			return fmt.Errorf("%w: invalid branch %q", ErrHeadMismatch, s.Head)
-		}
-		segs[i] = url.PathEscape(seg)
+	escaped, err := escapeRefHeads(s.Head)
+	if err != nil {
+		return err
 	}
-	err := p.do(tok, http.MethodGet, repoPath+"/git/ref/heads/"+strings.Join(segs, "/"), nil, &ref)
+	err = p.do(tok, http.MethodGet, repoPath+"/git/ref/heads/"+escaped, nil, &ref)
 	var se *statusError
 	if errors.As(err, &se) && se.code == http.StatusNotFound {
 		return fmt.Errorf("%w: %s does not exist", ErrHeadMismatch, s.Head)
@@ -147,6 +171,17 @@ func (p *Publisher) openFor(tok, pulls, owner, branch string) (int, error) {
 		return 0, nil
 	}
 	return open[0].Number, nil
+}
+
+func escapeRefHeads(branch string) (string, error) {
+	segs := strings.Split(branch, "/")
+	for i, seg := range segs {
+		if seg == "" || seg == "." || seg == ".." {
+			return "", fmt.Errorf("%w: invalid branch %q", ErrHeadMismatch, branch)
+		}
+		segs[i] = url.PathEscape(seg)
+	}
+	return strings.Join(segs, "/"), nil
 }
 
 func (p *Publisher) update(tok, pulls string, n int, s PullSpec) (int, error) {

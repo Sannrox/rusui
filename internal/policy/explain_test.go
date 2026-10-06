@@ -46,6 +46,7 @@ func TestExplainRepoReportsEffectiveSources(t *testing.T) {
 		"session_kinds":                    "defaults",
 		"egress":                           "defaults",
 		"size":                             "schema default",
+		"ship":                             "schema default",
 		"budgets.max_concurrent_leases":    "project",
 		"permissions":                      "schema default",
 		"local_runtime":                    "schema default",

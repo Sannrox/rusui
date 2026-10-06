@@ -127,7 +127,7 @@ projects:
         visibility: private
 `,
 		strings.Replace(good, "rusui:", "Rusui:", 1),
-		strings.Replace(good, "rusui:\n", "rusui:\n    ship: push-base\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    ship: merge\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    connections: {xai: http://127.0.0.1:1}\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    budgets: {tokens: 1}\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    budgets: {dollars: 1}\n", 1),
@@ -173,6 +173,46 @@ projects:
 	}
 	if err := AllowSecrets(p.Secrets, []string{"aws_key"}); err == nil {
 		t.Fatal("disallowed secret accepted")
+	}
+}
+
+func TestParseProjectShip(t *testing.T) {
+	raw := []byte(`
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+projects:
+  rusui:
+    repos:
+      Sannrox/rusui:
+        visibility: public
+`)
+	e, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := e.Project("rusui")
+	if !ok || p.Ship != ShipPullRequest {
+		t.Fatalf("omitted ship %+v ok=%v", p, ok)
+	}
+	withPR := strings.Replace(string(raw), "rusui:\n", "rusui:\n    ship: pull-request\n", 1)
+	e, err = Parse([]byte(withPR))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok = e.Project("rusui")
+	if !ok || p.Ship != ShipPullRequest {
+		t.Fatalf("pull-request %+v ok=%v", p, ok)
+	}
+	withPush := strings.Replace(string(raw), "rusui:\n", "rusui:\n    ship: push-base\n", 1)
+	e, err = Parse([]byte(withPush))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok = e.Project("rusui")
+	if !ok || p.Ship != ShipPushBase {
+		t.Fatalf("push-base %+v ok=%v", p, ok)
 	}
 }
 

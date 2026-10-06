@@ -86,6 +86,26 @@ func TestFenceGateRejectsBeforePolicyAllows(t *testing.T) {
 	}
 }
 
+func TestFenceGatePushBaseAllowsDefaultBranchAndBlocksPullRequest(t *testing.T) {
+	g := FenceGate{Next: RulesGate{Rules: []Rule{{Command: "gh"}, {Command: "git"}}}, AllowPushBase: "main"}
+	ask := func(cmd string) Decision {
+		raw, _ := json.Marshal(map[string]string{"toolCallId": "tc", "title": "run_terminal_command", "command": cmd})
+		return g.Decide(PermissionParams{ToolCall: raw})
+	}
+	if d := ask("git push origin HEAD:main"); d.Matched && !d.Allow {
+		t.Fatalf("push-base push %+v", d)
+	}
+	if d := ask("gh pr create --fill"); !d.Matched || d.Allow {
+		t.Fatalf("push-base create %+v", d)
+	}
+	if d := ask("gh pr merge 1"); !d.Matched || d.Allow {
+		t.Fatalf("push-base merge %+v", d)
+	}
+	if d := ask("git push --force origin main"); !d.Matched || d.Allow {
+		t.Fatalf("force %+v", d)
+	}
+}
+
 func TestRejectRulesWinOverAllowRules(t *testing.T) {
 	g := RulesGate{Rules: []Rule{{Command: "npm"}, {Command: "npm publish", Action: RuleReject}}}
 	raw := func(cmd string) PermissionParams {

@@ -89,6 +89,9 @@ func TestImplementSessionPushesAsOperator(t *testing.T) {
 	if a.GitHubToken != agentToken {
 		t.Fatalf("github token %q", a.GitHubToken)
 	}
+	if a.Ship != policy.ShipPullRequest || a.ShipBase != "" {
+		t.Fatalf("omitted ship assignment ship=%q base=%q", a.Ship, a.ShipBase)
+	}
 	home := t.TempDir()
 	guestEnv := runner.DriverEnv(a, home, os.Getenv("PATH"))
 	joined := strings.Join(guestEnv, "\n")
@@ -209,7 +212,35 @@ func TestPlanePublicationGivesImplementGuestsNoCredential(t *testing.T) {
 	_, e2 := agentCredentialEnv(t, true, agentToken)
 	hs2 := httptest.NewServer((&Server{Eng: e2, WorkerSec: "wsec", RepoTokens: repoTokens{}}).Handler())
 	t.Cleanup(hs2.Close)
-	if b := claim(t, hs2, e2, false); b.Publication != "" {
-		t.Fatalf("ordinary run marked for publication %q", b.Publication)
+	if b := claim(t, hs2, e2, false); b.Publication != "" || b.Ship != "" || b.ShipBase != "" {
+		t.Fatalf("ordinary run marked for publication %q ship=%q base=%q", b.Publication, b.Ship, b.ShipBase)
+	}
+}
+
+func TestImplementPushBaseClaimNamesDefaultBranchAndKeepsReviewReadOnly(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	raw := strings.Replace(slackPol, "implement: false", "implement: true", 1)
+	raw = strings.Replace(raw, "test:\n", "test:\n    ship: push-base\n", 1)
+	p, err := policy.Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := engine.New(st, p, gh.NewFake(), &clock.Fake{T: time.Unix(1_700_000_000, 0).UTC()})
+	e.Env = env.Process{Root: t.TempDir()}
+	e.ReloadPolicy(p)
+	hs := httptest.NewServer((&Server{Eng: e, WorkerSec: "wsec", AgentGitHubToken: agentToken}).Handler())
+	t.Cleanup(hs.Close)
+	a := claim(t, hs, e, true)
+	if a.GitHubToken != agentToken || a.Ship != policy.ShipPushBase || a.ShipBase != "main" {
+		t.Fatalf("push-base assignment token=%q ship=%q base=%q", a.GitHubToken, a.Ship, a.ShipBase)
+	}
+
+	hsR, eR := agentCredentialEnv(t, true, agentToken)
+	if b := claim(t, hsR, eR, false); b.GitHubToken != "" || b.Ship != "" {
+		t.Fatalf("ordinary run token=%q ship=%q", b.GitHubToken, b.Ship)
 	}
 }

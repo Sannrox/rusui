@@ -326,6 +326,15 @@ GiB, 2 CPU / 4 GiB, or 4 CPU / 8 GiB. A run may override it with
 `{"size":"large"}` or `rusui run -size large`. The container runtime
 enforces those limits.
 
+Project `ship` is `pull-request` (default when omitted) or `push-base`
+([ADR 0068](decisions/0068-project-ship-behavior.md)). Omitted and
+`pull-request` keep today's implement publication: open or update one
+pull request and do not push the default branch. `push-base` fast-forwards
+only that default branch and does not open a pull request. Any other
+value is a policy load error. Review and ordinary run still have no
+GitHub write credential. This repository does not set `push-base`. Live
+merge, comment, and close stay unauthorized.
+
 Project `secrets` is an allowlist of plane secret ids (`^[a-z][a-z0-9_]{0,31}$`).
 At wake the plane injects ids that also have a `RUSUI_SECRET_<ID>` value
 into `/run/rusui/secrets/<id>` and the guest environment as uppercase

@@ -81,6 +81,18 @@ func (f *fakePulls) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]int{"number": n})
 	case r.Method == http.MethodPatch && num > 0:
 		_, _ = w.Write([]byte(`{"number":` + strconv.Itoa(num) + `}`))
+	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/repos/o/r/git/refs/heads/"):
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		sha, _ := in["sha"].(string)
+		force, _ := in["force"].(bool)
+		if force || sha == "" {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return
+		}
+		branch := strings.TrimPrefix(r.URL.Path, "/repos/o/r/git/refs/heads/")
+		f.heads[branch] = sha
+		_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": sha}})
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -180,5 +192,27 @@ func TestPublisherRefusesWhenBranchHeadIsNotTheCandidate(t *testing.T) {
 	}
 	if got := f.count("POST /repos/o/r/pulls") + f.count("PATCH /repos/o/r/pulls/5"); got != 0 {
 		t.Fatalf("wrote %d times: %v", got, f.calls)
+	}
+}
+
+func TestPublisherPushBaseFastForwardsAndDoesNotOpenPullRequest(t *testing.T) {
+	f, p := newFakePublisher(t)
+	if err := p.PushBase("o/r", "main", "c1"); err != nil {
+		t.Fatal(err)
+	}
+	if f.heads["main"] != "c1" {
+		t.Fatalf("heads %+v", f.heads)
+	}
+	if got := f.count("POST /repos/o/r/pulls"); got != 0 {
+		t.Fatalf("opened %d pull requests", got)
+	}
+	if got := f.count("PATCH /repos/o/r/git/refs/heads/main"); got != 1 {
+		t.Fatalf("patched %d: %v", got, f.calls)
+	}
+	if err := p.PushBase("o/r", "main", ""); !errors.Is(err, ErrHeadMismatch) {
+		t.Fatalf("empty sha: %v", err)
+	}
+	if err := p.PushBase("o/r", "../main", "c1"); !errors.Is(err, ErrHeadMismatch) {
+		t.Fatalf("dotdot: %v", err)
 	}
 }
