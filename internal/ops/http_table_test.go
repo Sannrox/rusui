@@ -32,6 +32,9 @@ func TestConfigurationHTTPTableDocumentsPostReviews(t *testing.T) {
 	if !strings.Contains(table, "`POST` | `/sessions/{id}/cancel` | operator or worker token") {
 		t.Fatal("HTTP table missing POST /sessions/{id}/cancel with operator or worker auth")
 	}
+	if !strings.Contains(table, "`DELETE` | `/sessions/{id}/queued` | operator or worker token") {
+		t.Fatal("HTTP table missing DELETE /sessions/{id}/queued with operator or worker auth")
+	}
 	if strings.Contains(table, "`POST` | `/comment`") {
 		t.Fatal("plane HTTP table must not list preview-origin POST /comment")
 	}

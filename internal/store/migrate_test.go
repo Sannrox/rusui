@@ -266,3 +266,55 @@ func TestPlaneIDStablePerDatabase(t *testing.T) {
 		t.Fatalf("two databases share plane id %s", a)
 	}
 }
+
+// A v32 follow-up queue gains the queued and dropped flags (#492); rows
+// already queued stay ordinary follow-ups.
+func TestV33FollowUpsGainQueuedFlag(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v32.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`DROP TABLE followup_queue;
+CREATE TABLE followup_queue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  seq INTEGER NOT NULL,
+  prompt TEXT NOT NULL,
+  consumed INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(session_id, seq)
+);
+INSERT INTO followup_queue (session_id, seq, prompt) VALUES (5, 1, 'ordinary');
+DELETE FROM schema_migrations WHERE version>=33;`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	upgraded, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = upgraded.Close() })
+	err = upgraded.Tx(func(tx *sql.Tx) error {
+		if _, err := EnqueueQueuedPromptTx(tx, 5, "held"); err != nil {
+			return err
+		}
+		next, ok, err := NextFollowUpTx(tx, 5)
+		if err != nil || !ok || next.Prompt != "ordinary" || next.Queued {
+			t.Fatalf("head %+v ok %t err %v", next, ok, err)
+		}
+		n, err := DropQueuedPromptsTx(tx, 5)
+		if err != nil || n != 1 {
+			t.Fatalf("dropped %d err %v", n, err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dropped int
+	if err := upgraded.DB.QueryRow(`SELECT dropped FROM followup_queue WHERE session_id=5 AND seq=2`).Scan(&dropped); err != nil || dropped != 1 {
+		t.Fatalf("dropped %d err %v", dropped, err)
+	}
+}

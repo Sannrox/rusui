@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 32
+const CurrentSchema = 33
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -443,6 +443,32 @@ func (s *Store) migrate() error {
 		}
 		if err := stamp(s.DB, 32); err != nil {
 			return err
+		}
+	}
+	if ver < 33 {
+		if err := migrateV33(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 33); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// migrateV33 marks follow-ups the operator queued until the current turn
+// ends (#492). A queued prompt that has not started can be dropped; the
+// dropped row stays so its sequence number is not reused.
+func migrateV33(db *sql.DB) error {
+	for _, col := range []string{"queued", "dropped"} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('followup_queue') WHERE name=?`, col).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			if _, err := db.Exec(`ALTER TABLE followup_queue ADD COLUMN ` + col + ` INTEGER NOT NULL DEFAULT 0`); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

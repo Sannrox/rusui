@@ -172,7 +172,17 @@ List sessions and send prompts with the CLI:
 "$BIN/rusui" sessions -url http://127.0.0.1:8080 -token "$RUSUI_WORKER_SECRET"
 "$BIN/rusui" prompt -url http://127.0.0.1:8080 -token "$RUSUI_WORKER_SECRET" SESSION_ID "continue with this change"
 "$BIN/rusui" prompt -steer -url http://127.0.0.1:8080 -token "$RUSUI_WORKER_SECRET" SESSION_ID "use the narrower fix"
+"$BIN/rusui" prompt -queue -url http://127.0.0.1:8080 -token "$RUSUI_WORKER_SECRET" SESSION_ID "then update the changelog"
+"$BIN/rusui" prompt -drop-queue -url http://127.0.0.1:8080 -token "$RUSUI_WORKER_SECRET" SESSION_ID
 ```
+
+`-queue` stores the prompt and starts it as the next turn once the current
+turn completes or fails; queued prompts run in the order sent. A plain
+follow-up also waits for the live turn, but it becomes the pending revision at
+once and survives cancel. A queued prompt does not: `-drop-queue` drops every
+queued prompt that has not started and leaves the current turn running, and
+cancelling the session drops them too. With no turn running, a queued prompt
+starts at once (`"held": false` in the response).
 
 The session console offers the same queued follow-up and **Steer running
 turn** actions. A steer without a live turn becomes a queued follow-up. For a

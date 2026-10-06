@@ -116,6 +116,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /console/sessions/{id}/preview", s.consoleMintPreview)
 	mux.HandleFunc("POST /approvals/{id}", s.decideApproval)
 	mux.HandleFunc("POST /sessions/{id}/turns", s.followUpTurn)
+	mux.HandleFunc("DELETE /sessions/{id}/queued", s.dropQueuedPrompts)
 	mux.HandleFunc("POST /sessions/{id}/cancel", s.cancelSession)
 	mux.HandleFunc("POST /sessions/{id}/restart", s.restartLocalSession)
 	mux.HandleFunc("GET /projects/{slug}/measurements", s.projectMeasurements)

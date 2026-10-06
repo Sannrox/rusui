@@ -38,7 +38,7 @@ func (e *Engine) PromptFollowUp(sessionID int64, prompt string) (int64, int, err
 		if err != nil {
 			return err
 		}
-		if err := enqueueFollowUpTx(tx, j, sessionID, prompt); err != nil {
+		if _, err := enqueuePromptTx(tx, j, sessionID, prompt, false); err != nil {
 			return err
 		}
 		turnID = j.ID
@@ -46,6 +46,95 @@ func (e *Engine) PromptFollowUp(sessionID int64, prompt string) (int64, int, err
 		return nil
 	})
 	return turnID, pending, err
+}
+
+// PromptQueued stores a prompt that starts as the next turn once the
+// current one ends (#492). Unlike a follow-up it does not become the
+// pending revision while the turn runs, so DropQueuedPrompts or a session
+// cancel can still drop it. held reports that it waits; false means no
+// turn was running and the prompt is already the pending revision.
+func (e *Engine) PromptQueued(sessionID int64, prompt string) (int64, int, bool, error) {
+	if prompt == "" {
+		return 0, 0, false, fmt.Errorf("prompt required")
+	}
+	sess, err := store.GetSession(e.Store, sessionID)
+	if err != nil {
+		return 0, 0, false, err
+	}
+	turns, err := store.ListTurnsForSession(e.Store, sessionID)
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if len(turns) == 0 {
+		return 0, 0, false, fmt.Errorf("no turns")
+	}
+	var turnID int64
+	var pending int
+	var held bool
+	err = e.Store.Tx(func(tx *sql.Tx) error {
+		paused, err := store.Paused(tx, sess.Project)
+		if err != nil {
+			return err
+		}
+		if paused {
+			return errPaused
+		}
+		j, err := store.GetJobByIDTx(tx, turns[0].ID)
+		if err != nil {
+			return err
+		}
+		seq, err := enqueuePromptTx(tx, j, sessionID, prompt, true)
+		if err != nil {
+			return err
+		}
+		next, ok, err := store.NextFollowUpTx(tx, sessionID)
+		if err != nil {
+			return err
+		}
+		held = ok && next.Seq <= seq
+		turnID = j.ID
+		pending = j.PendingRevision
+		return insertOperatorSteerTx(tx, int64(seq), sess, j, prompt, "queued")
+	})
+	return turnID, pending, held, err
+}
+
+// DropQueuedPrompts drops the session's queued prompts that have not
+// started. The current turn keeps running; ordinary follow-ups and
+// promoted steers stay in the FIFO.
+func (e *Engine) DropQueuedPrompts(sessionID int64) (int, error) {
+	turns, err := store.ListTurnsForSession(e.Store, sessionID)
+	if err != nil {
+		return 0, err
+	}
+	if len(turns) == 0 {
+		return 0, fmt.Errorf("no turns")
+	}
+	var n int
+	err = e.Store.Tx(func(tx *sql.Tx) error {
+		var err error
+		n, err = store.DropQueuedPromptsTx(tx, sessionID)
+		if err != nil || n == 0 {
+			return err
+		}
+		j, err := store.GetJobByIDTx(tx, turns[0].ID)
+		if err != nil {
+			return err
+		}
+		// A follow-up that waited behind a dropped prompt takes its place.
+		before := j.PendingRevision
+		if err := promoteFollowUpTx(tx, j, sessionID); err != nil {
+			return err
+		}
+		if j.PendingRevision == before {
+			return nil
+		}
+		if j.State != "leased" {
+			j.State = "queued"
+		}
+		return store.UpdateJobTx(tx, j)
+	})
+	return n, err
 }
 
 type Steer struct {
@@ -96,23 +185,8 @@ func (e *Engine) PromptSteer(sessionID int64, prompt string) (int64, int, bool, 
 			pending = j.PendingRevision
 			return insertOperatorSteerTx(tx, id, sess, j, prompt, "steer")
 		}
-		seq, err := store.EnqueueFollowUpTx(tx, sessionID, prompt)
+		seq, err := enqueuePromptTx(tx, j, sessionID, prompt, false)
 		if err != nil {
-			return err
-		}
-		earlierSteer, err := store.HasEarlierUnacknowledgedSteerTx(tx, sessionID, seq)
-		if err != nil {
-			return err
-		}
-		if !hasUnclaimedFollowUp(j) && !earlierSteer {
-			if err := applyFollowUpTx(tx, j, sessionID, seq, prompt); err != nil {
-				return err
-			}
-		}
-		if j.State != "leased" {
-			j.State = "queued"
-		}
-		if err := store.UpdateJobTx(tx, j); err != nil {
 			return err
 		}
 		pending = j.PendingRevision
@@ -143,24 +217,45 @@ func hasUnclaimedFollowUp(j *store.Job) bool {
 	return j.ClaimedRevision != 0 || j.PendingRevision != 1
 }
 
-func enqueueFollowUpTx(tx *sql.Tx, j *store.Job, sessionID int64, prompt string) error {
-	seq, err := store.EnqueueFollowUpTx(tx, sessionID, prompt)
-	if err != nil {
-		return err
+// enqueuePromptTx appends the prompt to the session FIFO, then lets the
+// FIFO head become the pending revision when nothing is ahead of it.
+func enqueuePromptTx(tx *sql.Tx, j *store.Job, sessionID int64, prompt string, queued bool) (int, error) {
+	enqueue := store.EnqueueFollowUpTx
+	if queued {
+		enqueue = store.EnqueueQueuedPromptTx
 	}
-	earlierSteer, err := store.HasEarlierUnacknowledgedSteerTx(tx, sessionID, seq)
+	seq, err := enqueue(tx, sessionID, prompt)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	if !hasUnclaimedFollowUp(j) && !earlierSteer {
-		if err := applyFollowUpTx(tx, j, sessionID, seq, prompt); err != nil {
-			return err
-		}
+	if err := promoteFollowUpTx(tx, j, sessionID); err != nil {
+		return 0, err
 	}
 	if j.State != "leased" {
 		j.State = "queued"
 	}
-	return store.UpdateJobTx(tx, j)
+	return seq, store.UpdateJobTx(tx, j)
+}
+
+// promoteFollowUpTx makes the FIFO head the pending revision unless an
+// earlier revision or steer is still owed. A queued head waits while the
+// turn is leased or waiting for a claim; the turn ending applies it.
+func promoteFollowUpTx(tx *sql.Tx, j *store.Job, sessionID int64) error {
+	if hasUnclaimedFollowUp(j) {
+		return nil
+	}
+	next, ok, err := store.NextFollowUpTx(tx, sessionID)
+	if err != nil || !ok {
+		return err
+	}
+	if next.Queued && (j.State == "leased" || j.State == "queued") {
+		return nil
+	}
+	earlierSteer, err := store.HasEarlierUnacknowledgedSteerTx(tx, sessionID, next.Seq)
+	if err != nil || earlierSteer {
+		return err
+	}
+	return applyFollowUpTx(tx, j, sessionID, next.Seq, next.Prompt)
 }
 
 func applyFollowUpTx(tx *sql.Tx, j *store.Job, sessionID int64, seq int, prompt string) error {
@@ -193,9 +288,9 @@ func applyNextFollowUpTx(tx *sql.Tx, j *store.Job) error {
 	if err != nil {
 		return err
 	}
-	seq, prompt, ok, err := store.NextFollowUpTx(tx, turn.SessionID)
+	next, ok, err := store.NextFollowUpTx(tx, turn.SessionID)
 	if err != nil || !ok {
 		return err
 	}
-	return applyFollowUpTx(tx, j, turn.SessionID, seq, prompt)
+	return applyFollowUpTx(tx, j, turn.SessionID, next.Seq, next.Prompt)
 }

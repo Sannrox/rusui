@@ -47,6 +47,10 @@ func (e *Engine) CancelSession(sessionID int64) error {
 		}
 	}
 	err = e.Store.Tx(func(tx *sql.Tx) error {
+		// Cancel drops the queued prompts; follow-ups and steers stay (#492).
+		if _, err := store.DropQueuedPromptsTx(tx, sessionID); err != nil {
+			return err
+		}
 		for _, turn := range turns {
 			if err := e.cancelTurnTx(tx, turn.ID); err != nil {
 				return err

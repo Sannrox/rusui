@@ -267,13 +267,19 @@ retry of that revision, and releases the concurrent-lease reserve.
 Receipts and the session row remain. The environment stays until idle
 expiry. Any unacknowledged steer is preserved as a FIFO follow-up, so
 cancellation does not retry the claimed revision but may queue the next
-operator-supplied revision.
+operator-supplied revision. Cancel drops queued prompts (see Follow-up).
 
 ### Follow-up
 
 Each ordinary follow-up prompt is a durable FIFO turn on the same session.
 A second queued follow-up must not overwrite the first. A follow-up during
 a live lease does not steal that lease.
+
+An operator may mark a prompt **queued**. It joins the same FIFO but does
+not become the pending revision while the current turn is leased or
+awaiting a claim; it starts when that turn completes or fails. Until then
+the operator may drop the queued prompts without touching the current turn,
+and cancel drops them. Ordinary follow-ups and promoted steers are kept.
 
 An operator may instead **steer** a live turn. Rusui records the operator
 prompt against the current lease generation and delivers it over heartbeat.

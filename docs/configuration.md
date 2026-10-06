@@ -217,8 +217,9 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/jobs/{id}/heartbeat` | same |
 | `POST` | `/jobs/{id}/complete` | same |
 | `POST` | `/jobs/{id}/fail` | same |
-| `POST` | `/sessions/{id}/turns` | operator or worker token; follow-up prompt or steer (`rusui prompt`) |
-| `POST` | `/sessions/{id}/cancel` | operator or worker token; ends the turn and stops the guest's processes |
+| `POST` | `/sessions/{id}/turns` | operator or worker token; follow-up prompt, steer (`steer`), or queued prompt (`queued`) that starts after the current turn ends (`rusui prompt`) |
+| `DELETE` | `/sessions/{id}/queued` | operator or worker token; drops queued prompts that have not started and returns `dropped`; the current turn keeps running (`rusui prompt -drop-queue`) |
+| `POST` | `/sessions/{id}/cancel` | operator or worker token; ends the turn, drops queued prompts, and stops the guest's processes |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
 | `*` | `/model-proxy/` | per-turn grant (HTTPS for container guests) |
 | `*` | `/git-proxy/github.com/` | prepare or turn grant; push only with a turn grant on the session ref prefix |

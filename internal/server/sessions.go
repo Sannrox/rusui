@@ -267,9 +267,14 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Prompt string `json:"prompt"`
 		Steer  bool   `json:"steer"`
+		Queued bool   `json:"queued"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Steer && req.Queued {
+		http.Error(w, "steer and queued are exclusive", http.StatusBadRequest)
 		return
 	}
 	if req.Prompt != "" {
@@ -279,22 +284,59 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	var turnID int64
 	var pending int
+	var held bool
 	delivery := "follow_up"
-	if req.Steer {
+	switch {
+	case req.Steer:
 		var live bool
 		turnID, pending, live, err = s.Eng.PromptSteer(id, req.Prompt)
 		if live {
 			delivery = "steer"
 		}
-	} else {
+	case req.Queued:
+		delivery = "queued"
+		turnID, pending, held, err = s.Eng.PromptQueued(id, req.Prompt)
+	default:
 		turnID, pending, err = s.Eng.PromptFollowUp(id, req.Prompt)
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
+	out := map[string]any{"turn_id": turnID, "pending_revision": pending, "delivery": delivery}
+	if req.Queued {
+		out["held"] = held
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"turn_id": turnID, "pending_revision": pending, "delivery": delivery})
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// dropQueuedPrompts drops the session's queued prompts that have not
+// started (#492). The current turn keeps running.
+func (s *Server) dropQueuedPrompts(w http.ResponseWriter, r *http.Request) {
+	if !s.operatorOrWorkerOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "id", 400)
+		return
+	}
+	if _, err := store.GetSession(s.Eng.Store, id); errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	n, err := s.Eng.DropQueuedPrompts(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"dropped": n})
 }
 
 func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
