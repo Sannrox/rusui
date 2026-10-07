@@ -58,6 +58,13 @@ func (e *Engine) StartChild(parentID int64, prompt, project string) (int64, erro
 	}
 	var childID int64
 	err = e.Store.Tx(func(tx *sql.Tx) error {
+		var archived bool
+		if err := tx.QueryRow(`SELECT archived FROM sessions WHERE id=?`, parentID).Scan(&archived); err != nil {
+			return err
+		}
+		if archived {
+			return errArchived
+		}
 		for _, slug := range []string{parent.Project, project} {
 			paused, err := store.Paused(tx, slug)
 			if err != nil {
@@ -127,6 +134,13 @@ func (e *Engine) recordChildOutcomeTx(tx *sql.Tx, turnID int64, outcome string) 
 	parentID, repo, item, err := store.SessionLineageTx(tx, turn.SessionID)
 	if err != nil || parentID == 0 {
 		return err
+	}
+	var archived bool
+	if err := tx.QueryRow(`SELECT archived FROM sessions WHERE id=?`, parentID).Scan(&archived); err != nil {
+		return err
+	}
+	if archived {
+		return nil
 	}
 	var childProject string
 	if err := tx.QueryRow(`SELECT project FROM sessions WHERE id=?`, turn.SessionID).Scan(&childProject); err != nil {

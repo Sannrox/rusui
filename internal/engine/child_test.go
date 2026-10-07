@@ -497,3 +497,75 @@ func TestChildTreeLeaseSkipsBlockedChildForUnrelatedClaim(t *testing.T) {
 		t.Fatalf("unrelated guest claim %+v %v want item %d child item %d", c2, err, us.Item, cs.Item)
 	}
 }
+
+func TestArchiveParentStopsLeasedChild(t *testing.T) {
+	h := setup(t)
+	parent, err := h.e.StartRun("test", "investigate", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := h.e.StartChild(parent, "look", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c)); err != nil {
+		t.Fatal(err)
+	}
+	c = h.claim()
+	if err := h.e.ArchiveSession(parent); err != nil {
+		t.Fatal(err)
+	}
+	turns, err := store.ListTurnsForSession(h.st, child)
+	if err != nil || len(turns) != 1 {
+		t.Fatalf("turns %v: %v", turns, err)
+	}
+	if turns[0].State != "failed" {
+		t.Fatalf("child still %s", turns[0].State)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c)); err == nil {
+		t.Fatal("cancelled child completed")
+	}
+	acts, err := store.ListActionsForSession(h.st, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range acts {
+		if a.Type == "child.result" {
+			t.Fatalf("archived parent received %s", a.Body)
+		}
+	}
+}
+
+func TestChildCompletionDoesNotReportToArchivedParent(t *testing.T) {
+	h := setup(t)
+	parent, err := h.e.StartRun("test", "investigate", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = h.e.StartChild(parent, "look", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := h.claim()
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c)); err != nil {
+		t.Fatal(err)
+	}
+	c = h.claim()
+	// Model a parent archived by an earlier server that did not stop children.
+	if err := store.SetSessionArchived(h.st, parent, true, h.clk.T); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c)); err != nil {
+		t.Fatal(err)
+	}
+	acts, err := store.ListActionsForSession(h.st, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range acts {
+		if a.Type == "child.result" {
+			t.Fatalf("archived parent received %s", a.Body)
+		}
+	}
+}
