@@ -5,6 +5,8 @@
   lets a schedule bind to a session id.
   [ADR 0071](0071-bounded-child-session.md) lets a session start
   bounded children.
+  [ADR 0072](0072-cross-project-child-session.md) lets a parent name
+  another operator project as the child's project.
 - Date: 2026-09-15
 - Amends: [ADR 0003](0003-operator-surface.md) (dogfood start API;
   `sync` is not required for P1 dogfood). [ADR 0005](0005-policy-v2-project.md)

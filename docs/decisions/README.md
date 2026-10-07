@@ -14,7 +14,7 @@ Decisions that must outlive a single pull request.
 | [0003](0003-operator-surface.md) | Operator surfaces are views of one object API | Accepted |
 | [0004](0004-rusui-services-yaml.md) | services.yaml is `.rusui/services.yaml` only | Accepted |
 | [0005](0005-policy-v2-project.md) | Policy v2 is keyed by project | Accepted |
-| [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted; amended by 0069, 0071 |
+| [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted; amended by 0069, 0071, 0072 |
 | [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048, 0049, 0054, 0063, 0067 |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066 |
@@ -79,7 +79,8 @@ Decisions that must outlive a single pull request.
 | [0068](0068-project-ship-behavior.md) | Project ship behavior is pull-request or push-base | Accepted |
 | [0069](0069-schedule-binds-a-session.md) | A schedule may bind to one session | Accepted |
 | [0070](0070-session-owned-webhook.md) | A session may own a signed webhook | Accepted |
-| [0071](0071-bounded-child-session.md) | Bounded child-session delegation | Accepted |
+| [0071](0071-bounded-child-session.md) | Bounded child-session delegation | Accepted; amended by 0072 |
+| [0072](0072-cross-project-child-session.md) | Bounded cross-project child sessions | Accepted |
 
 ## When to write an ADR
 
