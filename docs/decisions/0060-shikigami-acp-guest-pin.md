@@ -1,6 +1,6 @@
 # ADR 0060: Pin shikigami acp as a supported guest
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0073](0073-session-plane-guest-registry.md)
 - Date: 2026-10-06
 - Amends: [ADR 0002](0002-grok-acp-agent-set.md) (shikigami needed an
   ACP server before it was a P1 guest).

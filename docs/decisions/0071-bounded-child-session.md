@@ -1,6 +1,6 @@
 # ADR 0071: Bounded child-session delegation
 
-- Status: Accepted; amended by [ADR 0072](0072-cross-project-child-session.md)
+- Status: Accepted; amended by [ADR 0072](0072-cross-project-child-session.md), [ADR 0073](0073-session-plane-guest-registry.md)
 - Date: 2026-10-06
 - Amends: [ADR 0006](0006-session-start.md). A session may start
   bounded children. Each child is a new session and a new environment.
