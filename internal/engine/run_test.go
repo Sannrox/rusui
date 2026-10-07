@@ -54,24 +54,8 @@ func TestStartRunCreatesNoChildSession(t *testing.T) {
 	if len(list) != 1 || list[0].ID != id {
 		t.Fatalf("start spawned extra sessions %+v", list)
 	}
-	rows, err := h.st.DB.Query(`PRAGMA table_info(sessions)`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var cid, notnull, pk int
-		var name, typ string
-		var def *string
-		if err := rows.Scan(&cid, &name, &typ, &notnull, &def, &pk); err != nil {
-			t.Fatal(err)
-		}
-		if strings.Contains(name, "parent") || strings.Contains(name, "child") || name == "fan_out" {
-			t.Fatalf("lineage column %s", name)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
+	if list[0].ParentSessionID != 0 {
+		t.Fatalf("start run is not a child %d", list[0].ParentSessionID)
 	}
 }
 

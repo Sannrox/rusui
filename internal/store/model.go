@@ -53,6 +53,7 @@ type Session struct {
 	Wait             string     `json:"wait,omitempty"`
 	Archived         bool       `json:"archived"`
 	ArchivedAt       *time.Time `json:"archived_at,omitempty"`
+	ParentSessionID  int64      `json:"parent_session_id,omitempty"`
 	CreatedAt        time.Time
 }
 

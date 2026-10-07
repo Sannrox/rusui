@@ -26,9 +26,17 @@ _Avoid_: operator, interactive, chat, implement (as a session kind)
 A unit of work on one project and one environment. A review session is
 identified by `(project, bound repo, item)`. A `run` or `scheduled` session
 is minted at create. An experimental `local` session is human-driven and has
-no Turn. A session has no children; independent work is another session from
-a snapshot ([ADR 0006](docs/decisions/0006-session-start.md), [ADR 0040](docs/decisions/0040-child-session-delegation-deferred.md)).
-_Avoid_: GitHub issue, turn, environment, child session, parent session
+no Turn. A parent may start bounded children in the same project; each child
+is a new session and a new environment from a snapshot
+([ADR 0006](docs/decisions/0006-session-start.md), [ADR 0071](docs/decisions/0071-bounded-child-session.md)).
+_Avoid_: GitHub issue, turn, environment
+
+**Child session**:
+A run session started by a parent in the same project. It has its own
+environment and turn. It cannot add a project, repository, kind, or egress
+class the parent lacks. Parent cancel cancels children. Child failure is a
+recorded result on the parent ([ADR 0071](docs/decisions/0071-bounded-child-session.md)).
+_Avoid_: live fork, shared writable workspace, cross-project child
 
 **Turn**:
 One leased attempt on an unattended session. A local session has no Turn.
