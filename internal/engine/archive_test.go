@@ -14,6 +14,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -162,4 +163,51 @@ func ioRead(res *http.Response) ([]byte, error) {
 	var buf bytes.Buffer
 	_, err := buf.ReadFrom(res.Body)
 	return buf.Bytes(), err
+}
+
+func TestArchiveTreeContinuesAfterChildSleepFailure(t *testing.T) {
+	h := setup(t)
+	pol, err := policy.Parse([]byte(strings.Replace(fixture, "test:\n", "test:\n    budgets: {max_concurrent_leases: 3}\n", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.ReloadPolicy(pol)
+	parent, err := h.e.StartRun("test", "parent", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := h.e.StartChild(parent, "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := h.e.StartChild(parent, "second", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.claim()
+	h.claim()
+	h.claim()
+	h.e.Env = env.Process{Root: t.TempDir()}
+	created, err := h.e.CreateEnvironment("broken-child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetSessionEnvironment(h.st, first, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(created.Handle); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.e.ArchiveSession(parent); err == nil {
+		t.Fatal("missing sleep failure")
+	}
+	for _, sid := range []int64{parent, first, second} {
+		turns, err := store.ListTurnsForSession(h.st, sid)
+		if err != nil || len(turns) != 1 {
+			t.Fatalf("session %d turns %v: %v", sid, turns, err)
+		}
+		if turns[0].State != "failed" {
+			t.Fatalf("session %d still %s", sid, turns[0].State)
+		}
+	}
 }
