@@ -894,9 +894,12 @@ ORDER BY a.rowid LIMIT 1`, sessionID).Scan(&seq, &turnID, &revision)
 	return seq, turnID, revision, err == nil, err
 }
 
-func CountChildSessionsTx(tx *sql.Tx, parentID int64) (int, error) {
+// CountActiveChildSessionsTx reserves fan-out for children with queued or
+// leased work. Historical completed and failed turns do not hold capacity.
+func CountActiveChildSessionsTx(tx *sql.Tx, parentID int64) (int, error) {
 	var n int
-	err := tx.QueryRow(`SELECT COUNT(*) FROM sessions WHERE parent_session_id=?`, parentID).Scan(&n)
+	err := tx.QueryRow(`SELECT COUNT(*) FROM sessions s WHERE s.parent_session_id=? AND s.archived=0
+AND EXISTS (SELECT 1 FROM turns t WHERE t.session_id=s.id AND t.state IN ('queued', 'leased'))`, parentID).Scan(&n)
 	return n, err
 }
 

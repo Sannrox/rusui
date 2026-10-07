@@ -74,7 +74,7 @@ func (e *Engine) StartChild(parentID int64, prompt, project string) (int64, erro
 				return errPaused
 			}
 		}
-		n, err := store.CountChildSessionsTx(tx, parentID)
+		n, err := store.CountActiveChildSessionsTx(tx, parentID)
 		if err != nil {
 			return err
 		}
@@ -159,4 +159,29 @@ func (e *Engine) recordChildOutcomeTx(tx *sql.Tx, turnID int64, outcome string) 
 		LimitSentence: "Child failure is a recorded result on the parent; it does not retry the child.",
 		Body:          string(body),
 	})
+}
+
+// A terminal child must reserve fan-out again before a prompt restarts it.
+func (e *Engine) checkChildReactivationTx(tx *sql.Tx, sessionID int64) error {
+	var parentID int64
+	var project string
+	if err := tx.QueryRow(`SELECT COALESCE(c.parent_session_id, 0), COALESCE(p.project, '')
+FROM sessions c LEFT JOIN sessions p ON p.id=c.parent_session_id WHERE c.id=?`, sessionID).Scan(&parentID, &project); err != nil {
+		return err
+	}
+	if parentID == 0 {
+		return nil
+	}
+	p, ok := e.PolicySnapshot().Project(project)
+	if !ok {
+		return fmt.Errorf("policy")
+	}
+	n, err := store.CountActiveChildSessionsTx(tx, parentID)
+	if err != nil {
+		return err
+	}
+	if n >= p.MaxConcurrentLeases() {
+		return fmt.Errorf("fan-out")
+	}
+	return nil
 }
