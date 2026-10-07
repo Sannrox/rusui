@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -499,11 +498,21 @@ func promptBlocks(a *Assignment, text string) ([]acp.PromptBlock, error) {
 			}
 			data = base64.StdEncoding.EncodeToString(raw)
 		}
-		typ := "resource"
-		if strings.HasPrefix(att.MIME, "image/") {
-			typ = "image"
+		typ, mime, ok := engine.GuestACPPart(att.MIME)
+		if !ok {
+			return nil, fmt.Errorf("unsupported attachment mime %s", att.MIME)
 		}
-		blocks = append(blocks, acp.PromptBlock{Type: typ, MimeType: att.MIME, Data: data})
+		if typ == "resource" {
+			blocks = append(blocks, acp.PromptBlock{
+				Type: "resource",
+				Resource: &acp.PromptResource{
+					MimeType: mime,
+					Blob:     data,
+				},
+			})
+			continue
+		}
+		blocks = append(blocks, acp.PromptBlock{Type: typ, MimeType: mime, Data: data})
 	}
 	return blocks, nil
 }

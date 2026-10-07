@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -25,7 +24,7 @@ func (e *Engine) promptFollowUp(sessionID int64, prompt string, files []store.Pr
 	if prompt == "" {
 		return 0, 0, fmt.Errorf("prompt required")
 	}
-	if err := validatePromptFiles(files); err != nil {
+	if err := validatePromptFiles(prompt, files); err != nil {
 		return 0, 0, err
 	}
 	sess, err := store.GetSession(e.Store, sessionID)
@@ -83,7 +82,7 @@ func (e *Engine) promptQueued(sessionID int64, prompt string, files []store.Prom
 	if prompt == "" {
 		return 0, 0, false, fmt.Errorf("prompt required")
 	}
-	if err := validatePromptFiles(files); err != nil {
+	if err := validatePromptFiles(prompt, files); err != nil {
 		return 0, 0, false, err
 	}
 	sess, err := store.GetSession(e.Store, sessionID)
@@ -252,8 +251,15 @@ func hasUnclaimedFollowUp(j *store.Job) bool {
 	return j.ClaimedRevision != 0 || j.PendingRevision != 1
 }
 
-func validatePromptFiles(files []store.PromptFile) error {
-	var total int
+func validatePromptFiles(prompt string, files []store.PromptFile) error {
+	wrapped := len(prompt) + GuestContentPromptOverheadBytes
+	if wrapped > GuestContentPartBytes {
+		return fmt.Errorf("oversize")
+	}
+	if len(files) > GuestContentMaxParts-1 {
+		return fmt.Errorf("oversize")
+	}
+	total := wrapped
 	for i := range files {
 		name, err := store.AttachmentName(files[i].Name)
 		if err != nil {
@@ -264,11 +270,14 @@ func validatePromptFiles(files []store.PromptFile) error {
 		if n == 0 {
 			return fmt.Errorf("attachment empty")
 		}
-		if n > env.WorkspaceUploadCap {
+		if _, _, ok := GuestACPPart(store.AttachmentMIME(files[i].Name, files[i].Body)); !ok {
+			return fmt.Errorf("unsupported")
+		}
+		if n > GuestContentPartBytes {
 			return fmt.Errorf("oversize")
 		}
 		total += n
-		if total > env.WorkspaceUploadCap {
+		if total > GuestContentAggregateBytes {
 			return fmt.Errorf("oversize")
 		}
 	}

@@ -155,6 +155,21 @@ func AttachmentMIME(name string, body []byte) string {
 		return "image/webp"
 	case ".pdf":
 		return "application/pdf"
+	case ".txt":
+		return "text/plain"
+	case ".md", ".markdown":
+		return "text/markdown"
+	case ".wav":
+		return "audio/wav"
 	}
-	return http.DetectContentType(body)
+	return CanonicalMIME(http.DetectContentType(body))
+}
+
+// CanonicalMIME lowercases a media type and drops parameters such as charset.
+func CanonicalMIME(mime string) string {
+	mime = strings.ToLower(strings.TrimSpace(mime))
+	if i := strings.IndexByte(mime, ';'); i >= 0 {
+		mime = strings.TrimSpace(mime[:i])
+	}
+	return mime
 }
