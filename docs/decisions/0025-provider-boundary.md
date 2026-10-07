@@ -1,6 +1,6 @@
 # ADR 0025: One Go provider boundary for Grok, Claude, and Codex
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0073](0073-session-plane-guest-registry.md)
 - Date: 2026-09-27
 - Amends: [ADR 0002](0002-grok-acp-agent-set.md) (the supported agent set)
   and [ADR 0017](0017-claude-guest-and-model-upstream.md) D1 (Claude is no

@@ -33,7 +33,7 @@ Decisions that must outlive a single pull request.
 | [0022](0022-public-repo-isolation.md) | Public-repository unattended sessions default to the container driver | Accepted |
 | [0023](0023-p8-pilot-narrow.md) | P8 ten-task live pilot is narrow | Accepted |
 | [0024](0024-session-surface.md) | The CLI and the console open a session | Accepted |
-| [0025](0025-provider-boundary.md) | One Go provider boundary for Grok, Claude, and Codex | Accepted |
+| [0025](0025-provider-boundary.md) | One Go provider boundary for Grok, Claude, and Codex | Accepted; amended by 0073 |
 | [0026](0026-harness-model-upstream.md) | Harness, model, and upstream are independent | Accepted; amended by 0061 |
 | [0027](0027-guest-reachability-ask.md) | The guest image does not declare reachability yet | Accepted |
 | [0028](0028-container-isolation-profile.md) | The supported machine isolation profile remains the container | Accepted |
@@ -68,7 +68,7 @@ Decisions that must outlive a single pull request.
 | [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Superseded by 0070 |
 | [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Superseded by 0071 |
 | [0059](0059-unattributed-operator-retained.md) | Plane calls stay one unattributed operator | Accepted |
-| [0060](0060-shikigami-acp-guest-pin.md) | Pin shikigami acp as a supported guest | Accepted |
+| [0060](0060-shikigami-acp-guest-pin.md) | Pin shikigami acp as a supported guest | Accepted; amended by 0073 |
 | [0061](0061-one-model-upstream-retained.md) | One model upstream retained | Accepted |
 | [0062](0062-guest-link-desktop-podman-deferred.md) | Docker Desktop and Podman stay unverified for the guest link | Accepted |
 | [0063](0063-keep-environment-until-archive.md) | Keep the environment until the operator archives it | Accepted |
@@ -79,8 +79,9 @@ Decisions that must outlive a single pull request.
 | [0068](0068-project-ship-behavior.md) | Project ship behavior is pull-request or push-base | Accepted |
 | [0069](0069-schedule-binds-a-session.md) | A schedule may bind to one session | Accepted |
 | [0070](0070-session-owned-webhook.md) | A session may own a signed webhook | Accepted |
-| [0071](0071-bounded-child-session.md) | Bounded child-session delegation | Accepted; amended by 0072 |
+| [0071](0071-bounded-child-session.md) | Bounded child-session delegation | Accepted; amended by 0072, 0073 |
 | [0072](0072-cross-project-child-session.md) | Bounded cross-project child sessions | Accepted |
+| [0073](0073-session-plane-guest-registry.md) | The session is the product; the guest is chosen per session | Accepted |
 
 ## When to write an ADR
 
