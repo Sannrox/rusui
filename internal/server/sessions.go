@@ -300,6 +300,38 @@ func (s *Server) attachSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) createChild(w http.ResponseWriter, r *http.Request) {
+	if !s.operatorOrWorkerOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "id", 400)
+		return
+	}
+	var req struct {
+		Prompt string `json:"prompt"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	childID, err := s.Eng.StartChild(id, req.Prompt)
+	if err != nil {
+		switch err.Error() {
+		case "prompt required", "parent kind", "depth", "fan-out":
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			http.Error(w, err.Error(), http.StatusConflict)
+		}
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{"session_id": childID})
+}
+
 func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)

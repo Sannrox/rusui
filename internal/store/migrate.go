@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 40
+const CurrentSchema = 41
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -509,7 +509,30 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 41 {
+		if err := migrateV41(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 41); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV41 records parent/child session lineage (#122, ADR 0071).
+func migrateV41(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='parent_session_id'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := db.Exec(`ALTER TABLE sessions ADD COLUMN parent_session_id INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec(`CREATE INDEX IF NOT EXISTS sessions_parent ON sessions(parent_session_id)`)
+	return err
 }
 
 // migrateV40 stores prompt attachments outside the repository (#508).

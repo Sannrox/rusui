@@ -25,5 +25,11 @@ func measurementPublication(r *TaskResult) string {
 }
 
 func (e *Engine) finishMeasurementTx(tx *sql.Tx, turnID int64, terminal string, art Artifact, ended time.Time) error {
-	return store.FinishMeasurementTx(tx, turnID, terminal, ended, measurementPublication(art.Result), art.InputTokens, art.OutputTokens)
+	if err := store.FinishMeasurementTx(tx, turnID, terminal, ended, measurementPublication(art.Result), art.InputTokens, art.OutputTokens); err != nil {
+		return err
+	}
+	if terminal != "completed" && terminal != "failed" {
+		return nil
+	}
+	return e.recordChildOutcomeTx(tx, turnID, terminal)
 }

@@ -10,6 +10,22 @@ import (
 )
 
 func (e *Engine) CancelSession(sessionID int64) error {
+	children, err := store.ListChildSessionIDs(e.Store, sessionID)
+	if err != nil {
+		return err
+	}
+	if err := e.cancelOneSession(sessionID); err != nil {
+		return err
+	}
+	for _, id := range children {
+		if err := e.CancelSession(id); err != nil {
+			e.exception(fmt.Sprintf("cancel session=%d: child %d: %v", sessionID, id, err))
+		}
+	}
+	return nil
+}
+
+func (e *Engine) cancelOneSession(sessionID int64) error {
 	sess, err := store.GetSession(e.Store, sessionID)
 	if err != nil {
 		return err

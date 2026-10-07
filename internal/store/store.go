@@ -224,14 +224,18 @@ func PutIdempotencyTx(tx *sql.Tx, key string, sessionID int64) error {
 }
 
 func InsertRunSessionTx(tx *sql.Tx, project, repo, prompt string) (sessionID int64, item int, err error) {
-	return insertOperatorSessionTx(tx, SessionKindRun, "run", project, repo, prompt, 0)
+	return insertOperatorSessionTx(tx, SessionKindRun, "run", project, repo, prompt, 0, 0)
+}
+
+func InsertChildSessionTx(tx *sql.Tx, project, repo, prompt string, parentID int64) (sessionID int64, item int, err error) {
+	return insertOperatorSessionTx(tx, SessionKindRun, "run", project, repo, prompt, 0, parentID)
 }
 
 func InsertScheduledSessionTx(tx *sql.Tx, project, repo, prompt string, scheduleID int64) (sessionID int64, item int, err error) {
-	return insertOperatorSessionTx(tx, SessionKindScheduled, "scheduled", project, repo, prompt, scheduleID)
+	return insertOperatorSessionTx(tx, SessionKindScheduled, "scheduled", project, repo, prompt, scheduleID, 0)
 }
 
-func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt string, scheduleID int64) (sessionID int64, item int, err error) {
+func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt string, scheduleID, parentSessionID int64) (sessionID int64, item int, err error) {
 	var minItem int
 	// Scoped by repo only: item numbers are shared across operator session kinds (run, scheduled, ...).
 	if err := tx.QueryRow(`SELECT COALESCE(MIN(item),0) FROM sessions WHERE repo=? AND item<0`, repo).Scan(&minItem); err != nil {
@@ -252,8 +256,8 @@ func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt strin
 	if err != nil {
 		return 0, 0, err
 	}
-	res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, prompt, schedule_id, size, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		envID, kind, repo, item, kind, "open", project, prompt, scheduleID, "", now)
+	res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, prompt, schedule_id, size, parent_session_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		envID, kind, repo, item, kind, "open", project, prompt, scheduleID, "", parentSessionID, now)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -737,7 +741,7 @@ func ListSessions(s *Store, project string, limit int) ([]Session, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, s.archived, s.archived_at, s.created_at
+	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	args := []any{}
 	if project != "" {
@@ -750,14 +754,14 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []Session
 	for rows.Next() {
 		var sess Session
 		var created string
 		var archived int
 		var archivedAt sql.NullString
-		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &archived, &archivedAt, &created); err != nil {
+		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &archived, &archivedAt, &sess.ParentSessionID, &created); err != nil {
 			return nil, err
 		}
 		if err := applySessionArchive(&sess, archived, archivedAt, created); err != nil {
@@ -883,14 +887,42 @@ ORDER BY a.rowid LIMIT 1`, sessionID).Scan(&seq, &turnID, &revision)
 	return seq, turnID, revision, err == nil, err
 }
 
+func CountChildSessionsTx(tx *sql.Tx, parentID int64) (int, error) {
+	var n int
+	err := tx.QueryRow(`SELECT COUNT(*) FROM sessions WHERE parent_session_id=?`, parentID).Scan(&n)
+	return n, err
+}
+
+func ListChildSessionIDs(s *Store, parentID int64) ([]int64, error) {
+	rows, err := s.DB.Query(`SELECT id FROM sessions WHERE parent_session_id=? ORDER BY id`, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+func SessionLineageTx(tx *sql.Tx, sessionID int64) (parentID int64, repo string, item int, err error) {
+	err = tx.QueryRow(`SELECT COALESCE(parent_session_id, 0), repo, item FROM sessions WHERE id=?`, sessionID).Scan(&parentID, &repo, &item)
+	return parentID, repo, item, err
+}
+
 func GetSession(s *Store, id int64) (*Session, error) {
 	var sess Session
 	var created string
 	var archived int
 	var archivedAt sql.NullString
-	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, s.archived, s.archived_at, s.created_at
+	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id WHERE s.id=?`, id).Scan(
-		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &archived, &archivedAt, &created)
+		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &archived, &archivedAt, &sess.ParentSessionID, &created)
 	if err != nil {
 		return nil, err
 	}
