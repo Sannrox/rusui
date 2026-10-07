@@ -226,7 +226,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/jobs/{id}/complete` | same |
 | `POST` | `/jobs/{id}/fail` | same |
 | `POST` | `/sessions/{id}/turns` | operator or worker token; follow-up prompt, steer (`steer`), or queued prompt (`queued`) that starts after the current turn ends (`rusui prompt`); optional `attachments` `[{name, content}]` as base64. Image and PDF (plus plain text / Markdown) only; 8 MiB per part including the prompt, 16 MiB aggregate with the prompt, at most 31 files, matching the pinned HTTP guest. Bytes stay on disk next to the plane store |
-| `POST` | `/sessions/{id}/children` | operator or worker token; start one child run in the same project (ADR 0071); depth 1; fan-out capped by `max_concurrent_leases` |
+| `POST` | `/sessions/{id}/children` | operator or worker token; start one child run. Omitted `project` stays on the parent project and the parent's repo pin (ADR 0071). Named `project` must already exist in policy; the child is admitted under that project's policy, repo pin, size, and `ship` and does not inherit the parent's grants (ADR 0072). Depth 1. Fan-out and live leases on the parent tree are capped by the parent's `max_concurrent_leases`, including children on another project. Uncommitted parent files are not copied; attach on the child if it needs bytes. Parent cancel cancels children. A child result is a receipt on the parent, not an atomic success across repositories |
 | `DELETE` | `/sessions/{id}/queued` | operator or worker token; drops queued prompts that have not started and returns `dropped`; the current turn keeps running (`rusui prompt -drop-queue`) |
 | `POST` | `/sessions/{id}/cancel` | operator or worker token; ends the turn, drops queued prompts, and stops the guest's processes |
 | `POST` | `/sessions/{id}/archive` | operator or worker token; sleeps the environment, refuses prompts, and keeps the session row (`rusui archive`) |
@@ -237,6 +237,12 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 
 GitHub webhook events: `issues`, `pull_request`, `issue_comment`.
 Forward the tunnel to `http://127.0.0.1:8080/hooks/github`.
+
+A two-project plan is one parent prompt plus an independent review of
+each repository's pull request or blocked reason. Private context stays
+in the session that loaded it. Recovery is cancel on the parent, which
+fails live children, then start a new child on the repository that still
+needs work. Live merge, comment, and close stay unauthorized.
 
 ## Preview origin
 

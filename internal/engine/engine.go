@@ -790,25 +790,20 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 		// Turns in the same class stay in id order, so catch-up reviews
 		// are still claimed once no run is waiting. A bound repository
 		// also sees leftover pinless sessions of the same project (#557).
-		rows, err := tx.Query(`SELECT t.id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo IN (`+placeholders(len(keys))+`) AND COALESCE(s.archived, 0)=0 AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
+		rows, err := tx.Query(`SELECT t.id, t.session_id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo IN (`+placeholders(len(keys))+`) AND COALESCE(s.archived, 0)=0 AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
 			append(anySlice(keys), anySlice(lanes)...)...)
 		if err != nil {
 			return err
 		}
-		var id int64
-		queued, eligible := false, false
+		type candidate struct{ id, sessionID, envID int64 }
+		var queued []candidate
 		for rows.Next() {
-			queued = true
-			var candidateID, environmentID int64
-			if err := rows.Scan(&candidateID, &environmentID); err != nil {
+			var c candidate
+			if err := rows.Scan(&c.id, &c.sessionID, &c.envID); err != nil {
 				_ = rows.Close()
 				return err
 			}
-			if e.environmentOperationInProgress(environmentID) {
-				continue
-			}
-			id, eligible = candidateID, true
-			break
+			queued = append(queued, c)
 		}
 		if err := rows.Err(); err != nil {
 			_ = rows.Close()
@@ -817,8 +812,28 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 		if err := rows.Close(); err != nil {
 			return err
 		}
+		var id int64
+		eligible := false
+		for _, c := range queued {
+			if e.environmentOperationInProgress(c.envID) {
+				continue
+			}
+			treeLeased, rootProject, err := store.CountTreeLeasedTurnsTx(tx, c.sessionID)
+			if err != nil {
+				return err
+			}
+			// Item reviews omit sessions.project; they are not a parent tree.
+			if rootProject != "" {
+				root, ok := activePolicy.Project(rootProject)
+				if !ok || treeLeased >= root.MaxConcurrentLeases() {
+					continue
+				}
+			}
+			id, eligible = c.id, true
+			break
+		}
 		if !eligible {
-			if budgetOut && !queued {
+			if budgetOut && len(queued) == 0 {
 				return errBudget
 			}
 			return nil
