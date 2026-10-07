@@ -1,6 +1,6 @@
 # ADR 0071: Bounded child-session delegation
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0072](0072-cross-project-child-session.md)
 - Date: 2026-10-06
 - Amends: [ADR 0006](0006-session-start.md). A session may start
   bounded children. Each child is a new session and a new environment.
@@ -12,7 +12,7 @@
 - Related: [ADR 0035](0035-live-environment-fork-deferred.md) (live
   fork stays deferred),
   [#135](https://github.com/Sannrox/rusui/issues/135) (cross-project
-  authority stays a later question),
+  children: [ADR 0072](0072-cross-project-child-session.md)),
   [#122](https://github.com/Sannrox/rusui/issues/122) (implementation)
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
