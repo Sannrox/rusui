@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -14,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -125,9 +126,55 @@ func TestPromptAttachmentPathEscapeAndOversize(t *testing.T) {
 	if _, _, err := h.e.PromptFollowUpFiles(sid, "look", []store.PromptFile{{Name: "a/b.png", Body: png1x1}}); err == nil || err.Error() != "path" {
 		t.Fatalf("slash %v", err)
 	}
-	big := bytes.Repeat([]byte("a"), env.WorkspaceUploadCap+1)
-	if _, _, err := h.e.PromptFollowUpFiles(sid, "look", []store.PromptFile{{Name: "big.bin", Body: big}}); err == nil || err.Error() != "oversize" {
+	big := bytes.Repeat([]byte("a"), engine.GuestContentAggregateBytes+1)
+	if _, _, err := h.e.PromptFollowUpFiles(sid, "look", []store.PromptFile{{Name: "big.png", Body: big}}); err == nil || err.Error() != "oversize" {
 		t.Fatalf("oversize %v", err)
+	}
+	part := bytes.Repeat([]byte("a"), engine.GuestContentPartBytes+1)
+	if _, _, err := h.e.PromptFollowUpFiles(sid, "look", []store.PromptFile{{Name: "part.png", Body: part}}); err == nil || err.Error() != "oversize" {
+		t.Fatalf("part %v", err)
+	}
+}
+
+func TestPromptAttachmentPDFAndUnsupported(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.e.PromptFollowUpFiles(sid, "look", []store.PromptFile{{Name: "doc.pdf", Body: []byte("%PDF-1.1")}}); err != nil {
+		t.Fatalf("pdf %v", err)
+	}
+	if _, _, err := h.e.PromptFollowUpFiles(sid, "look", []store.PromptFile{{Name: "clip.wav", Body: []byte("RIFF")}}); err == nil || err.Error() != "unsupported" {
+		t.Fatalf("audio %v", err)
+	}
+	if _, _, err := h.e.PromptFollowUpFiles(sid, "look", []store.PromptFile{{Name: "blob.bin", Body: []byte{0x00, 0x01, 0xff, 0xfe}}}); err == nil || err.Error() != "unsupported" {
+		t.Fatalf("bin %v", err)
+	}
+	sid2, err := h.e.StartRun("test", "second", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.e.PromptFollowUpFiles(sid2, "look", []store.PromptFile{{Name: "notes", Body: []byte("hello notes")}}); err != nil {
+		t.Fatalf("plain %v", err)
+	}
+	full := bytes.Repeat([]byte("a"), engine.GuestContentAggregateBytes-len("look")-engine.GuestContentPromptOverheadBytes+1)
+	if _, _, err := h.e.PromptFollowUpFiles(sid2, "look", []store.PromptFile{{Name: "full.png", Body: full}}); err == nil || err.Error() != "oversize" {
+		t.Fatalf("prompt plus attachments %v", err)
+	}
+	atPart := strings.Repeat("a", engine.GuestContentPartBytes-engine.GuestContentPromptOverheadBytes)
+	if _, _, err := h.e.PromptFollowUpFiles(sid2, atPart, nil); err != nil {
+		t.Fatalf("text part at overhead %v", err)
+	}
+	if _, _, err := h.e.PromptFollowUpFiles(sid2, atPart+"x", nil); err == nil || err.Error() != "oversize" {
+		t.Fatalf("text part plus overhead %v", err)
+	}
+	many := make([]store.PromptFile, engine.GuestContentMaxParts)
+	for i := range many {
+		many[i] = store.PromptFile{Name: fmt.Sprintf("p%d.png", i), Body: png1x1}
+	}
+	if _, _, err := h.e.PromptFollowUpFiles(sid2, "look", many); err == nil || err.Error() != "oversize" {
+		t.Fatalf("part count %v", err)
 	}
 }
 
@@ -167,5 +214,9 @@ func TestPromptAttachmentHTTP(t *testing.T) {
 	code, out = do(`{"prompt":"look","steer":true,"attachments":[{"name":"shot.png","content":"` + base64.StdEncoding.EncodeToString(png1x1) + `"}]}`)
 	if code != 400 || !strings.Contains(string(out), "attachments are not a steer") {
 		t.Fatalf("steer %d %s", code, out)
+	}
+	code, out = do(`{"prompt":"look","attachments":[{"name":"clip.wav","content":"` + base64.StdEncoding.EncodeToString([]byte("RIFF")) + `"}]}`)
+	if code != 400 || !strings.Contains(string(out), "unsupported") {
+		t.Fatalf("audio %d %s", code, out)
 	}
 }

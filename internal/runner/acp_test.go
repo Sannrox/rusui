@@ -465,6 +465,104 @@ func TestHostACPReadsAttachmentFromPath(t *testing.T) {
 	}
 }
 
+func TestHostACPSendsPDFNestedResource(t *testing.T) {
+	t.Parallel()
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+		_ = agentOut.Close()
+	})
+	prompts := make(chan acp.PromptParams, 1)
+	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptStarted: prompts}).Run() }()
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
+		return acp.Decision{}
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	in, _ := json.Marshal(map[string]string{"body": "read"})
+	data := base64.StdEncoding.EncodeToString([]byte("%PDF-1.1"))
+	_, err := HostACP(ctx, &Assignment{
+		Input: in,
+		Attachments: []PromptAttachment{{
+			Name: "doc.pdf",
+			MIME: "application/pdf",
+			Data: data,
+		}},
+	}, host, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case p := <-prompts:
+		if len(p.Prompt) != 2 {
+			t.Fatalf("blocks %+v", p.Prompt)
+		}
+		pdf := p.Prompt[1]
+		if pdf.Type != "resource" || pdf.MimeType != "" || pdf.Data != "" {
+			t.Fatalf("flat fields %+v", pdf)
+		}
+		if pdf.Resource == nil || pdf.Resource.MimeType != "application/pdf" || pdf.Resource.Blob != data {
+			t.Fatalf("resource %+v", pdf.Resource)
+		}
+		raw, err := json.Marshal(pdf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(raw), `"resource"`) || strings.Contains(string(raw), `"data"`) {
+			t.Fatalf("wire %s", raw)
+		}
+	default:
+		t.Fatal("guest was not prompted")
+	}
+}
+
+func TestHostACPNormalizesPlainTextMIME(t *testing.T) {
+	t.Parallel()
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+		_ = agentOut.Close()
+	})
+	prompts := make(chan acp.PromptParams, 1)
+	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptStarted: prompts}).Run() }()
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
+		return acp.Decision{}
+	}}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	in, _ := json.Marshal(map[string]string{"body": "read"})
+	data := base64.StdEncoding.EncodeToString([]byte("hello notes"))
+	_, err := HostACP(ctx, &Assignment{
+		Input: in,
+		Attachments: []PromptAttachment{{
+			Name: "notes",
+			MIME: "text/plain; charset=utf-8",
+			Data: data,
+		}},
+	}, host, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case p := <-prompts:
+		if len(p.Prompt) != 2 {
+			t.Fatalf("blocks %+v", p.Prompt)
+		}
+		doc := p.Prompt[1]
+		if doc.Type != "resource" || doc.Resource == nil || doc.Resource.MimeType != "text/plain" || doc.Resource.Blob != data {
+			t.Fatalf("resource %+v", doc)
+		}
+	default:
+		t.Fatal("guest was not prompted")
+	}
+}
+
 func TestHTTPRecorderWaitCancelsBlockedApprovalPoll(t *testing.T) {
 	pollStarted := make(chan struct{}, 1)
 	release := make(chan struct{})

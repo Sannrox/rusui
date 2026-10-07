@@ -101,10 +101,18 @@ type SessionCancelParams struct {
 }
 
 type PromptBlock struct {
-	Type     string `json:"type"`
-	Text     string `json:"text,omitempty"`
+	Type     string          `json:"type"`
+	Text     string          `json:"text,omitempty"`
+	MimeType string          `json:"mimeType,omitempty"`
+	Data     string          `json:"data,omitempty"`
+	Resource *PromptResource `json:"resource,omitempty"`
+}
+
+// PromptResource is the nested ACP resource object (PDF and other documents).
+type PromptResource struct {
 	MimeType string `json:"mimeType,omitempty"`
-	Data     string `json:"data,omitempty"`
+	Blob     string `json:"blob,omitempty"`
+	Text     string `json:"text,omitempty"`
 }
 
 type PromptResult struct {

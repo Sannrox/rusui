@@ -397,7 +397,7 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		switch err.Error() {
-		case "oversize", "path", "attachment empty":
+		case "oversize", "path", "attachment empty", "unsupported":
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, err.Error(), http.StatusConflict)
