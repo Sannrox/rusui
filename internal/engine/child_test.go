@@ -1,6 +1,7 @@
 package engine_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,8 +10,22 @@ import (
 	"testing"
 
 	"github.com/sannrox/rusui/internal/policy"
+	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
 )
+
+const guestProjectYAML = `
+  guest:
+    session_kinds: [run]
+    repos:
+      example/guest-repo:
+        visibility: public
+        review: true
+        comments: false
+        close: false
+        implement: false
+        land: false
+`
 
 func TestChildSessionOwnEnvironmentAndReportsBack(t *testing.T) {
 	h := setup(t)
@@ -23,7 +38,7 @@ func TestChildSessionOwnEnvironmentAndReportsBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := h.e.StartChild(parent, "look at tests")
+	child, err := h.e.StartChild(parent, "look at tests", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +59,7 @@ func TestChildSessionOwnEnvironmentAndReportsBack(t *testing.T) {
 	if cs.Project != ps.Project || cs.Repo != ps.Repo || cs.Kind != store.SessionKindRun {
 		t.Fatalf("child %+v parent %+v", cs, ps)
 	}
-	if _, err := h.e.StartChild(child, "deeper"); err == nil || err.Error() != "depth" {
+	if _, err := h.e.StartChild(child, "deeper", ""); err == nil || err.Error() != "depth" {
 		t.Fatalf("depth %v", err)
 	}
 	acts, err := store.ListActionsForSession(h.st, parent)
@@ -95,11 +110,11 @@ func TestChildCancelCascadesAndFanOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := h.e.StartChild(parent, "look")
+	child, err := h.e.StartChild(parent, "look", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.e.StartChild(parent, "again"); err == nil || err.Error() != "fan-out" {
+	if _, err := h.e.StartChild(parent, "again", ""); err == nil || err.Error() != "fan-out" {
 		t.Fatalf("fan-out %v", err)
 	}
 	if err := h.e.CancelSession(parent); err != nil {
@@ -147,5 +162,338 @@ func TestChildHTTP(t *testing.T) {
 	_ = res.Body.Close()
 	if res.StatusCode != 400 || !strings.Contains(string(b), "depth") {
 		t.Fatalf("depth %d %s", res.StatusCode, b)
+	}
+}
+
+func twoProjectChild(t *testing.T) *harn {
+	t.Helper()
+	h := setup(t)
+	raw := strings.Replace(fixture, "test:\n", "test:\n    budgets: {max_concurrent_leases: 2}\n", 1) + guestProjectYAML
+	pol, err := policy.Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.ReloadPolicy(pol)
+	h.f.Put(snapshot.Item{Repo: "example/guest-repo", Item: 1, ItemKind: "issue", State: "open", MainSHA: "bbb", DefaultBranch: "main"})
+	return h
+}
+
+func TestChildCrossProjectUsesNamedPolicy(t *testing.T) {
+	h := twoProjectChild(t)
+	parent, err := h.e.StartRun("test", "pin guest protocol", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := h.e.StartChild(parent, "document the pin", "guest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps, err := store.GetSession(h.st, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err := store.GetSession(h.st, child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cs.Project != "guest" || cs.Repo != "example/guest-repo" || cs.ParentSessionID != parent {
+		t.Fatalf("child %+v", cs)
+	}
+	if cs.Project == ps.Project || cs.Repo == ps.Repo || cs.EnvironmentID == ps.EnvironmentID {
+		t.Fatalf("child shared parent identity %+v %+v", cs, ps)
+	}
+	snap, err := store.LoadSnapshot(h.st, cs.Repo, cs.Item, 1)
+	if err != nil || snap.MainSHA != "bbb" || snap.Body != "document the pin" {
+		t.Fatalf("child snapshot %+v %v", snap, err)
+	}
+	parentSnap, err := store.LoadSnapshot(h.st, ps.Repo, ps.Item, 1)
+	if err != nil || parentSnap.MainSHA == snap.MainSHA {
+		t.Fatalf("parent snapshot %+v child %+v %v", parentSnap, snap, err)
+	}
+	task, ok := h.e.ImplementTask(cs)
+	if ok || task != nil {
+		t.Fatalf("child inherited implement %+v", task)
+	}
+	acts, err := store.ListActionsForSession(h.st, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spawned := false
+	for _, a := range acts {
+		if a.Type == "child.spawn" && strings.Contains(a.Body, `"project":"guest"`) && a.Repo == ps.Repo {
+			spawned = true
+		}
+	}
+	if !spawned {
+		t.Fatalf("spawn actions %+v", acts)
+	}
+	c1 := h.claim()
+	if c1.Job.Repo != ps.Repo || c1.Job.Item != ps.Item {
+		t.Fatalf("parent claim %+v want %s #%d", c1.Job, ps.Repo, ps.Item)
+	}
+	if _, err := h.e.Complete(c1.Job.ID, c1.Job.LeaseGeneration, c1.Job.ClaimedRevision, runArt(c1)); err != nil {
+		t.Fatal(err)
+	}
+	c2, err := h.e.Claim("example/guest-repo")
+	if err != nil || c2 == nil || c2.Job.Repo != cs.Repo || c2.Job.Item != cs.Item {
+		t.Fatalf("child claim %+v %v", c2, err)
+	}
+	if _, err := h.e.Complete(c2.Job.ID, c2.Job.LeaseGeneration, c2.Job.ClaimedRevision, runArt(c2)); err != nil {
+		t.Fatal(err)
+	}
+	acts, err = store.ListActionsForSession(h.st, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reported := false
+	for _, a := range acts {
+		if a.Type == "child.result" && strings.Contains(a.Body, `"outcome":"completed"`) && strings.Contains(a.Body, `"project":"guest"`) && a.Repo == ps.Repo && a.Item == ps.Item {
+			reported = true
+		}
+	}
+	if !reported {
+		t.Fatalf("result actions %+v", acts)
+	}
+}
+
+func TestChildUnknownProjectAndDeniedKind(t *testing.T) {
+	h := twoProjectChild(t)
+	parent, err := h.e.StartRun("test", "investigate", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.StartChild(parent, "look", "missing"); err == nil || err.Error() != "policy" {
+		t.Fatalf("missing %v", err)
+	}
+	raw := strings.Replace(fixture, "test:\n", "test:\n    budgets: {max_concurrent_leases: 2}\n", 1) + `
+  guest:
+    session_kinds: [review]
+    repos:
+      example/guest-repo:
+        visibility: public
+        review: true
+`
+	pol, err := policy.Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.ReloadPolicy(pol)
+	if _, err := h.e.StartChild(parent, "look", "guest"); err == nil || err.Error() != "policy" {
+		t.Fatalf("kind %v", err)
+	}
+}
+
+func TestChildPausedTargetAndCancel(t *testing.T) {
+	h := twoProjectChild(t)
+	parent, err := h.e.StartRun("test", "investigate", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.Tx(func(tx *sql.Tx) error {
+		return store.OverlaySet(tx, "pause:guest", "1")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.e.StartChild(parent, "look", "guest"); err == nil || err.Error() != "paused" {
+		t.Fatalf("paused %v", err)
+	}
+	if err := h.st.Tx(func(tx *sql.Tx) error {
+		return store.OverlaySet(tx, "pause:guest", "0")
+	}); err != nil {
+		t.Fatal(err)
+	}
+	child, err := h.e.StartChild(parent, "look", "guest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.e.CancelSession(parent); err != nil {
+		t.Fatal(err)
+	}
+	turns, err := store.ListTurnsForSession(h.st, child)
+	if err != nil || len(turns) == 0 || turns[0].State != "failed" {
+		t.Fatalf("child turn %v %v", turns, err)
+	}
+}
+
+func TestChildCrossProjectHTTPAndPartialComplete(t *testing.T) {
+	h := twoProjectChild(t)
+	parent, err := h.e.StartRun("test", "investigate", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest("POST", h.http.URL+"/sessions/"+strconv.FormatInt(parent, 10)+"/children", strings.NewReader(`{"prompt":"look","project":"guest"}`))
+	req.Header.Set("Authorization", "Bearer wsec")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("create %d %s", res.StatusCode, b)
+	}
+	var out struct {
+		SessionID int64 `json:"session_id"`
+	}
+	if err := json.Unmarshal(b, &out); err != nil || out.SessionID == 0 {
+		t.Fatalf("body %s %v", b, err)
+	}
+	cs, err := store.GetSession(h.st, out.SessionID)
+	if err != nil || cs.Project != "guest" {
+		t.Fatalf("child %+v %v", cs, err)
+	}
+	c1 := h.claim()
+	if c1.Job.Repo != "example/test-repo" {
+		t.Fatal("parent complete claimed the child")
+	}
+	if _, err := h.e.Complete(c1.Job.ID, c1.Job.LeaseGeneration, c1.Job.ClaimedRevision, runArt(c1)); err != nil {
+		t.Fatal(err)
+	}
+	turns, err := store.ListTurnsForSession(h.st, cs.ID)
+	if err != nil || len(turns) == 0 || turns[0].State != "queued" {
+		t.Fatalf("child still queued %v %v", turns, err)
+	}
+	req, _ = http.NewRequest("POST", h.http.URL+"/sessions/"+strconv.FormatInt(parent, 10)+"/children", strings.NewReader(`{"prompt":"look","project":"missing"}`))
+	req.Header.Set("Authorization", "Bearer wsec")
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ = io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusConflict || !strings.Contains(string(b), "policy") {
+		t.Fatalf("missing %d %s", res.StatusCode, b)
+	}
+}
+
+func TestChildSameProjectKeepsParentRepo(t *testing.T) {
+	h := setup(t)
+	parent, err := h.e.StartRun("test", "investigate", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps, err := store.GetSession(h.st, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.f.Put(snapshot.Item{Repo: "example/other-repo", Item: 1, ItemKind: "issue", State: "open", MainSHA: "ccc", DefaultBranch: "main"})
+	raw := strings.Replace(fixture, "example/test-repo:", "example/other-repo:\n        visibility: public\n        review: true\n        comments: true\n        close: true\n        implement: false\n        land: false\n      example/test-repo:", 1)
+	pol, err := policy.Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.ReloadPolicy(pol)
+	child, err := h.e.StartChild(parent, "look", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err := store.GetSession(h.st, child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cs.Project != ps.Project || cs.Repo != ps.Repo || cs.Repo != "example/test-repo" {
+		t.Fatalf("child pin %+v parent %+v", cs, ps)
+	}
+	snap, err := store.LoadSnapshot(h.st, cs.Repo, cs.Item, 1)
+	if err != nil || snap.MainSHA == "ccc" {
+		t.Fatalf("child snapshot %+v %v", snap, err)
+	}
+}
+
+func TestChildTreeLeaseCapBlocksCrossProjectClaim(t *testing.T) {
+	h := setup(t)
+	raw := fixture + guestProjectYAML
+	pol, err := policy.Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.ReloadPolicy(pol)
+	h.f.Put(snapshot.Item{Repo: "example/guest-repo", Item: 1, ItemKind: "issue", State: "open", MainSHA: "bbb", DefaultBranch: "main"})
+	parent, err := h.e.StartRun("test", "investigate", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := h.e.StartChild(parent, "look", "guest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c1 := h.claim()
+	if c1.Job.Repo != "example/test-repo" {
+		t.Fatalf("parent claim %+v", c1.Job)
+	}
+	c2, err := h.e.Claim("example/guest-repo")
+	if err != nil || c2 != nil {
+		t.Fatalf("child stayed queued under parent cap, got %+v %v", c2, err)
+	}
+	if _, err := h.e.Complete(c1.Job.ID, c1.Job.LeaseGeneration, c1.Job.ClaimedRevision, runArt(c1)); err != nil {
+		t.Fatal(err)
+	}
+	c3, err := h.e.Claim("example/guest-repo")
+	cs, _ := store.GetSession(h.st, child)
+	if err != nil || c3 == nil || cs == nil || c3.Job.Repo != cs.Repo || c3.Job.Item != cs.Item {
+		t.Fatalf("child claim after parent complete %+v %v child %+v", c3, err, cs)
+	}
+}
+
+func TestChildTreeLeaseAllowsWhenParentCapHasRoom(t *testing.T) {
+	h := twoProjectChild(t)
+	parent, err := h.e.StartRun("test", "investigate", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := h.e.StartChild(parent, "look", "guest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c1 := h.claim()
+	if c1.Job.Repo != "example/test-repo" {
+		t.Fatalf("parent claim %+v", c1.Job)
+	}
+	cs, err := store.GetSession(h.st, child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2, err := h.e.Claim("example/guest-repo")
+	if err != nil || c2 == nil || c2.Job.Repo != cs.Repo || c2.Job.Item != cs.Item {
+		t.Fatalf("child claim under parent cap 2 %+v %v", c2, err)
+	}
+}
+
+func TestChildTreeLeaseSkipsBlockedChildForUnrelatedClaim(t *testing.T) {
+	h := setup(t)
+	raw := fixture + guestProjectYAML
+	pol, err := policy.Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.ReloadPolicy(pol)
+	h.f.Put(snapshot.Item{Repo: "example/guest-repo", Item: 1, ItemKind: "issue", State: "open", MainSHA: "bbb", DefaultBranch: "main"})
+	parent, err := h.e.StartRun("test", "investigate", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := h.e.StartChild(parent, "look", "guest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unrelated, err := h.e.StartRun("guest", "other work", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c1 := h.claim()
+	if c1.Job.Repo != "example/test-repo" {
+		t.Fatalf("parent claim %+v", c1.Job)
+	}
+	cs, err := store.GetSession(h.st, child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	us, err := store.GetSession(h.st, unrelated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2, err := h.e.Claim("example/guest-repo")
+	if err != nil || c2 == nil || c2.Job.Item != us.Item || c2.Job.Repo != us.Repo {
+		t.Fatalf("unrelated guest claim %+v %v want item %d child item %d", c2, err, us.Item, cs.Item)
 	}
 }

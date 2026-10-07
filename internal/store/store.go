@@ -918,7 +918,8 @@ func ListChildSessionIDs(s *Store, parentID int64) ([]int64, error) {
 }
 
 func SessionLineageTx(tx *sql.Tx, sessionID int64) (parentID int64, repo string, item int, err error) {
-	err = tx.QueryRow(`SELECT COALESCE(parent_session_id, 0), repo, item FROM sessions WHERE id=?`, sessionID).Scan(&parentID, &repo, &item)
+	err = tx.QueryRow(`SELECT COALESCE(c.parent_session_id, 0), COALESCE(p.repo, c.repo), COALESCE(p.item, c.item)
+FROM sessions c LEFT JOIN sessions p ON p.id=c.parent_session_id WHERE c.id=?`, sessionID).Scan(&parentID, &repo, &item)
 	return parentID, repo, item, err
 }
 

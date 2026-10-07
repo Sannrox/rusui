@@ -42,6 +42,21 @@ func CountLeasedTurnsTx(tx *sql.Tx, project string, repos []string) (int, error)
 	return countLeasedTurns(tx, project, repos)
 }
 
+// CountTreeLeasedTurnsTx counts leased turns on sessionID's parent tree:
+// the root session and its direct children. A session with no parent is
+// its own root. rootProject is the root session's project (ADR 0072 D5).
+func CountTreeLeasedTurnsTx(tx *sql.Tx, sessionID int64) (n int, rootProject string, err error) {
+	var rootID int64
+	err = tx.QueryRow(`SELECT CASE WHEN c.parent_session_id != 0 THEN c.parent_session_id ELSE c.id END, COALESCE(p.project, c.project)
+FROM sessions c LEFT JOIN sessions p ON p.id=c.parent_session_id WHERE c.id=?`, sessionID).Scan(&rootID, &rootProject)
+	if err != nil {
+		return 0, "", err
+	}
+	err = tx.QueryRow(`SELECT COUNT(*) FROM turns t JOIN sessions s ON s.id=t.session_id
+WHERE t.state='leased' AND (s.id=? OR s.parent_session_id=?)`, rootID, rootID).Scan(&n)
+	return n, rootProject, err
+}
+
 type leasedCounter interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
