@@ -55,7 +55,7 @@ func (e *Engine) promptFollowUp(sessionID int64, prompt string, files []store.Pr
 		if err != nil {
 			return err
 		}
-		if _, err := enqueuePromptTx(tx, e.Store, j, sessionID, prompt, false, files, e.now()); err != nil {
+		if _, err := e.enqueuePromptTx(tx, j, sessionID, prompt, false, files, e.now()); err != nil {
 			return err
 		}
 		turnID = j.ID
@@ -114,7 +114,7 @@ func (e *Engine) promptQueued(sessionID int64, prompt string, files []store.Prom
 		if err != nil {
 			return err
 		}
-		seq, err := enqueuePromptTx(tx, e.Store, j, sessionID, prompt, true, files, e.now())
+		seq, err := e.enqueuePromptTx(tx, j, sessionID, prompt, true, files, e.now())
 		if err != nil {
 			return err
 		}
@@ -219,7 +219,7 @@ func (e *Engine) PromptSteer(sessionID int64, prompt string) (int64, int, bool, 
 			pending = j.PendingRevision
 			return insertOperatorSteerTx(tx, id, sess, j, prompt, "steer")
 		}
-		seq, err := enqueuePromptTx(tx, e.Store, j, sessionID, prompt, false, nil, e.now())
+		seq, err := e.enqueuePromptTx(tx, j, sessionID, prompt, false, nil, e.now())
 		if err != nil {
 			return err
 		}
@@ -315,7 +315,12 @@ func insertPromptFileReceiptsTx(tx *sql.Tx, sess *store.Session, j *store.Job, f
 
 // enqueuePromptTx appends the prompt to the session FIFO, then lets the
 // FIFO head become the pending revision when nothing is ahead of it.
-func enqueuePromptTx(tx *sql.Tx, st *store.Store, j *store.Job, sessionID int64, prompt string, queued bool, files []store.PromptFile, now time.Time) (int, error) {
+func (e *Engine) enqueuePromptTx(tx *sql.Tx, j *store.Job, sessionID int64, prompt string, queued bool, files []store.PromptFile, now time.Time) (int, error) {
+	if j.State != "queued" && j.State != "leased" {
+		if err := e.checkChildReactivationTx(tx, sessionID); err != nil {
+			return 0, err
+		}
+	}
 	enqueue := store.EnqueueFollowUpTx
 	if queued {
 		enqueue = store.EnqueueQueuedPromptTx
@@ -324,7 +329,7 @@ func enqueuePromptTx(tx *sql.Tx, st *store.Store, j *store.Job, sessionID int64,
 	if err != nil {
 		return 0, err
 	}
-	stored, err := store.InsertPromptAttachmentsTx(st, tx, sessionID, seq, files, now)
+	stored, err := store.InsertPromptAttachmentsTx(e.Store, tx, sessionID, seq, files, now)
 	if err != nil {
 		return 0, err
 	}

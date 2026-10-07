@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
@@ -567,5 +568,87 @@ func TestChildCompletionDoesNotReportToArchivedParent(t *testing.T) {
 		if a.Type == "child.result" {
 			t.Fatalf("archived parent received %s", a.Body)
 		}
+	}
+}
+
+func TestChildFanOutCapacityReturnsAfterTerminalTurns(t *testing.T) {
+	for _, outcome := range []string{"complete", "cancel"} {
+		t.Run(outcome, func(t *testing.T) {
+			h := setup(t)
+			pol, err := policy.Parse([]byte(strings.Replace(fixture, "test:\n", "test:\n    budgets: {max_concurrent_leases: 2}\n", 1)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			h.e.ReloadPolicy(pol)
+			parent, err := h.e.StartRun("test", "investigate", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := h.claim()
+			if _, err := h.e.Complete(p.Job.ID, p.Job.LeaseGeneration, p.Job.ClaimedRevision, runArt(p)); err != nil {
+				t.Fatal(err)
+			}
+			children := make([]int64, 2)
+			for i := range children {
+				children[i], err = h.e.StartChild(parent, "look", "")
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			first, second := h.claim(), h.claim()
+			if _, err := h.e.StartChild(parent, "too many", ""); err == nil || err.Error() != "fan-out" {
+				t.Fatalf("leased fan-out: %v", err)
+			}
+			if outcome == "complete" {
+				for _, c := range []*engine.Claim{first, second} {
+					if _, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, runArt(c)); err != nil {
+						t.Fatal(err)
+					}
+				}
+			} else {
+				for _, child := range children {
+					if err := h.e.CancelSession(child); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			replacements := make([]int64, len(children))
+			for i := range replacements {
+				replacements[i], err = h.e.StartChild(parent, "next batch", "")
+				if err != nil {
+					t.Fatalf("capacity did not return after %s: %v", outcome, err)
+				}
+			}
+			if _, err := h.e.StartChild(parent, "queued overflow", ""); err == nil || err.Error() != "fan-out" {
+				t.Fatalf("queued fan-out: %v", err)
+			}
+			for _, delivery := range []string{"follow-up", "queued", "steer"} {
+				var err error
+				switch delivery {
+				case "follow-up":
+					_, _, err = h.e.PromptFollowUp(children[0], "resume")
+				case "queued":
+					_, _, _, err = h.e.PromptQueued(children[0], "resume")
+				case "steer":
+					_, _, _, err = h.e.PromptSteer(children[0], "resume")
+				}
+				if err == nil || err.Error() != "fan-out" {
+					t.Errorf("%s reactivated child beyond capacity: %v", delivery, err)
+				}
+			}
+			if err := h.e.CancelSession(replacements[0]); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := h.e.PromptFollowUp(children[0], "resume with capacity"); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, _, err := h.e.PromptSteer(children[0], "same active child"); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := h.e.PromptFollowUp(children[1], "overflow again"); err == nil || err.Error() != "fan-out" {
+				t.Fatalf("reactivation fan-out: %v", err)
+			}
+
+		})
 	}
 }
