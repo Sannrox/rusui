@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,7 +15,8 @@ import (
 )
 
 type Store struct {
-	DB *sql.DB
+	DB  *sql.DB
+	Dir string
 }
 
 func Open(path string) (*Store, error) {
@@ -27,7 +29,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{DB: db}
+	s := &Store{DB: db, Dir: filepath.Dir(path)}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err

@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 42
+const CurrentSchema = 43
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -525,7 +525,30 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 43 {
+		if err := migrateV43(s); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 43); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV43 stores prompt attachment bytes on disk and keeps digest+path
+// in SQLite (#560). Leftover BLOBs from schema v40 are extracted once.
+func migrateV43(s *Store) error {
+	var n int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('prompt_attachments') WHERE name='path'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := s.DB.Exec(`ALTER TABLE prompt_attachments ADD COLUMN path TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	return extractPromptAttachmentBodies(s)
 }
 
 // migrateV42 records the optional ACP session mode forwarded on session/new (#559).
