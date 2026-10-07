@@ -19,6 +19,7 @@ func runCLI(args []string) {
 	idem := fs.String("idempotency-key", "", "idempotency key")
 	effort := fs.String("effort", "", "stable effort key for a pinned implementation task")
 	size := fs.String("size", "", "environment size: small, medium, or large")
+	mode := fs.String("mode", "", "guest session mode: low, medium, high, or ultra")
 	repo := fs.String("repo", "", "source repository")
 	ref := fs.String("ref", "", "source ref")
 	base := fs.String("base-sha", "", "pinned base commit")
@@ -32,6 +33,9 @@ func runCLI(args []string) {
 	payload := map[string]any{"kind": "run", "prompt": prompt}
 	if *size != "" {
 		payload["size"] = *size
+	}
+	if *mode != "" {
+		payload["mode"] = *mode
 	}
 	if *effort != "" || *repo != "" || *ref != "" || *base != "" || *paths != "" {
 		payload["effort_key"] = *effort

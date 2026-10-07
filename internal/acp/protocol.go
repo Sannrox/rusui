@@ -79,6 +79,7 @@ type InitializeResult struct {
 type SessionNewParams struct {
 	Cwd        string `json:"cwd"`
 	MCPServers []any  `json:"mcpServers"`
+	Mode       string `json:"mode,omitempty"`
 }
 
 type SessionIDResult struct {

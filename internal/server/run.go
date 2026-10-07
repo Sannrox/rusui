@@ -19,6 +19,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		Kind         string   `json:"kind"`
 		Prompt       string   `json:"prompt"`
 		Size         string   `json:"size"`
+		Mode         string   `json:"mode"`
 		EffortKey    string   `json:"effort_key"`
 		Repo         string   `json:"repo"`
 		Ref          string   `json:"ref"`
@@ -79,7 +80,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	id, err := s.Eng.StartRunSize(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size)
+	id, err := s.Eng.StartRunMode(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size, req.Mode)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return

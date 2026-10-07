@@ -495,6 +495,9 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		}
 		if sess, err := store.GetSession(s.Eng.Store, turn.SessionID); err == nil {
 			out["guest_session_id"] = sess.GuestSessionID
+			if sess.Mode != "" {
+				out["mode"] = sess.Mode
+			}
 			if envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID); err == nil {
 				out["driver"] = envRow.Driver
 				out["handle"] = envRow.Handle

@@ -68,6 +68,7 @@ type Assignment struct {
 	// ShipBase is the default branch a push-base implement turn may push.
 	ShipBase       string   `json:"ship_base,omitempty"`
 	Guest          string   `json:"guest,omitempty"`
+	Mode           string   `json:"mode,omitempty"`
 	CommitTrailers []string `json:"commit_trailers,omitempty"`
 	// CommitHooksDir is where PrepareCommitHooks placed the attribution
 	// hooks for this turn; set on the runner, never by the plane.

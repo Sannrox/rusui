@@ -24,6 +24,8 @@ type FakeAgent struct {
 	PermissionResult func(PermissionOutcome)
 	// SessionCwd receives the cwd of session/new.
 	SessionCwd func(string)
+	// SessionMode receives the optional mode of session/new.
+	SessionMode func(string)
 	// PromptStarted and CancelReceived let conformance tests observe the ACP boundary.
 	PromptStarted       chan<- PromptParams
 	PermissionRequested chan<- struct{}
@@ -77,6 +79,9 @@ func (a *FakeAgent) handle(msg rpcMessage) error {
 		_ = json.Unmarshal(msg.Params, &p)
 		if a.SessionCwd != nil {
 			a.SessionCwd(p.Cwd)
+		}
+		if a.SessionMode != nil {
+			a.SessionMode(p.Mode)
 		}
 		if !strings.HasPrefix(p.Cwd, "/") {
 			// Real guests (the Claude Code adapter) reject a relative or empty cwd.

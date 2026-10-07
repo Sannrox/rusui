@@ -14,6 +14,10 @@ func (e *Engine) StartRun(project, prompt, idem string) (int64, error) {
 }
 
 func (e *Engine) StartRunSize(project, prompt, idem, size string) (int64, error) {
+	return e.StartRunMode(project, prompt, idem, size, "")
+}
+
+func (e *Engine) StartRunMode(project, prompt, idem, size, mode string) (int64, error) {
 	p, ok := e.PolicySnapshot().Project(project)
 	if !ok || !p.AllowsKind(policy.KindRun) {
 		return 0, fmt.Errorf("policy")
@@ -22,6 +26,9 @@ func (e *Engine) StartRunSize(project, prompt, idem, size string) (int64, error)
 		if NormalizeSize(size) == "" || size != NormalizeSize(size) {
 			return 0, fmt.Errorf("size")
 		}
+	}
+	if !ValidSessionMode(mode) {
+		return 0, fmt.Errorf("mode")
 	}
 	if prompt == "" {
 		return 0, fmt.Errorf("prompt required")
@@ -56,6 +63,11 @@ func (e *Engine) StartRunSize(project, prompt, idem, size string) (int64, error)
 		}
 		if err := store.SetSessionSizeTx(tx, sid, NormalizeSize(resolved)); err != nil {
 			return err
+		}
+		if mode != "" {
+			if err := store.SetSessionModeTx(tx, sid, mode); err != nil {
+				return err
+			}
 		}
 		it := snapshot.Item{
 			Repo: repo, Item: item, ItemKind: "run", State: "open",

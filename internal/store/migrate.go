@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 41
+const CurrentSchema = 42
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -517,7 +517,28 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 42 {
+		if err := migrateV42(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 42); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV42 records the optional ACP session mode forwarded on session/new (#559).
+func migrateV42(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='mode'`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`ALTER TABLE sessions ADD COLUMN mode TEXT NOT NULL DEFAULT ''`)
+	return err
 }
 
 // migrateV41 records parent/child session lineage (#122, ADR 0071).
