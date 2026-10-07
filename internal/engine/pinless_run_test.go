@@ -172,3 +172,100 @@ func TestProjectKeyClaimRefusedWhenProjectHasRepos(t *testing.T) {
 		t.Fatalf("claim %+v %v", c, err)
 	}
 }
+
+const pinlessThenBoundPolicy = `version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+  session_kinds: [run]
+  egress: trusted
+  review: true
+  comments: false
+  close: false
+  implement: false
+  land: false
+  max_reviews_per_repo_per_utc_day: 50
+projects:
+  empty:
+    repos:
+      example/test-repo:
+        visibility: public
+        review: true
+        comments: false
+        close: false
+        implement: false
+        land: false
+    session_kinds: [run]
+`
+
+func bindPinlessProjectRepo(t *testing.T, h *harn) {
+	t.Helper()
+	p, err := policy.Parse([]byte(pinlessThenBoundPolicy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.ReloadPolicy(p)
+}
+
+func TestPinlessQueuedTurnClaimsByProjectKeyAfterProjectGainsRepo(t *testing.T) {
+	h := pinlessHarness(t)
+	if _, err := h.e.StartRun("empty", "look around", ""); err != nil {
+		t.Fatal(err)
+	}
+	bindPinlessProjectRepo(t, h)
+	key := policy.ProjectKey("empty")
+	c, err := h.e.Claim(key)
+	if err != nil || c == nil {
+		t.Fatalf("claim %v %v", c, err)
+	}
+	if c.Job.Repo != key || c.Job.Lane != "run" {
+		t.Fatalf("job %+v", c.Job)
+	}
+	if c.Snapshot.GitPin() != "" {
+		t.Fatalf("pin %+v", c.Snapshot)
+	}
+}
+
+func TestPinlessQueuedTurnClaimsByBoundRepoAfterProjectGainsRepo(t *testing.T) {
+	h := pinlessHarness(t)
+	id, err := h.e.StartRun("empty", "look around", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bindPinlessProjectRepo(t, h)
+	c, err := h.e.Claim("example/test-repo")
+	if err != nil || c == nil {
+		t.Fatalf("claim %v %v", c, err)
+	}
+	key := policy.ProjectKey("empty")
+	if c.Job.Repo != key {
+		t.Fatalf("job repo %q, want leftover project key", c.Job.Repo)
+	}
+	sess, err := store.GetSession(h.st, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sess.Repo != key {
+		t.Fatalf("session repo %q, want leftover project key", sess.Repo)
+	}
+}
+
+func TestPinlessQueuedTurnHTTPClaimsAfterProjectGainsRepo(t *testing.T) {
+	h := pinlessHarness(t)
+	if _, err := h.e.StartRun("empty", "look around", ""); err != nil {
+		t.Fatal(err)
+	}
+	bindPinlessProjectRepo(t, h)
+	key := policy.ProjectKey("empty")
+	req, _ := http.NewRequest("POST", h.http.URL+"/jobs/claim", strings.NewReader(`{"repo":"`+key+`"}`))
+	req.Header.Set("Authorization", "Bearer wsec")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("%d %s", res.StatusCode, b)
+	}
+}

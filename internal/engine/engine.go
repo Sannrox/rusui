@@ -740,7 +740,7 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 		if err != nil {
 			return err
 		}
-		proj, repoPolicy, err := e.claimScope(repo, paused)
+		proj, repoPolicy, err := e.claimScope(tx, repo, paused)
 		if err != nil {
 			return err
 		}
@@ -774,20 +774,24 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 			}
 			return errPolicy
 		}
-		if err := e.expireDeadLeasesTx(tx, repo, "review"); err != nil {
-			return err
-		}
-		if err := e.expireDeadLeasesTx(tx, repo, "run"); err != nil {
-			return err
-		}
-		if err := e.expireDeadLeasesTx(tx, repo, "scheduled"); err != nil {
-			return err
+		keys := claimSelectRepos(repo, proj)
+		for _, key := range keys {
+			if err := e.expireDeadLeasesTx(tx, key, "review"); err != nil {
+				return err
+			}
+			if err := e.expireDeadLeasesTx(tx, key, "run"); err != nil {
+				return err
+			}
+			if err := e.expireDeadLeasesTx(tx, key, "scheduled"); err != nil {
+				return err
+			}
 		}
 		// A queued run is leased before older review or scheduled turns.
 		// Turns in the same class stay in id order, so catch-up reviews
-		// are still claimed once no run is waiting.
-		rows, err := tx.Query(`SELECT t.id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo=? AND COALESCE(s.archived, 0)=0 AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
-			append([]any{repo}, anySlice(lanes)...)...)
+		// are still claimed once no run is waiting. A bound repository
+		// also sees leftover pinless sessions of the same project (#557).
+		rows, err := tx.Query(`SELECT t.id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo IN (`+placeholders(len(keys))+`) AND COALESCE(s.archived, 0)=0 AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
+			append(anySlice(keys), anySlice(lanes)...)...)
 		if err != nil {
 			return err
 		}
@@ -1595,17 +1599,43 @@ func (e *Engine) repoPaused(tx *sql.Tx, repo string) (bool, error) {
 	return store.Paused(tx, slug)
 }
 
-// claimScope is the policy that admits a claim key. A project key is only
-// valid for a project with zero bound repositories (ADR 0048).
-func (e *Engine) claimScope(repo string, paused bool) (policy.Project, *policy.Repo, error) {
+// claimSelectRepos is the sessions.repo values a claim key may lease.
+// A bound repository also sees leftover pinless sessions of the same
+// project, which keep the project key so their empty pin stays valid (#557).
+func claimSelectRepos(repo string, proj policy.Project) []string {
+	if policy.IsProjectKey(repo) {
+		return []string{repo}
+	}
+	pk := policy.ProjectKey(proj.Slug)
+	if pk == repo {
+		return []string{repo}
+	}
+	return []string{repo, pk}
+}
+
+// claimScope is the policy that admits a claim key. A project key is
+// valid for a project with zero bound repositories (ADR 0048), and also
+// while leftover pinless sessions still exist after the project later
+// binds a repository (#557). New project-key claims stay refused when
+// no such session remains.
+func (e *Engine) claimScope(tx *sql.Tx, repo string, paused bool) (policy.Project, *policy.Repo, error) {
 	active := e.PolicySnapshot()
 	if slug, ok := policy.ParseProjectKey(repo); ok {
 		if paused {
 			return policy.Project{}, nil, errPaused
 		}
 		p, ok := active.Project(slug)
-		if !ok || len(p.Repos) != 0 {
+		if !ok {
 			return policy.Project{}, nil, errPolicy
+		}
+		if len(p.Repos) != 0 {
+			open, err := store.HasOpenRepoSessionsTx(tx, repo)
+			if err != nil {
+				return policy.Project{}, nil, err
+			}
+			if !open {
+				return policy.Project{}, nil, errPolicy
+			}
 		}
 		return p, nil, nil
 	}
