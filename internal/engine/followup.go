@@ -1,9 +1,7 @@
 package engine
 
 import (
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -58,7 +56,7 @@ func (e *Engine) promptFollowUp(sessionID int64, prompt string, files []store.Pr
 		if err != nil {
 			return err
 		}
-		if _, err := enqueuePromptTx(tx, j, sessionID, prompt, false, files, e.now()); err != nil {
+		if _, err := enqueuePromptTx(tx, e.Store, j, sessionID, prompt, false, files, e.now()); err != nil {
 			return err
 		}
 		turnID = j.ID
@@ -117,7 +115,7 @@ func (e *Engine) promptQueued(sessionID int64, prompt string, files []store.Prom
 		if err != nil {
 			return err
 		}
-		seq, err := enqueuePromptTx(tx, j, sessionID, prompt, true, files, e.now())
+		seq, err := enqueuePromptTx(tx, e.Store, j, sessionID, prompt, true, files, e.now())
 		if err != nil {
 			return err
 		}
@@ -222,7 +220,7 @@ func (e *Engine) PromptSteer(sessionID int64, prompt string) (int64, int, bool, 
 			pending = j.PendingRevision
 			return insertOperatorSteerTx(tx, id, sess, j, prompt, "steer")
 		}
-		seq, err := enqueuePromptTx(tx, j, sessionID, prompt, false, nil, e.now())
+		seq, err := enqueuePromptTx(tx, e.Store, j, sessionID, prompt, false, nil, e.now())
 		if err != nil {
 			return err
 		}
@@ -277,19 +275,18 @@ func validatePromptFiles(files []store.PromptFile) error {
 	return nil
 }
 
-func insertPromptFileReceiptsTx(tx *sql.Tx, sess *store.Session, j *store.Job, files []store.PromptFile) error {
+func insertPromptFileReceiptsTx(tx *sql.Tx, sess *store.Session, j *store.Job, files []store.PromptAttachment) error {
 	sid, tid := sess.ID, j.ID
 	for _, f := range files {
 		id, err := newActionID()
 		if err != nil {
 			return err
 		}
-		sum := sha256.Sum256(f.Body)
 		body, err := json.Marshal(map[string]any{
 			"name":   f.Name,
-			"digest": hex.EncodeToString(sum[:]),
-			"size":   len(f.Body),
-			"mime":   store.AttachmentMIME(f.Name, f.Body),
+			"digest": f.Digest,
+			"size":   f.Size,
+			"mime":   f.MIME,
 		})
 		if err != nil {
 			return err
@@ -309,7 +306,7 @@ func insertPromptFileReceiptsTx(tx *sql.Tx, sess *store.Session, j *store.Job, f
 
 // enqueuePromptTx appends the prompt to the session FIFO, then lets the
 // FIFO head become the pending revision when nothing is ahead of it.
-func enqueuePromptTx(tx *sql.Tx, j *store.Job, sessionID int64, prompt string, queued bool, files []store.PromptFile, now time.Time) (int, error) {
+func enqueuePromptTx(tx *sql.Tx, st *store.Store, j *store.Job, sessionID int64, prompt string, queued bool, files []store.PromptFile, now time.Time) (int, error) {
 	enqueue := store.EnqueueFollowUpTx
 	if queued {
 		enqueue = store.EnqueueQueuedPromptTx
@@ -318,11 +315,12 @@ func enqueuePromptTx(tx *sql.Tx, j *store.Job, sessionID int64, prompt string, q
 	if err != nil {
 		return 0, err
 	}
-	if err := store.InsertPromptAttachmentsTx(tx, sessionID, seq, files, now); err != nil {
+	stored, err := store.InsertPromptAttachmentsTx(st, tx, sessionID, seq, files, now)
+	if err != nil {
 		return 0, err
 	}
 	sess := &store.Session{ID: sessionID, Repo: j.Repo, Item: j.Item}
-	if err := insertPromptFileReceiptsTx(tx, sess, j, files); err != nil {
+	if err := insertPromptFileReceiptsTx(tx, sess, j, stored); err != nil {
 		return 0, err
 	}
 	if err := promoteFollowUpTx(tx, j, sessionID); err != nil {

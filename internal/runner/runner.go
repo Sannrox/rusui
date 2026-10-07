@@ -88,9 +88,11 @@ type Assignment struct {
 
 // PromptAttachment is one ACP prompt part the guest may read.
 type PromptAttachment struct {
-	Name string `json:"name"`
-	MIME string `json:"mime"`
-	Data string `json:"data"`
+	Name   string `json:"name"`
+	MIME   string `json:"mime"`
+	Data   string `json:"data,omitempty"`
+	Digest string `json:"digest,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
 type steerReceiptState struct {

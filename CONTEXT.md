@@ -45,7 +45,7 @@ One leased attempt on an unattended session. A local session has no Turn.
 _Avoid_: session, job (as the product noun)
 
 **Prompt attachment**:
-A file the operator attaches to a turn prompt. The plane stores it outside the repository. The guest receives it as an ACP prompt part. `rusui read` records the name and digest, not the bytes.
+A file the operator attaches to a turn prompt. Bytes live on disk next to the plane store; SQLite keeps digest and path. The guest receives it as an ACP prompt part. `rusui read` records the name and digest, not the bytes.
 _Avoid_: workspace upload, git blob, image generation
 
 **Environment**:

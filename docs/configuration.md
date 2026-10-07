@@ -225,7 +225,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/jobs/{id}/heartbeat` | same |
 | `POST` | `/jobs/{id}/complete` | same |
 | `POST` | `/jobs/{id}/fail` | same |
-| `POST` | `/sessions/{id}/turns` | operator or worker token; follow-up prompt, steer (`steer`), or queued prompt (`queued`) that starts after the current turn ends (`rusui prompt`); optional `attachments` `[{name, content}]` as base64, 32 MiB cap, stored outside the repository |
+| `POST` | `/sessions/{id}/turns` | operator or worker token; follow-up prompt, steer (`steer`), or queued prompt (`queued`) that starts after the current turn ends (`rusui prompt`); optional `attachments` `[{name, content}]` as base64, 32 MiB cap, stored on disk next to the plane store |
 | `POST` | `/sessions/{id}/children` | operator or worker token; start one child run in the same project (ADR 0071); depth 1; fan-out capped by `max_concurrent_leases` |
 | `DELETE` | `/sessions/{id}/queued` | operator or worker token; drops queued prompts that have not started and returns `dropped`; the current turn keeps running (`rusui prompt -drop-queue`) |
 | `POST` | `/sessions/{id}/cancel` | operator or worker token; ends the turn, drops queued prompts, and stops the guest's processes |

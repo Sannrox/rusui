@@ -56,13 +56,27 @@ func TestPromptAttachmentReachesGuestAndStaysOffWorkspace(t *testing.T) {
 		t.Fatalf("claim attachments %v", out["attachments"])
 	}
 	row, _ := listed[0].(map[string]any)
-	if row["name"] != "shot.png" || row["mime"] != "image/png" || row["data"] != base64.StdEncoding.EncodeToString(png1x1) {
+	sum := sha256.Sum256(png1x1)
+	digest := hex.EncodeToString(sum[:])
+	path, _ := row["path"].(string)
+	if row["name"] != "shot.png" || row["mime"] != "image/png" || row["digest"] != digest || path == "" {
 		t.Fatalf("claim attachment %v", row)
+	}
+	if _, ok := row["data"]; ok {
+		t.Fatalf("claim still sent data %v", row)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(raw, png1x1) {
+		t.Fatalf("disk %v %v", raw, err)
 	}
 	rev := int(out["claimed_revision"].(float64))
 	atts, err := store.ListPromptAttachments(h.st, sid, rev)
-	if err != nil || len(atts) != 1 || atts[0].Name != "shot.png" || atts[0].MIME != "image/png" || !bytes.Equal(atts[0].Body, png1x1) {
+	if err != nil || len(atts) != 1 || atts[0].Name != "shot.png" || atts[0].MIME != "image/png" || atts[0].Digest != digest || atts[0].Size != len(png1x1) || len(atts[0].Body) != 0 {
 		t.Fatalf("stored %+v %v", atts, err)
+	}
+	var bodyLen int
+	if err := h.st.DB.QueryRow(`SELECT length(body) FROM prompt_attachments WHERE digest=?`, digest).Scan(&bodyLen); err != nil || bodyLen != 0 {
+		t.Fatalf("sqlite body %d %v", bodyLen, err)
 	}
 	sess, err := store.GetSession(h.st, sid)
 	if err != nil {
@@ -77,8 +91,6 @@ func TestPromptAttachmentReachesGuestAndStaysOffWorkspace(t *testing.T) {
 			t.Fatalf("attachment copied into workspace: %v", err)
 		}
 	}
-	sum := sha256.Sum256(png1x1)
-	digest := hex.EncodeToString(sum[:])
 	acts, err := store.ListActionsForSession(h.st, sid)
 	if err != nil {
 		t.Fatal(err)

@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -486,9 +485,10 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 			listed := make([]map[string]any, 0, len(atts))
 			for _, a := range atts {
 				listed = append(listed, map[string]any{
-					"name": a.Name,
-					"mime": a.MIME,
-					"data": base64.StdEncoding.EncodeToString(a.Body),
+					"name":   a.Name,
+					"mime":   a.MIME,
+					"digest": a.Digest,
+					"path":   a.Path,
 				})
 			}
 			out["attachments"] = listed

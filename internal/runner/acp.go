@@ -3,6 +3,7 @@ package runner
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -431,7 +432,11 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 		submitted := make(chan struct{})
 		blocks := []acp.PromptBlock{{Type: "text", Text: prompt}}
 		if useAtts {
-			blocks = promptBlocks(a, prompt)
+			var err error
+			blocks, err = promptBlocks(a, prompt)
+			if err != nil {
+				return engine.Artifact{}, nil, err
+			}
 			useAtts = false
 		}
 		go func(blocks []acp.PromptBlock) {
@@ -480,19 +485,27 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 	}
 }
 
-func promptBlocks(a *Assignment, text string) []acp.PromptBlock {
+func promptBlocks(a *Assignment, text string) ([]acp.PromptBlock, error) {
 	blocks := []acp.PromptBlock{{Type: "text", Text: text}}
 	if a == nil {
-		return blocks
+		return blocks, nil
 	}
 	for _, att := range a.Attachments {
+		data := att.Data
+		if data == "" && att.Path != "" {
+			raw, err := os.ReadFile(att.Path)
+			if err != nil {
+				return nil, err
+			}
+			data = base64.StdEncoding.EncodeToString(raw)
+		}
 		typ := "resource"
 		if strings.HasPrefix(att.MIME, "image/") {
 			typ = "image"
 		}
-		blocks = append(blocks, acp.PromptBlock{Type: typ, MimeType: att.MIME, Data: att.Data})
+		blocks = append(blocks, acp.PromptBlock{Type: typ, MimeType: att.MIME, Data: data})
 	}
-	return blocks
+	return blocks, nil
 }
 
 func promptFromInput(raw json.RawMessage) string {

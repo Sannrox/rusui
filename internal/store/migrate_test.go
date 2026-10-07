@@ -1,7 +1,11 @@
 package store
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -73,6 +77,10 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	var modeCol int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='mode'`).Scan(&modeCol); err != nil || modeCol != 1 {
 		t.Fatalf("sessions.mode missing after upgrade: %d %v", modeCol, err)
+	}
+	var attPath int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('prompt_attachments') WHERE name='path'`).Scan(&attPath); err != nil || attPath != 1 {
+		t.Fatalf("prompt_attachments.path missing after upgrade: %d %v", attPath, err)
 	}
 	var pubs int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='publication_attempts'`).Scan(&pubs); err != nil || pubs != 1 {
@@ -336,5 +344,36 @@ DELETE FROM schema_migrations WHERE version>=33;`); err != nil {
 	var dropped int
 	if err := upgraded.DB.QueryRow(`SELECT dropped FROM followup_queue WHERE session_id=5 AND seq=2`).Scan(&dropped); err != nil || dropped != 1 {
 		t.Fatalf("dropped %d err %v", dropped, err)
+	}
+}
+
+func TestMigrateV43MovesBodyToDisk(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(filepath.Join(dir, "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	body := []byte{0x89, 0x50, 0x4e, 0x47}
+	sum := sha256.Sum256(body)
+	digest := hex.EncodeToString(sum[:])
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.DB.Exec(`INSERT INTO prompt_attachments (session_id, seq, revision, name, digest, mime, body, path, created_at) VALUES (1,1,1,'shot.png',?,'image/png',?,'',?)`, digest, body, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateV43(s); err != nil {
+		t.Fatal(err)
+	}
+	var bodyLen int
+	var path string
+	if err := s.DB.QueryRow(`SELECT length(body), path FROM prompt_attachments WHERE digest=?`, digest).Scan(&bodyLen, &path); err != nil {
+		t.Fatal(err)
+	}
+	if bodyLen != 0 || path != digest {
+		t.Fatalf("sqlite body=%d path=%q", bodyLen, path)
+	}
+	raw, err := os.ReadFile(s.AttachmentFile(digest))
+	if err != nil || !bytes.Equal(raw, body) {
+		t.Fatalf("disk %v %v", raw, err)
 	}
 }
