@@ -218,6 +218,11 @@ func SetSessionSizeTx(tx *sql.Tx, sessionID int64, size string) error {
 	return err
 }
 
+func SetSessionModeTx(tx *sql.Tx, sessionID int64, mode string) error {
+	_, err := tx.Exec(`UPDATE sessions SET mode=? WHERE id=?`, mode, sessionID)
+	return err
+}
+
 func PutIdempotencyTx(tx *sql.Tx, key string, sessionID int64) error {
 	_, err := tx.Exec(`INSERT INTO session_idempotency(key, session_id) VALUES(?,?)`, key, sessionID)
 	return err
@@ -741,7 +746,7 @@ func ListSessions(s *Store, project string, limit int) ([]Session, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at
+	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	args := []any{}
 	if project != "" {
@@ -761,7 +766,7 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 		var created string
 		var archived int
 		var archivedAt sql.NullString
-		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &archived, &archivedAt, &sess.ParentSessionID, &created); err != nil {
+		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created); err != nil {
 			return nil, err
 		}
 		if err := applySessionArchive(&sess, archived, archivedAt, created); err != nil {
@@ -932,9 +937,9 @@ func GetSession(s *Store, id int64) (*Session, error) {
 	var created string
 	var archived int
 	var archivedAt sql.NullString
-	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at
+	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id WHERE s.id=?`, id).Scan(
-		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &archived, &archivedAt, &sess.ParentSessionID, &created)
+		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created)
 	if err != nil {
 		return nil, err
 	}

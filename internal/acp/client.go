@@ -283,8 +283,12 @@ func (c *Client) Initialize(ctx context.Context) (*InitializeResult, error) {
 }
 
 func (c *Client) SessionNew(ctx context.Context, cwd string) (string, error) {
+	return c.SessionNewMode(ctx, cwd, "")
+}
+
+func (c *Client) SessionNewMode(ctx context.Context, cwd, mode string) (string, error) {
 	var out SessionIDResult
-	err := c.Call(ctx, MethodSessionNew, SessionNewParams{Cwd: cwd, MCPServers: []any{}}, &out)
+	err := c.Call(ctx, MethodSessionNew, SessionNewParams{Cwd: cwd, MCPServers: []any{}, Mode: mode}, &out)
 	return out.SessionID, err
 }
 

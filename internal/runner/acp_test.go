@@ -51,6 +51,36 @@ func stallAfterSession(in io.Reader, out io.Writer) {
 	}
 }
 
+func TestHostACPForwardsSessionMode(t *testing.T) {
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+		_ = agentOut.Close()
+	})
+	var got string
+	go func() {
+		_ = (&acp.FakeAgent{In: agentIn, Out: agentOut, SessionMode: func(mode string) {
+			got = mode
+		}, PromptHandler: func(acp.PromptParams, <-chan struct{}, func(string, any) error) (acp.PromptResult, error) {
+			return acp.PromptResult{StopReason: "end_turn"}, nil
+		}}).Run()
+	}()
+	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	in, _ := json.Marshal(map[string]string{"body": "do the thing"})
+	_, err := HostACP(ctx, &Assignment{Input: in, Repo: "example/test-repo", Item: 1, ItemKind: "issue", Mode: "ultra"}, host, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "ultra" {
+		t.Fatalf("session/new mode %q", got)
+	}
+}
+
 func TestHostACPReturnsWhenGuestStopsReading(t *testing.T) {
 	clientIn, agentOut := io.Pipe()
 	agentIn, clientOut := io.Pipe()

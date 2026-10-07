@@ -70,6 +70,10 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='parent_session_id'`).Scan(&parentCol); err != nil || parentCol != 1 {
 		t.Fatalf("sessions.parent_session_id missing after upgrade: %d %v", parentCol, err)
 	}
+	var modeCol int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='mode'`).Scan(&modeCol); err != nil || modeCol != 1 {
+		t.Fatalf("sessions.mode missing after upgrade: %d %v", modeCol, err)
+	}
 	var pubs int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='publication_attempts'`).Scan(&pubs); err != nil || pubs != 1 {
 		t.Fatalf("publication_attempts missing after upgrade: %d %v", pubs, err)

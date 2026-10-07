@@ -330,6 +330,11 @@ GiB, 2 CPU / 4 GiB, or 4 CPU / 8 GiB. A run may override it with
 `{"size":"large"}` or `rusui run -size large`. The container runtime
 enforces those limits.
 
+Optional session `mode` is `low`, `medium`, `high`, or `ultra`. A run may
+set it with `{"mode":"high"}` or `rusui run -mode high`. The plane forwards
+it on ACP `session/new`. Omit keeps today's spawn. Any other name is a
+create error.
+
 Project `ship` is `pull-request` (default when omitted) or `push-base`
 ([ADR 0068](decisions/0068-project-ship-behavior.md)). Omitted and
 `pull-request` keep today's implement publication: open or update one

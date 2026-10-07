@@ -394,7 +394,11 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 	}
 	if sid == "" {
 		var err error
-		sid, err = host.SessionNew(ctx, cwd)
+		mode := ""
+		if a != nil {
+			mode = a.Mode
+		}
+		sid, err = host.SessionNewMode(ctx, cwd, mode)
 		if err != nil {
 			return engine.Artifact{}, nil, err
 		}

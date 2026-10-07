@@ -53,6 +53,11 @@ func (e *Engine) StartChild(parentID int64, prompt string) (int64, error) {
 		if err != nil {
 			return err
 		}
+		if parent.Mode != "" {
+			if err := store.SetSessionModeTx(tx, sid, parent.Mode); err != nil {
+				return err
+			}
+		}
 		sha := ""
 		if d, ok := e.GitHub.(interface {
 			DefaultSHA(string) (string, error)
