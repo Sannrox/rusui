@@ -915,6 +915,18 @@ func SessionLineageTx(tx *sql.Tx, sessionID int64) (parentID int64, repo string,
 	return parentID, repo, item, err
 }
 
+// HasOpenRepoSessionsTx reports whether any non-archived session still
+// uses repo as sessions.repo. Claim uses this so a leftover pinless
+// session remains claimable after the project binds a repository (#557).
+func HasOpenRepoSessionsTx(tx *sql.Tx, repo string) (bool, error) {
+	var n int
+	err := tx.QueryRow(`SELECT COUNT(*) FROM sessions WHERE repo=? AND COALESCE(archived, 0)=0`, repo).Scan(&n)
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 func GetSession(s *Store, id int64) (*Session, error) {
 	var sess Session
 	var created string
