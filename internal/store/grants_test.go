@@ -31,7 +31,7 @@ func TestLookupGrantExpiryLeaseAndPrepare(t *testing.T) {
 	if _, err := st.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'review','example/test-repo',1,'issue','open',?)`, now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (1, 'review', 'leased')`); err != nil {
+	if _, err := st.DB.Exec(`INSERT INTO turns (session_id, lane, state, lease_generation) VALUES (1, 'review', 'leased', 3)`); err != nil {
 		t.Fatal(err)
 	}
 	turnHash := hashLit("turn")
@@ -39,7 +39,7 @@ func TestLookupGrantExpiryLeaseAndPrepare(t *testing.T) {
 		t.Fatal(err)
 	}
 	g, ok, err = LookupGrant(st, turnHash, now)
-	if err != nil || !ok || !g.CanPush {
+	if err != nil || !ok || !g.CanPush || g.LeaseGeneration != 3 {
 		t.Fatalf("turn %+v ok=%v %v", g, ok, err)
 	}
 	if _, err := st.DB.Exec(`UPDATE turns SET state='queued' WHERE id=1`); err != nil {
