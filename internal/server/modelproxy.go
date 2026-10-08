@@ -179,17 +179,12 @@ func (s *Server) modelProxy(w http.ResponseWriter, r *http.Request) {
 		}
 		req.URL.Path = path
 	}
+	recordResponse := s.Eng.ModelResponseRecorder(*g, upstream.Scheme+"://"+upstream.Host, strings.TrimPrefix(r.URL.Path, "/model-proxy"))
 	proxy.ModifyResponse = func(res *http.Response) error {
-		_, err := s.Eng.IngestTurnAction(g.TurnID, "model.proxy", "recorded", map[string]any{
-			"origin": upstream.Scheme + "://" + upstream.Host,
-			"path":   strings.TrimPrefix(r.URL.Path, "/model-proxy"),
-			"status": res.StatusCode,
-		})
-		if err != nil {
-			s.Eng.Log.Printf("model receipt: %v", err)
-		}
+		recordResponse(res.StatusCode)
 		return nil
 	}
+
 	proxy.ServeHTTP(w, r)
 }
 

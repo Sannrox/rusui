@@ -82,7 +82,18 @@ per-turn model grant and cannot broaden repository or permission policy.
 All guests use the same `RUSUI_MODEL_UPSTREAM`. A gateway serving both OpenAI
 and Anthropic dialects can serve both kinds of guest; the plane chooses the
 credential header from the request dialect. `model.proxy` receipts record
-only destination origin, path, and HTTP status. A client disconnect leaves the
+a bounded aggregate of destination origin, path, and HTTP status, plus call
+counts and a status histogram. Model responses do not wait for a SQLite write.
+One aggregate per turn is committed with the terminal measurement, before the
+follow stream ends. Follow-ups and retries reuse the turn; each lease generation
+adds its counts to that same aggregate at termination, without accepting late
+responses from an older execution. Review revisions remain immutable. Counts are best-effort: a plane restart loses unfinished
+summaries; at most 256 turn summaries are retained in memory, with terminal
+snapshots or expired grants reclaimed first. If every slot remains active, new-turn diagnostics
+are dropped and one warning is logged. Each summary retains at most 64 distinct origin/path/
+status combinations; further combinations contribute to `other_calls` and
+the total status histogram. Paths over 1024 bytes are marked and truncated.
+No payloads, keys, or query strings are recorded. A client disconnect leaves the
 turn running; another authenticated client can use the existing session SSE
 stream and submit the next turn. See the
 [live shared-session proof](proofs/572-shared-guest-session.md).

@@ -13,13 +13,14 @@ const (
 
 // Grant is a hashed plane credential. Guests hold only the raw token.
 type Grant struct {
-	TokenHash string
-	Kind      string
-	SessionID int64
-	TurnID    int64
-	Repo      string
-	CanPush   bool
-	ExpiresAt time.Time
+	TokenHash       string
+	Kind            string
+	SessionID       int64
+	TurnID          int64
+	LeaseGeneration int // observed lease identity; not stored in the grant row
+	Repo            string
+	CanPush         bool
+	ExpiresAt       time.Time
 }
 
 func PutGrant(s *Store, g Grant) error {
@@ -50,10 +51,10 @@ func LookupGrant(s *Store, tokenHash string, now time.Time) (*Grant, bool, error
 	var push int
 	var exp, turnState string
 	err := s.DB.QueryRow(`
-SELECT g.token_hash, g.kind, g.session_id, g.turn_id, g.repo, g.can_push, g.expires_at, IFNULL(t.state,'')
+SELECT g.token_hash, g.kind, g.session_id, g.turn_id, g.repo, g.can_push, g.expires_at, IFNULL(t.state,''), IFNULL(t.lease_generation,0)
 FROM credential_grants g
 LEFT JOIN turns t ON t.id=g.turn_id
-WHERE g.token_hash=?`, tokenHash).Scan(&g.TokenHash, &g.Kind, &g.SessionID, &g.TurnID, &g.Repo, &push, &exp, &turnState)
+WHERE g.token_hash=?`, tokenHash).Scan(&g.TokenHash, &g.Kind, &g.SessionID, &g.TurnID, &g.Repo, &push, &exp, &turnState, &g.LeaseGeneration)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}

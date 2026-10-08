@@ -58,24 +58,27 @@ type Engine struct {
 	HookIDs   map[string]string
 	Notify    func(string)
 
-	FetchTimeout   time.Duration
-	OwnerTTL       time.Duration
-	ExecDeadline   time.Duration
-	Env            env.Driver
-	Container      env.Driver
-	EnvTTL         time.Duration
-	EnvIdleSleep   time.Duration
-	CancelEnvWait  time.Duration
-	Tree           TreeSource
-	SnapshotRoot   string
-	snapshotMu     sync.Mutex
-	refreshMu      sync.Mutex
-	policyMu       sync.RWMutex
-	sumikaMu       sync.Mutex
-	envOperationMu sync.Mutex
-	envOperations  map[int64]struct{}
-	completeMu     sync.Mutex
-	completing     map[int64]*completeLock
+	FetchTimeout         time.Duration
+	OwnerTTL             time.Duration
+	ExecDeadline         time.Duration
+	Env                  env.Driver
+	Container            env.Driver
+	EnvTTL               time.Duration
+	EnvIdleSleep         time.Duration
+	CancelEnvWait        time.Duration
+	Tree                 TreeSource
+	SnapshotRoot         string
+	snapshotMu           sync.Mutex
+	refreshMu            sync.Mutex
+	policyMu             sync.RWMutex
+	sumikaMu             sync.Mutex
+	envOperationMu       sync.Mutex
+	envOperations        map[int64]struct{}
+	modelMu              sync.Mutex
+	modelSummaries       map[int64]*modelProxySummary
+	modelSummaryOverflow bool
+	completeMu           sync.Mutex
+	completing           map[int64]*completeLock
 
 	// Secrets are plane-held values keyed by policy secret id (ADR 0066).
 	// Production loads them from RUSUI_SECRET_<ID> via SecretsFromEnv.

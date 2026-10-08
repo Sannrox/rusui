@@ -274,17 +274,22 @@ api_key_env = "OPENAI_API_KEY"
 				continue
 			}
 			var receipt struct {
-				Origin string `json:"origin"`
-				Path   string `json:"path"`
-				Status int    `json:"status"`
+				Calls []struct {
+					Origin string `json:"origin"`
+					Path   string `json:"path"`
+					Status int    `json:"status"`
+				} `json:"calls"`
 			}
 			if err := json.Unmarshal([]byte(action.Body), &receipt); err != nil {
 				t.Fatal(err)
 			}
-			t.Logf("native Responses receipt: origin=%s path=%s status=%d", receipt.Origin, receipt.Path, receipt.Status)
-			if receipt.Origin == gateway && receipt.Path == "/v1/responses" && (receipt.Status == 200 || receipt.Status == 101) {
-				nativeReceipt = true
+			for _, call := range receipt.Calls {
+				t.Logf("native Responses receipt: origin=%s path=%s status=%d", call.Origin, call.Path, call.Status)
+				if call.Origin == gateway && call.Path == "/v1/responses" && (call.Status == 200 || call.Status == 101) {
+					nativeReceipt = true
+				}
 			}
+
 		}
 		if !nativeReceipt {
 			t.Fatal("native Responses gateway receipt missing")
@@ -299,16 +304,25 @@ api_key_env = "OPENAI_API_KEY"
 	dialects := map[string]bool{}
 	for _, a := range actions {
 		if a.Type == "model.proxy" {
-			var r struct {
-				Origin string `json:"origin"`
-				Status int    `json:"status"`
-				Path   string `json:"path"`
+			var summary struct {
+				Count int `json:"count"`
+				Calls []struct {
+					Origin string `json:"origin"`
+					Status int    `json:"status"`
+					Path   string `json:"path"`
+				} `json:"calls"`
 			}
-			if err := json.Unmarshal([]byte(a.Body), &r); err != nil || r.Origin != gateway || r.Status != 200 {
-				t.Fatal("unexpected model destination receipt")
+			if err := json.Unmarshal([]byte(a.Body), &summary); err != nil {
+				t.Fatal(err)
 			}
-			dialects[r.Path] = true
-			receipts++
+			for _, call := range summary.Calls {
+				if call.Origin != gateway || call.Status != 200 {
+					t.Fatal("unexpected model destination receipt")
+				}
+				dialects[call.Path] = true
+			}
+			receipts += summary.Count
+
 		}
 	}
 	if receipts < 3 || !dialects["/v1/messages"] || !dialects["/v1/chat/completions"] {
