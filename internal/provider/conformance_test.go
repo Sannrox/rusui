@@ -479,3 +479,10 @@ func TestClaudeStreamRecordsTextAndToolCalls(t *testing.T) {
 		t.Fatalf("thinking or tool result content recorded %s", text)
 	}
 }
+
+func TestCodexFreshHomeCanStartAfterMissingCursor(t *testing.T) {
+	result := drive(t, KindCodex, Turn{Cursor: "missing-thread", Prompt: "continue", Workspace: t.TempDir(), ModelBaseURL: "http://127.0.0.1:1234", Model: "fixture-model"}, true)
+	if result.Cursor != "codex-thread" {
+		t.Fatalf("fresh thread cursor: %s", result.Cursor)
+	}
+}
