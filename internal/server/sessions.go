@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/store"
@@ -373,6 +374,25 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		files = append(files, store.PromptFile{Name: a.Name, Body: raw})
+	}
+	if len(files) > 0 && s.guest() == acp.GuestShikigami {
+		body, lookupErr := store.LatestActionBody(s.Eng.Store, id, acp.ActionInitialize)
+		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+			http.Error(w, lookupErr.Error(), http.StatusInternalServerError)
+			return
+		}
+		var observed acp.GuestInitialize
+		if lookupErr != nil || json.Unmarshal([]byte(body), &observed) != nil || observed.Guest != s.guest() {
+			http.Error(w, "guest attachment capabilities not observed", http.StatusBadRequest)
+			return
+		}
+		for _, file := range files {
+			part, _, ok := engine.GuestACPPart(store.AttachmentMIME(file.Name, file.Body))
+			if !ok || !observed.Result.AgentCapabilities.PromptCapabilities.Supports(part) {
+				http.Error(w, "guest does not support attachment kind", http.StatusBadRequest)
+				return
+			}
+		}
 	}
 	if req.Prompt != "" {
 		if _, ok := s.wakeForOperator(w, id, "operator prompt"); !ok {

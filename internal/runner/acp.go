@@ -383,8 +383,22 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 		return art, nil, err
 	}
 	host.Ctx = ctx
-	if _, err := host.Initialize(ctx); err != nil {
+	initialized, err := host.Initialize(ctx)
+	if err != nil {
 		return engine.Artifact{}, nil, err
+	}
+	if a.Guest == acp.GuestShikigami {
+		if host.Rec != nil {
+			if _, err := host.Rec.Record(acp.Receipt{Type: acp.ActionInitialize, Reason: acp.ReasonRecorded, Body: acp.GuestInitialize{Guest: a.Guest, Result: *initialized}}); err != nil {
+				return engine.Artifact{}, nil, err
+			}
+		}
+		for _, attachment := range a.Attachments {
+			part, _, ok := engine.GuestACPPart(attachment.MIME)
+			if !ok || !initialized.AgentCapabilities.PromptCapabilities.Supports(part) {
+				return engine.Artifact{}, nil, fmt.Errorf("guest does not support attachment kind %q", attachment.MIME)
+			}
+		}
 	}
 	sid := a.GuestSessionID
 	if sid != "" {
