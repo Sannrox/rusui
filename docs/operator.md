@@ -115,11 +115,19 @@ platform default), plane TLS (a local CA and a certificate for
 generated worker, webhook, Slack, and operator secrets, a policy skeleton
 when none exists, and, when Docker or Podman is installed, the
 `rusui-trusted` network and the reference guest image. The image
-(`build/guest-image`: git, `gh`, Node.js 22, Go 1.26.6, Chromium, Claude Code CLI 2.1.283) is
+(`build/guest-image`: git, `gh`, Node.js 22, Go 1.26.6, Chromium, Claude Code CLI 2.1.283, shikigami 2.0.0) is
 tagged by its image ID, so the tag names the bits the guest runs (the
 Dockerfile hash is only the build cache key); `-rebuild-image` rebuilds it
 with `--pull --no-cache`. Setup records the tag as `RUSUI_GUEST_IMAGE`
-and sets `RUSUI_GUEST=claude` unless you chose another image or guest.
+and gives the starter `default` project a policy guest default of
+`shikigami`. The policy registry records its argv, probe, and pin; setup
+does not add `RUSUI_GUEST`. The plane selects OpenAI model credentials from
+that shared project default; set `OPENAI_API_KEY` (or `RUSUI_OPENAI_API_KEY`)
+and optionally `RUSUI_MODEL_UPSTREAM` and `RUSUI_GUEST_MODEL`. Diagnose probes
+the default guest binary and its selected model. Existing policy and guest
+choices are kept. A preserved legacy policy without explicit project guest
+defaults or `RUSUI_GUEST` keeps the previous Claude fallback for the reference
+image.
 `make guest-image` builds the same tag from a checkout. It never overwrites a policy or existing TLS
 (`-rotate-tls` replaces TLS only) and never prints secret values.
 

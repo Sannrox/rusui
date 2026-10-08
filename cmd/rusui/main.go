@@ -229,7 +229,7 @@ func main() {
 			log.Printf("slack exception: %v", err)
 		}
 	}
-	model, err := server.ModelConfigFromEnv(os.Getenv)
+	model, err := server.ModelConfigFromEnv(server.PolicyModelEnv(os.Getenv, p))
 	if err != nil {
 		log.Fatal(err)
 	}

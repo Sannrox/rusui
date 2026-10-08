@@ -23,6 +23,9 @@ import (
 
 	guestimage "github.com/sannrox/rusui/build/guest-image"
 	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/guest"
+	"github.com/sannrox/rusui/internal/policy"
+	"gopkg.in/yaml.v3"
 )
 
 // Actions a step can report.
@@ -190,9 +193,13 @@ func run(o Options, apply bool) ([]Step, error) {
 	if exists(p.Policy) {
 		add(Keep, "policy", p.Policy)
 	} else {
-		add(Create, "policy", p.Policy+" (skeleton, no projects)")
+		add(Create, "policy", p.Policy+" (skeleton, default project)")
 		if apply {
-			if err := os.WriteFile(p.Policy, []byte(policySkeleton), 0o600); err != nil {
+			registry, err := yaml.Marshal(map[string]map[string]guest.Entry{"guests": guest.Builtin()})
+			if err != nil {
+				return steps, err
+			}
+			if err := os.WriteFile(p.Policy, append([]byte(policySkeleton), registry...), 0o600); err != nil {
 				return steps, err
 			}
 		}
@@ -350,7 +357,7 @@ func ensureGuestImage(p Paths, rt Network, apply, rebuild bool) ([]Step, error) 
 	case built:
 		steps = append(steps, Step{Rotate, "guest image", "rebuild " + cache + " with --pull --no-cache"})
 	default:
-		steps = append(steps, Step{Create, "guest image", "build " + cache + " (git, gh, Node.js, Go, Chromium, Claude Code CLI)"})
+		steps = append(steps, Step{Create, "guest image", "build " + cache + " (git, gh, Node.js, Go, Chromium, Claude Code CLI, shikigami)"})
 	}
 	if apply && (!built || rebuild) {
 		if err := rt.BuildImage(cache, guestimage.Dockerfile, rebuild); err != nil {
@@ -385,7 +392,16 @@ func ensureGuestImage(p Paths, rt Network, apply, rebuild bool) ([]Step, error) 
 		set["RUSUI_GUEST_IMAGE"] = tag
 	}
 	if vals["RUSUI_GUEST"] == "" {
-		set["RUSUI_GUEST"] = "claude" // the reference image carries the Claude Code adapter
+		if pol, err := policy.Load(p.Policy); err == nil {
+			legacy := len(pol.Projects) == 0
+			for _, project := range pol.Projects {
+				legacy = legacy || project.Guests == nil
+			}
+			if legacy {
+				// Preserved legacy policies need a guest present in the reference image.
+				set["RUSUI_GUEST"] = guest.KindClaude
+			}
+		}
 	}
 	if len(set) == 0 {
 		return append(steps, Step{Keep, "guest image env", tag}), nil
@@ -612,5 +628,10 @@ defaults:
   implement: false
   land: false
   max_reviews_per_repo_per_utc_day: 50
-projects: {}
+projects:
+  default:
+    guests:
+      default: shikigami
+      allowed: [shikigami]
+    repos: {}
 `

@@ -140,8 +140,11 @@ func TestDockerCLIExecStdioKeepsValuesOffArgv(t *testing.T) {
 	envLog := filepath.Join(t.TempDir(), "env")
 	t.Setenv("STUB_ENV_LOG", envLog)
 	t.Setenv("GH_TOKEN", "host-value")
+	controllerHome := t.TempDir()
+	t.Setenv("HOME", controllerHome)
+	t.Setenv("DOCKER_CONFIG", "")
 	d := DockerCLI{Bin: bin}
-	in, out, stop, err := d.ExecStdio("box", []string{"agent", "stdio"}, []string{"GH_TOKEN=ghp-secret", "XAI_API_KEY=grant"})
+	in, out, stop, err := d.ExecStdio("box", []string{"agent", "stdio"}, []string{"GH_TOKEN=ghp-secret", "XAI_API_KEY=grant", "HOME=/tmp/guest-home"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +158,7 @@ func TestDockerCLIExecStdioKeepsValuesOffArgv(t *testing.T) {
 	if strings.Contains(string(argv), "ghp-secret") || strings.Contains(string(argv), "grant") {
 		t.Fatalf("value on argv: %s", argv)
 	}
-	if !strings.Contains(string(argv), "-e GH_TOKEN -e XAI_API_KEY box agent stdio") {
+	if !strings.Contains(string(argv), "-e GH_TOKEN -e XAI_API_KEY -e HOME box agent stdio") {
 		t.Fatalf("argv %s", argv)
 	}
 	envb, err := os.ReadFile(envLog)
@@ -163,7 +166,10 @@ func TestDockerCLIExecStdioKeepsValuesOffArgv(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(envb), "GH_TOKEN=ghp-secret") || strings.Contains(string(envb), "host-value") {
-		t.Fatalf("cli env %s", envb)
+		t.Fatal("guest credential environment was not isolated")
+	}
+	if !strings.Contains(string(envb), "DOCKER_CONFIG="+filepath.Join(controllerHome, ".docker")) {
+		t.Fatal("controller Docker configuration was lost")
 	}
 }
 

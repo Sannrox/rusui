@@ -166,6 +166,12 @@ func GuestHost(c *Client) ACPHost {
 			}
 		}
 		argv = guestHomeArgv(a, argv, home)
+		if a.Guest == guest.KindShikigami {
+			argv, err = prepareShikigamiConfig(c.Exec, a, argv, home)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
 		if a.Driver == "container" && a.Handle != "" {
 			if c.Exec == nil {
 				return nil, nil, fmt.Errorf("container exec required")

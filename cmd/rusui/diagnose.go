@@ -15,7 +15,9 @@ import (
 
 	"github.com/sannrox/rusui/internal/acp"
 	envpkg "github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/guest"
 	"github.com/sannrox/rusui/internal/ops"
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/server"
 )
 
@@ -78,7 +80,20 @@ func addCheck(rep *ops.Report, check ops.Check) {
 
 func diagnoseWithModel(opt ops.Options, getenv func(string) string) ops.Report {
 	rep := ops.Diagnose(opt)
-	for _, check := range []ops.Check{checkModelUpstream(getenv), checkModelGuest(getenv)} {
+	look := opt.LookRuntime
+	if look == nil {
+		look = envpkg.LookRuntime
+	}
+	if rt, err := look(); err == nil {
+		for _, check := range ops.CheckGuestBinaries(rt, opt.PolicyPath, getenv) {
+			addCheck(&rep, check)
+		}
+	}
+	modelEnv := getenv
+	if pol, err := policy.Load(opt.PolicyPath); err == nil {
+		modelEnv = server.PolicyModelEnv(getenv, pol)
+	}
+	for _, check := range []ops.Check{checkModelUpstream(modelEnv), checkModelGuest(modelEnv)} {
 		rep.Checks = append(rep.Checks, check)
 		if check.Blocker && check.Status != ops.StatusReady {
 			rep.Ready = false
@@ -186,8 +201,8 @@ func checkModelUpstream(getenv func(string) string) ops.Check {
 	return check
 }
 
-// checkModelGuest asks the upstream whether the named Claude model can
-// accept one bounded messages request. A successful model list is not
+// checkModelGuest asks the upstream whether the named guest model can
+// accept one bounded model request. A successful model list is not
 // that proof: the catalog can be ready while the model the guest will
 // send is in quota cooldown.
 func checkModelGuest(getenv func(string) string) ops.Check {
@@ -206,15 +221,18 @@ func checkModelGuest(getenv func(string) string) ops.Check {
 		check.Detail = provider + " upstream configuration is invalid"
 		return check
 	}
-	if model.Guest != acp.GuestClaude {
+	if model.Guest != acp.GuestClaude && model.Guest != acp.GuestShikigami {
 		if model.GuestModel != "" {
 			check.Status = ops.StatusMisconfigured
-			check.Detail = "RUSUI_GUEST_MODEL is sent by the Claude guest; leave it unset for Grok, Codex, and shikigami"
+			check.Detail = "RUSUI_GUEST_MODEL is sent by the Claude guest; leave it unset for Grok and Codex"
 			return check
 		}
 		check.Status = ops.StatusReady
 		check.Detail = "guest does not take a named model"
 		return check
+	}
+	if model.Guest == acp.GuestShikigami && (model.GuestModel == "" || model.GuestModel == "auto") {
+		model.GuestModel = guest.DefaultShikigamiModel
 	}
 	if model.GuestModel == "" {
 		check.Status = ops.StatusMisconfigured
@@ -228,18 +246,25 @@ func checkModelGuest(getenv func(string) string) ops.Check {
 		check.Detail = detail
 		return check
 	}
-	body, err := json.Marshal(map[string]any{
+	requestBody := map[string]any{
 		"model":      model.GuestModel,
 		"max_tokens": 1,
 		"messages":   []map[string]string{{"role": "user", "content": "ping"}},
-	})
+	}
+	endpointPath := "messages"
+	if model.Guest == acp.GuestShikigami {
+		endpointPath = "chat/completions"
+		delete(requestBody, "max_tokens")
+		requestBody["max_completion_tokens"] = 1
+	}
+	body, err := json.Marshal(requestBody)
 	if err != nil {
 		check.Status = ops.StatusMisconfigured
 		check.Detail = "guest model probe could not be built"
 		return check
 	}
 	endpoint := *origin
-	endpoint.Path = path.Join(endpoint.Path, "v1", "messages")
+	endpoint.Path = path.Join(endpoint.Path, "v1", endpointPath)
 	endpoint.RawPath = ""
 	endpoint.Fragment = ""
 	req, err := http.NewRequest(http.MethodPost, endpoint.String(), bytes.NewReader(body))
@@ -249,9 +274,13 @@ func checkModelGuest(getenv func(string) string) ops.Check {
 		return check
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("anthropic-version", "2023-06-01")
-	if model.Key != "" {
-		req.Header.Set("x-api-key", model.Key)
+	if model.Guest == acp.GuestClaude {
+		req.Header.Set("anthropic-version", "2023-06-01")
+		if model.Key != "" {
+			req.Header.Set("x-api-key", model.Key)
+		}
+	} else if model.Key != "" {
+		req.Header.Set("Authorization", "Bearer "+model.Key)
 	}
 	res, err := modelProbeClient().Do(req)
 	if err != nil {
@@ -264,7 +293,7 @@ func checkModelGuest(getenv func(string) string) ops.Check {
 	switch {
 	case res.StatusCode >= http.StatusOK && res.StatusCode < http.StatusMultipleChoices:
 		check.Status = ops.StatusReady
-		check.Detail = provider + " guest model " + model.GuestModel + " accepted a bounded messages request"
+		check.Detail = provider + " guest model " + model.GuestModel + " accepted a bounded model request"
 	case res.StatusCode == http.StatusTooManyRequests:
 		check.Status = ops.StatusUnavailable
 		check.Detail = fmt.Sprintf("%s guest model %s is unavailable (HTTP 429); a model list is not proof the guest can prompt", provider, model.GuestModel)
@@ -276,7 +305,7 @@ func checkModelGuest(getenv func(string) string) ops.Check {
 		check.Detail = fmt.Sprintf("%s guest model probe was redirected (HTTP %d)", provider, res.StatusCode)
 	case res.StatusCode < http.StatusInternalServerError:
 		check.Status = ops.StatusMisconfigured
-		check.Detail = fmt.Sprintf("%s guest model rejected the bounded messages request (HTTP %d)", provider, res.StatusCode)
+		check.Detail = fmt.Sprintf("%s guest model rejected the bounded model request (HTTP %d)", provider, res.StatusCode)
 	default:
 		check.Status = ops.StatusUnavailable
 		check.Detail = fmt.Sprintf("%s guest model returned HTTP %d", provider, res.StatusCode)

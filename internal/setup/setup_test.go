@@ -14,6 +14,7 @@ import (
 
 	guestimage "github.com/sannrox/rusui/build/guest-image"
 	"github.com/sannrox/rusui/internal/ops"
+	"github.com/sannrox/rusui/internal/policy"
 )
 
 type fakeNet struct {
@@ -363,8 +364,16 @@ func TestApplyBuildsAndRecordsTheGuestImageOnce(t *testing.T) {
 	}
 	vals := ReadEnv(PathsFor(dir).Env)
 	id, _ := rt.ImageID(guestimage.CacheTag())
-	if vals["RUSUI_GUEST_IMAGE"] != guestimage.ContentTag(id) || vals["RUSUI_GUEST"] != "claude" || !rt.ImageExists(vals["RUSUI_GUEST_IMAGE"]) {
+	if vals["RUSUI_GUEST_IMAGE"] != guestimage.ContentTag(id) || vals["RUSUI_GUEST"] != "" || !rt.ImageExists(vals["RUSUI_GUEST_IMAGE"]) {
 		t.Fatalf("env %v", vals)
+	}
+	p, err := policy.Load(PathsFor(dir).Policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	choices := p.Projects["default"].Guests
+	if choices == nil || choices.Default != "shikigami" || len(choices.Allowed) != 1 || choices.Allowed[0] != "shikigami" {
+		t.Fatalf("fresh project guest: %+v", choices)
 	}
 	if _, ok := actions(steps)["RUSUI_GUEST_IMAGE"]; ok {
 		t.Fatal("guest image still reported as needs-you")
@@ -480,5 +489,36 @@ func TestContentTagFollowsTheImageID(t *testing.T) {
 	}
 	if guestimage.CacheTag() == guestimage.ContentTag("sha256:"+strings.Repeat("0", 64)) || !strings.Contains(guestimage.CacheTag(), ":build-") {
 		t.Fatal(guestimage.CacheTag())
+	}
+}
+
+func TestApplyPreservesLegacyPolicyAndCompatibleGuest(t *testing.T) {
+	for _, selector := range []string{"", "shikigami"} {
+		t.Run(selector, func(t *testing.T) {
+			dir := t.TempDir()
+			paths := PathsFor(dir)
+			legacy := []byte("version: 2\nprojects: {}\n")
+			if err := os.WriteFile(paths.Policy, legacy, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(paths.Env, []byte("RUSUI_GUEST="+selector+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			rt := &fakeNet{}
+			if _, err := Apply(Options{StateDir: dir, Network: rt, Getenv: func(string) string { return "" }}); err != nil {
+				t.Fatal(err)
+			}
+			want := selector
+			if want == "" {
+				want = "claude"
+			}
+			if got := ReadEnv(paths.Env)["RUSUI_GUEST"]; got != want {
+				t.Fatalf("guest %q want %q", got, want)
+			}
+			got, err := os.ReadFile(paths.Policy)
+			if err != nil || string(got) != string(legacy) {
+				t.Fatalf("legacy policy changed: %s %v", got, err)
+			}
+		})
 	}
 }

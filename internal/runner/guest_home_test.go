@@ -107,7 +107,7 @@ printf '%s\n' "$config"
 			if err := os.WriteFile(harness, []byte(script), 0o700); err != nil {
 				t.Fatal(err)
 			}
-			a := &Assignment{Guest: kind, TurnToken: "fixture-grant", GuestSpec: guest.Entry{Argv: []string{harness}}}
+			a := &Assignment{Guest: kind, TurnToken: "fixture-grant", ModelBaseURL: "http://127.0.0.1:1234/model-proxy/v1", GuestSpec: guest.Entry{Argv: []string{harness}}}
 			host, stop, err := GuestHost(&Client{})(a, workspace)
 			if err != nil {
 				t.Fatal(err)

@@ -104,10 +104,10 @@ reported and exits successfully.
 | `RUSUI_GUEST_IMAGE` | container guests | Guest image identity. Empty fails closed. |
 | `XAI_API_KEY` or `RUSUI_XAI_API_KEY` | model proxy (Grok) | Plane secret; never copied into the guest. |
 | `RUSUI_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY` | model proxy (Claude Code) | Plane secret, sent upstream as `x-api-key`; never copied into the guest. |
-| `RUSUI_GUEST` | no | `grok` (default), `claude`, `codex`, or `shikigami` ([ADR 0025](decisions/0025-provider-boundary.md), [ADR 0060](decisions/0060-shikigami-acp-guest-pin.md)). `shikigami` runs ACP with state in its temporary guest home; the binary must be on `PATH`. |
+| `RUSUI_GUEST` | no | `grok` (legacy default), `claude`, `codex`, or `shikigami` ([ADR 0025](decisions/0025-provider-boundary.md), [ADR 0060](decisions/0060-shikigami-acp-guest-pin.md)). `shikigami` runs ACP with state in its temporary guest home; the binary must be on `PATH`. |
 | `RUSUI_GUEST_VERSION` | no | Pinned guest version recorded on a Turn measurement when set. Unset stays unknown. |
 | `RUSUI_OTEL_ENDPOINT` | no | Optional collector URL. Unset: measurements stay on the plane and nothing is exported. A collector that is down does not fail the Turn. |
-| `RUSUI_GUEST_MODEL` | Claude guest | Model id the Claude guest sends as `ANTHROPIC_MODEL`. Unset, `model_guest` is misconfigured. A model list does not prove this id can prompt. The Grok harness does not take this id. |
+| `RUSUI_GUEST_MODEL` | Claude or shikigami guest | Claude sends the id as `ANTHROPIC_MODEL` and requires it for readiness. Shikigami uses the id in its HTTP configuration; omitted or `auto` selects `gpt-4.1-mini` in the pinned adapter. A model list does not prove this id can prompt. The Grok harness does not take this id. |
 | `RUSUI_MODEL_UPSTREAM` | no | http(s) URL replacing the provider API, e.g. a gateway or a CLI proxy on the plane host. With it set, the provider key may be empty. |
 | `RUSUI_AGENT_GITHUB_TOKEN` | `implement` sessions | Your GitHub credential for agent publication ([ADR 0015](decisions/0015-agent-publication.md)). Given only to implement sessions — `run` sessions started for an open pinned task (`rusui run -effort …`) on repositories with `implement: true` — as `GH_TOKEN` and git's credential for `https://github.com`. Unset: no session can push. |
 | `RUSUI_PUBLICATION` | no | `agent` (default, ADR 0015) or `plane` ([ADR 0044](decisions/0044-plane-publishes-from-turn-result.md)). `plane` requires GitHub App credentials or the plane exits; implement guests then get no GitHub credential and `RUSUI_AGENT_GITHUB_TOKEN` is ignored. The plane opens or updates the pull request as the App from the turn result's `publish` request. Off until the ADR 0020 pilot passes. |
@@ -159,9 +159,22 @@ session and its receipts remain.
 The pinned CLIs are Grok `agent` at ACP protocolVersion 1, Claude Code
 2.1.283 over `stream-json`, `codex app-server` at
 `app-server-2026-04-15`, and shikigami ACP. The runner replaces shikigami's
-registry `--state ./state` argument with the temporary state path.
+registry `--state ./state` argument with the temporary state path. It also
+writes explicit shikigami HTTP configuration there, using the plane model URL,
+`RUSUI_GUEST_MODEL` (or `auto` when omitted), and an allowlist containing only
+the plane model host. Local governance parks mutating tools for the plane
+permission decision. The turn grant stays in the process environment.
+The reference image builds pinned shikigami 2.0.0 source with a small HTTP
+client patch to add the mounted plane CA through `SHIKIGAMI_EXTRA_CA_CERTS`;
+public WebPKI roots remain available.
 
-`RUSUI_GUEST` names the harness (the guest process and the proxy
+An explicit `RUSUI_GUEST` selects the model proxy dialect. When it is unset
+and every project has the same explicit built-in guest default, the plane uses that
+guest for model credentials and proxy dialect. Mixed, generic ACP, or legacy project
+defaults retain the legacy environment selection. Fresh setup therefore uses
+shikigami with OpenAI credentials without adding `RUSUI_GUEST`.
+
+`RUSUI_GUEST` names the legacy harness (the guest process and the proxy
 protocol). `RUSUI_GUEST_MODEL` names the model id. `RUSUI_MODEL_UPSTREAM`
 names where the plane forwards the body. Those three are independent:
 naming a model does not change the harness, and changing the harness

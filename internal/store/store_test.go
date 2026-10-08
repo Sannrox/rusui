@@ -265,3 +265,33 @@ func TestFollowTokenMovesOnlyWithFollowedState(t *testing.T) {
 	}
 	moved("a session state change")
 }
+
+func TestRepositoryFreeOperatorEnvironmentName(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	var sid int64
+	if err := s.Tx(func(tx *sql.Tx) error {
+		sid, _, err = InsertRunSessionTx(tx, "default", "project:default", "hello")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	session, err := GetSession(s, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := GetEnvironment(s, session.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range environment.Name {
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '.' || c == '-' {
+			continue
+		} else {
+			t.Fatalf("environment name %q cannot be used by Docker", environment.Name)
+		}
+	}
+}
