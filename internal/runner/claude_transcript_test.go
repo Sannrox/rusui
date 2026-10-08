@@ -44,7 +44,7 @@ func TestHostACPClaudeRecordsTranscriptAndToolCalls(t *testing.T) {
 		`{"type":"assistant","message":{"id":"msg_01B","type":"message","role":"assistant","model":"claude-sonnet-5","content":[{"type":"tool_use","id":"toolu_01ABC","name":"Bash","input":{"command":` +
 			quote("curl -H 'Authorization: Bearer "+turnToken+"' https://plane/x && GH_TOKEN="+ghToken+" gh pr list && echo "+bareToken) +
 			`,"description":"List pull requests"}}],"stop_reason":null},"parent_tool_use_id":null,"session_id":"claude-sess","uuid":"u2"}`,
-		`{"type":"control_request","request_id":"req-1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls"}}}`,
+		`{"type":"control_request","request_id":"req-1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":` + quote("echo "+turnToken) + `}}}`,
 		`{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_01ABC","type":"tool_result","content":` +
 			quote("RUSUI_TURN_TOKEN="+turnToken+"\nGH_TOKEN="+ghToken+"\nRUSUI_WORKER_SECRET="+envToken) +
 			`,"is_error":false}]},"parent_tool_use_id":null,"session_id":"claude-sess","uuid":"u3","tool_use_result":{"stdout":"x","stderr":"","interrupted":false,"isImage":false}}`,
@@ -100,6 +100,7 @@ func TestHostACPClaudeRecordsTranscriptAndToolCalls(t *testing.T) {
 				t.Fatalf("row carries a secret: %s", raw)
 			}
 		}
+
 		var body struct {
 			Update map[string]any `json:"update"`
 		}

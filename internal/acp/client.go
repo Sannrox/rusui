@@ -118,7 +118,7 @@ func (c *Client) recordUpdate(params json.RawMessage) {
 		return
 	}
 	kind, _ := p.Update["sessionUpdate"].(string)
-	if kind != "tool_call" && kind != "tool_call_update" {
+	if kind != "tool_call" && kind != "tool_call_update" && kind != "agent_message_chunk" && kind != "user_message_chunk" {
 		return
 	}
 	_, _ = c.record(Receipt{Type: ActionUpdate, Reason: ReasonRecorded, Body: p})

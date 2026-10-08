@@ -340,6 +340,14 @@ func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide
 			}
 			continue
 		}
+		if kind == "codex" {
+			if observe != nil {
+				for _, ev := range codexStreamEvents(line) {
+					observe(ev)
+				}
+			}
+			continue
+		}
 		text := string(line)
 		kindName := "transcript"
 		if strings.Contains(text, "tool_call") || strings.Contains(text, "tool_use") || msg["method"] == "item/tool" {
@@ -350,6 +358,63 @@ func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide
 			return res, nil
 		}
 	}
+}
+
+// codexStreamEvents selects transcript-bearing app-server notifications.
+// Completed messages avoid duplicating the same text in deltas and items.
+// Tool results retain status only, as with Claude and ACP.
+func codexStreamEvents(line []byte) []Event {
+	var msg struct {
+		Method string `json:"method"`
+		Params struct {
+			Text string `json:"text"`
+			Item struct {
+				ID      string `json:"id"`
+				Type    string `json:"type"`
+				Text    string `json:"text"`
+				Command string `json:"command"`
+				Tool    string `json:"tool"`
+				Status  string `json:"status"`
+			} `json:"item"`
+		} `json:"params"`
+	}
+	if json.Unmarshal(line, &msg) != nil {
+		return nil
+	}
+	if msg.Method == "item/agentMessage" {
+		return []Event{{Kind: "transcript", Body: msg.Params.Text}}
+	}
+	if msg.Method != "item/started" && msg.Method != "item/completed" {
+		return nil
+	}
+	item := msg.Params.Item
+	if item.Type == "agentMessage" {
+		if msg.Method == "item/completed" {
+			return []Event{{Kind: "transcript", Body: item.Text}}
+		}
+		return nil
+	}
+	tool := &ToolCall{ID: item.ID, Name: item.Type, Kind: "other", Status: "pending"}
+	switch item.Type {
+	case "commandExecution":
+		tool.Kind = "execute"
+		tool.Input = map[string]string{"command": item.Command}
+	case "fileChange":
+		tool.Kind = "edit"
+	case "mcpToolCall", "dynamicToolCall":
+		tool.Name = item.Tool
+	case "webSearch":
+		tool.Kind = "search"
+	default:
+		return nil
+	}
+	if msg.Method == "item/completed" {
+		tool.Status = "completed"
+		if item.Status == "failed" || item.Status == "declined" {
+			tool.Status = "failed"
+		}
+	}
+	return []Event{{Kind: "tool_call", Tool: tool}}
 }
 
 func writePermission(w io.Writer, kind string, id any, optionID string, allow bool) error {

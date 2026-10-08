@@ -403,6 +403,11 @@ func (c *Client) heartbeatSteers(ctx context.Context, a *Assignment, steers chan
 }
 
 func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, steers <-chan engine.Steer, exec StdioExec) (engine.Artifact, []int64, error) {
+	if host != nil {
+		transcript := newTranscriptRecorder(a, host.Rec)
+		host.Rec = transcript
+		defer transcript.Flush()
+	}
 	if a != nil && (a.GuestSpec.Protocol == guest.ProtocolClaude || (a.GuestSpec.Protocol == "" && a.Guest == acp.GuestClaude)) {
 		if len(a.Attachments) > 0 {
 			return engine.Artifact{}, nil, fmt.Errorf("native Claude attachments unsupported")
@@ -617,7 +622,10 @@ func hostNative(ctx context.Context, a *Assignment, host *acp.Client, cwd, kind 
 		case <-stop:
 		}
 	}()
-	transcript := newClaudeRecorder(a, host.Rec)
+	transcript, ok := host.Rec.(*transcriptRecorder)
+	if !ok {
+		transcript = newTranscriptRecorder(a, host.Rec)
+	}
 	cursor := ""
 	if kind == provider.KindCodex {
 		cursor = a.GuestSessionID
