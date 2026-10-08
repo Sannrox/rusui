@@ -3,6 +3,7 @@ package engine_test
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
@@ -650,5 +652,91 @@ func TestChildFanOutCapacityReturnsAfterTerminalTurns(t *testing.T) {
 			}
 
 		})
+	}
+}
+
+type childPinGitHub struct {
+	gh.Client
+	sha string
+	err error
+}
+
+func (g childPinGitHub) DefaultSHA(string) (string, error) { return g.sha, g.err }
+
+func TestChildSameProjectRequiresRepositoryPin(t *testing.T) {
+	unavailable := errors.New("default branch unavailable")
+	for _, tc := range []struct {
+		name, sha   string
+		err         error
+		unsupported bool
+	}{
+		{name: "lookup error", err: unavailable},
+		{name: "empty pin"},
+		{name: "lookup unsupported", unsupported: true},
+		{name: "pinned", sha: "child-main-sha"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := setup(t)
+			parent, err := h.e.StartRun("test", "parent", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.unsupported {
+				h.e.GitHub = struct{ gh.Client }{h.f}
+			} else {
+				h.e.GitHub = childPinGitHub{Client: h.f, sha: tc.sha, err: tc.err}
+			}
+			child, err := h.e.StartChild(parent, "child", "")
+			if tc.sha == "" {
+				if err == nil || !strings.Contains(err.Error(), "pin") {
+					t.Fatalf("missing pin admitted child %d: %v", child, err)
+				}
+				if tc.err != nil && !errors.Is(err, tc.err) {
+					t.Fatalf("lost cause: %v", err)
+				}
+				children, err := store.ListChildSessionIDs(h.st, parent)
+				if err != nil || len(children) != 0 {
+					t.Fatalf("refused child persisted: %v %v", children, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			cs, err := store.GetSession(h.st, child)
+			if err != nil {
+				t.Fatal(err)
+			}
+			snap, err := store.LoadSnapshot(h.st, cs.Repo, cs.Item, 1)
+			if err != nil || snap.MainSHA != tc.sha {
+				t.Fatalf("pin %+v: %v", snap, err)
+			}
+		})
+	}
+}
+
+func TestChildWithoutRepositoryKeepsEmptyPin(t *testing.T) {
+	h := setup(t)
+	pol, err := policy.Parse([]byte("version: 2\nprojects:\n  scratch:\n    session_kinds: [run]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.ReloadPolicy(pol)
+	parent, err := h.e.StartRun("scratch", "parent", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.GitHub = childPinGitHub{Client: h.f, err: errors.New("not a repository")}
+	child, err := h.e.StartChild(parent, "child", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err := store.GetSession(h.st, child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap, err := store.LoadSnapshot(h.st, cs.Repo, cs.Item, 1)
+	if err != nil || snap.MainSHA != "" || cs.Repo != policy.ProjectKey("scratch") {
+		t.Fatalf("project-only pin %+v %+v: %v", cs, snap, err)
 	}
 }
