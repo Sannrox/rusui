@@ -253,7 +253,7 @@ func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt strin
 		item = -1
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	name := fmt.Sprintf("%s-%s-%d", kind, strings.ReplaceAll(repo, "/", "-"), item)
+	name := fmt.Sprintf("%s-%s-%d", kind, strings.NewReplacer("/", "-", ":", "_").Replace(repo), item)
 	envRes, err := tx.Exec(`INSERT INTO environments (name, driver, state, created_at) VALUES (?,?,?,?)`,
 		name, "process", EnvReady, now)
 	if err != nil {

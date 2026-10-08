@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -395,6 +396,16 @@ func (d DockerCLI) ExecStdio(handle string, argv, env []string) (io.WriteCloser,
 		args = append(args, "-e", k)
 		cliEnv = append(cliEnv, e)
 	}
+	// HOME belongs to the guest; the controller must keep its Docker context.
+	controllerConfig := os.Getenv("DOCKER_CONFIG")
+	if controllerConfig == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("docker exec: controller home: %w", err)
+		}
+		controllerConfig = filepath.Join(home, ".docker")
+	}
+	cliEnv = append(cliEnv, "DOCKER_CONFIG="+controllerConfig)
 	args = append(args, handle)
 	args = append(args, argv...)
 	cmd := exec.Command(d.bin(), args...)

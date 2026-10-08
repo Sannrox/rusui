@@ -16,6 +16,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/clock"
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/policy"
 )
 
 func TestModelProxySwapsTurnToken(t *testing.T) {
@@ -338,5 +339,40 @@ func TestModelProxyFailureLeaksNoSecrets(t *testing.T) {
 		if strings.Contains(logs.String(), secret) || strings.Contains(string(body), secret) {
 			t.Fatalf("secret leaked:\nlog: %s\nbody: %s", logs.String(), body)
 		}
+	}
+}
+
+func TestPolicyDefaultSelectsModelProviderWithoutChangingLegacyOverride(t *testing.T) {
+	pol, err := policy.Parse([]byte(`version: 2
+projects:
+  default:
+    guests: {default: shikigami, allowed: [shikigami]}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ legacy, guest, provider, key string }{
+		{"", "shikigami", ProviderOpenAI, "openai-fixture"},
+		{"claude", "claude", ProviderAnthropic, "anthropic-fixture"},
+	} {
+		t.Run(tc.guest, func(t *testing.T) {
+			env := func(key string) string {
+				return map[string]string{"RUSUI_GUEST": tc.legacy, "RUSUI_OPENAI_API_KEY": "openai-fixture", "RUSUI_ANTHROPIC_API_KEY": "anthropic-fixture"}[key]
+			}
+			model, err := ModelConfigFromEnv(PolicyModelEnv(env, pol))
+			if err != nil || model.Guest != tc.guest || model.Provider != tc.provider || model.Key != tc.key {
+				t.Fatalf("model configuration %+v %v", model, err)
+			}
+		})
+	}
+}
+
+func TestGenericPolicyGuestKeepsLegacyModelProvider(t *testing.T) {
+	pol := &policy.Effective{Projects: map[string]policy.Project{
+		"default": {Guests: &policy.ProjectGuests{Default: "second", Allowed: []string{"second"}}},
+	}}
+	model, err := ModelConfigFromEnv(PolicyModelEnv(func(string) string { return "" }, pol))
+	if err != nil || model.Guest != "grok" || model.Provider != ProviderXAI {
+		t.Fatalf("generic guest changed legacy provider: %+v %v", model, err)
 	}
 }

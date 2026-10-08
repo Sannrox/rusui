@@ -218,23 +218,26 @@ func TestModelGuestUnsetIsMisconfiguredForClaude(t *testing.T) {
 	}
 }
 
-func TestModelGuestAcceptsBoundedMessagesCall(t *testing.T) {
-	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/messages" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer hs.Close()
-	guest := checkModelGuest(func(key string) string {
-		return map[string]string{
-			"RUSUI_GUEST":          "claude",
-			"RUSUI_MODEL_UPSTREAM": hs.URL,
-			"RUSUI_GUEST_MODEL":    "glm-5.3",
-		}[key]
-	})
-	if guest.Status != "ready" || !strings.Contains(guest.Detail, "glm-5.3") {
-		t.Fatalf("guest %+v", guest)
+func TestModelGuestAcceptsBoundedModelCall(t *testing.T) {
+	for _, tc := range []struct{ guest, path, auth string }{
+		{"claude", "/v1/messages", "x-api-key"},
+		{"shikigami", "/v1/chat/completions", "Authorization"},
+	} {
+		t.Run(tc.guest, func(t *testing.T) {
+			hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tc.path || r.Header.Get(tc.auth) == "" {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer hs.Close()
+			check := checkModelGuest(func(key string) string {
+				return map[string]string{"RUSUI_GUEST": tc.guest, "RUSUI_MODEL_UPSTREAM": hs.URL, "RUSUI_GUEST_MODEL": "fixture-model", "RUSUI_OPENAI_API_KEY": "fixture-key", "RUSUI_ANTHROPIC_API_KEY": "fixture-key"}[key]
+			})
+			if check.Status != "ready" || !strings.Contains(check.Detail, "fixture-model") {
+				t.Fatalf("guest %+v", check)
+			}
+		})
 	}
 }

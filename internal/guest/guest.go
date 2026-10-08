@@ -59,3 +59,6 @@ func Builtin() map[string]Entry {
 		KindShikigami: {Protocol: ProtocolACP, Argv: []string{"shikigami", "--state", "./state", "acp"}, Probe: []string{"shikigami", "--version"}, Pin: "acp"},
 	}
 }
+
+// DefaultShikigamiModel is the HTTP adapter's auto model in the pinned guest.
+const DefaultShikigamiModel = "gpt-4.1-mini"

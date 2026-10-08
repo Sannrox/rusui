@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/sannrox/rusui/internal/acp"
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -99,6 +100,37 @@ func ModelConfigFromEnv(getenv func(string) string) (ModelConfig, error) {
 		c.Origin = u
 	}
 	return c, nil
+}
+
+// PolicyModelEnv uses one agreed explicit built-in project default for model selection
+// when the operator has not set the legacy guest selector. Mixed or legacy
+// project defaults retain the existing environment behavior.
+func PolicyModelEnv(getenv func(string) string, pol *policy.Effective) func(string) string {
+	if getenv("RUSUI_GUEST") != "" {
+		return getenv
+	}
+	selected := ""
+	for _, project := range pol.Projects {
+		if project.Guests == nil {
+			return getenv
+		}
+		if selected != "" && selected != project.Guests.Default {
+			return getenv
+		}
+		selected = project.Guests.Default
+	}
+	switch selected {
+	case acp.GuestGrok, acp.GuestClaude, "codex", acp.GuestShikigami:
+	default:
+		// Generic ACP names do not identify a model provider.
+		return getenv
+	}
+	return func(key string) string {
+		if key == "RUSUI_GUEST" {
+			return selected
+		}
+		return getenv(key)
+	}
 }
 
 func firstNonEmpty(vals ...string) string {
