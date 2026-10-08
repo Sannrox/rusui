@@ -25,60 +25,65 @@ import (
 	"github.com/sannrox/rusui/internal/store"
 )
 
-func TestShikigamiPromptCapabilitiesRecordedAndEnforced(t *testing.T) {
-	for _, supported := range []bool{false, true} {
-		t.Run(map[bool]string{false: "old guest", true: "HTTP guest"}[supported], func(t *testing.T) {
-			clientIn, agentOut := io.Pipe()
-			agentIn, clientOut := io.Pipe()
-			t.Cleanup(func() { _ = clientIn.Close(); _ = clientOut.Close(); _ = agentIn.Close(); _ = agentOut.Close() })
-			caps := &acp.PromptCapabilities{Image: supported, EmbeddedContext: supported}
-			prompts := make(chan acp.PromptParams, 1)
-			go func() {
-				_ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptCapabilities: caps, PromptStarted: prompts}).Run()
-			}()
-			st, err := store.Open(filepath.Join(t.TempDir(), "receipts.db"))
-			if err != nil {
-				t.Fatal(err)
+func TestACPPromptCapabilitiesRecordedAndEnforced(t *testing.T) {
+	for _, name := range []string{"shikigami", "grok", "generic"} {
+		t.Run(name, func(t *testing.T) {
+			for _, supported := range []bool{false, true} {
+				t.Run(map[bool]string{false: "old guest", true: "HTTP guest"}[supported], func(t *testing.T) {
+					clientIn, agentOut := io.Pipe()
+					agentIn, clientOut := io.Pipe()
+					t.Cleanup(func() { _ = clientIn.Close(); _ = clientOut.Close(); _ = agentIn.Close(); _ = agentOut.Close() })
+					caps := &acp.PromptCapabilities{Image: supported, EmbeddedContext: supported}
+					prompts := make(chan acp.PromptParams, 1)
+					go func() {
+						_ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptCapabilities: caps, PromptStarted: prompts}).Run()
+					}()
+					st, err := store.Open(filepath.Join(t.TempDir(), "receipts.db"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer func() { _ = st.Close() }()
+					sid := int64(1)
+					host := &acp.Client{In: clientIn, Out: clientOut, Rec: acp.StoreRecorder{Store: st, SessionID: &sid}, Perm: acp.DenyUnmatched{}}
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					_, err = HostACP(ctx, &Assignment{Guest: name, Input: json.RawMessage(`{"body":"inspect"}`), Attachments: []PromptAttachment{
+						{Name: "image.png", MIME: "image/png", Data: "iVBORw0KGgo="},
+						{Name: "document.pdf", MIME: "application/pdf", Data: base64.StdEncoding.EncodeToString([]byte("%PDF-1.1"))},
+					}}, host, t.TempDir())
+					if supported && err != nil {
+						t.Fatal(err)
+					}
+					if !supported && (err == nil || !strings.Contains(err.Error(), "guest does not support attachment")) {
+						t.Fatalf("old guest: %v", err)
+					}
+					body, err := store.LatestActionBody(st, sid, acp.ActionInitialize)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var observed acp.GuestInitialize
+					if err := json.Unmarshal([]byte(body), &observed); err != nil {
+						t.Fatal(err)
+					}
+					if observed.Guest != name || observed.Result.AgentCapabilities.PromptCapabilities != *caps {
+						t.Fatalf("initialize receipt %s", body)
+					}
+					select {
+					case p := <-prompts:
+						if !supported {
+							t.Fatal("unsupported guest received prompt")
+						}
+						if len(p.Prompt) != 3 || p.Prompt[1].Type != "image" || p.Prompt[2].Resource == nil || p.Prompt[2].Resource.MimeType != "application/pdf" {
+							t.Fatalf("prompt %+v", p)
+						}
+					default:
+						if supported {
+							t.Fatal("supported guest received no prompt")
+						}
+					}
+				})
 			}
-			defer func() { _ = st.Close() }()
-			sid := int64(1)
-			host := &acp.Client{In: clientIn, Out: clientOut, Rec: acp.StoreRecorder{Store: st, SessionID: &sid}, Perm: acp.DenyUnmatched{}}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_, err = HostACP(ctx, &Assignment{Guest: acp.GuestShikigami, Input: json.RawMessage(`{"body":"inspect"}`), Attachments: []PromptAttachment{
-				{Name: "image.png", MIME: "image/png", Data: "iVBORw0KGgo="},
-				{Name: "document.pdf", MIME: "application/pdf", Data: base64.StdEncoding.EncodeToString([]byte("%PDF-1.1"))},
-			}}, host, t.TempDir())
-			if supported && err != nil {
-				t.Fatal(err)
-			}
-			if !supported && (err == nil || !strings.Contains(err.Error(), "guest does not support attachment")) {
-				t.Fatalf("old guest: %v", err)
-			}
-			body, err := store.LatestActionBody(st, sid, acp.ActionInitialize)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var observed acp.GuestInitialize
-			if err := json.Unmarshal([]byte(body), &observed); err != nil {
-				t.Fatal(err)
-			}
-			if observed.Guest != acp.GuestShikigami || observed.Result.AgentCapabilities.PromptCapabilities != *caps {
-				t.Fatalf("initialize receipt %s", body)
-			}
-			select {
-			case p := <-prompts:
-				if !supported {
-					t.Fatal("unsupported guest received prompt")
-				}
-				if len(p.Prompt) != 3 || p.Prompt[1].Type != "image" || p.Prompt[2].Resource == nil || p.Prompt[2].Resource.MimeType != "application/pdf" {
-					t.Fatalf("prompt %+v", p)
-				}
-			default:
-				if supported {
-					t.Fatal("supported guest received no prompt")
-				}
-			}
+
 		})
 	}
 }
@@ -437,7 +442,9 @@ func TestHostACPSendsImageAttachment(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	prompts := make(chan acp.PromptParams, 1)
-	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptStarted: prompts}).Run() }()
+	go func() {
+		_ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptStarted: prompts, PromptCapabilities: &acp.PromptCapabilities{Image: true, EmbeddedContext: true}}).Run()
+	}()
 	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 		return acp.Decision{}
 	}}
@@ -484,7 +491,9 @@ func TestHostACPReadsAttachmentFromPath(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	prompts := make(chan acp.PromptParams, 1)
-	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptStarted: prompts}).Run() }()
+	go func() {
+		_ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptStarted: prompts, PromptCapabilities: &acp.PromptCapabilities{Image: true, EmbeddedContext: true}}).Run()
+	}()
 	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 		return acp.Decision{}
 	}}
@@ -536,7 +545,9 @@ func TestHostACPSendsPDFNestedResource(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	prompts := make(chan acp.PromptParams, 1)
-	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptStarted: prompts}).Run() }()
+	go func() {
+		_ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptStarted: prompts, PromptCapabilities: &acp.PromptCapabilities{Image: true, EmbeddedContext: true}}).Run()
+	}()
 	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 		return acp.Decision{}
 	}}
@@ -590,7 +601,9 @@ func TestHostACPNormalizesPlainTextMIME(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	prompts := make(chan acp.PromptParams, 1)
-	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptStarted: prompts}).Run() }()
+	go func() {
+		_ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptStarted: prompts, PromptCapabilities: &acp.PromptCapabilities{Image: true, EmbeddedContext: true}}).Run()
+	}()
 	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 		return acp.Decision{}
 	}}

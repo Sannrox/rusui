@@ -13,6 +13,7 @@ import (
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/guest"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -382,11 +383,15 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, guestErr.Error(), http.StatusConflict)
 			return
 		}
-		if guestName == "codex" {
+		if guestEntry.Protocol == guest.ProtocolClaude {
+			http.Error(w, "native Claude attachments unsupported", http.StatusBadRequest)
+			return
+		}
+		if guestEntry.Protocol == guest.ProtocolCodex {
 			http.Error(w, "native Codex attachments unsupported", http.StatusBadRequest)
 			return
 		}
-		if guestEntry.Conformance != "" || guestName == acp.GuestShikigami {
+		if guestEntry.Protocol == guest.ProtocolACP {
 			body, lookupErr := store.LatestActionBody(s.Eng.Store, id, acp.ActionInitialize)
 			if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
 				http.Error(w, lookupErr.Error(), http.StatusInternalServerError)
