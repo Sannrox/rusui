@@ -72,6 +72,38 @@ An empty registry image uses the existing operator image or process driver.
 The pin records the configured guest; it does not install or upgrade a binary.
 Claude and Codex retain their native protocols.
 
+Every protocol records the same transcript subset in the plane's existing
+`acp.session.update` actions. The body is `{"update": {...}}`, with these
+`sessionUpdate` variants:
+
+| Variant | Recorded fields |
+| --- | --- |
+| `agent_message_chunk`, `user_message_chunk` | `content: {"type":"text", "text":"..."}` |
+| `tool_call` | `toolCallId`, `title`, `kind`, `status`, `rawInput` (string summaries) |
+| `tool_call_update` | `toolCallId`, `status` |
+
+Permission requests and operator approvals keep the existing
+`acp.session.request_permission` and `acp.approval` action bodies
+(`toolCall`, `options`), alongside the transcript. Normalization never grants
+permission. Tool results retain status only; raw outputs, binary content,
+provider envelopes, and opaque update metadata are omitted. Text is redacted
+before it is bounded to 16 KiB per field; tool input summaries are capped at
+512 bytes per field, only for intent and location fields (`command`, `description`, `file_path`,
+`notebook_path`, `path`, `pattern`, `glob`, `url`, `query`, `subagent_type`,
+`skill`, `title`). File bodies, replacement text, and prompts are omitted. Turn credentials, credential environment values, known
+token forms, and authorization headers are redacted for every protocol's
+transcript updates. Consecutive message chunks are assembled before redaction
+and recorded before the next action or at turn end. A message exceeding 32 KiB
+before redaction is replaced with a limit notice. Permission receipts preserve
+the original request for exact policy revalidation and remain operator-only.
+Codex messages are recorded on item completion, so streamed deltas do not
+repeat the final text. Unsupported update variants are omitted.
+
+`read`, attach, and follow use the durable plane actions, including replay
+from a client's stored event cursor. A resumed guest uses the session's stored
+provider cursor when supported; transcript clients never read provider home
+directories. Older action rows remain readable in their original shapes.
+
 Generic ACP entries are admitted only with a container image and a
 `conformance` digest. Run `rusui acp-conformance -policy policy.yaml -guest
 NAME` after adding the entry; it runs the version probe and the isolated ACP

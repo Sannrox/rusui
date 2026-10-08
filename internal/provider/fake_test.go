@@ -227,7 +227,7 @@ func fakeCodex(in io.Reader, out io.Writer) error {
 		}
 		return writeJSON(out, map[string]any{"method": "turn/completed"})
 	}
-	if err := writeJSON(out, map[string]any{"method": "item/tool", "params": map[string]any{"title": "shell"}}); err != nil {
+	if err := writeJSON(out, map[string]any{"method": "item/started", "params": map[string]any{"item": map[string]any{"type": "commandExecution", "id": "cmd-1", "command": "echo fixture", "status": "inProgress"}}}); err != nil {
 		return err
 	}
 	if err := writeJSON(out, map[string]any{"method": "item/question", "params": map[string]any{"id": "q1", "body": "which file"}}); err != nil {
