@@ -13,12 +13,18 @@ func validGuests(registry map[string]guest.Entry) (map[string]guest.Entry, error
 	if registry == nil {
 		return builtin, nil
 	}
-	if len(registry) != len(builtin) {
-		return nil, fmt.Errorf("policy: guest registry requires the four supported guests")
-	}
 	for name, entry := range registry {
 		pinned, ok := builtin[name]
-		if !ok || entry.Protocol != pinned.Protocol {
+		if !ok {
+			if entry.Protocol != guest.ProtocolACP || entry.Conformance == "" || entry.Conformance != guest.ConformanceDigest(entry) || entry.Image == "" {
+				return nil, fmt.Errorf("policy: generic ACP guest %q requires a valid conformance digest and image", name)
+			}
+			if entry.Pin == "" || len(entry.Argv) == 0 || len(entry.Probe) == 0 {
+				return nil, fmt.Errorf("policy: guest %q requires argv, probe, and pin", name)
+			}
+			continue
+		}
+		if entry.Protocol != pinned.Protocol {
 			return nil, fmt.Errorf("policy: unsupported guest protocol for %q", name)
 		}
 		if name == guest.KindClaude && entry.Pin != pinned.Pin {
@@ -36,6 +42,11 @@ func validGuests(registry map[string]guest.Entry) (map[string]guest.Entry, error
 					return nil, fmt.Errorf("policy: guest %q argument contains NUL", name)
 				}
 			}
+		}
+	}
+	for name := range builtin {
+		if _, ok := registry[name]; !ok {
+			return nil, fmt.Errorf("policy: guest registry missing built-in %q", name)
 		}
 	}
 	return registry, nil

@@ -16,6 +16,15 @@ func TestGuestRegistryAndProjectChoices(t *testing.T) {
 	}{
 		{"four existing guests", func(*File) {}, false},
 		{"unknown guest", func(f *File) { f.Guests["extra"] = f.Guests["grok"] }, true},
+		{"qualified generic ACP", func(f *File) {
+			entry := guest.Entry{Protocol: guest.ProtocolACP, Argv: []string{"second-agent", "acp"}, Probe: []string{"second-agent", "--version"}, Pin: "2", Image: "example/second:2"}
+			entry.Conformance = guest.ConformanceDigest(entry)
+			f.Guests["second"] = entry
+			f.Projects["test"].Guests.Allowed = append(f.Projects["test"].Guests.Allowed, "second")
+		}, false},
+		{"unqualified generic ACP", func(f *File) {
+			f.Guests["second"] = guest.Entry{Protocol: guest.ProtocolACP, Argv: []string{"second-agent"}, Probe: []string{"second-agent", "--version"}, Pin: "2", Image: "example/second:2"}
+		}, true},
 		{"missing guest", func(f *File) { delete(f.Guests, "codex") }, true},
 		{"native guest as ACP", func(f *File) { g := f.Guests["claude"]; g.Protocol = "acp"; f.Guests["claude"] = g }, true},
 		{"unsupported Claude pin", func(f *File) { g := f.Guests["claude"]; g.Pin = "unsupported"; f.Guests["claude"] = g }, true},
@@ -44,7 +53,7 @@ func TestGuestRegistryAndProjectChoices(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(p.Guests) != 4 || p.Projects["test"].Guests.Default != "shikigami" {
+			if (!tc.bad && tc.name == "qualified generic ACP" && len(p.Guests) != 5) || (tc.name != "qualified generic ACP" && len(p.Guests) != 4) || p.Projects["test"].Guests.Default != "shikigami" {
 				t.Fatalf("guests %+v", p.Guests)
 			}
 		})
