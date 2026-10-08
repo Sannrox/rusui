@@ -40,6 +40,7 @@ const (
 	ActionUpdate          = "acp.session.update"
 	ActionApproval        = "acp.approval"
 	ActionUnknown         = "acp.unknown"
+	ActionInitialize      = "acp.initialize"
 )
 
 const (
@@ -72,8 +73,34 @@ type InitializeParams struct {
 }
 
 type InitializeResult struct {
-	ProtocolVersion int            `json:"protocolVersion"`
-	AgentInfo       map[string]any `json:"agentInfo"`
+	ProtocolVersion   int            `json:"protocolVersion"`
+	AgentInfo         map[string]any `json:"agentInfo"`
+	AgentCapabilities struct {
+		PromptCapabilities PromptCapabilities `json:"promptCapabilities"`
+	} `json:"agentCapabilities"`
+}
+
+type PromptCapabilities struct {
+	Image           bool `json:"image"`
+	EmbeddedContext bool `json:"embeddedContext"`
+}
+
+// Supports reports attachment kinds the guest advertised; missing fields refuse.
+func (p PromptCapabilities) Supports(part string) bool {
+	switch part {
+	case "image":
+		return p.Image
+	case "resource":
+		return p.EmbeddedContext
+	default:
+		return false
+	}
+}
+
+// GuestInitialize binds an observed initialize response to the selected guest.
+type GuestInitialize struct {
+	Guest  string           `json:"guest"`
+	Result InitializeResult `json:"result"`
 }
 
 type SessionNewParams struct {

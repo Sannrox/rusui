@@ -52,6 +52,18 @@ Use the [implement session how-to](implement-sessions.md).
   driver command (`-driver`) that prints review JSON on stdout. There
   is no in-tree `review-driver` binary.
 
+For shikigami HTTP prompt attachments, the compatibility check is the guest's
+`initialize.agentCapabilities.promptCapabilities`: `image: true` for images,
+`embeddedContext: true` for PDF and text documents. This requires the behavior
+introduced in [shikigami #410](https://github.com/Sannrox/shikigami/pull/410).
+The runner records that response with the session's turn actions. Until a text
+turn has initialized the guest, attachments receive HTTP 400 without storing
+a prompt. Missing or false capabilities also receive 400. Each subsequent
+guest process checks its own response before sending attachments, including
+after an image or binary downgrade. `RUSUI_GUEST_VERSION` remains measurement
+metadata; it does not bypass this check. The prompt limits remain 8 MiB per
+part and 16 MiB aggregate.
+
 ## Set up with `rusui setup`
 
 `rusui setup` prepares this machine ([ADR 0018](decisions/0018-rusui-setup.md)).

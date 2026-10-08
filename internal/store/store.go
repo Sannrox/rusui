@@ -796,6 +796,13 @@ func ListTurnsForSession(s *Store, sessionID int64) ([]Turn, error) {
 	return out, rows.Err()
 }
 
+// LatestActionBody uses insertion order, since action ids are random.
+func LatestActionBody(s *Store, sessionID int64, typ string) (string, error) {
+	var body string
+	err := s.DB.QueryRow(`SELECT body FROM actions WHERE session_id=? AND action_type=? ORDER BY rowid DESC LIMIT 1`, sessionID, typ).Scan(&body)
+	return body, err
+}
+
 func ListActionsForSession(s *Store, sessionID int64) ([]Action, error) {
 	rows, err := s.DB.Query(`SELECT action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body FROM actions WHERE session_id=? ORDER BY action_id`, sessionID)
 	if err != nil {

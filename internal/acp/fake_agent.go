@@ -17,6 +17,8 @@ import (
 type FakeAgent struct {
 	In  io.Reader
 	Out io.Writer
+	// PromptCapabilities overrides the initialize attachment advertisement.
+	PromptCapabilities *PromptCapabilities
 	// ToolCall is the permission request's tool call; empty sends a bare id.
 	ToolCall json.RawMessage
 	// PermissionOption receives the option the client selected.
@@ -72,7 +74,7 @@ func (a *FakeAgent) handle(msg rpcMessage) error {
 		return a.reply(msg.ID, map[string]any{
 			"protocolVersion":   1,
 			"agentInfo":         map[string]any{"name": "fake-acp", "version": "0"},
-			"agentCapabilities": map[string]any{"loadSession": true},
+			"agentCapabilities": map[string]any{"loadSession": true, "promptCapabilities": a.PromptCapabilities},
 		})
 	case MethodSessionNew:
 		var p SessionNewParams
