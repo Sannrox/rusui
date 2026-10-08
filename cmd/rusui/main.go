@@ -44,6 +44,9 @@ func main() {
 		case "acp":
 			acpCLI(os.Args[2:])
 			return
+		case "acp-conformance":
+			acpConformanceCLI(os.Args[2:])
+			return
 		case "sessions":
 			sessionsCLI(os.Args[2:])
 			return

@@ -376,7 +376,7 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 		files = append(files, store.PromptFile{Name: a.Name, Body: raw})
 	}
 	if len(files) > 0 {
-		guestName, _, guestErr := s.Eng.SessionGuest(id)
+		guestName, guestEntry, guestErr := s.Eng.SessionGuest(id)
 		if guestErr != nil {
 			http.Error(w, guestErr.Error(), http.StatusConflict)
 			return
@@ -385,7 +385,7 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "native Codex attachments unsupported", http.StatusBadRequest)
 			return
 		}
-		if guestName == acp.GuestShikigami {
+		if guestEntry.Conformance != "" || guestName == acp.GuestShikigami {
 			body, lookupErr := store.LatestActionBody(s.Eng.Store, id, acp.ActionInitialize)
 			if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
 				http.Error(w, lookupErr.Error(), http.StatusInternalServerError)

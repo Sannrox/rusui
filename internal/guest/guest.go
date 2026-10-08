@@ -1,6 +1,11 @@
 package guest
 
-import "fmt"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+)
 
 const (
 	KindGrok            = "grok"
@@ -25,6 +30,24 @@ type Entry struct {
 	Probe    []string `yaml:"probe" json:"probe"`
 	Pin      string   `yaml:"pin" json:"pin"`
 	Image    string   `yaml:"image" json:"image"`
+	// Conformance binds a generic ACP entry to the exact descriptor and
+	// conformance suite that qualified it. Built-ins retain their legacy pins.
+	Conformance string `yaml:"conformance,omitempty" json:"conformance,omitempty"`
+}
+
+const ConformanceSuite = "acp-subset-v1"
+
+func ConformanceDigest(e Entry) string {
+	e.Conformance = ""
+	b, _ := json.Marshal(struct {
+		Protocol string   `json:"protocol"`
+		Argv     []string `json:"argv"`
+		Probe    []string `json:"probe"`
+		Pin      string   `json:"pin"`
+		Image    string   `json:"image"`
+	}{e.Protocol, e.Argv, e.Probe, e.Pin, e.Image})
+	h := sha256.Sum256(append([]byte(ConformanceSuite+"\x00"), b...))
+	return hex.EncodeToString(h[:])
 }
 
 // Builtin returns fresh registry data for legacy policies.

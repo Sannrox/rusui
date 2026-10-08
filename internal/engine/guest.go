@@ -43,6 +43,9 @@ func (e *Engine) chooseGuest(project, requested string, pol *policy.Effective) (
 	if !ok {
 		return "", guest.Entry{}, fmt.Errorf("guest: %q is not registered", name)
 	}
+	if _, builtin := guest.Builtin()[name]; !builtin && entry.Protocol == guest.ProtocolACP && e.Container == nil {
+		return "", guest.Entry{}, fmt.Errorf("guest: generic ACP guests require a container driver")
+	}
 	return name, entry, nil
 }
 

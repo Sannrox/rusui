@@ -399,7 +399,7 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 	if err != nil {
 		return engine.Artifact{}, nil, err
 	}
-	if a.Guest == acp.GuestShikigami {
+	if a.GuestSpec.Conformance != "" || a.Guest == acp.GuestShikigami {
 		if host.Rec != nil {
 			if _, err := host.Rec.Record(acp.Receipt{Type: acp.ActionInitialize, Reason: acp.ReasonRecorded, Body: acp.GuestInitialize{Guest: a.Guest, Result: *initialized}}); err != nil {
 				return engine.Artifact{}, nil, err

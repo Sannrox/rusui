@@ -72,6 +72,13 @@ An empty registry image uses the existing operator image or process driver.
 The pin records the configured guest; it does not install or upgrade a binary.
 Claude and Codex retain their native protocols.
 
+Generic ACP entries are admitted only with a container image and a
+`conformance` digest. Run `rusui acp-conformance -policy policy.yaml -guest
+NAME` after adding the entry; it runs the version probe and the isolated ACP
+subset, then prints the digest to copy into that entry. A changed argv, probe,
+pin, or image invalidates the digest. Generic ACP guests use the same
+per-turn model grant and cannot broaden repository or permission policy.
+
 All guests use the same `RUSUI_MODEL_UPSTREAM`. A gateway serving both OpenAI
 and Anthropic dialects can serve both kinds of guest; the plane chooses the
 credential header from the request dialect. `model.proxy` receipts record
