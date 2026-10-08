@@ -3,6 +3,7 @@ package provider
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -94,27 +95,52 @@ func runClaude(rw io.ReadWriteCloser, turn Turn, decide Decide) (Result, error) 
 	return res, nil
 }
 
-func runCodex(rw io.ReadWriteCloser, inst Instance, turn Turn, decide Decide) (Result, error) {
+// runCodex uses the app-server JSON-RPC contract, not an ACP version handshake.
+func runCodex(rw io.ReadWriteCloser, _ Instance, turn Turn, decide Decide) (Result, error) {
 	r := bufio.NewReader(rw)
-	if err := writeJSON(rw, map[string]any{
-		"id": 1, "method": "initialize",
-		"params": map[string]any{"protocolVersion": CodexAppServerProto, "instance": inst.ID},
-	}); err != nil {
+	if err := writeJSON(rw, map[string]any{"id": 1, "method": "initialize", "params": map[string]any{"clientInfo": map[string]string{"name": "rusui", "title": "rusui", "version": "0"}}}); err != nil {
 		return Result{}, err
 	}
 	var init struct {
-		Result struct {
-			ProtocolVersion string `json:"protocolVersion"`
-		} `json:"result"`
+		UserAgent string `json:"userAgent"`
 	}
-	if err := readJSON(r, &init); err != nil {
+	if err := codexResponse(r, 1, &init); err != nil {
 		return Result{}, err
 	}
-	if init.Result.ProtocolVersion != CodexAppServerProto {
-		return Result{}, fmt.Errorf("provider: codex protocol %q refused", init.Result.ProtocolVersion)
+	if init.UserAgent == "" {
+		return Result{}, fmt.Errorf("provider: codex initialize refused")
+	}
+	if err := writeJSON(rw, map[string]any{"method": "initialized"}); err != nil {
+		return Result{}, err
+	}
+	if turn.APIKey != "" {
+		if err := writeJSON(rw, map[string]any{"id": 4, "method": "account/login/start", "params": map[string]string{"type": "apiKey", "apiKey": turn.APIKey}}); err != nil {
+			return Result{}, err
+		}
+		var login struct {
+			Type string `json:"type"`
+		}
+		if err := codexResponse(r, 4, &login); err != nil {
+			return Result{}, err
+		}
+		if login.Type != "apiKey" {
+			return Result{}, fmt.Errorf("provider: codex API-key login refused")
+		}
 	}
 	method := "thread/start"
-	params := map[string]any{}
+	// Override account/workspace defaults. The native sandbox remains read-only;
+	// write or network escalation must ask the plane and cannot persist approvals.
+	params := map[string]any{"cwd": turn.Workspace, "approvalPolicy": "untrusted", "sandbox": "read-only"}
+	if turn.ModelBaseURL != "" {
+		base := strings.TrimRight(turn.ModelBaseURL, "/")
+		if !strings.HasSuffix(base, "/v1") {
+			base += "/v1"
+		}
+		params["config"] = map[string]any{"openai_base_url": base}
+	}
+	if turn.Model != "" {
+		params["model"] = turn.Model
+	}
 	if turn.Cursor != "" {
 		method = "thread/resume"
 		params["threadId"] = turn.Cursor
@@ -123,20 +149,96 @@ func runCodex(rw io.ReadWriteCloser, inst Instance, turn Turn, decide Decide) (R
 		return Result{}, err
 	}
 	var opened struct {
-		Result struct {
-			ThreadID string `json:"threadId"`
-		} `json:"result"`
+		Thread struct {
+			ID string `json:"id"`
+		} `json:"thread"`
 	}
-	if err := readJSON(r, &opened); err != nil {
+	if err := codexResponse(r, 2, &opened); err != nil {
+		var rpcErr *codexRPCError
+		if method != "thread/resume" || !errors.As(err, &rpcErr) {
+			return Result{}, err
+		}
+		// Environment replacement can remove the provider's stored thread.
+		// A new thread uses the same cwd, sandbox, policy and turn grant.
+		delete(params, "threadId")
+		if err := writeJSON(rw, map[string]any{"id": 5, "method": "thread/start", "params": params}); err != nil {
+			return Result{}, err
+		}
+		if err := codexResponse(r, 5, &opened); err != nil {
+			return Result{}, err
+		}
+	}
+	if opened.Thread.ID == "" {
+		return Result{}, fmt.Errorf("provider: codex thread missing")
+	}
+	if err := writeJSON(rw, map[string]any{"id": 3, "method": "turn/start", "params": map[string]any{"threadId": opened.Thread.ID, "input": []map[string]string{{"type": "text", "text": turn.Prompt}}, "cwd": turn.Workspace, "approvalPolicy": "untrusted", "sandboxPolicy": map[string]any{"type": "readOnly"}}}); err != nil {
 		return Result{}, err
 	}
-	if err := writeJSON(rw, map[string]any{
-		"id": 3, "method": "turn/start",
-		"params": map[string]any{"threadId": opened.Result.ThreadID, "prompt": turn.Prompt},
-	}); err != nil {
-		return Result{}, err
+	return readProviderLoop(r, rw, opened.Thread.ID, decide, "codex", turn.Observe)
+}
+
+type codexRPCError struct {
+	Code int `json:"code"`
+}
+
+func (e *codexRPCError) Error() string {
+	return fmt.Sprintf("provider: codex request refused (%d)", e.Code)
+}
+
+func codexResponse(r *bufio.Reader, id int, out any) error {
+	for {
+		var msg struct {
+			ID     *int            `json:"id"`
+			Result json.RawMessage `json:"result"`
+			Error  *codexRPCError  `json:"error"`
+		}
+		if err := readJSON(r, &msg); err != nil {
+			return err
+		}
+		if msg.ID == nil {
+			continue
+		}
+		if *msg.ID != id {
+			return fmt.Errorf("provider: codex response id mismatch")
+		}
+		if msg.Error != nil {
+			return msg.Error
+		}
+		return json.Unmarshal(msg.Result, out)
 	}
-	return readProviderLoop(r, rw, opened.Result.ThreadID, decide, "codex", turn.Observe)
+}
+
+// answerCodexRequest never returns a session-wide grant or a policy amendment.
+func answerCodexRequest(w io.Writer, msg map[string]any, decide Decide) (Event, error) {
+	method, _ := msg["method"].(string)
+	params, _ := msg["params"].(map[string]any)
+	if method == "item/commandExecution/requestApproval" && params["networkApprovalContext"] != nil {
+		// A shell execution allowance is not managed network authorization.
+		err := writeJSON(w, map[string]any{"id": msg["id"], "result": map[string]string{"decision": "decline"}})
+		return Event{Kind: "permission", OptionID: "decline", Body: "decline"}, err
+	}
+	if method == "item/permissions/requestApproval" {
+		err := writeJSON(w, map[string]any{"id": msg["id"], "result": map[string]any{"permissions": map[string]any{}, "scope": "turn"}})
+		return Event{Kind: "permission", OptionID: "deny", Body: "deny"}, err
+	}
+	if method != "item/commandExecution/requestApproval" && method != "item/fileChange/requestApproval" {
+		return Event{}, fmt.Errorf("provider: unsupported codex request %q", method)
+	}
+	title, kind := "fileChange", "edit"
+	command, _ := params["command"].(string)
+	if method == "item/commandExecution/requestApproval" {
+		title, kind = "commandExecution", "execute"
+	}
+	raw, _ := json.Marshal(map[string]any{"toolName": title, "title": title, "kind": kind, "command": command})
+	decision := "decline"
+	if decide != nil {
+		option, allow := decide([]Option{{ID: "accept"}, {ID: "decline"}}, raw)
+		if allow && option == "accept" {
+			decision = "accept"
+		}
+	}
+	err := writeJSON(w, map[string]any{"id": msg["id"], "result": map[string]string{"decision": decision}})
+	return Event{Kind: "permission", OptionID: decision, Body: decision}, err
 }
 
 func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide, kind string, observe func(Event)) (Result, error) {
@@ -156,6 +258,29 @@ func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide
 		var msg map[string]any
 		if err := json.Unmarshal(line, &msg); err != nil {
 			return res, err
+		}
+		if kind == "codex" {
+			if msg["error"] != nil {
+				return res, fmt.Errorf("provider: codex request failed")
+			}
+			if msg["id"] != nil && msg["method"] != nil {
+				ev, err := answerCodexRequest(w, msg, decide)
+				if err != nil {
+					return res, err
+				}
+				emit(ev)
+				continue
+			}
+			if msg["id"] != nil && msg["result"] != nil {
+				continue
+			} // turn/start acknowledges before completion
+			if msg["method"] == "turn/completed" {
+				if params, ok := msg["params"].(map[string]any); ok {
+					if turn, ok := params["turn"].(map[string]any); ok && turn["status"] != "completed" {
+						return res, fmt.Errorf("provider: codex turn did not complete")
+					}
+				}
+			}
 		}
 		if kind == "claude" && msg["type"] == "control_request" {
 			ev, err := answerClaudeControl(w, line, decide)

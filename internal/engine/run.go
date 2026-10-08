@@ -18,9 +18,17 @@ func (e *Engine) StartRunSize(project, prompt, idem, size string) (int64, error)
 }
 
 func (e *Engine) StartRunMode(project, prompt, idem, size, mode string) (int64, error) {
-	p, ok := e.PolicySnapshot().Project(project)
+	return e.StartRunGuest(project, prompt, idem, size, mode, "")
+}
+
+func (e *Engine) StartRunGuest(project, prompt, idem, size, mode, guest string) (int64, error) {
+	pol := e.PolicySnapshot()
+	p, ok := pol.Project(project)
 	if !ok || !p.AllowsKind(policy.KindRun) {
 		return 0, fmt.Errorf("policy")
+	}
+	if _, _, err := e.chooseGuest(project, guest, pol); err != nil {
+		return 0, err
 	}
 	if size != "" {
 		if NormalizeSize(size) == "" || size != NormalizeSize(size) {
@@ -55,6 +63,9 @@ func (e *Engine) StartRunMode(project, prompt, idem, size, mode string) (int64, 
 		}
 		sid, item, err := store.InsertRunSessionTx(tx, project, repo, prompt)
 		if err != nil {
+			return err
+		}
+		if _, _, err := e.bindSessionGuestTx(tx, sid, project, guest, pol); err != nil {
 			return err
 		}
 		resolved := size

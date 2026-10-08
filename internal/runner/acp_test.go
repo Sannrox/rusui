@@ -20,6 +20,7 @@ import (
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/guest"
 	"github.com/sannrox/rusui/internal/provider"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -875,5 +876,73 @@ func TestHeartbeatSteersEndsTurnOnlyWhenLeaseIsGone(t *testing.T) {
 				t.Fatal("heartbeat loop kept running after the lease was lost")
 			}
 		})
+	}
+}
+
+func TestHostACPRegistryCodexResumesNativeThread(t *testing.T) {
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	t.Cleanup(func() { _ = clientIn.Close(); _ = clientOut.Close(); _ = agentIn.Close(); _ = agentOut.Close() })
+	methods := make(chan string, 6)
+	go func() {
+		sc := bufio.NewScanner(agentIn)
+		for sc.Scan() {
+			var msg struct {
+				ID     json.RawMessage `json:"id"`
+				Method string          `json:"method"`
+				Params struct {
+					ThreadID string            `json:"threadId"`
+					APIKey   string            `json:"apiKey"`
+					Type     string            `json:"type"`
+					Config   map[string]string `json:"config"`
+				} `json:"params"`
+			}
+			if json.Unmarshal(sc.Bytes(), &msg) != nil {
+				return
+			}
+			methods <- msg.Method
+			var result any
+			switch msg.Method {
+			case "initialize":
+				result = map[string]string{"userAgent": "codex-fixture"}
+			case "initialized":
+				continue
+			case "account/login/start":
+				if msg.Params.APIKey != "fixture-turn-grant" || msg.Params.Type != "apiKey" {
+					return
+				}
+				result = map[string]string{"type": "apiKey"}
+			case "thread/resume":
+				if msg.Params.ThreadID != "existing-thread" {
+					return
+				}
+				_, _ = io.WriteString(agentOut, `{"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"thread not found"}}`+"\n")
+				continue
+			case "thread/start":
+				if msg.Params.Config["openai_base_url"] != "http://127.0.0.1/model-proxy/v1" {
+					return
+				}
+				result = map[string]any{"thread": map[string]string{"id": "replacement-thread"}}
+			case "turn/start":
+				_, _ = io.WriteString(agentOut, `{"jsonrpc":"2.0","method":"turn/completed"}`+"\n")
+				return
+			default:
+				return
+			}
+			raw, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": result})
+			_, _ = agentOut.Write(append(raw, '\n'))
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	host := &acp.Client{In: clientIn, Out: clientOut}
+	art, err := HostACP(ctx, &Assignment{TurnToken: "fixture-turn-grant", ModelBaseURL: "http://127.0.0.1/model-proxy", Guest: "codex", GuestSpec: guest.Builtin()["codex"], GuestSessionID: "existing-thread", Input: json.RawMessage(`{"body":"continue"}`), Repo: "example/test-repo", Item: 1, ItemKind: "issue"}, host, t.TempDir())
+	if err != nil || art.GuestSessionID != "replacement-thread" {
+		t.Fatalf("native Codex resume: cursor=%q error=%v", art.GuestSessionID, err)
+	}
+	for _, want := range []string{"initialize", "initialized", "account/login/start", "thread/resume", "thread/start", "turn/start"} {
+		if got := <-methods; got != want {
+			t.Fatalf("native method %q, want %q", got, want)
+		}
 	}
 }

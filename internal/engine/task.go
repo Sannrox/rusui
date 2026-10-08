@@ -23,6 +23,7 @@ var (
 
 // TaskSpec is the immutable pin for an implementation effort (ADR 0013 source+task).
 type TaskSpec struct {
+	Guest            string
 	EffortKey        string
 	Prompt           string
 	Repo             string
@@ -39,6 +40,9 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 	p, ok := pol.Project(project)
 	if !ok || !p.AllowsKind(policy.KindRun) {
 		return nil, fmt.Errorf("policy")
+	}
+	if _, _, err := e.chooseGuest(project, spec.Guest, pol); err != nil {
+		return nil, err
 	}
 	if spec.EffortKey == "" || spec.Prompt == "" || spec.Repo == "" || spec.Ref == "" || spec.BaseSHA == "" {
 		return nil, fmt.Errorf("%w: missing pin", ErrTaskBlocked)
@@ -117,6 +121,9 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 		}
 		sid, item, err := store.InsertRunSessionTx(tx, project, spec.Repo, spec.Prompt)
 		if err != nil {
+			return err
+		}
+		if _, _, err := e.bindSessionGuestTx(tx, sid, project, spec.Guest, pol); err != nil {
 			return err
 		}
 		it := snapshot.Item{

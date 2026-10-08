@@ -173,21 +173,37 @@ func fakeCodex(in io.Reader, out io.Writer) error {
 		return err
 	}
 	params, _ := init["params"].(map[string]any)
-	if params["protocolVersion"] != CodexAppServerProto {
-		return writeJSON(out, map[string]any{"id": init["id"], "result": map[string]any{"protocolVersion": params["protocolVersion"]}})
+	client, _ := params["clientInfo"].(map[string]any)
+	if client["name"] != "rusui" || params["protocolVersion"] != nil {
+		return fmt.Errorf("invalid native initialize")
 	}
-	if err := writeJSON(out, map[string]any{"id": init["id"], "result": map[string]any{"protocolVersion": CodexAppServerProto}}); err != nil {
+	if err := writeJSON(out, map[string]any{"id": init["id"], "result": map[string]any{"userAgent": "codex-fixture"}}); err != nil {
 		return err
+	}
+	initialized, err := readMap(r)
+	if err != nil {
+		return err
+	}
+	if initialized["method"] != "initialized" {
+		return fmt.Errorf("initialized notification required")
 	}
 	open, err := readMap(r)
 	if err != nil {
 		return err
 	}
 	resume := open["method"] == "thread/resume"
-	if err := writeJSON(out, map[string]any{"id": open["id"], "result": map[string]any{"threadId": "codex-thread"}}); err != nil {
+	if err := writeJSON(out, map[string]any{"id": open["id"], "result": map[string]any{"thread": map[string]string{"id": "codex-thread"}}}); err != nil {
 		return err
 	}
-	if _, err := readMap(r); err != nil {
+	start, err := readMap(r)
+	if err != nil {
+		return err
+	}
+	startParams, _ := start["params"].(map[string]any)
+	if startParams["input"] == nil || startParams["prompt"] != nil {
+		return fmt.Errorf("turn input required")
+	}
+	if err := writeJSON(out, map[string]any{"id": start["id"], "result": map[string]any{"turn": map[string]string{"id": "turn-fixture", "status": "inProgress"}}}); err != nil {
 		return err
 	}
 	if resume {
@@ -202,15 +218,16 @@ func fakeCodex(in io.Reader, out io.Writer) error {
 	if err := writeJSON(out, map[string]any{"method": "item/question", "params": map[string]any{"id": "q1", "body": "which file"}}); err != nil {
 		return err
 	}
-	if err := writeJSON(out, map[string]any{"id": "perm-1", "method": "item/permission", "params": map[string]any{"options": []map[string]string{{"id": "allow-once"}}}}); err != nil {
+	if err := writeJSON(out, map[string]any{"id": "perm-1", "method": "item/commandExecution/requestApproval", "params": map[string]any{"command": "echo fixture"}}); err != nil {
 		return err
 	}
 	reply, err := readMap(r)
 	if err != nil {
 		return err
 	}
-	if permissionAllows(reply) {
-		return fmt.Errorf("fake codex was allowed without a reject option")
+	result, _ := reply["result"].(map[string]any)
+	if result["decision"] != "accept" && result["decision"] != "decline" {
+		return fmt.Errorf("fake codex expected native approval decision")
 	}
 	if err := writeJSON(out, map[string]any{"method": "item/agentMessage", "params": map[string]any{"text": "hello-codex"}}); err != nil {
 		return err

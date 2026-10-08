@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 43
+const CurrentSchema = 44
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -533,7 +533,36 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 44 {
+		if err := migrateV44(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 44); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV44 freezes the selected guest for a session (#572).
+func migrateV44(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, column := range []string{"guest_name", "guest_pin", "guest_config"} {
+		var n int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name=?`, column).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			if _, err := tx.Exec("ALTER TABLE sessions ADD COLUMN " + column + " TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
 }
 
 // migrateV43 stores prompt attachment bytes on disk and keeps digest+path

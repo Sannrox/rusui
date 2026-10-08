@@ -52,6 +52,34 @@ Use the [implement session how-to](implement-sessions.md).
   driver command (`-driver`) that prints review JSON on stdout. There
   is no in-tree `review-driver` binary.
 
+A project can choose its guest through `guests.default` and `guests.allowed`.
+The top-level `guests` registry supplies `protocol`, `argv`, `probe`, `pin`, and
+`image` for the four existing guests: Grok, Claude, Codex, and Shikigami. See
+[policy.example.yaml](../policy.example.yaml). When a project omits guest
+choices, `RUSUI_GUEST` remains its fallback. A request may choose an allowed
+guest:
+
+```bash
+rusui run -project rusui -guest shikigami 'Inspect the project'
+```
+
+An unlisted guest is refused before a session or environment is created.
+The session records `guest_name` and `guest_pin` and freezes the full spawn
+entry. Registry edits affect new sessions; a resumed session keeps its argv,
+pin, and image. Removing its guest from the project allowlist refuses further
+execution. Existing sessions without a choice bind on their first claim.
+An empty registry image uses the existing operator image or process driver.
+The pin records the configured guest; it does not install or upgrade a binary.
+Claude and Codex retain their native protocols.
+
+All guests use the same `RUSUI_MODEL_UPSTREAM`. A gateway serving both OpenAI
+and Anthropic dialects can serve both kinds of guest; the plane chooses the
+credential header from the request dialect. `model.proxy` receipts record
+only destination origin, path, and HTTP status. A client disconnect leaves the
+turn running; another authenticated client can use the existing session SSE
+stream and submit the next turn. See the
+[live shared-session proof](proofs/572-shared-guest-session.md).
+
 For shikigami HTTP prompt attachments, the compatibility check is the guest's
 `initialize.agentCapabilities.promptCapabilities`: `image: true` for images,
 `embeddedContext: true` for PDF and text documents. This requires the behavior

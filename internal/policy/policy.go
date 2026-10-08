@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sannrox/rusui/internal/guest"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,6 +31,7 @@ const (
 )
 
 type File struct {
+	Guests   map[string]guest.Entry `yaml:"guests,omitempty"`
 	Version  int                    `yaml:"version"`
 	Defaults DefaultsYAML           `yaml:"defaults"`
 	Projects map[string]ProjectYAML `yaml:"projects"`
@@ -49,7 +51,13 @@ type DefaultsYAML struct {
 	MaxReviewsPerRepoPerUTCDay int      `yaml:"max_reviews_per_repo_per_utc_day"`
 }
 
+type ProjectGuests struct {
+	Default string   `yaml:"default"`
+	Allowed []string `yaml:"allowed"`
+}
+
 type ProjectYAML struct {
+	Guests       *ProjectGuests      `yaml:"guests"`
 	Repos        map[string]RepoYAML `yaml:"repos"`
 	SessionKinds []string            `yaml:"session_kinds"`
 	LocalRuntime *LocalRuntimeYAML   `yaml:"local_runtime"`
@@ -99,6 +107,7 @@ type Repo struct {
 }
 
 type Project struct {
+	Guests       *ProjectGuests
 	Slug         string
 	SessionKinds []string
 	LocalRuntime *LocalRuntime
@@ -120,6 +129,7 @@ type LocalRuntime struct {
 }
 
 type Effective struct {
+	Guests   map[string]guest.Entry
 	Hash     string
 	Raw      []byte
 	Projects map[string]Project
@@ -152,6 +162,11 @@ func Parse(raw []byte) (*Effective, error) {
 		Projects: map[string]Project{},
 		Repos:    map[string]Repo{},
 	}
+	guests, err := validGuests(f.Guests)
+	if err != nil {
+		return nil, err
+	}
+	out.Guests = guests
 	defKinds := f.Defaults.SessionKinds
 	if len(defKinds) == 0 {
 		defKinds = []string{KindReview, KindRun, KindScheduled}
@@ -204,7 +219,11 @@ func Parse(raw []byte) (*Effective, error) {
 		if err != nil {
 			return nil, err
 		}
+		if err := validProjectGuests(slug, y.Guests, guests); err != nil {
+			return nil, err
+		}
 		p := Project{
+			Guests:       y.Guests,
 			Slug:         slug,
 			SessionKinds: kinds,
 			LocalRuntime: localRuntime,

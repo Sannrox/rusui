@@ -66,6 +66,9 @@ type Server struct {
 }
 
 func (s *Server) Handler() http.Handler {
+	if s.Eng != nil && s.Eng.DefaultGuest == "" {
+		s.Eng.DefaultGuest = s.guest()
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
@@ -454,7 +457,17 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := last
-	s.noteClaimedProvider(c.Job.ID)
+	turn, err := store.GetTurn(s.Eng.Store, c.Job.ID)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	guestName, guestEntry, err := s.Eng.SessionGuest(turn.SessionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	s.noteClaimedProvider(c.Job.ID, guestName)
 	tok, exp, err := issueTurnToken(s.Eng.Store, c.Job.ID, c.Job.LeaseGeneration, s.Eng.Clock.Now())
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -474,7 +487,8 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		"turn_token":         tok,
 		"turn_token_expires": exp.UTC().Format(time.RFC3339Nano),
 		"input":              s.Eng.BuildInput(c),
-		"guest":              s.guest(),
+		"guest":              guestName,
+		"guest_spec":         guestEntry,
 	}
 	if acp.ValidGuestModel(s.GuestModel) {
 		out["guest_model"] = s.GuestModel

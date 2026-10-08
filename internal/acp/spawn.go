@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/sannrox/rusui/internal/guest"
 )
 
 // Supported guests (ADR 0002, ADR 0017 D1, ADR 0060).
@@ -42,6 +44,14 @@ func GuestCommand(guest string) (*exec.Cmd, error) {
 	if err != nil {
 		return nil, err
 	}
+	return Command(argv)
+}
+
+// Command builds the selected registry process without a shell.
+func Command(argv []string) (*exec.Cmd, error) {
+	if len(argv) == 0 {
+		return nil, fmt.Errorf("acp: argv required")
+	}
 	path, err := exec.LookPath(argv[0])
 	if err != nil {
 		return nil, fmt.Errorf("acp: %w", err)
@@ -58,17 +68,13 @@ func SpawnArgs() []string {
 // SpawnArgsFor is the stdio argv for a guest. Empty means Grok; an unknown
 // guest fails closed. Claude and Codex use their own CLIs (ADR 0025).
 // Shikigami uses the ADR 0060 pin (#507).
-func SpawnArgsFor(guest string) ([]string, error) {
-	switch guest {
-	case "", GuestGrok:
-		return SpawnArgs(), nil
-	case GuestClaude:
-		return strings.Fields(ClaudeStdio), nil
-	case "codex":
-		return []string{"codex", "app-server", "--listen", "stdio://"}, nil
-	case GuestShikigami:
-		return strings.Fields(ShikigamiStdio), nil
-	default:
-		return nil, fmt.Errorf("acp: unknown guest %q", guest)
+func SpawnArgsFor(name string) ([]string, error) {
+	if name == "" {
+		name = GuestGrok
 	}
+	entry, ok := guest.Builtin()[name]
+	if !ok {
+		return nil, fmt.Errorf("acp: unknown guest %q", name)
+	}
+	return entry.Argv, nil
 }

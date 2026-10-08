@@ -22,6 +22,7 @@ import (
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
 	rusuienv "github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/guest"
 )
 
 // Client talks outbound-only to the plane. Bootstrap authenticates
@@ -66,10 +67,11 @@ type Assignment struct {
 	// Ship is pull-request or push-base for an implement turn (ADR 0068).
 	Ship string `json:"ship,omitempty"`
 	// ShipBase is the default branch a push-base implement turn may push.
-	ShipBase       string   `json:"ship_base,omitempty"`
-	Guest          string   `json:"guest,omitempty"`
-	Mode           string   `json:"mode,omitempty"`
-	CommitTrailers []string `json:"commit_trailers,omitempty"`
+	ShipBase       string      `json:"ship_base,omitempty"`
+	Guest          string      `json:"guest,omitempty"`
+	GuestSpec      guest.Entry `json:"guest_spec"`
+	Mode           string      `json:"mode,omitempty"`
+	CommitTrailers []string    `json:"commit_trailers,omitempty"`
 	// CommitHooksDir is where PrepareCommitHooks placed the attribution
 	// hooks for this turn; set on the runner, never by the plane.
 	CommitHooksDir string `json:"-"`
@@ -432,8 +434,19 @@ func DriverEnv(a *Assignment, home, path string) []string {
 	switch a.Guest {
 	case acp.GuestShikigami:
 		env = append(env, "OPENAI_API_KEY="+a.TurnToken, "SHIKIGAMI_MODEL_ADAPTER=http")
+		if acp.ValidGuestModel(a.GuestModel) {
+			env = append(env, "SHIKIGAMI_MODEL="+a.GuestModel)
+		}
 		if a.ModelBaseURL != "" {
 			env = append(env, "OPENAI_BASE_URL="+a.ModelBaseURL)
+		}
+	case "codex":
+		if a.ModelBaseURL != "" {
+			base := strings.TrimRight(a.ModelBaseURL, "/")
+			if !strings.HasSuffix(base, "/v1") {
+				base += "/v1"
+			}
+			env = append(env, "OPENAI_BASE_URL="+base)
 		}
 	case acp.GuestClaude:
 		// Claude Code talks to the plane model proxy with the grant; its

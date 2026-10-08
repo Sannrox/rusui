@@ -15,6 +15,7 @@ func runCLI(args []string) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
 	project := fs.String("project", "", "project slug")
+	guest := fs.String("guest", "", "project-allowed guest (default from policy)")
 	token := fs.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "operator/worker token")
 	idem := fs.String("idempotency-key", "", "idempotency key")
 	effort := fs.String("effort", "", "stable effort key for a pinned implementation task")
@@ -27,10 +28,13 @@ func runCLI(args []string) {
 	_ = fs.Parse(args)
 	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if *project == "" || prompt == "" {
-		fmt.Fprintln(os.Stderr, "usage: rusui run -project SLUG [-url URL] [-token TOKEN] [-idempotency-key KEY] [-effort KEY -repo REPO -ref REF -base-sha SHA -paths PATHS] PROMPT")
+		fmt.Fprintln(os.Stderr, "usage: rusui run -project SLUG [-url URL] [-token TOKEN] [-guest NAME] [-idempotency-key KEY] [-effort KEY -repo REPO -ref REF -base-sha SHA -paths PATHS] PROMPT")
 		os.Exit(2)
 	}
 	payload := map[string]any{"kind": "run", "prompt": prompt}
+	if *guest != "" {
+		payload["guest"] = *guest
+	}
 	if *size != "" {
 		payload["size"] = *size
 	}

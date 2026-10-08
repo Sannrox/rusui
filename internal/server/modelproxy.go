@@ -135,7 +135,7 @@ func (s *Server) modelProxy(w http.ResponseWriter, r *http.Request) {
 		req.Header.Del("Authorization")
 		req.Header.Del("X-Api-Key")
 		if s.ModelKey != "" {
-			if s.modelProvider() == ProviderAnthropic {
+			if strings.HasSuffix(r.URL.Path, "/messages") || (s.modelProvider() == ProviderAnthropic && !strings.HasSuffix(r.URL.Path, "/chat/completions") && !strings.HasSuffix(r.URL.Path, "/responses")) {
 				req.Header.Set("X-Api-Key", s.ModelKey)
 			} else {
 				req.Header.Set("Authorization", "Bearer "+s.ModelKey)
@@ -146,6 +146,17 @@ func (s *Server) modelProxy(w http.ResponseWriter, r *http.Request) {
 			path = "/"
 		}
 		req.URL.Path = path
+	}
+	proxy.ModifyResponse = func(res *http.Response) error {
+		_, err := s.Eng.IngestTurnAction(g.TurnID, "model.proxy", "recorded", map[string]any{
+			"origin": upstream.Scheme + "://" + upstream.Host,
+			"path":   strings.TrimPrefix(r.URL.Path, "/model-proxy"),
+			"status": res.StatusCode,
+		})
+		if err != nil {
+			s.Eng.Log.Printf("model receipt: %v", err)
+		}
+		return nil
 	}
 	proxy.ServeHTTP(w, r)
 }

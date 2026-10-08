@@ -48,6 +48,9 @@ type Session struct {
 	State            string
 	Project          string
 	Prompt           string
+	GuestName        string `json:"guest_name,omitempty"`
+	GuestPin         string `json:"guest_pin,omitempty"`
+	GuestConfig      string `json:"-"`
 	GuestSessionID   string
 	Size             string     `json:"size,omitempty"`
 	Mode             string     `json:"mode,omitempty"`

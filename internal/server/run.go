@@ -17,6 +17,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Kind         string   `json:"kind"`
+		Guest        string   `json:"guest"`
 		Prompt       string   `json:"prompt"`
 		Size         string   `json:"size"`
 		Mode         string   `json:"mode"`
@@ -34,7 +35,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Kind == "local" {
-		if req.Prompt != "" || req.EffortKey != "" || req.Repo != "" || req.Ref != "" || req.BaseSHA != "" || len(req.AllowedPaths) > 0 || len(req.ContextRefs) > 0 {
+		if req.Guest != "" || req.Prompt != "" || req.EffortKey != "" || req.Repo != "" || req.Ref != "" || req.BaseSHA != "" || len(req.AllowedPaths) > 0 || len(req.ContextRefs) > 0 {
 			http.Error(w, "local session uses its policy-configured runtime", http.StatusBadRequest)
 			return
 		}
@@ -66,7 +67,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	pinned := req.EffortKey != "" || req.Repo != "" || req.Ref != "" || req.BaseSHA != "" || len(req.AllowedPaths) > 0
 	if pinned {
 		task, err := s.Eng.StartTask(r.PathValue("slug"), engine.TaskSpec{
-			EffortKey: req.EffortKey, Prompt: req.Prompt, Repo: req.Repo, Ref: req.Ref,
+			EffortKey: req.EffortKey, Prompt: req.Prompt, Repo: req.Repo, Ref: req.Ref, Guest: req.Guest,
 			BaseSHA: req.BaseSHA, AllowedPaths: req.AllowedPaths, ContextRefs: req.ContextRefs,
 		})
 		if err != nil {
@@ -80,7 +81,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	id, err := s.Eng.StartRunMode(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size, req.Mode)
+	id, err := s.Eng.StartRunGuest(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size, req.Mode, req.Guest)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
