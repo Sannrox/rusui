@@ -441,6 +441,7 @@ func DriverEnv(a *Assignment, home, path string) []string {
 			env = append(env, "OPENAI_BASE_URL="+a.ModelBaseURL)
 		}
 	case "codex":
+		env = append(env, "CODEX_HOME="+home)
 		if a.ModelBaseURL != "" {
 			base := strings.TrimRight(a.ModelBaseURL, "/")
 			if !strings.HasSuffix(base, "/v1") {

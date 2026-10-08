@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -460,6 +461,9 @@ func TestGrokHostExecsInContainer(t *testing.T) {
 	e, st, hs := setup(t)
 	rt := &env.FakeRuntime{}
 	rt.StdioHook = func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+		if argv[0] == "sh" || argv[0] == "rm" {
+			return fakeGuestHomeCommand(t, argv)
+		}
 		return startFakeACPStdio(t)
 	}
 	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
@@ -470,17 +474,17 @@ func TestGrokHostExecsInContainer(t *testing.T) {
 		t.Fatal(err)
 	}
 	close(done)
-	if len(rt.Stdio) != 1 || rt.Stdio[0].Handle == "" {
+	if len(rt.Stdio) != 3 || rt.Stdio[1].Handle == "" {
 		t.Fatalf("stdio %#v", rt.Stdio)
 	}
-	if len(rt.Links) != 1 || rt.Links[0].Handle != rt.Stdio[0].Handle {
+	if len(rt.Links) != 1 || rt.Links[0].Handle != rt.Stdio[1].Handle {
 		t.Fatalf("turn ran without its guest link: %#v", rt.Links)
 	}
-	joined := strings.Join(rt.Stdio[0].Argv, " ")
+	joined := strings.Join(rt.Stdio[1].Argv, " ")
 	if !strings.Contains(joined, "agent stdio") || !strings.Contains(joined, "--permission-mode default") {
 		t.Fatalf("argv %q", joined)
 	}
-	envj := strings.Join(rt.Stdio[0].Env, "\n")
+	envj := strings.Join(rt.Stdio[1].Env, "\n")
 	if !strings.Contains(envj, "XAI_API_KEY=") {
 		t.Fatal(envj)
 	}
@@ -494,6 +498,9 @@ func TestClaudeGuestExecsAdapterInContainer(t *testing.T) {
 	e, st, hs := setup(t, func(s *server.Server) { s.Guest = acp.GuestClaude })
 	rt := &env.FakeRuntime{}
 	rt.StdioHook = func(handle string, argv, env []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+		if argv[0] == "sh" || argv[0] == "rm" {
+			return fakeGuestHomeCommand(t, argv)
+		}
 		return startFakeClaudeStdio(t)
 	}
 	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
@@ -504,11 +511,11 @@ func TestClaudeGuestExecsAdapterInContainer(t *testing.T) {
 		t.Fatal(err)
 	}
 	close(done)
-	if len(rt.Stdio) != 1 || strings.Join(rt.Stdio[0].Argv, " ") != acp.ClaudeStdio {
+	if len(rt.Stdio) != 3 || strings.Join(rt.Stdio[1].Argv, " ") != acp.ClaudeStdio+" --setting-sources user --strict-mcp-config" {
 		t.Fatalf("stdio %#v", rt.Stdio)
 	}
-	envj := strings.Join(rt.Stdio[0].Env, "\n")
-	for _, want := range []string{"ANTHROPIC_AUTH_TOKEN=", "ANTHROPIC_BASE_URL=https://rusui.plane", "CLAUDE_CONFIG_DIR=/tmp/rusui-claude"} {
+	envj := strings.Join(rt.Stdio[1].Env, "\n")
+	for _, want := range []string{"ANTHROPIC_AUTH_TOKEN=", "ANTHROPIC_BASE_URL=https://rusui.plane", "CLAUDE_CONFIG_DIR=/tmp/rusui-guest-"} {
 		if !strings.Contains(envj, want) {
 			t.Fatalf("missing %s in\n%s", want, envj)
 		}
@@ -741,4 +748,17 @@ func allowPendingApprovals(t *testing.T, base string, stop <-chan struct{}) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// Execute only the temporary-home setup/cleanup commands on the test host;
+// provider protocols still run through their distinct fake guests.
+func fakeGuestHomeCommand(t *testing.T, argv []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+	t.Helper()
+	out, err := exec.Command(argv[0], argv[1:]...).Output()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	reader, writer := io.Pipe()
+	_ = reader.Close()
+	return writer, io.NopCloser(strings.NewReader(string(out))), func() {}, nil
 }

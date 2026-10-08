@@ -144,7 +144,17 @@ func (r *HTTPRecorder) poll(ctx context.Context, id string) acp.Decision {
 // ADR 0017 D1) and records receipts on the plane.
 func GuestHost(c *Client) ACPHost {
 	return func(a *Assignment, dir string) (*acp.Client, func(), error) {
-		env := DriverEnv(a, dir, os.Getenv("PATH"))
+		home, cleanHome, err := prepareGuestHome(c.Exec, a, dir)
+		if err != nil {
+			return nil, nil, err
+		}
+		started := false
+		defer func() {
+			if !started {
+				cleanHome()
+			}
+		}()
+		env := DriverEnv(a, home, os.Getenv("PATH"))
 		rec := &HTTPRecorder{Base: c.Base, Token: a.TurnToken, TurnID: a.TurnID, HTTP: c.HTTP}
 		term := guestTermOutput(rec, a.SessionID)
 		argv := a.GuestSpec.Argv
@@ -155,6 +165,7 @@ func GuestHost(c *Client) ACPHost {
 				return nil, nil, err
 			}
 		}
+		argv = guestHomeArgv(a, argv, home)
 		if a.Driver == "container" && a.Handle != "" {
 			if c.Exec == nil {
 				return nil, nil, fmt.Errorf("container exec required")
@@ -163,7 +174,8 @@ func GuestHost(c *Client) ACPHost {
 			if err != nil {
 				return nil, nil, err
 			}
-			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait, TermOutput: term}, stop, nil
+			started = true
+			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait, TermOutput: term}, func() { stop(); cleanHome() }, nil
 		}
 		cmd, err := acp.Command(argv)
 		if err != nil {
@@ -182,7 +194,9 @@ func GuestHost(c *Client) ACPHost {
 		if err := cmd.Start(); err != nil {
 			return nil, nil, err
 		}
+		started = true
 		stop := func() {
+			defer cleanHome()
 			_ = stdin.Close()
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()

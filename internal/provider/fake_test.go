@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -192,6 +193,20 @@ func fakeCodex(in io.Reader, out io.Writer) error {
 		return err
 	}
 	resume := open["method"] == "thread/resume"
+	if params, ok := open["params"].(map[string]any); ok && resume && params["threadId"] == "missing-thread" {
+		if err := writeJSON(out, map[string]any{"id": open["id"], "error": map[string]any{"code": -32600, "message": "thread not found"}}); err != nil {
+			return err
+		}
+		open, err = readMap(r)
+		if err != nil {
+			return err
+		}
+		delete(params, "threadId")
+		if open["method"] != "thread/start" || !reflect.DeepEqual(open["params"], params) {
+			return fmt.Errorf("fallback changed thread admission parameters")
+		}
+		resume = false
+	}
 	if err := writeJSON(out, map[string]any{"id": open["id"], "result": map[string]any{"thread": map[string]string{"id": "codex-thread"}}}); err != nil {
 		return err
 	}
