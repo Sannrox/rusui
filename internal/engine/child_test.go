@@ -107,6 +107,28 @@ func TestChildSessionOwnEnvironmentAndReportsBack(t *testing.T) {
 	}
 }
 
+func TestChildOptionalGuestBindsAndRefusesUnlisted(t *testing.T) {
+	h := setup(t)
+	parent, err := h.e.StartRun("test", "parent", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := h.e.StartChildGuest(parent, "child", "", "grok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := store.GetSession(h.st, child)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.GuestName != "grok" || s.GuestPin == "" {
+		t.Fatalf("child guest %+v", s)
+	}
+	if _, err := h.e.StartChildGuest(parent, "other", "", "shikigami"); err == nil {
+		t.Fatal("unlisted child guest accepted")
+	}
+}
+
 func TestChildCancelCascadesAndFanOut(t *testing.T) {
 	h := setup(t)
 	parent, err := h.e.StartRun("test", "investigate", "")
