@@ -28,8 +28,12 @@ func (s *Server) projectMeasurements(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(agg)
 }
 
-func (s *Server) noteClaimedProvider(turnID int64) {
-	_ = store.NoteProvider(s.Eng.Store, turnID, s.guest(), s.GuestVersion)
+func (s *Server) noteClaimedProvider(turnID int64, guest string) {
+	version := ""
+	if guest == s.guest() {
+		version = s.GuestVersion
+	}
+	_ = store.NoteProvider(s.Eng.Store, turnID, guest, version)
 }
 
 func (s *Server) exportMeasurement(turnID int64) {

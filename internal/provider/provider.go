@@ -14,72 +14,40 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/sannrox/rusui/internal/guest"
 )
 
 const (
-	KindGrok      = "grok"
-	KindClaude    = "claude"
-	KindCodex     = "codex"
-	KindShikigami = "shikigami"
+	KindGrok      = guest.KindGrok
+	KindClaude    = guest.KindClaude
+	KindCodex     = guest.KindCodex
+	KindShikigami = guest.KindShikigami
 
 	// Pinned protocol versions. A guest that answers with another version
 	// is unsupported.
-	GrokACPVersion      = 1
-	ClaudeCodeVersion   = "2.1.283"
-	ClaudeStreamProto   = "stream-json"
-	CodexAppServerProto = "app-server-2026-04-15"
+	GrokACPVersion      = guest.GrokACPVersion
+	ClaudeCodeVersion   = guest.ClaudeCodeVersion
+	ClaudeStreamProto   = guest.ClaudeStreamProto
+	CodexAppServerProto = guest.CodexAppServerProto
 )
 
 // Argv is the guest process for a provider. It is that provider's own CLI.
 func Argv(kind string) ([]string, error) {
-	switch kind {
-	case "", KindGrok:
-		return []string{"agent", "--permission-mode", "default", "agent", "stdio"}, nil
-	case KindClaude:
-		// stdio delegates every permission prompt to rusui as a
-		// can_use_tool control request; without it Claude denies silently.
-		// The Bash ask rule makes every shell command such a prompt,
-		// including those Claude considers read-only (#442).
-		return []string{"claude", "--print", "--input-format", ClaudeStreamProto, "--output-format", ClaudeStreamProto, "--verbose", "--permission-mode", "default", "--permission-prompt-tool", "stdio", "--settings", `{"permissions":{"ask":["Bash"]}}`}, nil
-	case KindCodex:
-		return []string{"codex", "app-server", "--listen", "stdio://"}, nil
-	case KindShikigami:
-		return []string{"shikigami", "--state", "./state", "acp"}, nil
-	default:
-		return nil, fmt.Errorf("provider: unknown guest %q", kind)
-	}
+	guest, err := builtinGuest(kind)
+	return guest.Argv, err
 }
 
 // ProbeArgv is a version check. It does not start a session.
 func ProbeArgv(kind string) ([]string, error) {
-	switch kind {
-	case "", KindGrok:
-		return []string{"agent", "--version"}, nil
-	case KindClaude:
-		return []string{"claude", "--version"}, nil
-	case KindCodex:
-		return []string{"codex", "--version"}, nil
-	case KindShikigami:
-		return []string{"shikigami", "--version"}, nil
-	default:
-		return nil, fmt.Errorf("provider: unknown guest %q", kind)
-	}
+	guest, err := builtinGuest(kind)
+	return guest.Probe, err
 }
 
-// PinnedVersion is the version string a probe must print.
+// PinnedVersion is the protocol or binary pin recorded for the guest.
 func PinnedVersion(kind string) (string, error) {
-	switch kind {
-	case "", KindGrok:
-		return fmt.Sprintf("acp:%d", GrokACPVersion), nil
-	case KindClaude:
-		return ClaudeCodeVersion, nil
-	case KindCodex:
-		return CodexAppServerProto, nil
-	case KindShikigami:
-		return "acp", nil
-	default:
-		return "", fmt.Errorf("provider: unknown guest %q", kind)
-	}
+	guest, err := builtinGuest(kind)
+	return guest.Pin, err
 }
 
 // CanRewind is false for every pinned provider. Revert is refused before
@@ -124,10 +92,13 @@ type ToolCall struct {
 
 // Turn is one provider turn against a Rusui session cursor.
 type Turn struct {
-	Prompt      string
-	Cursor      string
-	Workspace   string
-	Attachments []string
+	ModelBaseURL string
+	APIKey       string // per-turn model grant, sent only through native account/login/start
+	Model        string
+	Prompt       string
+	Cursor       string
+	Workspace    string
+	Attachments  []string
 	// Observe, when set, receives each event as it is read, before the
 	// turn ends, so a follower sees it live.
 	Observe func(Event)
@@ -337,4 +308,15 @@ func (q *Questions) Answer(id, text string) {
 			q.items[i].Answer = text
 		}
 	}
+}
+
+func builtinGuest(kind string) (guest.Entry, error) {
+	if kind == "" {
+		kind = KindGrok
+	}
+	entry, ok := guest.Builtin()[kind]
+	if !ok {
+		return guest.Entry{}, fmt.Errorf("provider: unknown guest %q", kind)
+	}
+	return entry, nil
 }

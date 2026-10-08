@@ -48,6 +48,7 @@ func TestClaimIncludesPermissions(t *testing.T) {
 func TestClaimCarriesNamedGuestModel(t *testing.T) {
 	h := setup(t)
 	h.srv.Guest = acp.GuestClaude
+	h.e.DefaultGuest = acp.GuestClaude
 	h.srv.GuestModel = "grok-4.6"
 	if _, err := h.e.StartRun("test", "hi", ""); err != nil {
 		t.Fatal(err)

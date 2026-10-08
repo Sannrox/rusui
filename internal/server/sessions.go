@@ -375,22 +375,33 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 		}
 		files = append(files, store.PromptFile{Name: a.Name, Body: raw})
 	}
-	if len(files) > 0 && s.guest() == acp.GuestShikigami {
-		body, lookupErr := store.LatestActionBody(s.Eng.Store, id, acp.ActionInitialize)
-		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
-			http.Error(w, lookupErr.Error(), http.StatusInternalServerError)
+	if len(files) > 0 {
+		guestName, _, guestErr := s.Eng.SessionGuest(id)
+		if guestErr != nil {
+			http.Error(w, guestErr.Error(), http.StatusConflict)
 			return
 		}
-		var observed acp.GuestInitialize
-		if lookupErr != nil || json.Unmarshal([]byte(body), &observed) != nil || observed.Guest != s.guest() {
-			http.Error(w, "guest attachment capabilities not observed", http.StatusBadRequest)
+		if guestName == "codex" {
+			http.Error(w, "native Codex attachments unsupported", http.StatusBadRequest)
 			return
 		}
-		for _, file := range files {
-			part, _, ok := engine.GuestACPPart(store.AttachmentMIME(file.Name, file.Body))
-			if !ok || !observed.Result.AgentCapabilities.PromptCapabilities.Supports(part) {
-				http.Error(w, "guest does not support attachment kind", http.StatusBadRequest)
+		if guestName == acp.GuestShikigami {
+			body, lookupErr := store.LatestActionBody(s.Eng.Store, id, acp.ActionInitialize)
+			if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+				http.Error(w, lookupErr.Error(), http.StatusInternalServerError)
 				return
+			}
+			var observed acp.GuestInitialize
+			if lookupErr != nil || json.Unmarshal([]byte(body), &observed) != nil || observed.Guest != guestName {
+				http.Error(w, "guest attachment capabilities not observed", http.StatusBadRequest)
+				return
+			}
+			for _, file := range files {
+				part, _, ok := engine.GuestACPPart(store.AttachmentMIME(file.Name, file.Body))
+				if !ok || !observed.Result.AgentCapabilities.PromptCapabilities.Supports(part) {
+					http.Error(w, "guest does not support attachment kind", http.StatusBadRequest)
+					return
+				}
 			}
 		}
 	}

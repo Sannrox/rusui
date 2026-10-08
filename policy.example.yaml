@@ -13,9 +13,74 @@ defaults:
   implement: false
   land: false
   max_reviews_per_repo_per_utc_day: 50
+# The four existing protocols. Empty image uses RUSUI_GUEST_IMAGE.
+# Omitting this registry preserves the built-in entries.
+guests:
+  grok:
+    protocol: acp
+    argv:
+    - agent
+    - --permission-mode
+    - default
+    - agent
+    - stdio
+    probe:
+    - agent
+    - --version
+    pin: acp:1
+    image: ''
+  claude:
+    protocol: claude-stream-json
+    argv:
+    - claude
+    - --print
+    - --input-format
+    - stream-json
+    - --output-format
+    - stream-json
+    - --verbose
+    - --permission-mode
+    - default
+    - --permission-prompt-tool
+    - stdio
+    - --settings
+    - '{"permissions":{"ask":["Bash"]}}'
+    probe:
+    - claude
+    - --version
+    pin: 2.1.283
+    image: ''
+  codex:
+    protocol: codex-app-server
+    argv:
+    - codex
+    - app-server
+    - --listen
+    - stdio://
+    probe:
+    - codex
+    - --version
+    pin: app-server-2026-04-15
+    image: ''
+  shikigami:
+    protocol: acp
+    argv:
+    - shikigami
+    - --state
+    - ./state
+    - acp
+    probe:
+    - shikigami
+    - --version
+    pin: acp
+    image: ''
 projects:
   rusui:
     size: medium
+    # Optional guest choice; omit to retain RUSUI_GUEST fallback.
+    # guests:
+    #   default: shikigami
+    #   allowed: [grok, claude, codex, shikigami]
     repos:
       Sannrox/rusui:
         visibility: public

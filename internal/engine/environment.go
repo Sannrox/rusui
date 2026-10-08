@@ -26,6 +26,7 @@ func SourceHash(image, pin string, setup []byte) string {
 }
 
 type EnvSpec struct {
+	Image       string
 	Name        string
 	Kind        string
 	SourceHash  string
@@ -78,7 +79,7 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 	var handle string
 	if sc, ok := d.(env.SpecCreator); ok {
 		handle, err = sc.CreateSpec(env.Spec{
-			Name: spec.Name, CPUMillis: spec.CPUMillis, MemoryBytes: spec.MemoryBytes,
+			Name: spec.Name, Image: spec.Image, CPUMillis: spec.CPUMillis, MemoryBytes: spec.MemoryBytes,
 		})
 	} else {
 		handle, err = d.Create(spec.Name)
@@ -493,7 +494,15 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	if e.Container != nil {
 		kind = env.KindContainer
 	}
-	hash := SourceHash(e.imageIdentity(), pin, nil)
+	_, entry, err := e.SessionGuest(sess.ID)
+	if err != nil {
+		return err
+	}
+	image := entry.Image
+	if image == "" {
+		image = e.imageIdentity()
+	}
+	hash := SourceHash(image, pin, nil)
 	if envRow.Handle != "" && envRow.SourceHash == hash {
 		if envRow.State == store.EnvSleeping {
 			started := e.now()
@@ -534,14 +543,14 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 		if len(suffix) > 12 {
 			suffix = suffix[:12]
 		}
-		spec := EnvSpec{Name: envRow.Name + "-" + suffix, Kind: kind, SourceHash: hash, Repo: item.Repo, Pin: pin}
+		spec := EnvSpec{Name: envRow.Name + "-" + suffix, Kind: kind, Image: entry.Image, SourceHash: hash, Repo: item.Repo, Pin: pin}
 		e.applySessionSize(&spec, sess)
 		return e.replaceSessionEnvironment(sess.ID, envRow, spec)
 	}
 	if envRow.State == store.EnvExpired {
 		// An expired environment is never refilled: its id named the old
 		// guest, so the session moves to a new environment (#415).
-		spec := EnvSpec{Name: replacementName(envRow.Name, envRow.ID), Kind: kind, SourceHash: hash, Repo: item.Repo, Pin: pin}
+		spec := EnvSpec{Name: replacementName(envRow.Name, envRow.ID), Kind: kind, Image: entry.Image, SourceHash: hash, Repo: item.Repo, Pin: pin}
 		e.applySessionSize(&spec, sess)
 		return e.replaceSessionEnvironment(sess.ID, envRow, spec)
 	}
@@ -552,7 +561,7 @@ func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) erro
 	cpu, mem := SizeLimits(e.SessionSize(sess))
 	var handle string
 	if sc, ok := d.(env.SpecCreator); ok {
-		handle, err = sc.CreateSpec(env.Spec{Name: envRow.Name, CPUMillis: cpu, MemoryBytes: mem})
+		handle, err = sc.CreateSpec(env.Spec{Name: envRow.Name, Image: entry.Image, CPUMillis: cpu, MemoryBytes: mem})
 	} else {
 		handle, err = d.Create(envRow.Name)
 	}

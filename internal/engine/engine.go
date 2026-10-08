@@ -46,9 +46,10 @@ const (
 )
 
 type Engine struct {
-	Store  *store.Store
-	policy *policy.Effective
-	GitHub gh.Client
+	DefaultGuest string // RUSUI_GUEST fallback for projects without guest choices
+	Store        *store.Store
+	policy       *policy.Effective
+	GitHub       gh.Client
 	// Publisher is set only when plane publication is on (ADR 0044).
 	Publisher PullPublisher
 	Clock     clock.Clock
@@ -818,6 +819,16 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 			if e.environmentOperationInProgress(c.envID) {
 				continue
 			}
+			name, _, _, err := store.SessionGuestTx(tx, c.sessionID)
+			if err != nil {
+				return err
+			}
+			if _, _, err := e.chooseGuest(proj.Slug, name, activePolicy); err != nil {
+				if errors.Is(err, ErrGuestNotAllowed) {
+					continue
+				}
+				return err
+			}
 			treeLeased, rootProject, err := store.CountTreeLeasedTurnsTx(tx, c.sessionID)
 			if err != nil {
 				return err
@@ -850,6 +861,13 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 			// The turn stays queued. Claim returns no work so the runner
 			// retries without 409 (ADR 0064 D2/D3).
 			return nil
+		}
+		turn, err := store.GetTurnTx(tx, id)
+		if err != nil {
+			return err
+		}
+		if _, _, err := e.bindSessionGuestTx(tx, turn.SessionID, proj.Slug, "", activePolicy); err != nil {
+			return err
 		}
 		if err := e.checkRequestedSecrets(proj); err != nil {
 			return err

@@ -18,6 +18,7 @@ func TestShikigamiAttachmentCapabilityAdmission(t *testing.T) {
 		receipts []string
 		want     int
 	}{
+		{"native Codex", nil, 400},
 		{"unknown", nil, 400},
 		{"malformed", []string{`{"guest":`}, 400},
 		{"old guest", []string{`{"guest":"shikigami","result":{"agentCapabilities":{"promptCapabilities":{}}}}`}, 400},
@@ -30,6 +31,10 @@ func TestShikigamiAttachmentCapabilityAdmission(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s, hs, e := consoleEnv(t)
 			s.Guest = acp.GuestShikigami
+			if tc.name == "native Codex" {
+				s.Guest = "codex"
+			}
+			e.DefaultGuest = s.Guest
 			sid := createRunSession(t, hs, "first")
 			for i, body := range tc.receipts {
 				if err := store.InsertAction(e.Store, store.Action{ID: fmt.Sprintf("init-%d", i), SessionID: &sid, Type: "acp.initialize", Body: body}); err != nil {

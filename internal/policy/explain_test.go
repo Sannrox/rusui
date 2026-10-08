@@ -137,6 +137,9 @@ func TestStarterYAMLMatchesOperatorExample(t *testing.T) {
 	if err != nil {
 		t.Fatalf("starter policy does not parse: %v", err)
 	}
+	if effective.Projects["rusui"].Guests != nil {
+		t.Fatal("starter overrides the environment guest fallback")
+	}
 	repo, ok := effective.Repo("Sannrox/rusui")
 	if !ok || !repo.Review || repo.Comments || repo.Close || repo.Implement || repo.Land {
 		t.Fatalf("starter capabilities are not review-only: %+v", repo)

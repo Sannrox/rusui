@@ -117,6 +117,10 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT id, environment_id, kind FROM sessions WHERE repo=? AND item=?`, "Sannrox/rusui", 42).Scan(&sessionID, &envID, &kind); err != nil {
 		t.Fatal(err)
 	}
+	sess, err := GetSession(s, sessionID)
+	if err != nil || sess.GuestName != "" || sess.GuestPin != "" || sess.GuestConfig != "" {
+		t.Fatalf("legacy session guest binding: %+v %v", sess, err)
+	}
 	if sessionID == 0 || envID != DefaultEnvironmentID || kind != SessionKindReview {
 		t.Fatalf("session %d env %d kind %s", sessionID, envID, kind)
 	}

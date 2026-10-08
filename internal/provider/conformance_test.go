@@ -85,10 +85,10 @@ func runConformance(t *testing.T, kind string) {
 	if !hasKind(history, "tool_call") || !hasKind(history, "transcript") {
 		t.Fatalf("events %+v", history)
 	}
-	// Grok and Codex may omit a reject option, so the adapter must deny;
-	// Claude always accepts deny, so its gate's answer stands.
+	// Grok may omit a reject option. Codex and Claude support denial
+	// unconditionally, so their gates decide.
 	for _, ev := range history {
-		if kind != KindClaude && ev.Kind == "permission" && ev.OptionID != "deny" {
+		if kind == KindGrok && ev.Kind == "permission" && ev.OptionID != "deny" {
 			t.Fatalf("permission option %q", ev.OptionID)
 		}
 	}
@@ -263,7 +263,10 @@ func drive(t *testing.T, kind string, turn Turn, wantDeny bool) Result {
 		if len(options) == 0 {
 			return "", false
 		}
-		return options[0].ID, true // the provider omitted reject; adapter must still deny
+		if kind == KindCodex && wantDeny {
+			return "decline", false
+		}
+		return options[0].ID, true // Grok omitted reject; its adapter must still deny
 	})
 	if err != nil {
 		t.Fatalf("%s run %v", kind, err)
@@ -272,7 +275,7 @@ func drive(t *testing.T, kind string, turn Turn, wantDeny bool) Result {
 	if wantDeny && kind != KindClaude {
 		ok := false
 		for _, ev := range res.Events {
-			if ev.Kind == "permission" && ev.OptionID == "deny" {
+			if ev.Kind == "permission" && (ev.OptionID == "deny" || ev.OptionID == "decline") {
 				ok = true
 			}
 		}

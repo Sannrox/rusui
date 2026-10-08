@@ -748,7 +748,7 @@ func ListSessions(s *Store, project string, limit int) ([]Session, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at
+	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	args := []any{}
 	if project != "" {
@@ -768,7 +768,7 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 		var created string
 		var archived int
 		var archivedAt sql.NullString
-		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created); err != nil {
+		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig); err != nil {
 			return nil, err
 		}
 		if err := applySessionArchive(&sess, archived, archivedAt, created); err != nil {
@@ -950,9 +950,9 @@ func GetSession(s *Store, id int64) (*Session, error) {
 	var created string
 	var archived int
 	var archivedAt sql.NullString
-	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at
+	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id WHERE s.id=?`, id).Scan(
-		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created)
+		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -1202,4 +1202,15 @@ func ListActions(s *Store, repo string, item int) ([]Action, error) {
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// SessionGuestTx reads the frozen process configuration without leaving the caller transaction.
+func SessionGuestTx(tx *sql.Tx, sessionID int64) (name, pin, config string, err error) {
+	err = tx.QueryRow(`SELECT guest_name, guest_pin, guest_config FROM sessions WHERE id=?`, sessionID).Scan(&name, &pin, &config)
+	return
+}
+
+func SetSessionGuestTx(tx *sql.Tx, sessionID int64, name, pin, config string) error {
+	_, err := tx.Exec(`UPDATE sessions SET guest_name=?, guest_pin=?, guest_config=? WHERE id=?`, name, pin, config, sessionID)
+	return err
 }

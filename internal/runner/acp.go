@@ -16,6 +16,7 @@ import (
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/guest"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/provider"
 )
@@ -146,13 +147,17 @@ func GuestHost(c *Client) ACPHost {
 		env := DriverEnv(a, dir, os.Getenv("PATH"))
 		rec := &HTTPRecorder{Base: c.Base, Token: a.TurnToken, TurnID: a.TurnID, HTTP: c.HTTP}
 		term := guestTermOutput(rec, a.SessionID)
+		argv := a.GuestSpec.Argv
+		if len(argv) == 0 {
+			var err error
+			argv, err = acp.SpawnArgsFor(a.Guest)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
 		if a.Driver == "container" && a.Handle != "" {
 			if c.Exec == nil {
 				return nil, nil, fmt.Errorf("container exec required")
-			}
-			argv, err := acp.SpawnArgsFor(a.Guest)
-			if err != nil {
-				return nil, nil, err
 			}
 			stdin, stdout, stop, err := c.Exec.ExecStdio(a.Handle, argv, env)
 			if err != nil {
@@ -160,7 +165,7 @@ func GuestHost(c *Client) ACPHost {
 			}
 			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait, TermOutput: term}, stop, nil
 		}
-		cmd, err := acp.GuestCommand(a.Guest)
+		cmd, err := acp.Command(argv)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -378,8 +383,15 @@ func (c *Client) heartbeatSteers(ctx context.Context, a *Assignment, steers chan
 }
 
 func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, steers <-chan engine.Steer, exec StdioExec) (engine.Artifact, []int64, error) {
-	if a != nil && a.Guest == acp.GuestClaude {
-		art, err := hostClaude(ctx, a, host, cwd)
+	if a != nil && (a.GuestSpec.Protocol == guest.ProtocolClaude || (a.GuestSpec.Protocol == "" && a.Guest == acp.GuestClaude)) {
+		art, err := hostNative(ctx, a, host, cwd, provider.KindClaude)
+		return art, nil, err
+	}
+	if a != nil && a.GuestSpec.Protocol == guest.ProtocolCodex {
+		if len(a.Attachments) > 0 {
+			return engine.Artifact{}, nil, fmt.Errorf("native Codex attachments unsupported")
+		}
+		art, err := hostNative(ctx, a, host, cwd, provider.KindCodex)
 		return art, nil, err
 	}
 	host.Ctx = ctx
@@ -560,13 +572,9 @@ func promptFromInput(raw json.RawMessage) string {
 	return text
 }
 
-// hostClaude speaks the stream-json handshake (ADR 0025). It reads the
-// Claude init event before writing a user message. ACP initialize is not sent.
-// Resume is deferred on this host: the spawn has no --resume, so no Cursor
-// is passed and every turn is a new conversation. The init session id is
-// still recorded as the cursor. Assistant text and tool calls are recorded
-// as they arrive, redacted (#495).
-func hostClaude(ctx context.Context, a *Assignment, host *acp.Client, cwd string) (engine.Artifact, error) {
+// hostNative uses the pinned Claude or Codex protocol (ADR 0025). Claude
+// starts a new conversation; Codex resumes the stored thread cursor.
+func hostNative(ctx context.Context, a *Assignment, host *acp.Client, cwd, kind string) (engine.Artifact, error) {
 	if ctx.Err() != nil {
 		return engine.Artifact{}, ctx.Err()
 	}
@@ -589,10 +597,22 @@ func hostClaude(ctx context.Context, a *Assignment, host *acp.Client, cwd string
 		}
 	}()
 	transcript := newClaudeRecorder(a, host.Rec)
-	res, err := provider.Run(ctx, provider.KindClaude, provider.Instance{}, rw, provider.Turn{
-		Prompt:    prompt,
-		Workspace: cwd,
-		Observe:   transcript.Observe,
+	cursor := ""
+	if kind == provider.KindCodex {
+		cursor = a.GuestSessionID
+	}
+	apiKey := ""
+	if kind == provider.KindCodex {
+		apiKey = a.TurnToken
+	}
+	res, err := provider.Run(ctx, kind, provider.Instance{}, rw, provider.Turn{
+		APIKey:       apiKey,
+		ModelBaseURL: a.ModelBaseURL,
+		Model:        a.GuestModel,
+		Cursor:       cursor,
+		Prompt:       prompt,
+		Workspace:    cwd,
+		Observe:      transcript.Observe,
 	}, claudeDecide(a, host))
 	if err != nil {
 		if ctx.Err() != nil {

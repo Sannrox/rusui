@@ -43,7 +43,7 @@ func TestPermissionReplyEchoesNumericIDUnchanged(t *testing.T) {
 		method string
 	}{
 		{"grok", "session/request_permission"},
-		{"codex", "item/permission"},
+		{"codex", "item/commandExecution/requestApproval"},
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
 			pr, pw := io.Pipe()
@@ -70,5 +70,25 @@ func TestPermissionReplyEchoesNumericIDUnchanged(t *testing.T) {
 				t.Fatalf("permission reply id = %s, want numeric 7 echoed unchanged", reply.ID)
 			}
 		})
+	}
+}
+
+func TestCodexNetworkApprovalDoesNotInheritExecuteGrant(t *testing.T) {
+	var out strings.Builder
+	called := false
+	event, err := answerCodexRequest(&out, map[string]any{"id": 7, "method": "item/commandExecution/requestApproval", "params": map[string]any{"networkApprovalContext": map[string]string{"host": "example.com", "protocol": "https"}}}, func([]Option, json.RawMessage) (string, bool) { called = true; return "accept", true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reply struct {
+		Result struct {
+			Decision string `json:"decision"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &reply); err != nil {
+		t.Fatal(err)
+	}
+	if called || event.OptionID != "decline" || reply.Result.Decision != "decline" {
+		t.Fatal("network approval inherited execution grant")
 	}
 }
