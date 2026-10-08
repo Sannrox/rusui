@@ -15,6 +15,12 @@ import (
 // exist in policy; the child is admitted under that project's policy
 // and does not inherit the parent's grants (ADR 0072).
 func (e *Engine) StartChild(parentID int64, prompt, project string) (int64, error) {
+	return e.StartChildGuest(parentID, prompt, project, "")
+}
+
+// StartChildGuest admits an optional guest under the child's project policy.
+// The child receives its own frozen guest entry and environment.
+func (e *Engine) StartChildGuest(parentID int64, prompt, project, requestedGuest string) (int64, error) {
 	if prompt == "" {
 		return 0, fmt.Errorf("prompt required")
 	}
@@ -42,6 +48,9 @@ func (e *Engine) StartChild(parentID int64, prompt, project string) (int64, erro
 	p, ok := pol.Project(project)
 	if !ok || !p.AllowsKind(policy.KindRun) {
 		return 0, fmt.Errorf("policy")
+	}
+	if _, _, err := e.chooseGuest(project, requestedGuest, pol); err != nil {
+		return 0, err
 	}
 	// Same-project children stay on the parent's pin so a parent that is
 	// not Repos[0], or a later repo reorder, cannot move the child.
@@ -93,6 +102,9 @@ func (e *Engine) StartChild(parentID int64, prompt, project string) (int64, erro
 		}
 		sid, item, err := store.InsertChildSessionTx(tx, project, repo, prompt, parentID)
 		if err != nil {
+			return err
+		}
+		if _, _, err := e.bindSessionGuestTx(tx, sid, project, requestedGuest, pol); err != nil {
 			return err
 		}
 		if err := store.SetSessionSizeTx(tx, sid, NormalizeSize(p.Size)); err != nil {

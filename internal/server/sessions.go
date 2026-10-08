@@ -314,12 +314,13 @@ func (s *Server) createChild(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Prompt  string `json:"prompt"`
 		Project string `json:"project"`
+		Guest   string `json:"guest"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	childID, err := s.Eng.StartChild(id, req.Prompt, req.Project)
+	childID, err := s.Eng.StartChildGuest(id, req.Prompt, req.Project, req.Guest)
 	if err != nil {
 		switch err.Error() {
 		case "prompt required", "parent kind", "depth", "fan-out":
