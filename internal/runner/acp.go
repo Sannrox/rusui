@@ -404,6 +404,9 @@ func (c *Client) heartbeatSteers(ctx context.Context, a *Assignment, steers chan
 
 func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, steers <-chan engine.Steer, exec StdioExec) (engine.Artifact, []int64, error) {
 	if a != nil && (a.GuestSpec.Protocol == guest.ProtocolClaude || (a.GuestSpec.Protocol == "" && a.Guest == acp.GuestClaude)) {
+		if len(a.Attachments) > 0 {
+			return engine.Artifact{}, nil, fmt.Errorf("native Claude attachments unsupported")
+		}
 		art, err := hostNative(ctx, a, host, cwd, provider.KindClaude)
 		return art, nil, err
 	}
@@ -419,17 +422,15 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 	if err != nil {
 		return engine.Artifact{}, nil, err
 	}
-	if a.GuestSpec.Conformance != "" || a.Guest == acp.GuestShikigami {
-		if host.Rec != nil {
-			if _, err := host.Rec.Record(acp.Receipt{Type: acp.ActionInitialize, Reason: acp.ReasonRecorded, Body: acp.GuestInitialize{Guest: a.Guest, Result: *initialized}}); err != nil {
-				return engine.Artifact{}, nil, err
-			}
+	if host.Rec != nil {
+		if _, err := host.Rec.Record(acp.Receipt{Type: acp.ActionInitialize, Reason: acp.ReasonRecorded, Body: acp.GuestInitialize{Guest: a.Guest, Result: *initialized}}); err != nil {
+			return engine.Artifact{}, nil, err
 		}
-		for _, attachment := range a.Attachments {
-			part, _, ok := engine.GuestACPPart(attachment.MIME)
-			if !ok || !initialized.AgentCapabilities.PromptCapabilities.Supports(part) {
-				return engine.Artifact{}, nil, fmt.Errorf("guest does not support attachment kind %q", attachment.MIME)
-			}
+	}
+	for _, attachment := range a.Attachments {
+		part, _, ok := engine.GuestACPPart(attachment.MIME)
+		if !ok || !initialized.AgentCapabilities.PromptCapabilities.Supports(part) {
+			return engine.Artifact{}, nil, fmt.Errorf("guest does not support attachment kind %q", attachment.MIME)
 		}
 	}
 	sid := a.GuestSessionID

@@ -184,6 +184,17 @@ func TestPromptAttachmentHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	guestName, _, err := h.e.SessionGuest(sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed, err := json.Marshal(map[string]any{"guest": guestName, "result": map[string]any{"agentCapabilities": map[string]any{"promptCapabilities": map[string]bool{"image": true, "embeddedContext": true}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.InsertAction(h.e.Store, store.Action{ID: "observed-attachment-caps", SessionID: &sid, Type: "acp.initialize", Body: string(observed)}); err != nil {
+		t.Fatal(err)
+	}
 	do := func(body string) (int, []byte) {
 		t.Helper()
 		req, _ := http.NewRequest("POST", h.http.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/turns", strings.NewReader(body))
@@ -216,7 +227,7 @@ func TestPromptAttachmentHTTP(t *testing.T) {
 		t.Fatalf("steer %d %s", code, out)
 	}
 	code, out = do(`{"prompt":"look","attachments":[{"name":"clip.wav","content":"` + base64.StdEncoding.EncodeToString([]byte("RIFF")) + `"}]}`)
-	if code != 400 || !strings.Contains(string(out), "unsupported") {
+	if code != 400 || !strings.Contains(string(out), "guest does not support attachment kind") {
 		t.Fatalf("audio %d %s", code, out)
 	}
 }

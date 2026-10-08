@@ -249,7 +249,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/jobs/{id}/heartbeat` | same |
 | `POST` | `/jobs/{id}/complete` | same |
 | `POST` | `/jobs/{id}/fail` | same |
-| `POST` | `/sessions/{id}/turns` | operator or worker token; follow-up prompt, steer (`steer`), or queued prompt (`queued`) that starts after the current turn ends (`rusui prompt`); optional `attachments` `[{name, content}]` as base64. Image and PDF (plus plain text / Markdown) only; 8 MiB per part including the prompt, 16 MiB aggregate with the prompt, at most 31 files, matching the pinned HTTP guest. Bytes stay on disk next to the plane store |
+| `POST` | `/sessions/{id}/turns` | operator or worker token; follow-up prompt, steer (`steer`), or queued prompt (`queued`) that starts after the current turn ends (`rusui prompt`); optional `attachments` `[{name, content}]` as base64. Image and PDF (plus plain text / Markdown) only; 8 MiB per part including the prompt, 16 MiB aggregate with the prompt, at most 31 files, subject to the protocol capability table below. Bytes stay on disk next to the plane store |
 | `POST` | `/sessions/{id}/children` | operator or worker token; start one child run. Optional `guest` names a guest allowed by the child project; omission chooses that project's default. The guest name, pin, and configuration are frozen when the child is created, before its environment starts. Omitted `project` stays on the parent project and the parent's repo pin (ADR 0071). Named `project` must already exist in policy; the child is admitted under that project's policy, repo pin, size, and `ship` and does not inherit the parent's grants (ADR 0072). Depth 1. Fan-out and live leases on the parent tree are capped by the parent's `max_concurrent_leases`, including children on another project. Uncommitted parent files are not copied; attach on the child if it needs bytes. Parent cancel cancels children. A child result is a receipt on the parent, not an atomic success across repositories |
 | `DELETE` | `/sessions/{id}/queued` | operator or worker token; drops queued prompts that have not started and returns `dropped`; the current turn keeps running (`rusui prompt -drop-queue`) |
 | `POST` | `/sessions/{id}/cancel` | operator or worker token; ends the turn, drops queued prompts, and stops the guest's processes |
@@ -258,6 +258,19 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/approvals/{id}` | worker secret or turn token |
 | `*` | `/model-proxy/` | per-turn grant (HTTPS for container guests) |
 | `*` | `/git-proxy/github.com/` | prepare or turn grant; push only with a turn grant on the session ref prefix |
+
+Follow-up attachments are checked before the prompt or files are stored:
+
+| Guest protocol | Accepted attachment kinds | HTTP 400 refusal |
+| --- | --- | --- |
+| ACP (shikigami, Grok, or generic) | Images when the latest observed `promptCapabilities.image` is true; PDF, plain text, and Markdown when `embeddedContext` is true | `guest attachment capabilities not observed` before initialization or for a mismatched receipt; `guest does not support attachment kind` for unsupported kinds |
+| Claude stream-json | None | `native Claude attachments unsupported` |
+| Codex app-server | None | `native Codex attachments unsupported` |
+
+ACP capability receipts come from the current runner's `initialize` response.
+Existing Grok sessions need one turn on the updated runner before attachments
+can be admitted. The runner rechecks capabilities on each guest start, so a
+capability downgrade refuses delivery. Attachments cannot accompany a steer.
 
 GitHub webhook events: `issues`, `pull_request`, `issue_comment`.
 Forward the tunnel to `http://127.0.0.1:8080/hooks/github`.
