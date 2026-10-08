@@ -48,10 +48,20 @@ func (e *Engine) StartChild(parentID int64, prompt, project string) (int64, erro
 	var repo, sha string
 	if project == parent.Project {
 		repo = parent.Repo
-		if d, ok := e.GitHub.(interface {
-			DefaultSHA(string) (string, error)
-		}); ok {
-			sha, _ = d.DefaultSHA(repo)
+		if !policy.IsProjectKey(repo) {
+			d, ok := e.GitHub.(interface {
+				DefaultSHA(string) (string, error)
+			})
+			if !ok {
+				return 0, fmt.Errorf("child pin: default branch lookup unavailable")
+			}
+			sha, err = d.DefaultSHA(repo)
+			if err != nil {
+				return 0, fmt.Errorf("child pin: %w", err)
+			}
+			if sha == "" {
+				return 0, fmt.Errorf("child pin: empty default branch SHA")
+			}
 		}
 	} else {
 		repo, sha = e.operatorSessionPin(p)
