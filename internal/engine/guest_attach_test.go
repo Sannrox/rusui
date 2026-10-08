@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sannrox/rusui/internal/acp"
+	"github.com/sannrox/rusui/internal/guest"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/runner"
 	"github.com/sannrox/rusui/internal/store"
@@ -137,4 +138,77 @@ func TestGuestSessionSurvivesClientDisconnectAndNextTurn(t *testing.T) {
 	if err != nil || len(turns) != 1 || turns[0].State != "completed" || turns[0].LeaseGeneration != 2 || turns[0].ClaimedRevision != 2 {
 		t.Fatalf("turns %+v %v", turns, err)
 	}
+}
+
+func TestChildSelectedGuestRunsThroughHTTP(t *testing.T) {
+	h := setup(t)
+	h.clk.T = time.Now().UTC()
+	var config policy.File
+	if err := yaml.Unmarshal(h.e.PolicySnapshot().Raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	config.Guests = guest.Builtin()
+	p := config.Projects["test"]
+	p.Guests = &policy.ProjectGuests{Default: "shikigami", Allowed: []string{"shikigami", "grok"}}
+	config.Projects["test"] = p
+	raw, err := yaml.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.e.ReloadPolicyBytes(raw); err != nil {
+		t.Fatal(err)
+	}
+	parent, err := h.e.StartRun("test", "parent", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/sessions/%d/children", h.http.URL, parent), strings.NewReader(`{"prompt":"child","guest":"grok"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer wsec")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if err != nil || res.StatusCode != http.StatusCreated {
+		t.Fatalf("child create %d %s %v", res.StatusCode, body, err)
+	}
+	client := &runner.Client{Base: h.http.URL, Bootstrap: "wsec", Repo: "example/test-repo"}
+	for _, want := range []string{"shikigami", "grok"} {
+		host := func(a *runner.Assignment, _ string) (*acp.Client, func(), error) {
+			if a.Guest != want || a.GuestSpec.Pin != config.Guests[want].Pin {
+				return nil, nil, fmt.Errorf("guest assignment %s %+v, want %s", a.Guest, a.GuestSpec, want)
+			}
+			clientIn, agentOut := io.Pipe()
+			agentIn, clientOut := io.Pipe()
+			stop := func() { _ = clientIn.Close(); _ = agentOut.Close(); _ = agentIn.Close(); _ = clientOut.Close() }
+			go func() {
+				_ = (&acp.FakeAgent{In: agentIn, Out: agentOut, PromptHandler: func(_ acp.PromptParams, _ <-chan struct{}, _ func(string, any) error) (acp.PromptResult, error) {
+					if err := os.WriteFile(a.ResultPath, []byte(`{"blocked_reason":"two-guest fixture"}`), 0o600); err != nil {
+						return acp.PromptResult{}, err
+					}
+					return acp.PromptResult{StopReason: "end_turn"}, nil
+				}}).Run()
+			}()
+			return &acp.Client{In: clientIn, Out: clientOut, Rec: &runner.HTTPRecorder{Base: h.http.URL, Token: a.TurnToken, TurnID: a.TurnID}, Perm: acp.DenyUnmatched{}}, stop, nil
+		}
+		if err := runner.OneACPTurn(ctx, client, host); err != nil {
+			t.Fatal(err)
+		}
+	}
+	actions, err := store.ListActionsForSession(h.st, parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range actions {
+		if a.Type == "child.result" && strings.Contains(a.Body, `"outcome":"completed"`) {
+			return
+		}
+	}
+	t.Fatalf("missing child completion receipt: %+v", actions)
 }

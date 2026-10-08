@@ -124,8 +124,16 @@ func TestChildOptionalGuestBindsAndRefusesUnlisted(t *testing.T) {
 	if s.GuestName != "grok" || s.GuestPin == "" {
 		t.Fatalf("child guest %+v", s)
 	}
+	before, err := store.ListSessions(h.st, "test", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.e.StartChildGuest(parent, "other", "", "shikigami"); err == nil {
 		t.Fatal("unlisted child guest accepted")
+	}
+	after, err := store.ListSessions(h.st, "test", 50)
+	if err != nil || len(after) != len(before) {
+		t.Fatalf("refused child stored: %d -> %d %v", len(before), len(after), err)
 	}
 }
 
