@@ -8,7 +8,7 @@ lists versions, targets, paths, and CI behavior for lookup.
 | Source | Version |
 | --- | --- |
 | `go.mod` | language `go 1.26` |
-| `.go-version` | `1.26.6` — `make` sets `GOTOOLCHAIN` unless `FORCE_HOST_GO` is set |
+| `.go-version` | `1.26.9` — `make` sets `GOTOOLCHAIN` unless `FORCE_HOST_GO` is set |
 | CI | `.github/workflows/build.yml` uses `go-version-file: .go-version` |
 
 Docker is optional for host `make all`. Unattended public-repository

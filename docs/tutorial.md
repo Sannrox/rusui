@@ -55,7 +55,7 @@ exercise if you no longer need them.
 
 ### What you need
 
-- Go 1.26 on `PATH`. `make` pins [`.go-version`](../.go-version) (currently 1.26.6).
+- Go 1.26 on `PATH`. `make` pins [`.go-version`](../.go-version) (currently 1.26.9).
 - `make`, `git`, and `curl`.
 - A **non-empty** GitHub token in the environment. The server refuses to
   start if `RUSUI_GITHUB_TOKEN` and `GITHUB_TOKEN` are both empty. This

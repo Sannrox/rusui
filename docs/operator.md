@@ -38,7 +38,7 @@ Use the [implement session how-to](implement-sessions.md).
 ## Prerequisites
 
 - Go 1.26 on `PATH`. `make` uses `GOTOOLCHAIN=go$(cat .go-version)`
-  (currently 1.26.6).
+  (currently 1.26.9).
 - A **read-only** GitHub token for intake of repositories listed in policy.
   `implement` sessions additionally need your GitHub credential in
   `RUSUI_AGENT_GITHUB_TOKEN`: a fine-grained token with contents and
@@ -158,7 +158,7 @@ platform default), plane TLS (a local CA and a certificate for
 generated worker, webhook, Slack, and operator secrets, a policy skeleton
 when none exists, and, when Docker or Podman is installed, the
 `rusui-trusted` network and the reference guest image. The image
-(`build/guest-image`: git, `gh`, Node.js 22, Go 1.26.6, Chromium, Claude Code CLI 2.1.283, shikigami 2.0.0) is
+(`build/guest-image`: git, `gh`, Node.js 22, Go 1.26.9, Chromium, Claude Code CLI 2.1.283, shikigami 2.0.0) is
 tagged by its image ID, so the tag names the bits the guest runs (the
 Dockerfile hash is only the build cache key); `-rebuild-image` rebuilds it
 with `--pull --no-cache`. Setup records the tag as `RUSUI_GUEST_IMAGE`
