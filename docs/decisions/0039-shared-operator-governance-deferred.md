@@ -1,9 +1,10 @@
 # ADR 0039: Shared-operator governance is deferred
 
-- Status: Accepted; amended by 0059
+- Status: Accepted; amended by 0059, 0074
 - Date: 2026-09-29
-- Amends: none. [ADR 0012](0012-operator-access.md) stands unchanged.
-- Amended by: [ADR 0059](0059-unattributed-operator-retained.md).
+- Amends: none. At acceptance, [ADR 0012](0012-operator-access.md) stood unchanged.
+- Amended by: [ADR 0059](0059-unattributed-operator-retained.md),
+  [ADR 0074](0074-single-operator-oidc-cli.md) (OIDC CLI credential form only).
   Operator calls stay unattributed. A member id is not identity.
 - Resolves: [#127](https://github.com/Sannrox/rusui/issues/127)
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
@@ -20,6 +21,12 @@
   a shared-operator profile stays unauthorized).
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
+
+- Amendment on acceptance: [ADR 0074](0074-single-operator-oidc-cli.md)
+  permits optional OIDC CLI credentials for the same single operator.
+  The token-only clauses named in ADR 0074 are superseded on acceptance;
+  their text below remains historical rationale. Browser access,
+  shared-operator deferral, and unattributed receipts remain unchanged.
 
 ## Context
 
@@ -78,7 +85,11 @@ authority is named. Dogfood is one maintainer on one host.
 
 **D1. Defer. Retain single-operator local policy.** rusui does not add
 a shared-operator, team-role, or external-authority object in the 1.0
-core. Plane authorization remains the one operator token in ADR 0012.
+core. Plane authorization remains one operator. On acceptance of
+[ADR 0074](0074-single-operator-oidc-cli.md), operator API calls may
+present the static token or a validated OIDC access token for the one
+configured issuer/subject pair. The original static-token-only rule
+is superseded for those calls.
 Policy remains project-keyed ([ADR 0005](0005-policy-v2-project.md)).
 A Session is not jointly owned.
 
