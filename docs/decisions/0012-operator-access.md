@@ -1,6 +1,6 @@
 # ADR 0012: Single-operator access for terminal and preview
 
-- Status: Accepted; amended by 0032, 0036, 0039, 0059
+- Status: Accepted; amended by 0032, 0036, 0039, 0059, 0074
 - Date: 2026-09-20
 - Amends: [ADR 0003](0003-operator-surface.md) reachability (credential
   classes, browser session, preview origin). The API-first, CLI-first,
@@ -17,6 +17,7 @@
   local operator token; shared-operator governance is deferred.
   [ADR 0059](0059-unattributed-operator-retained.md) keeps operator
   calls unattributed; a caller-supplied member id is not identity.
+  [ADR 0074](0074-single-operator-oidc-cli.md) permits optional OIDC CLI login.
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
   Objects: operator credential, worker credential, turn grant, browser
@@ -28,6 +29,12 @@
   write lease, and open a preview on a **different origin**.
   Policy: fail closed — worker/turn secrets cannot mint browser
   sessions; public bind still requires operator TLS; no team roles.
+
+- Amendment on acceptance: [ADR 0074](0074-single-operator-oidc-cli.md)
+  permits optional OIDC CLI credentials for the same single operator.
+  The token-only clauses named in ADR 0074 are superseded on acceptance;
+  their text below remains historical rationale. Browser access,
+  shared-operator deferral, and unattributed receipts remain unchanged.
 
 ## Context
 
@@ -76,7 +83,10 @@ The current worker-authenticated JSON API is unchanged.
   grants for that operator generation become invalid.
 - Cookie-authenticated mutations require a CSRF token bound to the
   session. Bearer API calls do not use cookies and do not need CSRF.
-- No OIDC, no multi-user roles, no refresh-token family.
+- No multi-user roles. The original "No OIDC" and "no refresh-token
+  family" restrictions are superseded for CLI credentials on acceptance
+  of [ADR 0074](0074-single-operator-oidc-cli.md). Browser authentication
+  remains static-token-only.
 
 ### D3. Transport and deployment
 
