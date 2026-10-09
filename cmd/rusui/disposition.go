@@ -21,6 +21,10 @@ func dispositionCLI(args []string) {
 	wrong := fs.Bool("wrong", false, "mark a finding as wrong (false recommendation)")
 	note := fs.String("note", "", "optional note")
 	_ = fs.Parse(args)
+	if err := resolveOperatorToken(fs, *url, token); err != nil {
+		fmt.Fprintln(os.Stderr, "disposition:", err)
+		os.Exit(1)
+	}
 
 	var res *http.Response
 	var err error

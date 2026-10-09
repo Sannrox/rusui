@@ -42,6 +42,10 @@ func syncMain(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if err := resolveOperatorToken(fs, *url, token); err != nil {
+		_, _ = fmt.Fprintln(stderr, "sync:", err)
+		return 1
+	}
 	if fs.NArg() != 1 {
 		_, _ = fmt.Fprintln(stderr, "usage: rusui sync [-url URL] [-token TOKEN] [-remote NAME] [-dir DIR] SESSION_ID")
 		return 2

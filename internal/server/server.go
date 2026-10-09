@@ -21,6 +21,7 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/oidc"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/slack"
 	"github.com/sannrox/rusui/internal/store"
@@ -31,6 +32,7 @@ type Server struct {
 	WebhookSec       string
 	WorkerSec        string
 	OperatorTok      string
+	OIDC             *oidc.Verifier
 	SlackSec         string
 	SlackUsers       map[string]bool
 	PolicyPath       string
@@ -70,6 +72,8 @@ func (s *Server) Handler() http.Handler {
 		s.Eng.DefaultGuest = s.guest()
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /auth/oidc", s.oidcMetadata)
+	mux.HandleFunc("GET /auth/oidc/session", s.oidcSession)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})

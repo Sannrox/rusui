@@ -20,6 +20,25 @@ server is the source of truth. Slack is the human socket. Model CLIs receive a
 GitHub write credential only in `implement` sessions (ADR 0015). Schema changes are versioned migrations
 (`schema_migrations`), not `CREATE IF NOT EXISTS` drift.
 
+## Operator authentication
+
+One operator authenticates API calls with `RUSUI_OPERATOR_TOKEN` or,
+when configured, a signed OIDC access token for one exact issuer/subject
+pair ([ADR 0074](docs/decisions/0074-single-operator-oidc-cli.md)).
+`rusui login` opens Authorization Code + PKCE in the browser and stores
+private, per-server CLI credentials. Refresh uses the issuer endpoint
+pinned at login. The server validates only cached trusted keys; startup
+requires usable keys, and unknown keys fail closed while refresh runs.
+Expired credentials and failed refresh require renewed login. Provider
+logout does not instantly revoke issued access tokens; token expiry bounds
+that exposure. Static tokens remain an explicit break-glass path.
+
+Browser console sign-in remains static-token-only. OIDC does not mint
+console cookies, terminal write leases, or preview grants. Workers and
+turn grants retain separate credentials. This adds no second operator,
+role table, project overlay, or receipt identity. See the
+[OIDC CLI guide](docs/oidc-cli.md) for configuration and limits.
+
 ## Milestones
 
 **Current contract:** one repository profile, one model CLI, one runner on

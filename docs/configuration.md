@@ -92,7 +92,12 @@ reported and exits successfully.
 | `RUSUI_GITHUB_APP_INSTALLATION_ID` | GitHub App intake | Installation on the bound repository |
 | `RUSUI_WEBHOOK_SECRET` | **Yes** unless `-allow-insecure` | GitHub + generic event HMAC |
 | `RUSUI_WORKER_SECRET` | **Yes** unless `-allow-insecure` | Runner / job bearer |
-| `RUSUI_OPERATOR_TOKEN` | operator console and `rusui attach` | Distinct from worker; unset keeps console HTML and attachment disabled ([ADR 0012](decisions/0012-operator-access.md)) |
+| `RUSUI_OPERATOR_TOKEN` | static operator token for console and CLI break-glass access | Distinct from worker; unset keeps console HTML and attachment disabled ([ADR 0012](decisions/0012-operator-access.md)) |
+| `RUSUI_OIDC_ISSUER` | no | Optional OIDC issuer for CLI operator tokens; HTTPS required except loopback HTTP. Requires audience, client ID, subject, and optional space-separated scopes. |
+| `RUSUI_OIDC_AUDIENCE` | no | OIDC API audience validated on every bearer. |
+| `RUSUI_OIDC_CLIENT_ID` | no | Public OIDC client ID used by `rusui login`. |
+| `RUSUI_OIDC_SUBJECT` | no | Exact OIDC subject bound to the single rusui operator. |
+| `RUSUI_OIDC_SCOPES` | `openid` | Space-separated scopes requested by `rusui login`. |
 | `RUSUI_SLACK_SECRET` | **Yes** unless `-allow-insecure` | Slack HMAC |
 | `RUSUI_GITHUB_API` | no | Default `https://api.github.com` |
 | `RUSUI_GITHUB_HOOK_IDS` | for reconcile | `owner/repo=hookid`, comma-separated |
@@ -224,6 +229,8 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | --- | --- | --- |
 | `GET` | `/healthz` | none; body `ok` |
 | `GET` | `/readyz` | none; JSON topology report; 200 ready / 503 not ready |
+| `GET` | `/auth/oidc` | public OIDC client metadata; 404 when disabled |
+| `GET` | `/auth/oidc/session` | validate operator bearer; 204 when accepted, 401 when refused |
 | `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`) |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
 | `GET` | `/sessions/{id}/terminal` | operator, worker, or turn token; current environment terminal output; not the transcript |
@@ -491,3 +498,7 @@ Slash command `/rusui` → `POST /hooks/slack`.
 | `implement` | Rejected |
 
 If the Slack bot token is unset, exceptions stay in the process log.
+
+Operator API credentials may be the static token or a configured OIDC access
+token ([OIDC CLI guide](oidc-cli.md)). Browser console, worker-only, and
+turn-only routes do not accept the saved OIDC login.

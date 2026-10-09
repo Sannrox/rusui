@@ -27,7 +27,7 @@ func (s *Server) sessionTerminal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if !s.OperatorBrowserOK(r) && !s.sessionEventOK(r, sess.ID) {
+	if !s.OperatorAPIOK(r) && !s.sessionEventOK(r, sess.ID) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}

@@ -42,7 +42,7 @@ func (s *Server) sessionLogs(w http.ResponseWriter, r *http.Request) {
 // distinct from the action receipts of /logs. Like the transcript, it is
 // operator-only: hook output may hold workspace secrets.
 func (s *Server) sessionEnvlog(w http.ResponseWriter, r *http.Request) {
-	if !s.OperatorBrowserOK(r) {
+	if !s.OperatorAPIOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}

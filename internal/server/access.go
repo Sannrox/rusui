@@ -48,11 +48,24 @@ func (s *Server) OperatorBrowserOK(r *http.Request) bool {
 	return ClassifyBearer(bearerToken(r), s.OperatorTok, s.WorkerSec) == CredOperator
 }
 
+// OperatorAPIOK permits static or OIDC credentials for the same operator.
+// OIDC credentials never pass the browser, worker, or turn checks.
+func (s *Server) OperatorAPIOK(r *http.Request) bool {
+	if s.OperatorBrowserOK(r) {
+		return true
+	}
+	tok := bearerToken(r)
+	if tok == "" || tok == s.WorkerSec || (s.OperatorTok != "" && s.OperatorTok == s.WorkerSec) {
+		return false
+	}
+	return s.OIDC != nil && s.OIDC.Valid(tok)
+}
+
 // operatorOrWorkerOK is the session/approval observer path: operator
 // console/editor and the worker CLI share it. Claim/complete stay worker-only.
 func (s *Server) operatorOrWorkerOK(r *http.Request) bool {
 	c := ClassifyBearer(bearerToken(r), s.OperatorTok, s.WorkerSec)
-	if c == CredOperator || c == CredWorker {
+	if c == CredOperator || c == CredWorker || s.OperatorAPIOK(r) {
 		return true
 	}
 	// WorkerOK also accepts X-Worker-Token; keep that for CLI.

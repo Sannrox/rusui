@@ -15,7 +15,7 @@ import (
 )
 
 func (s *Server) projectMeasurements(w http.ResponseWriter, r *http.Request) {
-	if !s.OperatorBrowserOK(r) {
+	if !s.OperatorAPIOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}

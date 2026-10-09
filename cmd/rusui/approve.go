@@ -16,6 +16,10 @@ func logsCLI(args []string) {
 	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
 	token := fs.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "operator/worker token")
 	_ = fs.Parse(args)
+	if err := resolveOperatorToken(fs, *url, token); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "usage: rusui logs [-url URL] [-token TOKEN] SESSION_ID")
 		os.Exit(2)
@@ -44,6 +48,10 @@ func approveCLI(args []string) {
 	allow := fs.Bool("allow", false, "record allow")
 	deny := fs.Bool("deny", false, "record deny")
 	_ = fs.Parse(args)
+	if err := resolveOperatorToken(fs, *url, token); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if fs.NArg() == 0 {
 		res, err := planeClient(*url, *token, "/approvals")
 		if err != nil {
