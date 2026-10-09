@@ -36,7 +36,7 @@ type sessionReadEntry struct {
 }
 
 func (s *Server) readSession(w http.ResponseWriter, r *http.Request) {
-	if !s.OperatorBrowserOK(r) {
+	if !s.OperatorAPIOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}

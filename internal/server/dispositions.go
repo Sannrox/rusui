@@ -16,7 +16,7 @@ const dispositionNoteCap = 4 << 10
 // (`rusui disposition`). Operator only: the worker never grades its own
 // output. Recording grants nothing.
 func (s *Server) recordDisposition(w http.ResponseWriter, r *http.Request) {
-	if !s.OperatorBrowserOK(r) {
+	if !s.OperatorAPIOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
@@ -58,7 +58,7 @@ func (s *Server) recordDisposition(w http.ResponseWriter, r *http.Request) {
 // commentGate reports trailing shadow-result dispositions against the
 // ADR 0038 D6 comment thresholds. Reading it promotes nothing.
 func (s *Server) commentGate(w http.ResponseWriter, r *http.Request) {
-	if !s.OperatorBrowserOK(r) {
+	if !s.OperatorAPIOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}

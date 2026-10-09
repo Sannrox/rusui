@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	envpkg "github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/oidc"
 	"github.com/sannrox/rusui/internal/ops"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/server"
@@ -35,6 +37,10 @@ var (
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "login":
+			os.Exit(loginMain(os.Args[2:], os.Stdout, os.Stderr))
+		case "logout":
+			os.Exit(logoutMain(os.Args[2:], os.Stdout, os.Stderr))
 		case "run":
 			runCLI(os.Args[2:])
 			return
@@ -256,6 +262,16 @@ func main() {
 		NoSessionTrailer:  os.Getenv("RUSUI_DISABLE_SESSION_TRAILER") == "1",
 		GuestHTTPSOnly:    tlsCert != "" && tlsKey != "",
 		PreviewBase:       os.Getenv("RUSUI_PREVIEW_BASE"),
+	}
+	oidcConfig, err := oidc.ConfigFromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+	if oidcConfig.Issuer != "" {
+		srv.OIDC, err = oidc.NewVerifier(context.Background(), oidcConfig)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 	if repoTokens != nil {
 		srv.RepoTokens = repoTokens

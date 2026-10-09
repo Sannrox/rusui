@@ -52,6 +52,10 @@ func reviewCLI(args []string) {
 	timeout := fs.Duration("timeout", 30*time.Minute, "maximum wait for the review result; 0 waits indefinitely")
 	pollInterval := fs.Duration("poll-interval", time.Second, "result polling interval")
 	_ = fs.Parse(args)
+	if err := resolveOperatorToken(fs, *url, token); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if fs.NArg() != 1 || *timeout < 0 || *pollInterval <= 0 {
 		fmt.Fprintln(os.Stderr, "usage: rusui review [-url URL] [-token TOKEN] [-timeout DURATION] OWNER/REPO#PR")
 		os.Exit(2)

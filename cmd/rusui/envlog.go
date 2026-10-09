@@ -22,6 +22,10 @@ func envlogCLI(args []string) {
 	name := fs.String("name", "", "filter by service name")
 	omitBody := fs.Bool("omit-body", false, "list captures without output bodies")
 	_ = fs.Parse(args)
+	if err := resolveOperatorToken(fs, *base, token); err != nil {
+		fmt.Fprintln(os.Stderr, "envlog:", err)
+		os.Exit(1)
+	}
 	if fs.NArg() < 1 {
 		fmt.Fprintln(os.Stderr, "usage: rusui envlog [-url URL] [-token TOKEN] [-kind KIND] [-name NAME] [-omit-body] SESSION_ID")
 		os.Exit(2)

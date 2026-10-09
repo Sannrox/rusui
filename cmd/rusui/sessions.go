@@ -33,6 +33,10 @@ func sessionsCLI(args []string) {
 	token := fs.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "operator/worker token")
 	project := fs.String("project", "", "filter by project slug")
 	_ = fs.Parse(args)
+	if err := resolveOperatorToken(fs, *url, token); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	path := "/sessions"
 	if *project != "" {
 		path += "?project=" + *project
@@ -62,6 +66,10 @@ func promptCLI(args []string) {
 	queue := fs.Bool("queue", false, "start this prompt as the next turn once the current turn ends")
 	dropQueue := fs.Bool("drop-queue", false, "drop queued prompts that have not started; the current turn keeps running")
 	_ = fs.Parse(args)
+	if err := resolveOperatorToken(fs, *url, token); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	usage := func() {
 		fmt.Fprintln(os.Stderr, "usage: rusui prompt [-steer | -queue] [-url URL] [-token TOKEN] SESSION_ID TEXT\n       rusui prompt -drop-queue [-url URL] [-token TOKEN] SESSION_ID")
 		os.Exit(2)

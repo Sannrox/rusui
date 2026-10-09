@@ -3,6 +3,7 @@ module github.com/sannrox/rusui
 go 1.26
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	golang.org/x/sys v0.22.0
 	golang.org/x/term v0.22.0
 	gopkg.in/yaml.v3 v3.0.1

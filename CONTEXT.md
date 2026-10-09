@@ -9,7 +9,7 @@ An operator-named policy and budget domain. A session belongs to exactly one pro
 _Avoid_: Repository, environment, session, GitHub Project, workspace, tenant
 
 **Operator**:
-The single human who holds `RUSUI_OPERATOR_TOKEN`. Plane authorization is that token, not a role table or external authority ([ADR 0012](docs/decisions/0012-operator-access.md), [ADR 0039](docs/decisions/0039-shared-operator-governance-deferred.md)). Slack allowlisted users may notify and approve; they are not plane operators.
+The single human who holds `RUSUI_OPERATOR_TOKEN`. Plane API authorization is that token or an optional validated OIDC access token for one configured issuer/subject pair ([ADR 0074](docs/decisions/0074-single-operator-oidc-cli.md)). Console sign-in remains token-based; shared operators remain deferred ([ADR 0039](docs/decisions/0039-shared-operator-governance-deferred.md)). Slack allowlisted users may notify and approve; they are not plane operators.
 _Avoid_: team, org, IdP user, second operator, Slack user as operator
 
 **Bound repository**:

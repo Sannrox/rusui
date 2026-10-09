@@ -28,6 +28,10 @@ func archiveMain(verb string, args []string, out io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if err := resolveOperatorToken(fs, *url, token); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	if fs.NArg() != 1 {
 		fmt.Fprintf(os.Stderr, "usage: rusui %s [-url URL] [-token TOKEN] SESSION_ID\n", verb)
 		return 2

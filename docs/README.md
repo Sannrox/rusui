@@ -24,6 +24,7 @@ Use these when you already have a task to complete.
 - [Run rusui against a repository](operator.md) — setup, webhook, runner,
   restart, removal, and troubleshooting.
 - [Use the local interactive profile](local-interactive.md).
+- [Sign in to the CLI with OIDC](oidc-cli.md).
 - [Configure container guests](container-guests.md).
 - [Request a pull request review](pull-request-review.md).
 - [Use implement sessions](implement-sessions.md).

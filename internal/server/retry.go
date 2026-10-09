@@ -12,7 +12,7 @@ import (
 // (`rusui retry`): OWNER/REPO requeues every failed job in the repository,
 // OWNER/REPO#ITEM one item. Operator only; it grants nothing new.
 func (s *Server) retryFailed(w http.ResponseWriter, r *http.Request) {
-	if !s.OperatorBrowserOK(r) {
+	if !s.OperatorAPIOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}

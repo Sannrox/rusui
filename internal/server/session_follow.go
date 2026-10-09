@@ -92,7 +92,7 @@ func (f followStatus) done() bool {
 // a gap or a repeat. The stream ends after a completed, failed, or
 // cancelled state. It never carries terminal bytes or the workspace diff.
 func (s *Server) followSessionRead(w http.ResponseWriter, r *http.Request) {
-	if !s.OperatorBrowserOK(r) {
+	if !s.OperatorAPIOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}

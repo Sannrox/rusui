@@ -26,6 +26,10 @@ func putMain(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if err := resolveOperatorToken(fs, *base, token); err != nil {
+		_, _ = fmt.Fprintln(stderr, "put:", err)
+		return 1
+	}
 	if fs.NArg() != 2 || *file == "" {
 		_, _ = fmt.Fprintln(stderr, "usage: rusui put [-url URL] [-token TOKEN] -file LOCAL SESSION_ID DEST")
 		return 2
