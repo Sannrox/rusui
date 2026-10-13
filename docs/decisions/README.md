@@ -20,7 +20,7 @@ Decisions that must outlive a single pull request.
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066, 0075 |
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
-| [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076 |
+| [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077 |
 | [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
 | [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Superseded by 0023 |
 | [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted; amended by 0055, 0068 |
@@ -85,7 +85,8 @@ Decisions that must outlive a single pull request.
 
 | [0074](0074-single-operator-oidc-cli.md) | Optional OIDC CLI authentication for one operator | Accepted on merge |
 | [0075](0075-split-guest-grant-from-runner.md) | Guest grant is model and git only; runner token records actions | Accepted on merge |
-| [0076](0076-tenant-isolation.md) | Tenant isolation on the session plane | Accepted on merge |
+| [0076](0076-tenant-isolation.md) | Tenant isolation on the session plane | Accepted on merge; amended by 0077 |
+| [0077](0077-session-access-grants.md) | Sessions are tenant-owned; cross-tenant access is an audited grant | Accepted on merge |
 
 ## When to write an ADR
 

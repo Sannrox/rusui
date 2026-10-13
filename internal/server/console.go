@@ -455,7 +455,7 @@ func (s *Server) consolePrompt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.visibleSession(r, id); err != nil {
+	if _, err := s.visibleOwnedSession(r, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -618,6 +618,9 @@ func (s *Server) consoleEvents(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-tick.C:
+			if !s.sessionStillAllowed(r, id) {
+				return
+			}
 			send()
 		}
 	}
@@ -636,7 +639,7 @@ func (s *Server) consoleFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	sess, err := s.visibleSession(r, id)
+	sess, err := s.visibleOwnedSession(r, id)
 	if err != nil {
 		http.Error(w, "not found", 404)
 		return

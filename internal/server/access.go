@@ -157,12 +157,20 @@ func (s *Server) operatorTenant(r *http.Request) (string, bool) {
 func (s *Server) sessionAllowed(r *http.Request, sess *store.Session) bool {
 	switch p := s.identify(r); p.Class {
 	case CredOperator:
-		return store.NormalizeTenantID(sess.TenantID) == p.TenantID
+		if store.NormalizeTenantID(sess.TenantID) == p.TenantID {
+			return true
+		}
+		ok, err := store.SessionGranted(s.Eng.Store, sess.ID, p.TenantID)
+		return err == nil && ok
 	case CredWorker:
 		return true
 	}
 	if s.consoleAuthed(r) {
-		return store.NormalizeTenantID(sess.TenantID) == store.DefaultTenantID
+		if store.NormalizeTenantID(sess.TenantID) == store.DefaultTenantID {
+			return true
+		}
+		ok, err := store.SessionGranted(s.Eng.Store, sess.ID, store.DefaultTenantID)
+		return err == nil && ok
 	}
 	return false
 }
@@ -219,6 +227,31 @@ func (s *Server) visibleSession(r *http.Request, id int64) (*store.Session, erro
 		return nil, sql.ErrNoRows
 	}
 	return sess, nil
+}
+
+func (s *Server) visibleOwnedSession(r *http.Request, id int64) (*store.Session, error) {
+	sess, err := store.GetSession(s.Eng.Store, id)
+	if err != nil {
+		return nil, err
+	}
+	switch s.identify(r).Class {
+	case CredWorker:
+		return sess, nil
+	case CredOperator:
+		if s.sessionOwner(r, sess) {
+			return sess, nil
+		}
+		return nil, sql.ErrNoRows
+	}
+	if s.consoleAuthed(r) && store.NormalizeTenantID(sess.TenantID) == store.DefaultTenantID {
+		return sess, nil
+	}
+	return nil, sql.ErrNoRows
+}
+
+func (s *Server) sessionStillAllowed(r *http.Request, id int64) bool {
+	_, err := s.visibleSession(r, id)
+	return err == nil
 }
 
 func (s *Server) visibleApprovalAction(r *http.Request, id string) (*store.Action, error) {

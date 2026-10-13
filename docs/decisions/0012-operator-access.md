@@ -1,6 +1,6 @@
 # ADR 0012: Single-operator access for terminal and preview
 
-- Status: Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076
+- Status: Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077
 - Date: 2026-09-20
 - Amends: [ADR 0003](0003-operator-surface.md) reachability (credential
   classes, browser session, preview origin). The API-first, CLI-first,
@@ -19,7 +19,9 @@
   calls unattributed; a caller-supplied member id is not identity.
   [ADR 0074](0074-single-operator-oidc-cli.md) permits optional OIDC CLI login.
   [ADR 0076](0076-tenant-isolation.md) binds operator credentials to a
-  tenant isolation key.
+  tenant isolation key. [ADR 0077](0077-session-access-grants.md)
+  records session creators and allows an owning tenant to grant
+  cross-tenant read and reopen of a session by id.
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
   Objects: operator credential, worker credential, turn grant, browser

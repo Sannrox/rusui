@@ -86,6 +86,18 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT tenant_id FROM sessions LIMIT 1`).Scan(&tenant); err != nil || tenant != DefaultTenantID {
 		t.Fatalf("migrated session tenant %q %v", tenant, err)
 	}
+	var createdByCol int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='created_by'`).Scan(&createdByCol); err != nil || createdByCol != 1 {
+		t.Fatalf("sessions.created_by missing after upgrade: %d %v", createdByCol, err)
+	}
+	var createdBy string
+	if err := s.DB.QueryRow(`SELECT created_by FROM sessions LIMIT 1`).Scan(&createdBy); err != nil || createdBy != DefaultTenantID {
+		t.Fatalf("migrated session created_by %q %v", createdBy, err)
+	}
+	var grants int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_access_grants'`).Scan(&grants); err != nil || grants != 1 {
+		t.Fatalf("session_access_grants missing after upgrade: %d %v", grants, err)
+	}
 	var attPath int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('prompt_attachments') WHERE name='path'`).Scan(&attPath); err != nil || attPath != 1 {
 		t.Fatalf("prompt_attachments.path missing after upgrade: %d %v", attPath, err)

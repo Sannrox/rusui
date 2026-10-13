@@ -59,6 +59,7 @@ type Session struct {
 	ArchivedAt       *time.Time `json:"archived_at,omitempty"`
 	ParentSessionID  int64      `json:"parent_session_id,omitempty"`
 	TenantID         string     `json:"tenant_id,omitempty"`
+	CreatedBy        string     `json:"created_by,omitempty"`
 	CreatedAt        time.Time
 }
 

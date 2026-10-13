@@ -157,6 +157,9 @@ func (s *Server) followSessionRead(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		first = false
+		if !s.sessionStillAllowed(r, id) {
+			return
+		}
 		// One cheap query says whether anything moved; the state and the
 		// transcript are read only then (#439).
 		token, err := store.FollowToken(s.Eng.Store, id)
