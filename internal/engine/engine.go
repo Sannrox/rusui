@@ -172,9 +172,42 @@ func (e *Engine) IngestEvent(deliveryID, source, repo string, item int, kind str
 // stopped running.
 var ErrTurnNotLeased = errors.New("action: turn not leased")
 
+// ErrTurnActionType refuses an action type the plane does not record
+// from POST /turns/{id}/actions.
+var ErrTurnActionType = errors.New("action: type not allowed")
+
+// ErrTurnActionBudget refuses further rows once the per-turn cap is hit.
+var ErrTurnActionBudget = errors.New("action: turn budget exceeded")
+
+const (
+	// TurnActionRowCap bounds how many actions one leased turn may store.
+	TurnActionRowCap = 4096
+	// TurnActionByteCap bounds stored action body bytes for one turn.
+	TurnActionByteCap = 4 << 20
+)
+
+// AllowedTurnActionType is the ingest allow-list. Transcript, permission,
+// and approval types are runner-owned; unknown types are refused so a
+// guest cannot grow the store with arbitrary rows.
+func AllowedTurnActionType(typ string) bool {
+	if typ == "" || len(typ) > 64 {
+		return false
+	}
+	switch typ {
+	case "acp.fs.read_text_file", "acp.fs.write_text_file",
+		"acp.terminal.create", "acp.terminal.output", "acp.terminal.wait_for_exit",
+		"acp.terminal.kill", "acp.terminal.release",
+		"acp.session.request_permission", "acp.session.update", "acp.approval",
+		"acp.unknown", "acp.initialize", "acp.update",
+		"resume", "permission.request":
+		return true
+	}
+	return strings.HasPrefix(typ, "provider.")
+}
+
 func (e *Engine) IngestTurnAction(turnID int64, typ, reason string, body any) (string, error) {
-	if typ == "" {
-		return "", fmt.Errorf("action: type required")
+	if !AllowedTurnActionType(typ) {
+		return "", fmt.Errorf("%w: %s", ErrTurnActionType, typ)
 	}
 	turn, err := store.GetTurn(e.Store, turnID)
 	if err != nil {
@@ -212,6 +245,13 @@ func (e *Engine) IngestTurnAction(turnID int64, typ, reason string, body any) (s
 		}
 		if cur.State != "leased" {
 			return fmt.Errorf("%w: turn is %s", ErrTurnNotLeased, cur.State)
+		}
+		rows, used, err := store.TurnActionUsageTx(tx, turnID)
+		if err != nil {
+			return err
+		}
+		if rows >= TurnActionRowCap || used+int64(len(payload)) > TurnActionByteCap {
+			return ErrTurnActionBudget
 		}
 		return store.InsertActionTx(tx, store.Action{
 			ID:            id,

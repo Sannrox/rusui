@@ -98,7 +98,7 @@ func TestImplementSessionPushesAsOperator(t *testing.T) {
 	if !strings.Contains(joined, "GH_TOKEN="+agentToken) {
 		t.Fatal("gh has no credential")
 	}
-	if strings.Contains(joined, "insteadof") || strings.Contains(joined, "Bearer "+a.TurnToken) {
+	if strings.Contains(joined, "insteadof") || strings.Contains(joined, "Bearer "+a.TurnToken) || strings.Contains(joined, "Bearer "+a.GuestGrant) {
 		t.Fatalf("implement session still routed through the git proxy grant:\n%s", joined)
 	}
 	out := gitCredential(t, guestEnv)
@@ -125,7 +125,10 @@ func TestSessionsWithoutImplementKeepTheProxyGrant(t *testing.T) {
 			}
 			guestEnv := runner.DriverEnv(a, t.TempDir(), os.Getenv("PATH"))
 			joined := strings.Join(guestEnv, "\n")
-			if strings.Contains(joined, "GH_TOKEN") || !strings.Contains(joined, "insteadof") {
+			if a.GuestGrant == "" || a.GuestGrant == a.TurnToken {
+				t.Fatalf("guest grant %q turn token %q", a.GuestGrant, a.TurnToken)
+			}
+			if strings.Contains(joined, "GH_TOKEN") || !strings.Contains(joined, "insteadof") || !strings.Contains(joined, "Bearer "+a.GuestGrant) || strings.Contains(joined, "Bearer "+a.TurnToken) {
 				t.Fatalf("guest env:\n%s", joined)
 			}
 			if out := gitCredential(t, guestEnv); strings.Contains(out, agentToken) {

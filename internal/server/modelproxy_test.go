@@ -89,6 +89,40 @@ func TestModelProxyRejectsBadTokenAndMissingKey(t *testing.T) {
 	}
 }
 
+func TestModelProxyRejectsRunnerTurnToken(t *testing.T) {
+	e, clk, _ := eventEnv(t)
+	now := clk.T.UTC().Format(time.RFC3339Nano)
+	res, err := e.Store.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'review','example/test-repo',9,'issue','open',?)`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sid, _ := res.LastInsertId()
+	if _, err := e.Store.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'leased')`, sid); err != nil {
+		t.Fatal(err)
+	}
+	var turnID int64
+	if err := e.Store.DB.QueryRow(`SELECT id FROM turns WHERE session_id=?`, sid).Scan(&turnID); err != nil {
+		t.Fatal(err)
+	}
+	sec, err := issueTurnSecrets(e.Store, turnID, 1, clk.T)
+	if err != nil {
+		t.Fatal(err)
+	}
+	origin, _ := url.Parse("http://127.0.0.1:1")
+	hs := httptest.NewServer((&Server{Eng: e, ModelKey: "k", ModelOrigin: origin}).Handler())
+	t.Cleanup(hs.Close)
+	req, _ := http.NewRequest("POST", hs.URL+"/model-proxy/v1/x", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "Bearer "+sec.Runner)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("runner token on model proxy %d", resp.StatusCode)
+	}
+}
+
 func TestModelProxyRejectsPrepareExpiredAndRequiresTLS(t *testing.T) {
 	e, clk, tok := leasedTurn(t)
 	origin, _ := url.Parse("http://127.0.0.1:1")
@@ -179,11 +213,11 @@ func leasedTurn(t *testing.T) (*engine.Engine, *clock.Fake, string) {
 	if err := e.Store.DB.QueryRow(`SELECT id FROM turns WHERE session_id=?`, sid).Scan(&turnID); err != nil {
 		t.Fatal(err)
 	}
-	tok, _, err := issueTurnToken(e.Store, turnID, 1, clk.T)
+	sec, err := issueTurnSecrets(e.Store, turnID, 1, clk.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return e, clk, tok
+	return e, clk, sec.Guest
 }
 
 // upstreamSaw proxies one guest request through a plane configured with srv

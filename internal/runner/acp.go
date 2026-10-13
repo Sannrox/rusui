@@ -632,7 +632,7 @@ func hostNative(ctx context.Context, a *Assignment, host *acp.Client, cwd, kind 
 	}
 	apiKey := ""
 	if kind == provider.KindCodex {
-		apiKey = a.TurnToken
+		apiKey = a.GuestGrant
 	}
 	res, err := provider.Run(ctx, kind, provider.Instance{}, rw, provider.Turn{
 		APIKey:       apiKey,

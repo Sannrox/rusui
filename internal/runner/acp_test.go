@@ -323,6 +323,7 @@ func TestOneACPTurnFailsWhenGuestStopsReading(t *testing.T) {
 				"item_kind":          "run",
 				"execution_deadline": deadline,
 				"turn_token":         "tok",
+				"guest_grant":        "guest",
 				"input":              map[string]string{"body": "implement the package"},
 				"driver":             "container",
 				"handle":             "guest-8",
@@ -949,7 +950,7 @@ func TestHostACPRegistryCodexResumesNativeThread(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	host := &acp.Client{In: clientIn, Out: clientOut}
-	art, err := HostACP(ctx, &Assignment{TurnToken: "fixture-turn-grant", ModelBaseURL: "http://127.0.0.1/model-proxy", Guest: "codex", GuestSpec: guest.Builtin()["codex"], GuestSessionID: "existing-thread", Input: json.RawMessage(`{"body":"continue"}`), Repo: "example/test-repo", Item: 1, ItemKind: "issue"}, host, t.TempDir())
+	art, err := HostACP(ctx, &Assignment{TurnToken: "runner-tok", GuestGrant: "fixture-turn-grant", ModelBaseURL: "http://127.0.0.1/model-proxy", Guest: "codex", GuestSpec: guest.Builtin()["codex"], GuestSessionID: "existing-thread", Input: json.RawMessage(`{"body":"continue"}`), Repo: "example/test-repo", Item: 1, ItemKind: "issue"}, host, t.TempDir())
 	if err != nil || art.GuestSessionID != "replacement-thread" {
 		t.Fatalf("native Codex resume: cursor=%q error=%v", art.GuestSessionID, err)
 	}

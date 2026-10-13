@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 44
+const CurrentSchema = 45
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -541,7 +541,22 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 45 {
+		if err := migrateV45(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 45); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV45 indexes actions by turn so ingest can enforce a per-turn row
+// and byte budget without scanning the session transcript (#601).
+func migrateV45(db *sql.DB) error {
+	_, err := db.Exec(`CREATE INDEX IF NOT EXISTS actions_turn ON actions(turn_id)`)
+	return err
 }
 
 // migrateV44 freezes the selected guest for a session (#572).

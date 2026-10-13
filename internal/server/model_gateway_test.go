@@ -104,10 +104,11 @@ func TestGatewayBothDialectsUseOneOriginAndRecordDestination(t *testing.T) {
 	if _, err := e.Store.DB.Exec(`UPDATE turns SET state='leased',lease_generation=2 WHERE id=?`, turnID); err != nil {
 		t.Fatal(err)
 	}
-	token, _, err = issueTurnToken(e.Store, turnID, 2, clk.T)
+	sec, err := issueTurnSecrets(e.Store, turnID, 2, clk.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	token = sec.Guest
 	for range 2 {
 		req, _ := http.NewRequest(http.MethodPost, hs.URL+"/model-proxy/v1/messages?retry=1", strings.NewReader(`{}`))
 		req.Header.Set("Authorization", "Bearer "+token)

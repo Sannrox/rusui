@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -293,5 +294,50 @@ func TestRepositoryFreeOperatorEnvironmentName(t *testing.T) {
 		} else {
 			t.Fatalf("environment name %q cannot be used by Docker", environment.Name)
 		}
+	}
+}
+
+func TestTurnActionUsageCountsBodyBytes(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	var sid, tid int64
+	if err := s.Tx(func(tx *sql.Tx) error {
+		res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, 'run', 'o/r', 1, 'issue', 'open', ?)`, time.Now().UTC().Format(time.RFC3339Nano))
+		if err != nil {
+			return err
+		}
+		if sid, err = res.LastInsertId(); err != nil {
+			return err
+		}
+		res, err = tx.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'leased')`, sid)
+		if err != nil {
+			return err
+		}
+		tid, err = res.LastInsertId()
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body := "世界"
+	if err := InsertAction(s, Action{
+		ID: "mb", SessionID: &sid, TurnID: &tid, Repo: "o/r", Item: 1,
+		Type: "resume", ReasonCode: "recorded", EvidenceClass: "plane_observed", Body: body,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Tx(func(tx *sql.Tx) error {
+		rows, n, err := TurnActionUsageTx(tx, tid)
+		if err != nil {
+			return err
+		}
+		if rows != 1 || n != int64(len(body)) {
+			return fmt.Errorf("usage rows=%d bytes=%d want 1/%d", rows, n, len(body))
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

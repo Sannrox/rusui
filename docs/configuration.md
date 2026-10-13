@@ -123,7 +123,7 @@ reported and exits successfully.
 
 ### Model upstream
 
-The guest only ever holds its per-turn grant; the plane model proxy strips
+The guest only ever holds its guest grant; the plane model proxy strips
 it and sends the operator's credential upstream. The upstream is, in order:
 
 1. `RUSUI_MODEL_UPSTREAM` when set: a gateway or a **CLI proxy** that uses
@@ -200,7 +200,7 @@ work is set by the provider's terms, not by rusui.
 With plane TLS, every client of an `https` plane URL (`rusui-runner`, `rusui run`, `rusui review`, `sessions`, `logs`, `approvals`, `approve`, `prompt`, `drain`) trusts `RUSUI_PLANE_CA`.
 
 GitHub token: read-only. Do not give it to the runner or the model.
-Guest `XAI_API_KEY` and git HTTP auth are the per-turn grant, except in
+Guest `XAI_API_KEY` and git HTTP auth are the guest grant, except in
 `implement` sessions, where git and `gh` use `RUSUI_AGENT_GITHUB_TOKEN`.
 Issue that as a fine-grained token limited to the bound repositories
 (contents and pull requests write; no administration, workflow, or secrets)
@@ -250,7 +250,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/hooks/slack` | Slack HMAC + user allowlist |
 | `POST` | `/runners/hello` | worker secret |
 | `POST` | `/sessions/{id}/events` | turn/session auth |
-| `POST` | `/turns/{id}/actions` | turn auth |
+| `POST` | `/turns/{id}/actions` | runner turn token or worker secret; guest grant refused; 64 KiB body; type allow-list; per-turn row and byte budget |
 | `POST` | `/turns/{id}/schedule` | turn or worker token; guest set, replace, or clear of this session's bound schedule; 202 receipt |
 | `POST` | `/jobs/claim` | `Authorization: Bearer` or `X-Worker-Token` |
 | `POST` | `/jobs/{id}/heartbeat` | same |
@@ -263,8 +263,8 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/sessions/{id}/archive` | operator or worker token; sleeps the environment, refuses prompts, and keeps the session row (`rusui archive`) |
 | `POST` | `/sessions/{id}/unarchive` | operator or worker token; allows prompts again on the same environment (`rusui unarchive`) |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
-| `*` | `/model-proxy/` | per-turn grant (HTTPS for container guests) |
-| `*` | `/git-proxy/github.com/` | prepare or turn grant; push only with a turn grant on the session ref prefix |
+| `*` | `/model-proxy/` | guest grant (HTTPS for container guests); runner turn token refused |
+| `*` | `/git-proxy/github.com/` | prepare or guest grant; push only with a guest grant on the session ref prefix |
 
 Follow-up attachments are checked before the prompt or files are stored:
 
