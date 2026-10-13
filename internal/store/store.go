@@ -744,16 +744,35 @@ func GetTurn(s *Store, id int64) (*Turn, error) {
 	return &t, nil
 }
 
+type SessionListFilter struct {
+	Project string
+	Tenant  string
+	Limit   int
+}
+
 func ListSessions(s *Store, project string, limit int) ([]Session, error) {
+	return ListSessionsFilter(s, SessionListFilter{Project: project, Limit: limit})
+}
+
+func ListSessionsFilter(s *Store, f SessionListFilter) ([]Session, error) {
+	limit := f.Limit
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config
+	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config, COALESCE(s.tenant_id, 'default')
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	args := []any{}
-	if project != "" {
-		q += ` WHERE s.project=?`
-		args = append(args, project)
+	var where []string
+	if f.Project != "" {
+		where = append(where, `s.project=?`)
+		args = append(args, f.Project)
+	}
+	if f.Tenant != "" {
+		where = append(where, `s.tenant_id=?`)
+		args = append(args, f.Tenant)
+	}
+	if len(where) > 0 {
+		q += ` WHERE ` + strings.Join(where, ` AND `)
 	}
 	q += ` ORDER BY s.id DESC LIMIT ?`
 	args = append(args, limit)
@@ -768,7 +787,7 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 		var created string
 		var archived int
 		var archivedAt sql.NullString
-		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig); err != nil {
+		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig, &sess.TenantID); err != nil {
 			return nil, err
 		}
 		if err := applySessionArchive(&sess, archived, archivedAt, created); err != nil {
@@ -950,9 +969,9 @@ func GetSession(s *Store, id int64) (*Session, error) {
 	var created string
 	var archived int
 	var archivedAt sql.NullString
-	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config
+	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config, COALESCE(s.tenant_id, 'default')
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id WHERE s.id=?`, id).Scan(
-		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig)
+		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig, &sess.TenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -1097,10 +1116,21 @@ func scanEnvironment(row interface{ Scan(...any) error }) (*Environment, error) 
 }
 
 func ListPendingApprovals(s *Store) ([]Action, error) {
-	rows, err := s.DB.Query(`SELECT a.action_id, a.session_id, a.turn_id, a.review_revision_id, a.repo, a.item, a.action_type, a.reason_code, a.evidence_class, a.limit_sentence, a.body
+	return ListPendingApprovalsTenant(s, "")
+}
+
+func ListPendingApprovalsTenant(s *Store, tenant string) ([]Action, error) {
+	q := `SELECT a.action_id, a.session_id, a.turn_id, a.review_revision_id, a.repo, a.item, a.action_type, a.reason_code, a.evidence_class, a.limit_sentence, a.body
 FROM actions a LEFT JOIN approval_decisions d ON d.action_id=a.action_id
-WHERE a.action_type='acp.approval' AND d.action_id IS NULL
-ORDER BY a.action_id`)
+LEFT JOIN sessions sess ON sess.id=a.session_id
+WHERE a.action_type='acp.approval' AND d.action_id IS NULL`
+	args := []any{}
+	if tenant != "" {
+		q += ` AND sess.tenant_id=?`
+		args = append(args, tenant)
+	}
+	q += ` ORDER BY a.action_id`
+	rows, err := s.DB.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}

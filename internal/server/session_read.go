@@ -45,7 +45,7 @@ func (s *Server) readSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", http.StatusBadRequest)
 		return
 	}
-	view, err := s.sessionRead(id)
+	view, err := s.sessionRead(r, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -64,8 +64,8 @@ func (s *Server) readSession(w http.ResponseWriter, r *http.Request) {
 
 // sessionRead is the session the console shows: durable transcript entries
 // and the current workspace diff. It does not open a terminal.
-func (s *Server) sessionRead(id int64) (sessionRead, error) {
-	page, err := s.sessionPage(id)
+func (s *Server) sessionRead(r *http.Request, id int64) (sessionRead, error) {
+	page, err := s.sessionPage(r, id)
 	if err != nil {
 		return sessionRead{}, err
 	}

@@ -21,6 +21,10 @@ func (s *Server) requestReview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if !s.repoAllowed(r, req.Repo) || !s.reviewSessionAllowed(r, req.Repo, req.Item) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	result, err := s.Eng.RequestReview(req.Repo, req.Item)
 	if err != nil {
 		status := http.StatusInternalServerError

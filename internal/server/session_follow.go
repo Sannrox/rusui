@@ -109,7 +109,7 @@ func (s *Server) followSessionRead(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	sess, err := store.GetSession(s.Eng.Store, id)
+	sess, err := s.visibleSession(r, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return

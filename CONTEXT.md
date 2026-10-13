@@ -5,8 +5,12 @@ Self-hosted environment plane. Glossary for nouns in the current contract.
 ## Language
 
 **Project**:
-An operator-named policy and budget domain. A session belongs to exactly one project; an environment belongs to exactly one project; a GitHub repository binds to at most one project.
-_Avoid_: Repository, environment, session, GitHub Project, workspace, tenant
+An operator-named policy and budget domain. A session belongs to exactly one project; an environment belongs to exactly one project; a GitHub repository binds to at most one project. A project may name a `tenant` so sessions inherit that isolation key.
+_Avoid_: Repository, environment, session, GitHub Project, workspace
+
+**Tenant**:
+The hard isolation key `tenant_id` on sessions and, through them, approvals ([ADR 0076](docs/decisions/0076-tenant-isolation.md)). Single-operator installs use `default`. Per-tenant operator credentials and optional project `tenant` bind list, read, decide, review, retry, disposition, and measurement to that key. Membership and product access stay upstream.
+_Avoid_: second operator, namespace as isolation, caller-side filtering
 
 **Operator**:
 The single human who holds `RUSUI_OPERATOR_TOKEN`. Plane API authorization is that token or an optional validated OIDC access token for one configured issuer/subject pair ([ADR 0074](docs/decisions/0074-single-operator-oidc-cli.md)). Console sign-in remains token-based; shared operators remain deferred ([ADR 0039](docs/decisions/0039-shared-operator-governance-deferred.md)). Slack allowlisted users may notify and approve; they are not plane operators.

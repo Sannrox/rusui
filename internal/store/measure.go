@@ -140,8 +140,15 @@ func GetMeasurement(s *Store, turnID int64) (*Measurement, error) {
 	return m, err
 }
 
-func ProjectAggregates(s *Store, project string) (Aggregates, error) {
-	rows, err := s.DB.Query(`SELECT turn_id, session_id, project, provider, provider_version, terminal_state, duration_ms, first_event_ms, wake_ms, resume, permission_decision, tokens_in, tokens_out, publication FROM turn_measurements WHERE project=? AND terminal_state<>'' ORDER BY turn_id`, project)
+func ProjectAggregates(s *Store, project, tenant string) (Aggregates, error) {
+	q := `SELECT m.turn_id, m.session_id, m.project, m.provider, m.provider_version, m.terminal_state, m.duration_ms, m.first_event_ms, m.wake_ms, m.resume, m.permission_decision, m.tokens_in, m.tokens_out, m.publication FROM turn_measurements m JOIN sessions s ON s.id=m.session_id WHERE m.project=? AND m.terminal_state<>''`
+	args := []any{project}
+	if tenant != "" {
+		q += ` AND COALESCE(s.tenant_id,'default')=?`
+		args = append(args, NormalizeTenantID(tenant))
+	}
+	q += ` ORDER BY m.turn_id`
+	rows, err := s.DB.Query(q, args...)
 	if err != nil {
 		return Aggregates{}, err
 	}
@@ -166,7 +173,13 @@ func ProjectAggregates(s *Store, project string) (Aggregates, error) {
 	if err := rows.Err(); err != nil {
 		return Aggregates{}, err
 	}
-	if err := s.DB.QueryRow(`SELECT COALESCE(SUM(deny_count),0) FROM turn_measurements WHERE project=? AND terminal_state<>''`, project).Scan(&out.Denies); err != nil {
+	denyQ := `SELECT COALESCE(SUM(m.deny_count),0) FROM turn_measurements m JOIN sessions s ON s.id=m.session_id WHERE m.project=? AND m.terminal_state<>''`
+	denyArgs := []any{project}
+	if tenant != "" {
+		denyQ += ` AND COALESCE(s.tenant_id,'default')=?`
+		denyArgs = append(denyArgs, NormalizeTenantID(tenant))
+	}
+	if err := s.DB.QueryRow(denyQ, denyArgs...).Scan(&out.Denies); err != nil {
 		return Aggregates{}, err
 	}
 	out.MedianDurationMS = median(durations)

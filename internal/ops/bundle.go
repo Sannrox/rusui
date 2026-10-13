@@ -52,6 +52,22 @@ func SecretValues(getenv func(string) string) []string {
 			out = append(out, v)
 		}
 	}
+	if raw := getenv("RUSUI_TENANT_TOKENS"); raw != "" {
+		body := []byte(raw)
+		if !strings.HasPrefix(strings.TrimSpace(raw), "{") {
+			if b, err := os.ReadFile(raw); err == nil {
+				body = b
+			}
+		}
+		var m map[string]string
+		if json.Unmarshal(body, &m) == nil {
+			for _, v := range m {
+				if v != "" {
+					out = append(out, v)
+				}
+			}
+		}
+	}
 	if raw := getenv("RUSUI_MODEL_UPSTREAM"); raw != "" {
 		if u, err := url.Parse(raw); err == nil && u.User != nil {
 			if info := u.User.String(); info != "" {

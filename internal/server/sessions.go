@@ -25,7 +25,16 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	list, err := store.ListSessions(s.Eng.Store, r.URL.Query().Get("project"), limit)
+	filter := store.SessionListFilter{Project: r.URL.Query().Get("project"), Limit: limit}
+	switch p := s.identify(r); p.Class {
+	case CredOperator:
+		filter.Tenant = p.TenantID
+	case CredWorker:
+	default:
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	list, err := store.ListSessionsFilter(s.Eng.Store, filter)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -90,6 +99,10 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
+	if _, err := s.visibleSession(r, id); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	if r.URL.Query().Get("view") == "review-status" {
 		s.getSessionReviewStatus(w, r, id)
 		return
@@ -112,7 +125,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	sess, err := store.GetSession(s.Eng.Store, id)
+	sess, err := s.visibleSession(r, id)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -251,7 +264,7 @@ func (s *Server) attachSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	sess, err := store.GetSession(s.Eng.Store, id)
+	sess, err := s.visibleSession(r, id)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -312,6 +325,10 @@ func (s *Server) createChild(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
+	if _, err := s.visibleSession(r, id); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	var req struct {
 		Prompt  string `json:"prompt"`
 		Project string `json:"project"`
@@ -344,6 +361,10 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.Error(w, "id", 400)
+		return
+	}
+	if _, err := s.visibleSession(r, id); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, int64(env.WorkspaceUploadCap)+int64(env.WorkspaceUploadCap)/2+1<<20)
@@ -462,7 +483,7 @@ func (s *Server) dropQueuedPrompts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	if _, err := store.GetSession(s.Eng.Store, id); errors.Is(err, sql.ErrNoRows) {
+	if _, err := s.visibleSession(r, id); errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	} else if err != nil {
@@ -488,7 +509,7 @@ func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	sess, err := store.GetSession(s.Eng.Store, id)
+	sess, err := s.visibleSession(r, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -543,7 +564,7 @@ func (s *Server) setSessionArchive(w http.ResponseWriter, r *http.Request, archi
 		http.Error(w, "id", http.StatusBadRequest)
 		return
 	}
-	if _, err := store.GetSession(s.Eng.Store, id); errors.Is(err, sql.ErrNoRows) {
+	if _, err := s.visibleSession(r, id); errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	} else if err != nil {

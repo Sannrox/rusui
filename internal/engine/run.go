@@ -65,6 +65,9 @@ func (e *Engine) StartRunGuest(project, prompt, idem, size, mode, guest string) 
 		if err != nil {
 			return err
 		}
+		if err := store.SetSessionTenantTx(tx, sid, sessionTenant(p)); err != nil {
+			return err
+		}
 		if _, _, err := e.bindSessionGuestTx(tx, sid, project, guest, pol); err != nil {
 			return err
 		}

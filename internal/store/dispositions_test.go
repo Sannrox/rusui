@@ -66,7 +66,7 @@ func TestCommentGateCountsLatestDispositionOfShadowResults(t *testing.T) {
 		t.Fatalf("history rows %d %v", rows, err)
 	}
 
-	g, err := CommentGateReport(s)
+	g, err := CommentGateReport(s, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,13 +78,13 @@ func TestCommentGateCountsLatestDispositionOfShadowResults(t *testing.T) {
 	// useful ≥ 2× harmful, but 3 wrong findings exceed 10%.
 	last := shadowResult(t, s, 20, true)
 	dispose(t, s, last, DispositionUseful, false)
-	if g, _ = CommentGateReport(s); g.Status != "shadow_pass" || g.Results != CommentGateWindow {
+	if g, _ = CommentGateReport(s, ""); g.Status != "shadow_pass" || g.Results != CommentGateWindow {
 		t.Fatalf("full window: %+v", g)
 	}
 	for _, id := range []int64{last, last - 1, last - 2} {
 		dispose(t, s, id, DispositionHarmful, true)
 	}
-	g, _ = CommentGateReport(s)
+	g, _ = CommentGateReport(s, "")
 	if g.Status != "fail" || g.Harmful != 3 || g.FalseRecommendations != 3 || len(g.Failed) != 1 {
 		t.Fatalf("threshold: %+v", g)
 	}

@@ -77,6 +77,9 @@ func (e *Engine) StartLocalSession(project, idem string) (LocalSessionResult, er
 		if err != nil {
 			return err
 		}
+		if err := store.SetSessionTenantTx(tx, sessionID, sessionTenant(p)); err != nil {
+			return err
+		}
 		if idem != "" {
 			if err := store.PutIdempotencyTx(tx, idem, sessionID); err != nil {
 				return err

@@ -80,7 +80,7 @@ func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "csrf", http.StatusForbidden)
 		return
 	}
-	sess, err := store.GetSession(s.Eng.Store, mustID(r))
+	sess, err := s.visibleSession(r, mustID(r))
 	if err != nil {
 		http.Error(w, "not found", 404)
 		return

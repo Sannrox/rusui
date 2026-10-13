@@ -58,6 +58,7 @@ type Session struct {
 	Archived         bool       `json:"archived"`
 	ArchivedAt       *time.Time `json:"archived_at,omitempty"`
 	ParentSessionID  int64      `json:"parent_session_id,omitempty"`
+	TenantID         string     `json:"tenant_id,omitempty"`
 	CreatedAt        time.Time
 }
 

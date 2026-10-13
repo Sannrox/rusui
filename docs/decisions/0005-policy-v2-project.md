@@ -1,6 +1,6 @@
 # ADR 0005: Policy v2 is keyed by project
 
-- Status: Accepted
+- Status: Accepted; amended by 0076
 - Date: 2026-09-15
 - Amends: [ADR 0001](0001-environment-plane.md) D9 (local policy v2
   identity). Overlay-may-only-narrow, fail-closed unknown fields, and

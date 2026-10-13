@@ -39,6 +39,15 @@ turn grants retain separate credentials. This adds no second operator,
 role table, project overlay, or receipt identity. See the
 [OIDC CLI guide](docs/oidc-cli.md) for configuration and limits.
 
+Sessions and approvals are isolated by `tenant_id`
+([ADR 0076](docs/decisions/0076-tenant-isolation.md)). A single-operator
+install uses tenant `default`; `RUSUI_OPERATOR_TOKEN` and OIDC bind to
+it. Optional `RUSUI_TENANT_TOKENS` maps additional tenant ids to
+operator-class bearers. A project may set `tenant` in `policy.yaml` so
+new sessions inherit that key. Operator list, read, decide, review, retry,
+disposition, and measurement cannot cross tenants. Membership and product
+access stay upstream.
+
 ## Milestones
 
 **Current contract:** one repository profile, one model CLI, one runner on

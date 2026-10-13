@@ -123,6 +123,9 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 		if err != nil {
 			return err
 		}
+		if err := store.SetSessionTenantTx(tx, sid, sessionTenant(p)); err != nil {
+			return err
+		}
 		if _, _, err := e.bindSessionGuestTx(tx, sid, project, spec.Guest, pol); err != nil {
 			return err
 		}

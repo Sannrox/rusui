@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/sannrox/rusui/internal/slack"
+	"github.com/sannrox/rusui/internal/store"
 )
 
 // retryFailed requeues failed review work like the Slack `retry` command
@@ -28,15 +29,28 @@ func (s *Server) retryFailed(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "target must be OWNER/REPO or OWNER/REPO#ITEM", http.StatusBadRequest)
 		return
 	}
+	if !s.repoAllowed(r, repo) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	tenant, ok := s.operatorTenant(r)
+	if !ok {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
 	out := map[string]any{"repo": repo}
 	if item == 0 {
-		n, err := s.Eng.RetryAll(repo, "operator-api")
+		n, err := s.retryFailedTenant(repo, tenant)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		out["retried"] = n
 	} else {
+		if !s.reviewSessionAllowed(r, repo, item) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 		if err := s.Eng.OperatorRetry(repo, item, "operator-api"); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
@@ -45,4 +59,17 @@ func (s *Server) retryFailed(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+func (s *Server) retryFailedTenant(repo, tenant string) (int, error) {
+	items, err := store.FailedReviewItems(s.Eng.Store, repo, tenant)
+	if err != nil {
+		return 0, err
+	}
+	for i, item := range items {
+		if err := s.Eng.OperatorRetry(repo, item, "operator-api"); err != nil {
+			return i, err
+		}
+	}
+	return len(items), nil
 }

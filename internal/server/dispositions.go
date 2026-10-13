@@ -25,6 +25,13 @@ func (s *Server) recordDisposition(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", http.StatusBadRequest)
 		return
 	}
+	if tenant, ok := s.operatorTenant(r); ok {
+		sess, err := store.ReviewRevisionSession(s.Eng.Store, id)
+		if err != nil || sess == nil || store.NormalizeTenantID(sess.TenantID) != tenant {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+	}
 	var req struct {
 		Disposition  string `json:"disposition"`
 		WrongFinding bool   `json:"wrong_finding"`
@@ -62,7 +69,12 @@ func (s *Server) commentGate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
-	g, err := store.CommentGateReport(s.Eng.Store)
+	tenant, ok := s.operatorTenant(r)
+	if !ok {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	g, err := store.CommentGateReport(s.Eng.Store, tenant)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

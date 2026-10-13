@@ -23,6 +23,10 @@ func (s *Server) sessionWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", http.StatusBadRequest)
 		return
 	}
+	if _, err := s.visibleSession(r, id); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	path, secret, err := s.Eng.EnsureSessionWebhook(id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

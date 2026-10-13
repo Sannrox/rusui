@@ -599,6 +599,15 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int, enfo
 	if err != nil {
 		return err
 	}
+	if j != nil {
+		mismatch, err := e.reviewTenantMismatchTx(tx, it.Repo, it.Item)
+		if err != nil {
+			return err
+		}
+		if mismatch {
+			return nil
+		}
+	}
 	if !AdvisoryEligible(it) && (j == nil || j.PendingRevision == 0) {
 		if enforceReviewBudget {
 			return ErrReviewIneligible
@@ -652,7 +661,10 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int, enfo
 	}
 	if j == nil {
 		j = &store.Job{Repo: it.Repo, Item: it.Item, ItemKind: it.ItemKind, Lane: "review", PendingRevision: rev, State: "queued", RetryCount: 0}
-		return store.InsertJobTx(tx, j)
+		if err := store.InsertJobTx(tx, j); err != nil {
+			return err
+		}
+		return e.stampReviewTenantTx(tx, it.Repo, it.Item)
 	}
 	j.PendingRevision = rev
 	j.RetryCount = 0
@@ -834,8 +846,8 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 		// Turns in the same class stay in id order, so catch-up reviews
 		// are still claimed once no run is waiting. A bound repository
 		// also sees leftover pinless sessions of the same project (#557).
-		rows, err := tx.Query(`SELECT t.id, t.session_id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo IN (`+placeholders(len(keys))+`) AND COALESCE(s.archived, 0)=0 AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
-			append(anySlice(keys), anySlice(lanes)...)...)
+		rows, err := tx.Query(`SELECT t.id, t.session_id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo IN (`+placeholders(len(keys))+`) AND COALESCE(s.archived, 0)=0 AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) AND COALESCE(s.tenant_id,'default')=? ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
+			append(append(anySlice(keys), anySlice(lanes)...), sessionTenant(proj))...)
 		if err != nil {
 			return err
 		}

@@ -69,6 +69,9 @@ type ProjectYAML struct {
 	Secrets []string `yaml:"secrets"`
 	// Ship is pull-request (default) or push-base (ADR 0068).
 	Ship string `yaml:"ship"`
+	// Tenant is the isolation key for sessions created in this project.
+	// Empty means the single-operator default tenant.
+	Tenant string `yaml:"tenant"`
 }
 
 type LocalRuntimeYAML struct {
@@ -121,6 +124,8 @@ type Project struct {
 	// default as pull-request when the field is omitted.
 	Ship  string
 	Repos []string
+	// Tenant is the isolation key; empty means the default tenant.
+	Tenant string
 }
 
 type LocalRuntime struct {
@@ -222,6 +227,9 @@ func Parse(raw []byte) (*Effective, error) {
 		if err := validProjectGuests(slug, y.Guests, guests); err != nil {
 			return nil, err
 		}
+		if err := validTenant(slug, y.Tenant); err != nil {
+			return nil, err
+		}
 		p := Project{
 			Guests:       y.Guests,
 			Slug:         slug,
@@ -233,6 +241,7 @@ func Parse(raw []byte) (*Effective, error) {
 			Permissions:  y.Permissions,
 			Secrets:      secrets,
 			Ship:         ship,
+			Tenant:       y.Tenant,
 		}
 		for name, ry := range y.Repos {
 			if _, ok := out.Repos[name]; ok {
@@ -306,6 +315,16 @@ func validSlug(slug string) error {
 	}
 	if slug[0] < 'a' || slug[0] > 'z' {
 		return fmt.Errorf("policy: invalid project slug %q", slug)
+	}
+	return nil
+}
+
+func validTenant(slug, tenant string) error {
+	if tenant == "" {
+		return nil
+	}
+	if err := validSlug(tenant); err != nil {
+		return fmt.Errorf("policy: %s invalid tenant %q", slug, tenant)
 	}
 	return nil
 }

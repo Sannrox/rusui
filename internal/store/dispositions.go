@@ -34,6 +34,19 @@ type Disposition struct {
 	RecordedAt       time.Time `json:"recorded_at"`
 }
 
+// ReviewRevisionSession returns the session that produced a review result.
+func ReviewRevisionSession(s *Store, revisionID int64) (*Session, error) {
+	var sid int64
+	err := s.DB.QueryRow(`SELECT t.session_id FROM review_revisions r JOIN turns t ON t.id=r.job_id WHERE r.id=?`, revisionID).Scan(&sid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrUnknownResult
+	}
+	if err != nil {
+		return nil, err
+	}
+	return GetSession(s, sid)
+}
+
 // RecordDisposition appends a disposition for an existing review result.
 // Earlier dispositions stay as history; the latest one counts.
 func RecordDisposition(s *Store, d Disposition) (Disposition, error) {
@@ -80,18 +93,32 @@ type CommentGate struct {
 
 // CommentGateReport reads the latest disposition of each of the most
 // recent CommentGateWindow disposed shadow results.
-func CommentGateReport(s *Store) (CommentGate, error) {
+func CommentGateReport(s *Store, tenant string) (CommentGate, error) {
 	g := CommentGate{
 		Window: CommentGateWindow,
 		// Held-out cases and replay duplicates come from `rusui eval`;
 		// private-context leaks need a separate check.
 		NotMeasured: []string{"held_out_cases", "replay_duplicate_comments", "private_context_leaks"},
 	}
-	rows, err := s.DB.Query(`
+	q := `
 SELECT d.disposition, d.wrong_finding FROM result_dispositions d
 WHERE d.id = (SELECT MAX(x.id) FROM result_dispositions x WHERE x.review_revision_id = d.review_revision_id)
-  AND EXISTS (SELECT 1 FROM actions a WHERE a.review_revision_id = d.review_revision_id AND a.action_type = 'comment')
-ORDER BY d.review_revision_id DESC LIMIT ?`, CommentGateWindow)
+  AND EXISTS (SELECT 1 FROM actions a WHERE a.review_revision_id = d.review_revision_id AND a.action_type = 'comment')`
+	args := []any{}
+	if tenant != "" {
+		q += `
+  AND EXISTS (
+    SELECT 1 FROM review_revisions r
+    JOIN turns t ON t.id=r.job_id
+    JOIN sessions s ON s.id=t.session_id
+    WHERE r.id=d.review_revision_id AND COALESCE(s.tenant_id,'default')=?
+  )`
+		args = append(args, NormalizeTenantID(tenant))
+	}
+	q += `
+ORDER BY d.review_revision_id DESC LIMIT ?`
+	args = append(args, CommentGateWindow)
+	rows, err := s.DB.Query(q, args...)
 	if err != nil {
 		return g, err
 	}

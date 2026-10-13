@@ -21,7 +21,7 @@ func (s *Server) sessionLogs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	if _, err := store.GetSession(s.Eng.Store, id); err != nil {
+	if _, err := s.visibleSession(r, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -51,7 +51,7 @@ func (s *Server) sessionEnvlog(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	if _, err := store.GetSession(s.Eng.Store, id); err != nil {
+	if _, err := s.visibleSession(r, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -80,7 +80,16 @@ func (s *Server) listApprovals(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
-	list, err := store.ListPendingApprovals(s.Eng.Store)
+	tenant := ""
+	switch p := s.identify(r); p.Class {
+	case CredOperator:
+		tenant = p.TenantID
+	case CredWorker:
+	default:
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	list, err := store.ListPendingApprovalsTenant(s.Eng.Store, tenant)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -98,6 +107,11 @@ func (s *Server) getApproval(w http.ResponseWriter, r *http.Request) {
 		act, err := store.GetAction(s.Eng.Store, id)
 		if err != nil || act.TurnID == nil || !s.turnOK(r, *act.TurnID) {
 			http.Error(w, "auth", http.StatusUnauthorized)
+			return
+		}
+	} else if s.identify(r).Class == CredOperator {
+		if _, err := s.visibleApprovalAction(r, id); err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 	}
@@ -174,6 +188,12 @@ func (s *Server) decideApproval(w http.ResponseWriter, r *http.Request) {
 	if req.Decision != "allow" && req.Decision != "deny" {
 		http.Error(w, "decision", http.StatusBadRequest)
 		return
+	}
+	if s.identify(r).Class == CredOperator {
+		if _, err := s.visibleApprovalAction(r, r.PathValue("id")); err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 	}
 	if err := store.PutApprovalDecision(s.Eng.Store, r.PathValue("id"), req.Decision); err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)

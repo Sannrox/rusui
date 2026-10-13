@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 45
+const CurrentSchema = 46
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -549,7 +549,32 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 46 {
+		if err := migrateV46(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 46); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV46 stamps tenant_id on sessions so listings and approvals are
+// isolated per tenant. Existing rows belong to the single-operator default
+// tenant (#604).
+func migrateV46(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='tenant_id'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := db.Exec(`ALTER TABLE sessions ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'default'`); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec(`CREATE INDEX IF NOT EXISTS sessions_tenant ON sessions(tenant_id)`)
+	return err
 }
 
 // migrateV45 indexes actions by turn so ingest can enforce a per-turn row
