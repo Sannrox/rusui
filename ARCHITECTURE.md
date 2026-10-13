@@ -44,9 +44,14 @@ Sessions and approvals are isolated by `tenant_id`
 install uses tenant `default`; `RUSUI_OPERATOR_TOKEN` and OIDC bind to
 it. Optional `RUSUI_TENANT_TOKENS` maps additional tenant ids to
 operator-class bearers. A project may set `tenant` in `policy.yaml` so
-new sessions inherit that key. Operator list, read, decide, review, retry,
-disposition, and measurement cannot cross tenants. Membership and product
-access stay upstream.
+new sessions inherit that key. Each session records `created_by` and
+is a tenant-owned resource with a stable id; the ACP conversation
+(`guest_session_id`) is that session's thread
+([ADR 0077](docs/decisions/0077-session-access-grants.md)). Operator
+list, decide, review, retry, disposition, and measurement stay inside
+the owning tenant. Read and reopen by id also succeed for an explicit
+audited cross-tenant grant. Unknown and forbidden ids return the same
+not-found response. Membership and product access stay upstream.
 
 ## Milestones
 

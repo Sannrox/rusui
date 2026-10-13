@@ -287,6 +287,9 @@ func (s *Server) attachSession(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-tick.C:
+			if !s.sessionStillAllowed(r, id) {
+				return
+			}
 			turns, err := store.ListTurnsForSession(s.Eng.Store, id)
 			if err != nil {
 				return
@@ -325,7 +328,7 @@ func (s *Server) createChild(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	if _, err := s.visibleSession(r, id); err != nil {
+	if _, err := s.visibleOwnedSession(r, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -363,7 +366,7 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	if _, err := s.visibleSession(r, id); err != nil {
+	if _, err := s.visibleOwnedSession(r, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -483,7 +486,7 @@ func (s *Server) dropQueuedPrompts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	if _, err := s.visibleSession(r, id); errors.Is(err, sql.ErrNoRows) {
+	if _, err := s.visibleOwnedSession(r, id); errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	} else if err != nil {
@@ -509,7 +512,7 @@ func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	sess, err := s.visibleSession(r, id)
+	sess, err := s.visibleOwnedSession(r, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -564,7 +567,11 @@ func (s *Server) setSessionArchive(w http.ResponseWriter, r *http.Request, archi
 		http.Error(w, "id", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.visibleSession(r, id); errors.Is(err, sql.ErrNoRows) {
+	lookup := s.visibleSession
+	if archive {
+		lookup = s.visibleOwnedSession
+	}
+	if _, err := lookup(r, id); errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	} else if err != nil {

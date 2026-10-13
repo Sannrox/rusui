@@ -1,13 +1,17 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/policy"
@@ -104,6 +108,140 @@ func TestTenantCredentialCannotListReadOrDecideForeignWork(t *testing.T) {
 	idsWorker := sessionIDs(t, getJSON(t, hs.URL+"/sessions", "wsec"))
 	if !slices.Contains(idsWorker, sidA) || !slices.Contains(idsWorker, sidB) {
 		t.Fatalf("worker should see every tenant: %v", idsWorker)
+	}
+}
+
+func TestTenantGrantAllowsReopenAndRevoke(t *testing.T) {
+	s, hs, e := consoleEnv(t)
+	s.TenantToks = map[string]string{"acme": "tok-acme-secret", "globex": "tok-globex-secret"}
+	sidA, err := e.StartRun("test", "grant-me", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetSessionTenant(e.Store, sidA, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	path := "/sessions/" + strconv.FormatInt(sidA, 10)
+	if code := getStatus(t, hs.URL+path, "tok-globex-secret"); code != http.StatusNotFound {
+		t.Fatalf("globex read before grant: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/unarchive", "tok-globex-secret", `{}`); code != http.StatusNotFound {
+		t.Fatalf("globex reopen before grant: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/grants", "tok-globex-secret", `{"tenant":"globex"}`); code != http.StatusNotFound {
+		t.Fatalf("globex granted itself: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/grants", "tok-acme-secret", `{"tenant":"acme"}`); code != http.StatusBadRequest {
+		t.Fatalf("acme grant self: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/grants", "tok-acme-secret", `{"tenant":"globex"}`); code != http.StatusCreated {
+		t.Fatalf("acme grant globex: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/grants", "tok-acme-secret", `{"tenant":"globex"}`); code != http.StatusConflict {
+		t.Fatalf("duplicate grant: %d", code)
+	}
+	if !strings.Contains(getJSON(t, hs.URL+path+"/grants", "tok-acme-secret"), `"tenant":"globex"`) {
+		t.Fatal("owner grant list missing globex")
+	}
+	if code := getStatus(t, hs.URL+path+"/grants", "tok-globex-secret"); code != http.StatusNotFound {
+		t.Fatalf("grantee listed grants: %d", code)
+	}
+	idsGlobex := sessionIDs(t, getJSON(t, hs.URL+"/sessions", "tok-globex-secret"))
+	if slices.Contains(idsGlobex, sidA) {
+		t.Fatalf("list leaked granted session: %v", idsGlobex)
+	}
+	if code := getStatus(t, hs.URL+path, "tok-globex-secret"); code != http.StatusOK {
+		t.Fatalf("globex read after grant: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/unarchive", "tok-globex-secret", `{}`); code != http.StatusNoContent && code != http.StatusOK && code != http.StatusConflict {
+		t.Fatalf("globex reopen after grant: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/cancel", "tok-globex-secret", `{}`); code != http.StatusNotFound {
+		t.Fatalf("globex cancelled via grant: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/archive", "tok-globex-secret", `{}`); code != http.StatusNotFound {
+		t.Fatalf("globex archived via grant: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/turns", "tok-globex-secret", `{"prompt":"nope"}`); code != http.StatusNotFound {
+		t.Fatalf("globex prompted via grant: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/grants", "tok-acme-secret", `{"tenant":"default"}`); code != http.StatusCreated {
+		t.Fatalf("acme grant default: %d", code)
+	}
+	if code := getStatus(t, hs.URL+path, "op-tok"); code != http.StatusOK {
+		t.Fatalf("default read after grant: %d", code)
+	}
+	op := operatorClient(t, hs)
+	page, err := op.Get(hs.URL + "/console/sessions/" + strconv.FormatInt(sidA, 10))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, page.Body)
+	_ = page.Body.Close()
+	if page.StatusCode != http.StatusOK {
+		t.Fatalf("console read after default grant: %d", page.StatusCode)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/turns", "op-tok", `{"prompt":"nope"}`); code != http.StatusNotFound {
+		t.Fatalf("default prompted via grant: %d", code)
+	}
+	form := url.Values{"csrf": {s.consoleCSRF()}, "mode": {"follow_up"}, "prompt": {"nope"}}
+	req, err := http.NewRequest(http.MethodPost, hs.URL+"/console/sessions/"+strconv.FormatInt(sidA, 10)+"/prompt", strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer op-tok")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("console prompt via grant: %d", res.StatusCode)
+	}
+	if code := deleteStatus(t, hs.URL+path+"/grants/globex", "tok-acme-secret"); code != http.StatusNoContent {
+		t.Fatalf("acme revoke: %d", code)
+	}
+	if code := getStatus(t, hs.URL+path, "tok-globex-secret"); code != http.StatusNotFound {
+		t.Fatalf("globex read after revoke: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/unarchive", "tok-globex-secret", `{}`); code != http.StatusNotFound {
+		t.Fatalf("globex reopen after revoke: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/grants", "tok-acme-secret", `{"tenant":"globex"}`); code != http.StatusCreated {
+		t.Fatalf("regrant after revoke: %d", code)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	att, err := http.NewRequestWithContext(ctx, http.MethodGet, hs.URL+path+"/attach", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	att.Header.Set("Authorization", "Bearer tok-globex-secret")
+	done := make(chan error, 1)
+	go func() {
+		res, err := http.DefaultClient.Do(att)
+		if err != nil {
+			done <- err
+			return
+		}
+		_, _ = io.Copy(io.Discard, res.Body)
+		_ = res.Body.Close()
+		done <- nil
+	}()
+	time.Sleep(300 * time.Millisecond)
+	if code := deleteStatus(t, hs.URL+path+"/grants/globex", "tok-acme-secret"); code != http.StatusNoContent {
+		t.Fatalf("revoke live stream: %d", code)
+	}
+	select {
+	case err := <-done:
+		if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+			t.Fatalf("attach after revoke: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("attach continued after revoke")
 	}
 }
 
@@ -342,6 +480,22 @@ func getJSON(t *testing.T, url, token string) string {
 func getStatus(t *testing.T, url, token string) int {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, res.Body)
+	_ = res.Body.Close()
+	return res.StatusCode
+}
+
+func deleteStatus(t *testing.T, url, token string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

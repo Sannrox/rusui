@@ -47,7 +47,7 @@ func (s *Server) writeWorkspaceUpload(r *http.Request, rel string) error {
 	if err != nil {
 		return fmt.Errorf("id")
 	}
-	sess, err := s.visibleSession(r, id)
+	sess, err := s.visibleOwnedSession(r, id)
 	if err != nil {
 		return errNotFound
 	}

@@ -44,6 +44,9 @@ projects:
 	if sess.TenantID != "acme" {
 		t.Fatalf("tenant %q", sess.TenantID)
 	}
+	if sess.CreatedBy != "acme" {
+		t.Fatalf("created_by %q", sess.CreatedBy)
+	}
 }
 
 func TestReviewSessionInheritsProjectTenant(t *testing.T) {

@@ -246,7 +246,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/readyz` | none; JSON topology report; 200 ready / 503 not ready |
 | `GET` | `/auth/oidc` | public OIDC client metadata; 404 when disabled |
 | `GET` | `/auth/oidc/session` | validate operator bearer; 204 when accepted, 401 when refused |
-| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`) |
+| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, or revoked grant |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
 | `GET` | `/sessions/{id}/terminal` | operator, worker, or turn token; current environment terminal output; not the transcript |
 | `GET` | `/sessions/{id}/envlog` | operator token; last pre-clone, pre-setup, setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`pre-clone`/`pre-setup`/`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
@@ -276,7 +276,10 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `DELETE` | `/sessions/{id}/queued` | operator or worker token; drops queued prompts that have not started and returns `dropped`; the current turn keeps running (`rusui prompt -drop-queue`) |
 | `POST` | `/sessions/{id}/cancel` | operator or worker token; ends the turn, drops queued prompts, and stops the guest's processes |
 | `POST` | `/sessions/{id}/archive` | operator or worker token; sleeps the environment, refuses prompts, and keeps the session row (`rusui archive`) |
-| `POST` | `/sessions/{id}/unarchive` | operator or worker token; allows prompts again on the same environment (`rusui unarchive`) |
+| `POST` | `/sessions/{id}/unarchive` | operator or worker token; allows prompts again on the same environment (`rusui unarchive`); tenant operators may reopen a foreign session only with a live access grant |
+| `GET` | `/sessions/{id}/grants` | operator token; live cross-tenant access grants for a session the caller owns; 404 unknown or foreign-owned |
+| `POST` | `/sessions/{id}/grants` | operator token; JSON `tenant` of the grantee; owning tenant only; 201 created, 409 duplicate live grant |
+| `DELETE` | `/sessions/{id}/grants/{tenant}` | operator token; revoke a live grant; owning tenant only; 204; 404 unknown grant |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
 | `*` | `/model-proxy/` | guest grant (HTTPS for container guests); runner turn token refused |
 | `*` | `/git-proxy/github.com/` | prepare or guest grant; push only with a guest grant on the session ref prefix |

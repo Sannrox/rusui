@@ -300,7 +300,7 @@ func (s *Server) termSessionEnv(r *http.Request) (*store.Session, *store.Environ
 	if err != nil {
 		return nil, nil, fmt.Errorf("id")
 	}
-	sess, err := s.visibleSession(r, id)
+	sess, err := s.visibleOwnedSession(r, id)
 	if err != nil {
 		return nil, nil, fmt.Errorf("not found")
 	}

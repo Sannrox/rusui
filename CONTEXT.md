@@ -9,7 +9,7 @@ An operator-named policy and budget domain. A session belongs to exactly one pro
 _Avoid_: Repository, environment, session, GitHub Project, workspace
 
 **Tenant**:
-The hard isolation key `tenant_id` on sessions and, through them, approvals ([ADR 0076](docs/decisions/0076-tenant-isolation.md)). Single-operator installs use `default`. Per-tenant operator credentials and optional project `tenant` bind list, read, decide, review, retry, disposition, and measurement to that key. Membership and product access stay upstream.
+The hard isolation key `tenant_id` on sessions and, through them, approvals ([ADR 0076](docs/decisions/0076-tenant-isolation.md)). Single-operator installs use `default`. Per-tenant operator credentials and optional project `tenant` bind list, decide, review, retry, disposition, and measurement to that key. A session is a tenant-owned resource with a stable id and recorded `created_by`; its thread is the session conversation. Sharing across tenants is an explicit audited grant on that session ([ADR 0077](docs/decisions/0077-session-access-grants.md)). Read and reopen by id check that grant; list stays owner-tenant only. Unknown and forbidden ids return the same not-found response. Membership and product access stay upstream.
 _Avoid_: second operator, namespace as isolation, caller-side filtering
 
 **Operator**:

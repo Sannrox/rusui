@@ -23,7 +23,7 @@ func (s *Server) sessionWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.visibleSession(r, id); err != nil {
+	if _, err := s.visibleOwnedSession(r, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

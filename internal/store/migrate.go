@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 46
+const CurrentSchema = 47
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -557,7 +557,45 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 47 {
+		if err := migrateV47(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 47); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV47 records the session creator and audited cross-tenant access
+// grants. Existing rows inherit created_by from tenant_id (#606).
+func migrateV47(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='created_by'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := db.Exec(`ALTER TABLE sessions ADD COLUMN created_by TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	if _, err := db.Exec(`UPDATE sessions SET created_by=COALESCE(NULLIF(created_by,''), tenant_id, 'default')`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS session_access_grants (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  grantee_tenant TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT
+)`); err != nil {
+		return err
+	}
+	_, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS session_access_grants_live ON session_access_grants(session_id, grantee_tenant) WHERE revoked_at IS NULL`)
+	return err
 }
 
 // migrateV46 stamps tenant_id on sessions so listings and approvals are

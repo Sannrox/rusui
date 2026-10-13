@@ -1,6 +1,6 @@
 # ADR 0076: Tenant isolation on the session plane
 
-- Status: Accepted
+- Status: Accepted; amended by 0077
 - Date: 2026-10-13
 - Amends: [ADR 0012](0012-operator-access.md) (operator credentials
   carry a tenant isolation key); [ADR 0005](0005-policy-v2-project.md)

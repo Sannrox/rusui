@@ -19,7 +19,8 @@ func NormalizeTenantID(id string) string {
 }
 
 func SetSessionTenantTx(tx *sql.Tx, sessionID int64, tenantID string) error {
-	_, err := tx.Exec(`UPDATE sessions SET tenant_id=? WHERE id=?`, NormalizeTenantID(tenantID), sessionID)
+	id := NormalizeTenantID(tenantID)
+	_, err := tx.Exec(`UPDATE sessions SET tenant_id=?, created_by=CASE WHEN created_by='' THEN ? ELSE created_by END WHERE id=?`, id, id, sessionID)
 	return err
 }
 
