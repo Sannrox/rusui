@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -165,7 +166,17 @@ func GuestHost(c *Client) ACPHost {
 				return nil, nil, err
 			}
 		}
-		argv = guestHomeArgv(a, argv, home)
+		state := filepath.Join(home, "state")
+		if a.Guest == guest.KindShikigami {
+			kept, err := sessionStateDir(c.Exec, a)
+			if err != nil {
+				return nil, nil, err
+			}
+			if kept != "" {
+				state = kept
+			}
+		}
+		argv = guestHomeArgv(a, argv, state)
 		if a.Guest == guest.KindShikigami {
 			argv, err = prepareShikigamiConfig(c.Exec, a, argv, home)
 			if err != nil {
@@ -443,6 +454,9 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 		if err := host.SessionLoad(ctx, sid, cwd); err != nil {
 			sid = ""
 		}
+		if err := recordResume(host.Rec, a, sid != ""); err != nil {
+			return engine.Artifact{}, nil, err
+		}
 	}
 	if sid == "" {
 		var err error
@@ -642,6 +656,7 @@ func hostNative(ctx context.Context, a *Assignment, host *acp.Client, cwd, kind 
 		Prompt:       prompt,
 		Workspace:    cwd,
 		Observe:      transcript.Observe,
+		Resumed:      func(loaded bool) error { return recordResume(host.Rec, a, loaded) },
 	}, claudeDecide(a, host))
 	if err != nil {
 		if ctx.Err() != nil {
@@ -652,6 +667,20 @@ func hostNative(ctx context.Context, a *Assignment, host *acp.Client, cwd, kind 
 	art := artifactFromAssignment(a, nil)
 	art.GuestSessionID = res.Cursor
 	return art, nil
+}
+
+// recordResume tells the plane whether the guest loaded the session's stored
+// conversation or started a new one without the earlier turns.
+func recordResume(rec acp.Recorder, a *Assignment, loaded bool) error {
+	if rec == nil {
+		return nil
+	}
+	reason := "succeeded"
+	if !loaded {
+		reason = "refused"
+	}
+	_, err := rec.Record(acp.Receipt{Type: acp.ActionResume, Reason: reason, Body: map[string]string{"guest": a.Guest, "cursor": a.GuestSessionID}})
+	return err
 }
 
 func claudeDecide(a *Assignment, host *acp.Client) provider.Decide {

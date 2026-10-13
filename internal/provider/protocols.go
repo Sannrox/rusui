@@ -171,6 +171,11 @@ func runCodex(rw io.ReadWriteCloser, _ Instance, turn Turn, decide Decide) (Resu
 	if opened.Thread.ID == "" {
 		return Result{}, fmt.Errorf("provider: codex thread missing")
 	}
+	if turn.Cursor != "" && turn.Resumed != nil {
+		if err := turn.Resumed(opened.Thread.ID == turn.Cursor); err != nil {
+			return Result{}, err
+		}
+	}
 	if err := writeJSON(rw, map[string]any{"id": 3, "method": "turn/start", "params": map[string]any{"threadId": opened.Thread.ID, "input": []map[string]string{{"type": "text", "text": turn.Prompt}}, "cwd": turn.Workspace, "approvalPolicy": "untrusted", "sandboxPolicy": map[string]any{"type": "readOnly"}}}); err != nil {
 		return Result{}, err
 	}
