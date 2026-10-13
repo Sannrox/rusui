@@ -23,7 +23,7 @@ func (s *Server) consoleApprovals(w http.ResponseWriter, r *http.Request) {
 	if !s.consoleRequire(w, r) {
 		return
 	}
-	list, err := store.ListPendingApprovals(s.Eng.Store)
+	list, err := store.ListPendingApprovalsTenant(s.Eng.Store, store.DefaultTenantID)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -61,6 +61,16 @@ func (s *Server) consoleDecide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	if act, err := store.GetAction(s.Eng.Store, id); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	} else if act.SessionID == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	} else if sess, err := store.GetSession(s.Eng.Store, *act.SessionID); err != nil || store.NormalizeTenantID(sess.TenantID) != store.DefaultTenantID {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	dec := r.FormValue("decision")
 	if dec != "allow" && dec != "deny" {
 		http.Error(w, "decision", 400)
@@ -83,7 +93,7 @@ func (s *Server) consoleDecide(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	list, _ := store.ListPendingApprovals(s.Eng.Store)
+	list, _ := store.ListPendingApprovalsTenant(s.Eng.Store, store.DefaultTenantID)
 	out := make([]consoleApproval, 0, len(list))
 	for _, a := range list {
 		sid := int64(0)
@@ -103,7 +113,7 @@ func (s *Server) consoleEnvironments(w http.ResponseWriter, r *http.Request) {
 	if !s.consoleRequire(w, r) {
 		return
 	}
-	rows, err := s.Eng.Store.DB.Query(`SELECT id, name, driver, state, IFNULL(source_hash,'') FROM environments ORDER BY id DESC LIMIT 50`)
+	rows, err := s.Eng.Store.DB.Query(`SELECT DISTINCT e.id, e.name, e.driver, e.state, IFNULL(e.source_hash,'') FROM environments e JOIN sessions s ON s.environment_id=e.id WHERE COALESCE(s.tenant_id,'default')=? ORDER BY e.id DESC LIMIT 50`, store.DefaultTenantID)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -149,7 +159,7 @@ func (s *Server) consoleReceipts(w http.ResponseWriter, r *http.Request) {
 	if !s.consoleRequire(w, r) {
 		return
 	}
-	rows, err := s.Eng.Store.DB.Query(`SELECT job_id, kind FROM receipts ORDER BY job_id DESC LIMIT 50`)
+	rows, err := s.Eng.Store.DB.Query(`SELECT r.job_id, r.kind FROM receipts r JOIN turns t ON t.id=r.job_id JOIN sessions s ON s.id=t.session_id WHERE COALESCE(s.tenant_id,'default')=? ORDER BY r.job_id DESC LIMIT 50`, store.DefaultTenantID)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -174,12 +184,15 @@ func (s *Server) consoleBudgets(w http.ResponseWriter, r *http.Request) {
 	}
 	var out [][]string
 	for slug, p := range s.Eng.PolicySnapshot().Projects {
+		if store.NormalizeTenantID(p.Tenant) != store.DefaultTenantID {
+			continue
+		}
 		cap := 0
 		if p.Budgets != nil {
 			cap = p.Budgets[policy.BudgetMaxConcurrentLeases]
 		}
 		var n int
-		_ = s.Eng.Store.DB.QueryRow(`SELECT COUNT(*) FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.project=? AND t.state='leased'`, slug).Scan(&n)
+		_ = s.Eng.Store.DB.QueryRow(`SELECT COUNT(*) FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.project=? AND t.state='leased' AND COALESCE(s.tenant_id,'default')=?`, slug, store.DefaultTenantID).Scan(&n)
 		limit := "unset (not an enforced estimate)"
 		if cap > 0 {
 			limit = strconv.Itoa(cap)

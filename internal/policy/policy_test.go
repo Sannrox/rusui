@@ -62,6 +62,28 @@ projects:
 	}
 }
 
+func TestParseProjectTenant(t *testing.T) {
+	e, err := Parse([]byte(`
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+projects:
+  rusui:
+    tenant: acme
+    repos:
+      Sannrox/rusui:
+        visibility: private
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := e.Project("rusui")
+	if !ok || p.Tenant != "acme" {
+		t.Fatalf("tenant %+v ok=%v", p, ok)
+	}
+}
+
 func TestParseReviewDefaultAndRepoOverride(t *testing.T) {
 	base := `
 version: 2
@@ -139,6 +161,7 @@ projects:
 		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{command: npm, action: warp}]\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{action: reject}]\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{command: npm, verdict: reject}]\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    tenant: Acme\n", 1),
 	}
 	for i, c := range cases {
 		if _, err := Parse([]byte(c)); err == nil {

@@ -28,10 +28,13 @@ import (
 )
 
 type Server struct {
-	Eng              *engine.Engine
-	WebhookSec       string
-	WorkerSec        string
-	OperatorTok      string
+	Eng         *engine.Engine
+	WebhookSec  string
+	WorkerSec   string
+	OperatorTok string
+	// TenantToks maps tenant_id to a distinct operator bearer. The default
+	// tenant uses OperatorTok. Worker and turn secrets are never keys here.
+	TenantToks       map[string]string
 	OIDC             *oidc.Verifier
 	SlackSec         string
 	SlackUsers       map[string]bool
@@ -147,7 +150,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /jobs/{id}/fail", s.fail)
 	mux.Handle("/model-proxy/", http.HandlerFunc(s.modelProxy))
 	mux.Handle("/git-proxy/", http.HandlerFunc(s.gitProxy))
-	return mux
+	return s.withPrincipal(mux)
 }
 
 const turnTokenTTL = engine.GrantTTL

@@ -49,6 +49,9 @@ func (e *Engine) StartChildGuest(parentID int64, prompt, project, requestedGuest
 	if !ok || !p.AllowsKind(policy.KindRun) {
 		return 0, fmt.Errorf("policy")
 	}
+	if sessionTenant(p) != store.NormalizeTenantID(parent.TenantID) {
+		return 0, fmt.Errorf("tenant")
+	}
 	if _, _, err := e.chooseGuest(project, requestedGuest, pol); err != nil {
 		return 0, err
 	}
@@ -102,6 +105,9 @@ func (e *Engine) StartChildGuest(parentID int64, prompt, project, requestedGuest
 		}
 		sid, item, err := store.InsertChildSessionTx(tx, project, repo, prompt, parentID)
 		if err != nil {
+			return err
+		}
+		if err := store.SetSessionTenantTx(tx, sid, store.NormalizeTenantID(parent.TenantID)); err != nil {
 			return err
 		}
 		if _, _, err := e.bindSessionGuestTx(tx, sid, project, requestedGuest, pol); err != nil {

@@ -19,7 +19,17 @@ func (s *Server) projectMeasurements(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
-	agg, err := store.ProjectAggregates(s.Eng.Store, r.PathValue("slug"))
+	slug := r.PathValue("slug")
+	if !s.projectAllowed(r, slug) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	tenant, ok := s.operatorTenant(r)
+	if !ok {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	agg, err := store.ProjectAggregates(s.Eng.Store, slug, tenant)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

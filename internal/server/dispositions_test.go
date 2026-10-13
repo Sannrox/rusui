@@ -12,7 +12,16 @@ import (
 
 func TestDispositionIsOperatorOnly(t *testing.T) {
 	_, hs, e := consoleEnv(t)
-	res, err := e.Store.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (1, 1, 'h', 'm', '{}')`)
+	sid, err := e.StartRun("test", "disp", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := e.Store.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'completed')`, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tid, _ := turn.LastInsertId()
+	res, err := e.Store.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', '{}')`, tid)
 	if err != nil {
 		t.Fatal(err)
 	}

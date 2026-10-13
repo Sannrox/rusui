@@ -36,7 +36,7 @@ func TestStartRunAndClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sess.Kind != store.SessionKindRun || sess.Prompt != "do the thing" || sess.Project != "test" {
+	if sess.Kind != store.SessionKindRun || sess.Prompt != "do the thing" || sess.Project != "test" || sess.TenantID != store.DefaultTenantID {
 		t.Fatalf("%+v", sess)
 	}
 }

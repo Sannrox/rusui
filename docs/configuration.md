@@ -92,7 +92,8 @@ reported and exits successfully.
 | `RUSUI_GITHUB_APP_INSTALLATION_ID` | GitHub App intake | Installation on the bound repository |
 | `RUSUI_WEBHOOK_SECRET` | **Yes** unless `-allow-insecure` | GitHub + generic event HMAC |
 | `RUSUI_WORKER_SECRET` | **Yes** unless `-allow-insecure` | Runner / job bearer |
-| `RUSUI_OPERATOR_TOKEN` | static operator token for console and CLI break-glass access | Distinct from worker; unset keeps console HTML and attachment disabled ([ADR 0012](decisions/0012-operator-access.md)) |
+| `RUSUI_OPERATOR_TOKEN` | static operator token for console and CLI break-glass access | Distinct from worker; unset keeps console HTML and attachment disabled ([ADR 0012](decisions/0012-operator-access.md)). Binds to tenant `default` ([ADR 0076](decisions/0076-tenant-isolation.md)). |
+| `RUSUI_TENANT_TOKENS` | no | JSON object of `tenant_id` to operator bearer, or a path to that file. Each token lists, reads, decides, reviews, retries, dispositions, and measurements only for that tenant. The `default` key is refused; duplicate token values and overlap with the operator token or worker secret fail closed. |
 | `RUSUI_OIDC_ISSUER` | no | Optional OIDC issuer for CLI operator tokens; HTTPS required except loopback HTTP. Requires audience, client ID, subject, and optional space-separated scopes. |
 | `RUSUI_OIDC_AUDIENCE` | no | OIDC API audience validated on every bearer. |
 | `RUSUI_OIDC_CLIENT_ID` | no | Public OIDC client ID used by `rusui login`. |
@@ -252,10 +253,10 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/sessions/{id}/workspace` | operator token; multipart `file` plus `path` query; 32 MiB cap; workspace-relative only |
 | `GET` | `/sessions/{id}?include=receipts[&receipt_after_id={id}][&process_receipt_after_id={id}]` | operator or worker token; up to 100 environment and 100 local process receipts in ID order; follow `environment_receipts_next_after_id` and `process_receipts_next_after_id` when present |
 | `GET` | `/sessions/{id}?view=review-status&turn_id={turn}` | operator or worker token; compact turn state and revisions for polling |
-| `POST` | `/reviews` | operator or worker token; request one bound pull-request review (`rusui review`) |
-| `POST` | `/results/{id}/dispositions` | operator token; JSON `disposition` (`useful`/`neutral`/`harmful`), optional `wrong_finding` and `note` (4 KiB) for review result `{id}` (`rusui disposition`); 404 unknown result |
-| `GET` | `/dispositions/comment-gate` | operator token; trailing 20 disposed shadow results against the ADR 0038 D6 comment thresholds |
-| `POST` | `/retry` | operator token; JSON `target` `OWNER/REPO` (every failed review job) or `OWNER/REPO#ITEM` (one); same as Slack `retry` (`rusui retry`); 409 when the item has no failed review job |
+| `POST` | `/reviews` | operator or worker token; request one bound pull-request review (`rusui review`); tenant operators only for repositories of their tenant |
+| `POST` | `/results/{id}/dispositions` | operator token; JSON `disposition` (`useful`/`neutral`/`harmful`), optional `wrong_finding` and `note` (4 KiB) for review result `{id}` (`rusui disposition`); 404 unknown or foreign-tenant result |
+| `GET` | `/dispositions/comment-gate` | operator token; trailing 20 disposed shadow results against the ADR 0038 D6 comment thresholds, scoped to the caller's tenant |
+| `POST` | `/retry` | operator token; JSON `target` `OWNER/REPO` (every failed review job) or `OWNER/REPO#ITEM` (one); same as Slack `retry` (`rusui retry`); 409 when the item has no failed review job; tenant operators only for repositories of their tenant |
 | `POST` | `/drain` | worker secret; pause claims and list live turns |
 | `POST` | `/hooks/github` | `X-Hub-Signature-256` |
 | `POST` | `/hooks/events` | `X-Rusui-Signature-256` (same webhook secret); 202 |

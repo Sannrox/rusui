@@ -78,6 +78,14 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='mode'`).Scan(&modeCol); err != nil || modeCol != 1 {
 		t.Fatalf("sessions.mode missing after upgrade: %d %v", modeCol, err)
 	}
+	var tenantCol int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='tenant_id'`).Scan(&tenantCol); err != nil || tenantCol != 1 {
+		t.Fatalf("sessions.tenant_id missing after upgrade: %d %v", tenantCol, err)
+	}
+	var tenant string
+	if err := s.DB.QueryRow(`SELECT tenant_id FROM sessions LIMIT 1`).Scan(&tenant); err != nil || tenant != DefaultTenantID {
+		t.Fatalf("migrated session tenant %q %v", tenant, err)
+	}
 	var attPath int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('prompt_attachments') WHERE name='path'`).Scan(&attPath); err != nil || attPath != 1 {
 		t.Fatalf("prompt_attachments.path missing after upgrade: %d %v", attPath, err)

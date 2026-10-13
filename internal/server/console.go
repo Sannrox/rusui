@@ -394,7 +394,7 @@ func (s *Server) consoleSessions(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/console/signin", http.StatusSeeOther)
 		return
 	}
-	list, err := store.ListSessions(s.Eng.Store, "", 50)
+	list, err := store.ListSessionsFilter(s.Eng.Store, store.SessionListFilter{Tenant: store.DefaultTenantID, Limit: 50})
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -427,7 +427,7 @@ func (s *Server) consoleSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	page, err := s.sessionPage(id)
+	page, err := s.sessionPage(r, id)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -453,6 +453,10 @@ func (s *Server) consolePrompt(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.Error(w, "id", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.visibleSession(r, id); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	prompt := strings.TrimSpace(r.FormValue("prompt"))
@@ -484,8 +488,8 @@ func (s *Server) consolePrompt(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/console/sessions/"+strconv.FormatInt(id, 10)+"?notice="+url.QueryEscape(notice), http.StatusSeeOther)
 }
 
-func (s *Server) sessionPage(id int64) (consolePage, error) {
-	sess, err := store.GetSession(s.Eng.Store, id)
+func (s *Server) sessionPage(r *http.Request, id int64) (consolePage, error) {
+	sess, err := s.visibleSession(r, id)
 	if err != nil {
 		return consolePage{}, err
 	}
@@ -577,7 +581,7 @@ func (s *Server) consoleEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	if _, err := store.GetSession(s.Eng.Store, id); err != nil {
+	if _, err := s.visibleSession(r, id); err != nil {
 		http.Error(w, "not found", 404)
 		return
 	}
@@ -632,7 +636,7 @@ func (s *Server) consoleFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	sess, err := store.GetSession(s.Eng.Store, id)
+	sess, err := s.visibleSession(r, id)
 	if err != nil {
 		http.Error(w, "not found", 404)
 		return
