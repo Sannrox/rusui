@@ -94,7 +94,11 @@ func (c *transcriptRecorder) Observe(ev provider.Event) {
 			"content":       map[string]any{"type": "text", "text": ev.Body},
 		}
 	case ev.Kind == "tool_call" && ev.Tool != nil && ev.Tool.Status == "pending":
-		input := ev.Tool.Input
+		// Widen to the decoded-JSON shape Record reads without a round trip.
+		input := make(map[string]any, len(ev.Tool.Input))
+		for key, value := range ev.Tool.Input {
+			input[key] = value
+		}
 		update = map[string]any{
 			"sessionUpdate": "tool_call",
 			"toolCallId":    ev.Tool.ID,
@@ -117,51 +121,78 @@ func (c *transcriptRecorder) Observe(ev provider.Event) {
 
 // Record preserves authority receipt types; normalization affects recorded
 // observations only. Permission decisions still consume the original request.
+// Updates are normalized and redacted before taking the lock, so the guest
+// read loop holds it only for message buffering and the downstream write.
 func (c *transcriptRecorder) Record(rec acp.Receipt) (string, error) {
 	if c.rec == nil {
 		return "", nil
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	switch rec.Type {
-	case acp.ActionUpdate:
-		raw, err := json.Marshal(rec.Body)
+	var update map[string]any
+	if rec.Type == acp.ActionUpdate {
+		raw, err := sessionUpdate(rec.Body)
 		if err != nil {
 			return "", err
 		}
-		var params acp.SessionUpdateParams
-		if err := json.Unmarshal(raw, &params); err != nil {
-			return "", err
-		}
-		update := acp.NormalizeSessionUpdate(params.Update)
-		if update == nil {
+		if update = acp.NormalizeSessionUpdate(raw); update == nil {
 			return "", nil
 		}
-		kind, _ := update["sessionUpdate"].(string)
-		if kind == "agent_message_chunk" || kind == "user_message_chunk" {
-			if c.messageKind != "" && c.messageKind != kind {
-				c.flushMessage()
-			}
-			c.messageKind = kind
-			content, _ := update["content"].(map[string]any)
-			text, _ := content["text"].(string)
-			// Drop an oversized message whole: cutting an unredacted chunk can
-			// retain a credential prefix whose remainder arrives in the next chunk.
-			if c.message.Len()+len(text) > 2*transcriptTextCap {
-				c.message.Reset()
-				c.overflow = true
-			}
-			if !c.overflow {
-				c.message.WriteString(text)
-			}
-			return "", nil
-		}
+	}
+	kind, _ := update["sessionUpdate"].(string)
+	message := kind == "agent_message_chunk" || kind == "user_message_chunk"
+	if update != nil && !message {
 		rec.Body = map[string]any{"update": c.cleanValue(update, 0)}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if message {
+		if c.messageKind != "" && c.messageKind != kind {
+			c.flushMessage()
+		}
+		c.messageKind = kind
+		content, _ := update["content"].(map[string]any)
+		text, _ := content["text"].(string)
+		// Drop an oversized message whole: cutting an unredacted chunk can
+		// retain a credential prefix whose remainder arrives in the next chunk.
+		if c.message.Len()+len(text) > 2*transcriptTextCap {
+			c.message.Reset()
+			c.overflow = true
+		}
+		if !c.overflow {
+			c.message.WriteString(text)
+		}
+		return "", nil
 	}
 	// Permission bodies are authority inputs used again by policy revalidation.
 	// Keep their exact structure and bytes, separate from transcript summaries.
 	c.flushMessage()
 	return c.rec.Record(rec)
+}
+
+// sessionUpdate returns the ACP update carried by an update receipt body.
+// The ACP client and Observe already hold decoded values; only an unknown
+// body shape pays for a JSON round trip.
+func sessionUpdate(body any) (map[string]any, error) {
+	switch b := body.(type) {
+	case acp.SessionUpdateParams:
+		return b.Update, nil
+	case *acp.SessionUpdateParams:
+		if b != nil {
+			return b.Update, nil
+		}
+	case map[string]any:
+		if update, ok := b["update"].(map[string]any); ok {
+			return update, nil
+		}
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	var params acp.SessionUpdateParams
+	if err := json.Unmarshal(raw, &params); err != nil {
+		return nil, err
+	}
+	return params.Update, nil
 }
 
 // Flush closes the final message even when a turn fails or is cancelled.

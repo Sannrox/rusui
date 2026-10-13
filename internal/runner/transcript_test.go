@@ -155,3 +155,51 @@ func TestTranscriptChunkLimitAndAuthorityInputs(t *testing.T) {
 		}
 	}
 }
+
+// largeToolCall is an edit whose bodies dominate the update, as a guest sends.
+func largeToolCall(n int) map[string]any {
+	body := strings.Repeat("x", n)
+	return map[string]any{
+		"sessionUpdate": "tool_call", "toolCallId": "tool-1", "title": "Edit", "kind": "edit", "status": "pending",
+		"rawInput": map[string]any{"file_path": "main.go", "old_string": body, "new_string": body},
+		"content":  []any{map[string]any{"type": "diff", "path": "main.go", "oldText": body, "newText": body}},
+	}
+}
+
+// Every update body shape yields the same summary; unknown shapes still
+// decode through JSON.
+func TestTranscriptUpdateBodyShapes(t *testing.T) {
+	update := largeToolCall(64)
+	raw, _ := json.Marshal(acp.SessionUpdateParams{Update: update})
+	want := `{"update":{"kind":"edit","rawInput":{"file_path":"main.go"},"sessionUpdate":"tool_call","status":"pending","title":"Edit","toolCallId":"tool-1"}}`
+	for name, body := range map[string]any{
+		"params":  acp.SessionUpdateParams{Update: update},
+		"pointer": &acp.SessionUpdateParams{Update: update},
+		"map":     map[string]any{"update": update},
+		"raw":     json.RawMessage(raw),
+	} {
+		log := &receiptLog{}
+		if _, err := newTranscriptRecorder(nil, log).Record(acp.Receipt{Type: acp.ActionUpdate, Body: body}); err != nil {
+			t.Fatal(name, err)
+		}
+		got, _ := json.Marshal(log.rows[0].Body)
+		if string(got) != want {
+			t.Fatalf("%s: got %s", name, got)
+		}
+	}
+}
+
+func BenchmarkTranscriptRecordLargeToolCall(b *testing.B) {
+	rec := newTranscriptRecorder(nil, nopRecorder{})
+	body := acp.SessionUpdateParams{SessionID: "bench", Update: largeToolCall(1 << 20)}
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := rec.Record(acp.Receipt{Type: acp.ActionUpdate, Body: body}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+type nopRecorder struct{}
+
+func (nopRecorder) Record(acp.Receipt) (string, error) { return "", nil }
