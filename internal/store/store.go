@@ -1176,6 +1176,12 @@ func InsertActionTx(tx *sql.Tx, a Action) error {
 	return err
 }
 
+// TurnActionUsageTx counts rows and stored body bytes for one turn.
+func TurnActionUsageTx(tx *sql.Tx, turnID int64) (rows int, bytes int64, err error) {
+	err = tx.QueryRow(`SELECT COUNT(*), COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM actions WHERE turn_id=?`, turnID).Scan(&rows, &bytes)
+	return
+}
+
 func ListActions(s *Store, repo string, item int) ([]Action, error) {
 	rows, err := s.DB.Query(`SELECT action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body FROM actions WHERE repo=? AND item=? ORDER BY action_id`,
 		repo, item)

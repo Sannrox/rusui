@@ -55,6 +55,7 @@ func newTranscriptRecorder(a *Assignment, rec acp.Recorder) *transcriptRecorder 
 	}
 	if a != nil {
 		add(a.TurnToken)
+		add(a.GuestGrant)
 		add(a.GitHubToken)
 	}
 	for _, entry := range os.Environ() {

@@ -197,10 +197,11 @@ func TestGitProxyRejectsUnapprovedHostExpiredCrossSessionAndPreparePush(t *testi
 	if err := e.Store.DB.QueryRow(`SELECT id FROM turns WHERE session_id=?`, sidB).Scan(&turnB); err != nil {
 		t.Fatal(err)
 	}
-	tokB, _, err := issueTurnToken(e.Store, turnB, 1, clk.T)
+	secB, err := issueTurnSecrets(e.Store, turnB, 1, clk.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	tokB := secB.Guest
 	req, _ = http.NewRequest("POST", hs.URL+"/git-proxy/github.com/example/test-repo.git/git-upload-pack", strings.NewReader("0000"))
 	req.Header.Set("Authorization", "Bearer "+tokB)
 	resp, err = http.DefaultClient.Do(req)
@@ -282,11 +283,11 @@ func leasedImplementTurn(t *testing.T, ship string) (*engine.Engine, string, int
 	if err != nil || c == nil {
 		t.Fatalf("claim %v", err)
 	}
-	tok, _, err := issueTurnToken(e.Store, c.Job.ID, c.Job.LeaseGeneration, clk.T)
+	sec, err := issueTurnSecrets(e.Store, c.Job.ID, c.Job.LeaseGeneration, clk.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return e, tok, task.SessionID
+	return e, sec.Guest, task.SessionID
 }
 
 func receivePack(t *testing.T, hs *httptest.Server, tok, ref string) int {

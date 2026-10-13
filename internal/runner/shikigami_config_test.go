@@ -24,7 +24,7 @@ exit 1
 	if err := os.WriteFile(harness, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	a := &Assignment{Guest: guest.KindShikigami, TurnToken: "fixture-grant", ModelBaseURL: "http://127.0.0.1:1234/model-proxy", GuestModel: "fixture-model", GuestSpec: guest.Entry{Argv: []string{harness, "acp"}}}
+	a := &Assignment{Guest: guest.KindShikigami, TurnToken: "runner-tok", GuestGrant: "fixture-grant", ModelBaseURL: "http://127.0.0.1:1234/model-proxy", GuestModel: "fixture-model", GuestSpec: guest.Entry{Argv: []string{harness, "acp"}}}
 	client, stop, err := GuestHost(&Client{})(a, workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +40,7 @@ exit 1
 			t.Fatalf("guest config missing %s: %s", field, text)
 		}
 	}
-	if strings.Contains(text, a.TurnToken) {
+	if strings.Contains(text, a.TurnToken) || strings.Contains(text, a.GuestGrant) {
 		t.Fatal("turn credential persisted in guest config")
 	}
 }

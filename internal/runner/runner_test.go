@@ -372,7 +372,7 @@ func TestDeadlineKillsProcessGroup(t *testing.T) {
 }
 
 func TestDriverEnvIncludesAssignedSecrets(t *testing.T) {
-	a := &runner.Assignment{TurnToken: "tok", Secrets: map[string]string{"npm_token": "sekrit"}}
+	a := &runner.Assignment{TurnToken: "runner-tok", GuestGrant: "tok", Secrets: map[string]string{"npm_token": "sekrit"}}
 	joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
 	if !strings.Contains(joined, "NPM_TOKEN=sekrit") {
 		t.Fatal(joined)
@@ -380,11 +380,14 @@ func TestDriverEnvIncludesAssignedSecrets(t *testing.T) {
 }
 
 func TestDriverEnvHasTurnTokenNotPlaneSecret(t *testing.T) {
-	a := &runner.Assignment{TurnID: 9, TurnToken: "tok"}
+	a := &runner.Assignment{TurnID: 9, TurnToken: "runner-tok", GuestGrant: "tok"}
 	env := runner.DriverEnv(a, "/tmp/home", "/bin")
 	joined := strings.Join(env, "\n")
 	if !strings.Contains(joined, "RUSUI_TURN_TOKEN=tok") || !strings.Contains(joined, "XAI_API_KEY=tok") {
 		t.Fatal(joined)
+	}
+	if strings.Contains(joined, "runner-tok") {
+		t.Fatalf("runner token leaked into guest env:\n%s", joined)
 	}
 	a.ModelBaseURL = "http://rusui.plane:8080/model-proxy"
 	joined = strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
@@ -530,7 +533,7 @@ func TestClaudeGuestExecsAdapterInContainer(t *testing.T) {
 }
 
 func TestClaudeGuestEnvHoldsOnlyTheGrant(t *testing.T) {
-	a := &runner.Assignment{TurnID: 9, TurnToken: "grant", Guest: acp.GuestClaude, ModelBaseURL: "http://127.0.0.1:8080/model-proxy"}
+	a := &runner.Assignment{TurnID: 9, TurnToken: "runner-tok", GuestGrant: "grant", Guest: acp.GuestClaude, ModelBaseURL: "http://127.0.0.1:8080/model-proxy"}
 	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-operator")
 	t.Setenv("CLAUDE_CONFIG_DIR", "/Users/op/.claude")
 	joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
@@ -550,7 +553,7 @@ func TestClaudeGuestEnvHoldsOnlyTheGrant(t *testing.T) {
 
 func TestClaudeGuestEnvCarriesConfiguredModel(t *testing.T) {
 	a := &runner.Assignment{
-		TurnID: 9, TurnToken: "grant", Guest: acp.GuestClaude,
+		TurnID: 9, TurnToken: "runner-tok", GuestGrant: "grant", Guest: acp.GuestClaude,
 		ModelBaseURL: "http://127.0.0.1:8080/model-proxy", GuestModel: "grok-4.6",
 	}
 	joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
@@ -566,7 +569,7 @@ func TestClaudeGuestEnvCarriesConfiguredModel(t *testing.T) {
 		}
 	}
 	grok := &runner.Assignment{
-		TurnID: 3, TurnToken: "grant", Guest: acp.GuestGrok,
+		TurnID: 3, TurnToken: "runner-tok", GuestGrant: "grant", Guest: acp.GuestGrok,
 		ModelBaseURL: "http://127.0.0.1:9/model-proxy", GuestModel: "grok-4.6",
 	}
 	grokEnv := strings.Join(runner.DriverEnv(grok, "/tmp/home", "/bin"), "\n")
@@ -597,7 +600,7 @@ func TestUnknownGuestFailsClosed(t *testing.T) {
 }
 
 func TestShikigamiGuestEnvHoldsOnlyTheGrant(t *testing.T) {
-	a := &runner.Assignment{TurnID: 9, TurnToken: "grant", Guest: acp.GuestShikigami, ModelBaseURL: "http://127.0.0.1:8080/model-proxy"}
+	a := &runner.Assignment{TurnID: 9, TurnToken: "runner-tok", GuestGrant: "grant", Guest: acp.GuestShikigami, ModelBaseURL: "http://127.0.0.1:8080/model-proxy"}
 	t.Setenv("OPENAI_API_KEY", "sk-operator")
 	t.Setenv("XAI_API_KEY", "xai-operator")
 	joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")

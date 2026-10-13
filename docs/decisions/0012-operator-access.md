@@ -1,6 +1,6 @@
 # ADR 0012: Single-operator access for terminal and preview
 
-- Status: Accepted; amended by 0032, 0036, 0039, 0059, 0074
+- Status: Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075
 - Date: 2026-09-20
 - Amends: [ADR 0003](0003-operator-surface.md) reachability (credential
   classes, browser session, preview origin). The API-first, CLI-first,
@@ -60,7 +60,8 @@ and a rule for who types in the terminal after a second tab opens.
 | --- | --- | --- | --- |
 | **Operator** | `RUSUI_OPERATOR_TOKEN` (separate from worker) | Human CLI and console | List/attach sessions, approve, drain, hold terminal write, mint preview grants |
 | **Worker** | `RUSUI_WORKER_SECRET` | `rusui-runner` and scripts | Hello, claim, heartbeat, complete/fail, drain |
-| **Turn** | per-turn grant | Guest / ACP host | Proxies, turn actions, approval poll for that turn |
+| **Turn** | runner turn token | ACP host / runner | Turn actions, approval poll, terminal, complete/fail for that turn |
+| **Guest grant** | guest grant | Guest | Model proxy and git proxy only ([ADR 0075](0075-split-guest-grant-from-runner.md)) |
 
 Presenting a worker or turn secret as a browser session **fails closed**.
 CLI may keep using the worker secret for today's runner-shaped commands

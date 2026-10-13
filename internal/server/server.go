@@ -324,6 +324,8 @@ func (s *Server) sessionEvents(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
+const turnActionBodyCap = 64 << 10
+
 func (s *Server) turnActions(w http.ResponseWriter, r *http.Request) {
 	tid, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || tid == 0 {
@@ -347,13 +349,27 @@ func (s *Server) turnActions(w http.ResponseWriter, r *http.Request) {
 		Reason string `json:"reason"`
 		Body   any    `json:"body"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, turnActionBodyCap))
+	if err := dec.Decode(&rec); err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			http.Error(w, "action body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	id, err := s.Eng.IngestTurnAction(tid, rec.Type, rec.Reason, rec.Body)
+	body, err := sanitizeTurnActionBody(rec.Type, rec.Body, turnActionSecrets(s, r))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	id, err := s.Eng.IngestTurnAction(tid, rec.Type, rec.Reason, body)
 	if errors.Is(err, engine.ErrTurnNotLeased) {
 		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	if errors.Is(err, engine.ErrTurnActionBudget) {
+		http.Error(w, err.Error(), http.StatusTooManyRequests)
 		return
 	}
 	if err != nil {
@@ -365,31 +381,60 @@ func (s *Server) turnActions(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"id": id})
 }
 
-func issueTurnToken(st *store.Store, turnID int64, gen int, now time.Time) (string, time.Time, error) {
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return "", time.Time{}, err
+func turnActionSecrets(s *Server, r *http.Request) []string {
+	var secrets []string
+	if tok := bearer(r); tok != "" {
+		secrets = append(secrets, tok)
 	}
-	token := hex.EncodeToString(raw)
-	sum := sha256.Sum256([]byte(token))
-	hash := hex.EncodeToString(sum[:])
+	if s != nil && s.WorkerSec != "" {
+		secrets = append(secrets, s.WorkerSec)
+	}
+	return secrets
+}
+
+type turnSecrets struct {
+	Runner string
+	Guest  string
+	Exp    time.Time
+}
+
+func mintTurnSecret() (raw, hash string, err error) {
+	b := make([]byte, 32)
+	if _, err = rand.Read(b); err != nil {
+		return "", "", err
+	}
+	raw = hex.EncodeToString(b)
+	sum := sha256.Sum256([]byte(raw))
+	return raw, hex.EncodeToString(sum[:]), nil
+}
+
+func issueTurnSecrets(st *store.Store, turnID int64, gen int, now time.Time) (turnSecrets, error) {
+	var out turnSecrets
+	runner, runnerHash, err := mintTurnSecret()
+	if err != nil {
+		return out, err
+	}
+	guest, guestHash, err := mintTurnSecret()
+	if err != nil {
+		return out, err
+	}
 	exp := now.Add(turnTokenTTL)
-	if err := store.PutTurnCredential(st, turnID, gen, hash, exp.UTC().Format(time.RFC3339Nano)); err != nil {
-		return "", time.Time{}, err
+	if err := store.PutTurnCredential(st, turnID, gen, runnerHash, exp.UTC().Format(time.RFC3339Nano)); err != nil {
+		return out, err
 	}
 	turn, err := store.GetTurn(st, turnID)
 	if err != nil {
-		return "", time.Time{}, err
+		return out, err
 	}
 	sess, err := store.GetSession(st, turn.SessionID)
 	if err != nil {
-		return "", time.Time{}, err
+		return out, err
 	}
 	if err := store.DeleteGrantsForTurn(st, turnID); err != nil {
-		return "", time.Time{}, err
+		return out, err
 	}
 	if err := store.PutGrant(st, store.Grant{
-		TokenHash: hash,
+		TokenHash: guestHash,
 		Kind:      store.GrantTurn,
 		SessionID: turn.SessionID,
 		TurnID:    turnID,
@@ -397,9 +442,15 @@ func issueTurnToken(st *store.Store, turnID int64, gen int, now time.Time) (stri
 		CanPush:   true,
 		ExpiresAt: exp,
 	}); err != nil {
-		return "", time.Time{}, err
+		return out, err
 	}
-	return token, exp, nil
+	out.Runner, out.Guest, out.Exp = runner, guest, exp
+	return out, nil
+}
+
+func issueTurnToken(st *store.Store, turnID int64, gen int, now time.Time) (string, time.Time, error) {
+	sec, err := issueTurnSecrets(st, turnID, gen, now)
+	return sec.Runner, sec.Exp, err
 }
 
 func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
@@ -472,11 +523,12 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.noteClaimedProvider(c.Job.ID, guestName)
-	tok, exp, err := issueTurnToken(s.Eng.Store, c.Job.ID, c.Job.LeaseGeneration, s.Eng.Clock.Now())
+	sec, err := issueTurnSecrets(s.Eng.Store, c.Job.ID, c.Job.LeaseGeneration, s.Eng.Clock.Now())
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
+	tok, grant, exp := sec.Runner, sec.Guest, sec.Exp
 	out := map[string]any{
 		"job_id":             c.Job.ID,
 		"turn_id":            c.Job.ID,
@@ -489,6 +541,7 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 		"item_hash":          c.ItemHash,
 		"execution_deadline": c.Job.ExecutionDeadlineAt,
 		"turn_token":         tok,
+		"guest_grant":        grant,
 		"turn_token_expires": exp.UTC().Format(time.RFC3339Nano),
 		"input":              s.Eng.BuildInput(c),
 		"guest":              guestName,

@@ -108,6 +108,10 @@ func TestClaimHTTPReplaysLeaseWithFreshTurnToken(t *testing.T) {
 	if tok == "" || tok == first["turn_token"] {
 		t.Fatalf("replay should carry a fresh turn token")
 	}
+	grant, _ := again["guest_grant"].(string)
+	if grant == "" || grant == tok || grant == first["guest_grant"] {
+		t.Fatalf("replay should carry a distinct fresh guest grant")
+	}
 	body := fmt.Sprintf(`{"lease_generation":%v,"claimed_revision":%v}`, again["lease_generation"], again["claimed_revision"])
 	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/jobs/%v/heartbeat", h.http.URL, again["turn_id"]), strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+tok)

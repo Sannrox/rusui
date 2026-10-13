@@ -620,9 +620,12 @@ What v1 does enforce:
   they receive only the per-turn grant
   ([ADR 0009](docs/decisions/0009-credential-broker.md)).
 - Runner hello and claim require the bootstrap secret. Heartbeat,
-  complete, and fail accept that secret or the per-turn token.
-  The process driver environment contains only an allowlist and
-  `RUSUI_TURN_TOKEN` (32 random bytes, hashed at rest, ten-minute
+  complete, and fail accept that secret or the runner turn token.
+  Claim mints two secrets ([ADR 0075](docs/decisions/0075-split-guest-grant-from-runner.md)):
+  the runner turn token (actions, approvals, terminal, complete/fail)
+  and a guest grant (model proxy and git proxy only). The process
+  driver environment contains only an allowlist and `RUSUI_TURN_TOKEN`
+  set to the guest grant (32 random bytes, hashed at rest, ten-minute
   TTL). `complete`/`fail` include `lease_generation` and
   `claimed_revision`. The runner opens no inbound port.
 
@@ -664,11 +667,12 @@ plus those permission receipts. Rusui does not jail tools inside the
 guest; shikigami’s tool sandbox is out of P1. `--always-approve` is
 not the unattended spawn.
 
-Credentials ([ADR 0009](docs/decisions/0009-credential-broker.md)):
+Credentials ([ADR 0009](docs/decisions/0009-credential-broker.md),
+[ADR 0075](docs/decisions/0075-split-guest-grant-from-runner.md)):
 git smart-HTTP and model egress proxies run on the **plane**. The
-guest holds only the per-turn grant (Grok's `XAI_API_KEY`, Claude Code's
+guest holds only the guest grant (Grok's `XAI_API_KEY`, Claude Code's
 `ANTHROPIC_AUTH_TOKEN`, shikigami's `OPENAI_API_KEY`, and git HTTP auth
-are that grant). The guest is
+are that grant). It cannot post turn actions or complete the job. The guest is
 pointed at the plane model proxy (`GROK_XAI_API_BASE_URL`,
 `ANTHROPIC_BASE_URL`, or shikigami's `OPENAI_BASE_URL`); the runner **execs** it inside the container.
 Claude Code runs with a fresh `CLAUDE_CONFIG_DIR`, never the operator's

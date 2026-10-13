@@ -488,7 +488,7 @@ func TestGuestFilesystemOmitsProviderSecrets(t *testing.T) {
 		t.Fatal("unlist secret injected")
 	}
 	envv := runner.DriverEnv(&runner.Assignment{
-		TurnToken: "turn-grant-only", ModelBaseURL: "https://rusui.plane:8080/model-proxy",
+		TurnToken: "runner-tok", GuestGrant: "turn-grant-only", ModelBaseURL: "https://rusui.plane:8080/model-proxy",
 		GitProxyURL: "https://rusui.plane:8080/git-proxy/github.com/",
 	}, "/tmp/home", "/bin")
 	joined := strings.Join(envv, "\n")

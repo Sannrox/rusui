@@ -54,13 +54,16 @@ type Assignment struct {
 	ItemHash        string `json:"item_hash"`
 	SessionID       int64  `json:"session_id"`
 	TurnToken       string `json:"turn_token"`
-	Driver          string `json:"driver"`
-	Handle          string `json:"handle"`
-	Workspace       string `json:"workspace"`
-	ModelBaseURL    string `json:"model_base_url"`
-	GuestModel      string `json:"guest_model,omitempty"`
-	GitProxyURL     string `json:"git_proxy_url"`
-	GitHubToken     string `json:"github_token,omitempty"`
+	// GuestGrant is the model-proxy and git-proxy credential. It is the
+	// only plane secret copied into the guest environment.
+	GuestGrant   string `json:"guest_grant,omitempty"`
+	Driver       string `json:"driver"`
+	Handle       string `json:"handle"`
+	Workspace    string `json:"workspace"`
+	ModelBaseURL string `json:"model_base_url"`
+	GuestModel   string `json:"guest_model,omitempty"`
+	GitProxyURL  string `json:"git_proxy_url"`
+	GitHubToken  string `json:"github_token,omitempty"`
 	// Publication is "plane" for an implement turn under ADR 0044: the
 	// guest holds no GitHub credential and asks the plane to publish.
 	Publication string `json:"publication,omitempty"`
@@ -423,17 +426,25 @@ func (c *Client) Fail(a *Assignment) error {
 	})
 }
 
+func (a *Assignment) guestToken() string {
+	if a == nil {
+		return ""
+	}
+	return a.GuestGrant
+}
+
 // DriverEnv is the only environment the process driver may see.
 func DriverEnv(a *Assignment, home, path string) []string {
+	grant := a.guestToken()
 	env := []string{
 		"PATH=" + path,
 		"HOME=" + home,
-		"RUSUI_TURN_TOKEN=" + a.TurnToken,
+		"RUSUI_TURN_TOKEN=" + grant,
 		"RUSUI_TURN_ID=" + fmt.Sprint(a.TurnID),
 	}
 	switch a.Guest {
 	case acp.GuestShikigami:
-		env = append(env, "OPENAI_API_KEY="+a.TurnToken, "SHIKIGAMI_MODEL_ADAPTER=http")
+		env = append(env, "OPENAI_API_KEY="+grant, "SHIKIGAMI_MODEL_ADAPTER=http")
 		if acp.ValidGuestModel(a.GuestModel) {
 			env = append(env, "SHIKIGAMI_MODEL="+a.GuestModel)
 		}
@@ -457,7 +468,7 @@ func DriverEnv(a *Assignment, home, path string) []string {
 			configDir = home + "/.rusui-claude"
 		}
 		env = append(env,
-			"ANTHROPIC_AUTH_TOKEN="+a.TurnToken,
+			"ANTHROPIC_AUTH_TOKEN="+grant,
 			"CLAUDE_CONFIG_DIR="+configDir,
 			"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
 			"DISABLE_TELEMETRY=1",
@@ -480,7 +491,7 @@ func DriverEnv(a *Assignment, home, path string) []string {
 			)
 		}
 	default:
-		env = append(env, "XAI_API_KEY="+a.TurnToken)
+		env = append(env, "XAI_API_KEY="+grant)
 		if a.ModelBaseURL != "" {
 			env = append(env, "GROK_XAI_API_BASE_URL="+a.ModelBaseURL)
 		}
@@ -508,7 +519,7 @@ func DriverEnv(a *Assignment, home, path string) []string {
 	} else if a.GitProxyURL != "" {
 		git = append(git,
 			[2]string{"url." + a.GitProxyURL + ".insteadof", "https://github.com/"},
-			[2]string{"http.extraHeader", "Authorization: Bearer " + a.TurnToken},
+			[2]string{"http.extraHeader", "Authorization: Bearer " + grant},
 		)
 	}
 	if a.CommitHooksDir != "" {
