@@ -1,6 +1,7 @@
 package env
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,11 +52,18 @@ func (p Process) Wake(handle string) error {
 	return writeState(handle, "ready")
 }
 
+// Destroy removes the workspace and the guest state kept beside it.
 func (p Process) Destroy(handle string) error {
 	if handle == "" {
 		return nil
 	}
-	return os.RemoveAll(handle)
+	return errors.Join(os.RemoveAll(handle), os.RemoveAll(GuestStateRoot(handle)))
+}
+
+// GuestStateRoot is where the runner keeps per-session guest state for a
+// process workspace: beside it, so the checkout never holds it.
+func GuestStateRoot(handle string) string {
+	return filepath.Clean(handle) + ".guest"
 }
 
 func (p Process) PlaceTree(handle, srcDir string) error {

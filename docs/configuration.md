@@ -109,7 +109,7 @@ reported and exits successfully.
 | `RUSUI_GUEST_IMAGE` | container guests | Guest image identity. Empty fails closed. |
 | `XAI_API_KEY` or `RUSUI_XAI_API_KEY` | model proxy (Grok) | Plane secret; never copied into the guest. |
 | `RUSUI_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY` | model proxy (Claude Code) | Plane secret, sent upstream as `x-api-key`; never copied into the guest. |
-| `RUSUI_GUEST` | no | `grok` (legacy default), `claude`, `codex`, or `shikigami` ([ADR 0025](decisions/0025-provider-boundary.md), [ADR 0060](decisions/0060-shikigami-acp-guest-pin.md)). `shikigami` runs ACP with state in its temporary guest home; the binary must be on `PATH`. |
+| `RUSUI_GUEST` | no | `grok` (legacy default), `claude`, `codex`, or `shikigami` ([ADR 0025](decisions/0025-provider-boundary.md), [ADR 0060](decisions/0060-shikigami-acp-guest-pin.md)). `shikigami` runs ACP with a per-session state store outside the workspace; the binary must be on `PATH`. |
 | `RUSUI_GUEST_VERSION` | no | Pinned guest version recorded on a Turn measurement when set. Unset stays unknown. |
 | `RUSUI_OTEL_ENDPOINT` | no | Optional collector URL. Unset: measurements stay on the plane and nothing is exported. A collector that is down does not fail the Turn. |
 | `RUSUI_GUEST_MODEL` | Claude or shikigami guest | Claude sends the id as `ANTHROPIC_MODEL` and requires it for readiness. Shikigami uses the id in its HTTP configuration; omitted or `auto` selects `gpt-4.1-mini` in the pinned adapter. A model list does not prove this id can prompt. The Grok harness does not take this id. |
@@ -148,26 +148,40 @@ RUSUI_ANTHROPIC_API_KEY=<the proxy's client key>
 `RUSUI_GUEST` names the provider (`grok`, `claude`, `codex`, or
 `shikigami`). The runner creates a private temporary guest home outside the
 workspace for each turn and removes it after the guest stops, for process
-and container drivers. `HOME`, Codex's `CODEX_HOME`, Claude's
-`CLAUDE_CONFIG_DIR`, and shikigami's `--state` path use that home. Provider
-credentials and state are not part of the repository or its snapshots.
+and container drivers. `HOME`, Codex's `CODEX_HOME`, and Claude's
+`CLAUDE_CONFIG_DIR` use that home, so configuration a guest writes there
+never reaches a later turn. Provider credentials and state are not part of
+the repository or its snapshots.
 Codex refuses a workspace containing `.codex` before spawning; for process
 workspaces, the check also covers ancestors through the repository root.
 Claude loads only the fresh user settings and the plane's explicit settings;
 project/local settings and repository MCP configuration are excluded.
-An unavailable or unconfirmed temporary home refuses the guest start.
-Temporary homes do not retain provider conversation history between turns.
-If Codex or an ACP guest cannot load the stored cursor, the existing adapter
-starts a new provider conversation with the current plane prompt; the plane
-session and its receipts remain.
+An unavailable or unconfirmed home refuses the guest start.
+
+Shikigami's `--state` conversation store is kept per session, so a
+follow-up turn loads the stored conversation. Its configuration is passed
+per turn with `--config`, so the store holds no configuration the guest
+runs. A process workspace keeps it beside the workspace in
+`<workspace>.guest/<session>`; a container keeps `/tmp/rusui-state-s<session>`
+inside the guest. Both are removed with the environment, not on archive, so
+an unarchived session continues its conversation. A linked or foreign store
+refuses the guest start. A turn without a session environment keeps state
+in its temporary home. Grok and Codex keep their stores in the temporary
+home and do not retain conversation history between turns.
+
+When a session has a stored cursor, the turn records a `resume` action:
+`succeeded` when Codex or an ACP guest loaded the stored conversation, and
+`refused` when it started a new provider conversation with only the current
+plane prompt. The turn measurement keeps the same outcome. Claude does not
+resume ([ADR 0025](decisions/0025-provider-boundary.md)).
 
 The pinned CLIs are Grok `agent` at ACP protocolVersion 1, Claude Code
 2.1.283 over `stream-json`, `codex app-server` at
 `app-server-2026-04-15`, and shikigami ACP. The runner replaces shikigami's
-registry `--state ./state` argument with the temporary state path. It also
-writes explicit shikigami HTTP configuration there, using the plane model URL,
-`RUSUI_GUEST_MODEL` (or `auto` when omitted), and an allowlist containing only
-the plane model host. Local governance parks mutating tools for the plane
+registry `--state ./state` argument with the session state path. It also
+writes explicit shikigami HTTP configuration to the temporary home, using the
+plane model URL, `RUSUI_GUEST_MODEL` (or `auto` when omitted), and an
+allowlist containing only the plane model host. Local governance parks mutating tools for the plane
 permission decision. The turn grant stays in the process environment.
 The reference image builds pinned shikigami 2.0.0 source with a small HTTP
 client patch to add the mounted plane CA through `SHIKIGAMI_EXTRA_CA_CERTS`;

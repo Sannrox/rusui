@@ -37,7 +37,10 @@ resume for all three pins. The live runner does not use it on every host
 yet:
 
 - The Grok host loads the stored cursor with `session/load`. When the load
-  fails, it starts a new session.
+  fails, it starts a new session. Each turn records the outcome as a
+  `resume` action (`succeeded` or `refused`). Only shikigami keeps its
+  conversation store per session; other guest homes are per turn, so their
+  loads are refused.
 - The Claude host records the cursor from the `init` event but does not
   pass it. It spawns without `--resume`, so each Claude turn is a new
   provider conversation. Continuity comes from the prompt the plane sends.

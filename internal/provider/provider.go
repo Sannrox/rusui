@@ -102,6 +102,9 @@ type Turn struct {
 	// Observe, when set, receives each event as it is read, before the
 	// turn ends, so a follower sees it live.
 	Observe func(Event)
+	// Resumed, when set with a Cursor, learns whether the provider loaded
+	// that conversation, before the prompt runs. An error ends the turn.
+	Resumed func(loaded bool) error
 }
 
 // Result is the cursor to store for the next process and the events from

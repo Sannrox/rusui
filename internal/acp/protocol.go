@@ -41,6 +41,9 @@ const (
 	ActionApproval        = "acp.approval"
 	ActionUnknown         = "acp.unknown"
 	ActionInitialize      = "acp.initialize"
+	// ActionResume records whether a turn loaded the session's stored
+	// guest conversation (succeeded) or started a new one (refused).
+	ActionResume = "resume"
 )
 
 const (

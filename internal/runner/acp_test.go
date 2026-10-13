@@ -391,7 +391,8 @@ func TestHostACPLoadsOrCreatesGuestSession(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut}).Run() }()
-	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
+	log := &receiptLog{}
+	host := &acp.Client{In: clientIn, Out: clientOut, Rec: log, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 		return acp.Decision{}
 	}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -404,6 +405,7 @@ func TestHostACPLoadsOrCreatesGuestSession(t *testing.T) {
 	if art.GuestSessionID != "sess-fake" {
 		t.Fatalf("restore-failed must session/new, got %q", art.GuestSessionID)
 	}
+	assertResume(t, log, "refused")
 }
 
 func TestHostACPReusesGuestSession(t *testing.T) {
@@ -417,7 +419,8 @@ func TestHostACPReusesGuestSession(t *testing.T) {
 		_ = agentOut.Close()
 	})
 	go func() { _ = (&acp.FakeAgent{In: agentIn, Out: agentOut}).Run() }()
-	host := &acp.Client{In: clientIn, Out: clientOut, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
+	log := &receiptLog{}
+	host := &acp.Client{In: clientIn, Out: clientOut, Rec: log, Perm: acp.DenyUnmatched{}, Wait: func(context.Context, string, acp.PermissionParams) acp.Decision {
 		return acp.Decision{}
 	}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -430,6 +433,7 @@ func TestHostACPReusesGuestSession(t *testing.T) {
 	if art.GuestSessionID != "sess-fake" {
 		t.Fatalf("load kept %q", art.GuestSessionID)
 	}
+	assertResume(t, log, "succeeded")
 }
 
 func TestHostACPSendsImageAttachment(t *testing.T) {
@@ -949,7 +953,8 @@ func TestHostACPRegistryCodexResumesNativeThread(t *testing.T) {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	host := &acp.Client{In: clientIn, Out: clientOut}
+	log := &receiptLog{}
+	host := &acp.Client{In: clientIn, Out: clientOut, Rec: log}
 	art, err := HostACP(ctx, &Assignment{TurnToken: "runner-tok", GuestGrant: "fixture-turn-grant", ModelBaseURL: "http://127.0.0.1/model-proxy", Guest: "codex", GuestSpec: guest.Builtin()["codex"], GuestSessionID: "existing-thread", Input: json.RawMessage(`{"body":"continue"}`), Repo: "example/test-repo", Item: 1, ItemKind: "issue"}, host, t.TempDir())
 	if err != nil || art.GuestSessionID != "replacement-thread" {
 		t.Fatalf("native Codex resume: cursor=%q error=%v", art.GuestSessionID, err)
@@ -958,5 +963,20 @@ func TestHostACPRegistryCodexResumesNativeThread(t *testing.T) {
 		if got := <-methods; got != want {
 			t.Fatalf("native method %q, want %q", got, want)
 		}
+	}
+	assertResume(t, log, "refused")
+}
+
+// assertResume checks the turn recorded exactly one resume outcome.
+func assertResume(t *testing.T, log *receiptLog, reason string) {
+	t.Helper()
+	var got []string
+	for _, rec := range log.rows {
+		if rec.Type == acp.ActionResume {
+			got = append(got, rec.Reason)
+		}
+	}
+	if len(got) != 1 || got[0] != reason {
+		t.Fatalf("resume receipts %v, want [%s]", got, reason)
 	}
 }
