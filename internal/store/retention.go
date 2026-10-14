@@ -138,7 +138,7 @@ func ClearSessionDataTx(s *Store, tx *sql.Tx, sessionID int64) error {
 	if _, err := tx.Exec(`UPDATE tasks SET prompt='' WHERE session_id=?`, sessionID); err != nil {
 		return err
 	}
-	if err := scrubSteerActionPromptsTx(tx, sessionID); err != nil {
+	if err := scrubPromptBearingActionsTx(tx, sessionID); err != nil {
 		return err
 	}
 	if err := scrubSessionSnapshotBodiesTx(tx, sessionID); err != nil {
@@ -180,19 +180,21 @@ func ClearSessionDataTx(s *Store, tx *sql.Tx, sessionID int64) error {
 	return nil
 }
 
-func scrubSteerActionPromptsTx(tx *sql.Tx, sessionID int64) error {
-	rows, err := tx.Query(`SELECT action_id, body FROM actions WHERE session_id=? AND action_type=?`, sessionID, "operator.steer")
+func scrubPromptBearingActionsTx(tx *sql.Tx, sessionID int64) error {
+	rows, err := tx.Query(`SELECT action_id, action_type, body FROM actions WHERE session_id=? AND action_type IN (?, ?)`,
+		sessionID, "operator.steer", "acp.session.update")
 	if err != nil {
 		return err
 	}
 	type row struct {
 		id   string
+		typ  string
 		body string
 	}
 	var list []row
 	for rows.Next() {
 		var r row
-		if err := rows.Scan(&r.id, &r.body); err != nil {
+		if err := rows.Scan(&r.id, &r.typ, &r.body); err != nil {
 			_ = rows.Close()
 			return err
 		}
@@ -206,20 +208,49 @@ func scrubSteerActionPromptsTx(tx *sql.Tx, sessionID int64) error {
 		return err
 	}
 	for _, r := range list {
-		var m map[string]any
-		if err := json.Unmarshal([]byte(r.body), &m); err != nil {
-			m = map[string]any{}
-		}
-		m["prompt"] = ""
-		b, err := json.Marshal(m)
+		b, err := scrubActionPromptBody(r.typ, r.body)
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(`UPDATE actions SET body=? WHERE action_id=?`, string(b), r.id); err != nil {
+		if b == r.body {
+			continue
+		}
+		if _, err := tx.Exec(`UPDATE actions SET body=? WHERE action_id=?`, b, r.id); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func scrubActionPromptBody(typ, body string) (string, error) {
+	var m map[string]any
+	if err := json.Unmarshal([]byte(body), &m); err != nil {
+		if typ == "operator.steer" {
+			return `{"prompt":""}`, nil
+		}
+		return body, nil
+	}
+	switch typ {
+	case "operator.steer":
+		m["prompt"] = ""
+	case "acp.session.update":
+		update, _ := m["update"].(map[string]any)
+		if update == nil {
+			return body, nil
+		}
+		kind, _ := update["sessionUpdate"].(string)
+		if kind != "user_message_chunk" && kind != "agent_message_chunk" {
+			return body, nil
+		}
+		if content, ok := update["content"].(map[string]any); ok {
+			content["text"] = ""
+		}
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func scrubSessionSnapshotBodiesTx(tx *sql.Tx, sessionID int64) error {

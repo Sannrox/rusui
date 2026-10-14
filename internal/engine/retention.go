@@ -53,7 +53,6 @@ func dueForExpiry(sess *store.Session, now time.Time) bool {
 }
 
 func (e *Engine) finishRetention(sessionID int64, actionType, sentence string, requireDue bool) error {
-	var did bool
 	err := e.Store.Tx(func(tx *sql.Tx) error {
 		sess, err := store.GetSessionTx(tx, sessionID)
 		if err != nil {
@@ -75,20 +74,20 @@ func (e *Engine) finishRetention(sessionID int64, actionType, sentence string, r
 		if err != nil {
 			return err
 		}
-		if err := store.InsertActionTx(tx, store.Action{
+		return store.InsertActionTx(tx, store.Action{
 			ID: fmt.Sprintf("%s-%d-%d", actionType, sessionID, e.now().UnixNano()), SessionID: &sessionID,
 			Type: actionType, ReasonCode: "recorded", EvidenceClass: "plane_observed",
 			LimitSentence: sentence, Body: string(body),
-		}); err != nil {
-			return err
-		}
-		did = true
-		return nil
+		})
 	})
 	if err != nil {
 		return err
 	}
-	if !did {
+	sess, err := store.GetSession(e.Store, sessionID)
+	if err != nil {
+		return err
+	}
+	if !sess.RetentionExpired {
 		return nil
 	}
 	return e.ArchiveSession(sessionID)
