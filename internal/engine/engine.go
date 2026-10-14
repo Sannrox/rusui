@@ -79,6 +79,8 @@ type Engine struct {
 	modelSummaryOverflow bool
 	completeMu           sync.Mutex
 	completing           map[int64]*completeLock
+	writeMu              sync.Mutex
+	writing              map[int64]*completeLock
 
 	// Secrets are plane-held values keyed by policy secret id (ADR 0066).
 	// Production loads them from RUSUI_SECRET_<ID> via SecretsFromEnv.
@@ -1217,6 +1219,32 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 		}
 		revID, _ := res.LastInsertId()
 		receipt := map[string]any{"kind": "complete", "review_revision_id": revID}
+		if art.Result != nil && art.Result.Outcome == OutcomeProposed && art.Result.Publish != nil {
+			pid, err := newActionID()
+			if err != nil {
+				return err
+			}
+			body, err := json.Marshal(WriteProposal{
+				Branch:       art.Result.Publish.Branch,
+				Title:        art.Result.Publish.Title,
+				Body:         art.Result.Publish.Body,
+				CandidateSHA: art.Result.CandidateSHA,
+			})
+			if err != nil {
+				return err
+			}
+			sid, tid := turn.SessionID, j.ID
+			if err := store.InsertActionTx(tx, store.Action{
+				ID: pid, SessionID: &sid, TurnID: &tid, ReviewRevisionID: &revID,
+				Repo: j.Repo, Item: j.Item, Type: ActionWritePropose, ReasonCode: "recorded",
+				EvidenceClass: "plane_observed",
+				LimitSentence: "The turn proposed a GitHub write; applying it is a separate Action.",
+				Body:          string(body),
+			}); err != nil {
+				return err
+			}
+			receipt["proposal_id"] = pid
+		}
 		rb, _ := json.Marshal(receipt)
 		if err := store.InsertReceiptTx(tx, j.ID, gen, claimed, "complete", string(rb)); err != nil {
 			return err

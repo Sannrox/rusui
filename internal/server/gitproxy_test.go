@@ -325,7 +325,7 @@ func TestGitProxyPushBaseAllowsDefaultBranchAndPullRequestStillForbids(t *testin
 	ePush, tokPush, _ := leasedImplementTurn(t, policy.ShipPushBase)
 	hsPush := httptest.NewServer((&Server{Eng: ePush, GitHubToken: "plane-pat", GitOrigin: origin}).Handler())
 	t.Cleanup(hsPush.Close)
-	if code := receivePack(t, hsPush, tokPush, "refs/heads/main"); code != 200 {
+	if code := receivePack(t, hsPush, tokPush, "refs/heads/main"); code != http.StatusForbidden {
 		t.Fatalf("push-base main %d", code)
 	}
 	if code := receivePack(t, hsPush, tokPush, "refs/heads/master"); code != http.StatusForbidden {

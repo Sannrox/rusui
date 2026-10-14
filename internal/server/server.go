@@ -149,6 +149,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /sessions/{id}/tool-grants", s.listSessionToolGrants)
 	mux.HandleFunc("POST /sessions/{id}/tool-grants", s.grantSessionTool)
 	mux.HandleFunc("DELETE /sessions/{id}/tool-grants/{tool}", s.revokeSessionTool)
+	mux.HandleFunc("POST /sessions/{id}/write-actions", s.applySessionWrite)
 	mux.HandleFunc("POST /sessions/{id}/restart", s.restartLocalSession)
 	mux.HandleFunc("GET /projects/{slug}/measurements", s.projectMeasurements)
 	mux.HandleFunc("POST /results/{id}/dispositions", s.recordDisposition)
@@ -615,11 +616,7 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 						out["ship_base"] = base
 					}
 				}
-				if tok := s.agentGitHubToken(sess); tok != "" {
-					out["github_token"] = tok
-				} else if s.RepoTokens != nil {
-					out["publication"] = "plane"
-				}
+				out["publication"] = "plane"
 			}
 			if t := s.commitTrailers(sess); len(t) > 0 {
 				out["commit_trailers"] = t
@@ -649,29 +646,15 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// agentGitHubToken is the operator credential an implement session
-// receives under ADR 0015 agent publication. Review, scheduled, and
-// ordinary run sessions never receive it, and plane publication (ADR 0044)
-// gives no guest a GitHub credential.
-func (s *Server) agentGitHubToken(sess *store.Session) string {
-	if s.AgentGitHubToken == "" || s.RepoTokens != nil {
-		return ""
-	}
-	if _, ok := s.Eng.ImplementTask(sess); !ok {
-		return ""
-	}
-	return s.AgentGitHubToken
-}
+// agentGitHubToken is unused: guests never receive a GitHub credential
+// (#607). Kept so tests can assert the assignment stays empty.
+func (s *Server) agentGitHubToken(*store.Session) string { return "" }
 
-// implementFenced matches the runner's fence rule (permissionGate): an
-// implement session whose guest holds the agent credential (ADR 0015) or
-// publishes through the plane (ADR 0044).
+// implementFenced matches the runner's fence: implement sessions propose
+// writes and cannot open pull requests or push the default branch.
 func (s *Server) implementFenced(sess *store.Session) bool {
-	if s.agentGitHubToken(sess) != "" {
-		return true
-	}
 	_, ok := s.Eng.ImplementTask(sess)
-	return ok && s.RepoTokens != nil
+	return ok
 }
 
 func (s *Server) guest() string {

@@ -3,6 +3,8 @@
 - Status: Accepted
 - Date: 2026-09-29
 - Resolves: [#382](https://github.com/Sannrox/rusui/issues/382)
+- Amended by: [ADR 0080](0080-turns-propose-writes-go-through-actions.md)
+  (Complete records a proposal; apply performs the GitHub write).
 - Amends: [ADR 0020](0020-turn-scoped-github-publication.md) (how the agent
   asks the plane to publish)
 - Related: [ADR 0015](0015-agent-publication.md),

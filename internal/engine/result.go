@@ -2,8 +2,10 @@ package engine
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -50,6 +52,7 @@ const (
 	OutcomeUnconfirmed = "unconfirmed" // a PR was claimed but GitHub does not show it at the candidate SHA
 	OutcomeBlocked     = "blocked"     // the agent reported why it stopped
 	OutcomeReported    = "reported"    // findings only
+	OutcomeProposed    = "proposed"    // the turn asked to write; the Action has not applied it
 )
 
 type Finding struct {
@@ -123,6 +126,8 @@ func (e *Engine) observeResult(art *Artifact) {
 		}
 	case r.BlockedReason != "":
 		r.Outcome = OutcomeBlocked
+	case r.Publish != nil:
+		r.Outcome = OutcomeProposed
 	default:
 		r.Outcome = OutcomeReported
 	}
@@ -176,10 +181,56 @@ type Publication struct {
 	Branch      string `json:"branch,omitempty"`
 }
 
-// SessionPublication is the newest result any turn of the session
-// actually published. ok is false when no turn has published.
+// SessionPublication is the newest GitHub write the operator applied for
+// the session, or the newest published review result if no write.apply
+// exists. ok is false when nothing has been applied.
 func SessionPublication(s *store.Store, sessionID int64) (Publication, bool, error) {
+	if p, ok, err := publicationFromWriteApply(s, sessionID); err != nil || ok {
+		return p, ok, err
+	}
 	return newestPublication(s, `SELECT r.payload FROM review_revisions r JOIN turns t ON t.id=r.job_id WHERE t.session_id=? ORDER BY r.id DESC`, sessionID)
+}
+
+func publicationFromWriteApply(s *store.Store, sessionID int64) (Publication, bool, error) {
+	a, err := store.LatestAction(s, sessionID, ActionWriteApply)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Publication{}, false, nil
+	}
+	if err != nil {
+		return Publication{}, false, err
+	}
+	var rec WriteApplyReceipt
+	if json.Unmarshal([]byte(a.Body), &rec) != nil || rec.PullRequest <= 0 || rec.SHA == "" {
+		return Publication{}, false, nil
+	}
+	return Publication{Repo: a.Repo, PullRequest: rec.PullRequest, SHA: rec.SHA, Publisher: rec.Publisher, Branch: rec.Branch}, true, nil
+}
+
+// priorPublishAsk is the branch the session already proposed, so a
+// follow-up cannot switch heads.
+func priorPublishAsk(s *store.Store, sessionID int64) (string, bool) {
+	rows, err := s.DB.Query(`SELECT r.payload FROM review_revisions r JOIN turns t ON t.id=r.job_id WHERE t.session_id=? ORDER BY r.id DESC`, sessionID)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return "", false
+		}
+		var prev Artifact
+		if json.Unmarshal([]byte(raw), &prev) != nil || prev.Result == nil || prev.Result.Publish == nil {
+			continue
+		}
+		if prev.Result.BlockedReason != "" {
+			continue
+		}
+		if b := prev.Result.Publish.Branch; b != "" {
+			return b, true
+		}
+	}
+	return "", false
 }
 
 func newestPublication(s *store.Store, query string, id int64) (Publication, bool, error) {

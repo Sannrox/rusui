@@ -77,7 +77,10 @@ func TestFencedApprovalIsInvalidInImplementSessions(t *testing.T) {
 	if s.allowStillValid(approval("act-wrapped-merge", `bash -c 'gh pr merge 1'`)) {
 		t.Fatal("approval of a fenced command stayed valid in an implement session")
 	}
-	if !s.allowStillValid(approval("act-create", "gh pr create --fill")) {
+	if s.allowStillValid(approval("act-create", "gh pr create --fill")) {
+		t.Fatal("approval of a fenced create stayed valid in an implement session")
+	}
+	if !s.allowStillValid(approval("act-view", "gh pr view 1")) {
 		t.Fatal("approval of an allowed command became invalid")
 	}
 }

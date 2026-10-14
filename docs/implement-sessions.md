@@ -4,7 +4,7 @@
 
 For the `Sannrox/rusui` example, setup must leave `implement: true` on that
 repository and `run` in project `rusui`'s `session_kinds`. Add a narrowly
-scoped `RUSUI_AGENT_GITHUB_TOKEN`, one model credential or logged-in model
+`RUSUI_PUBLICATION=plane` with GitHub App credentials, one model credential or logged-in model
 proxy, and `RUSUI_GUEST_MODEL` when the guest is Claude. Put them in
 `rusui.env`, then apply setup and confirm its embedded `diagnose` report
 shows `model_upstream: ready` and, for Claude, `model_guest: ready`. A
@@ -71,19 +71,19 @@ with a human maintainer.
 
 ## Agent publication
 
-In an implement session the agent pushes a branch and opens or updates its
-own pull request as you ([ADR 0015](decisions/0015-agent-publication.md)).
+In an implement session the agent proposes a GitHub write; applying it is
+an operator Action ([ADR 0080](decisions/0080-turns-propose-writes-go-through-actions.md)).
 It needs all of:
 
 - `implement: true` on the repository in `policy.yaml`, and `run` in the
   project's `session_kinds`;
-- `RUSUI_AGENT_GITHUB_TOKEN` on the plane;
+- `RUSUI_PUBLICATION=plane` and GitHub App credentials on the plane;
 - a pinned task: `rusui run -project SLUG -effort KEY -repo OWNER/NAME
   -ref main -base-sha SHA -paths docs,internal/x "the change"`;
-- `gh` in the guest image (container guests) or on the runner `PATH`.
+- `POST /sessions/{id}/write-actions` after the turn completes.
 
 Ordinary `rusui run PROMPT` sessions, scheduled sessions, and review
-sessions never receive the token.
+sessions cannot propose a write.
 
 A run turn may execute for 45 minutes from claim (`RunExecDeadline`).
 Review and scheduled turns keep the 12-minute execution deadline.
@@ -101,31 +101,29 @@ enable `implement`, set up:
   maintainer, also require an approving review from someone other than the
   last pusher.
 
-On a solo repository GitHub cannot tell the agent from you: merging needs
-the same permission as pushing, and you cannot require your own approval.
-rusui rejects `gh pr merge`, `gh pr close`, `gh release`, default-branch
-and force pushes, and similar commands in implement sessions
-([ADR 0017](decisions/0017-claude-guest-and-model-upstream.md) D3). Those
-rules are workflow control, not a security boundary.
+rusui rejects `gh pr create`, `gh pr merge`, `gh pr close`, `gh release`,
+default-branch and force pushes, and similar commands in implement
+sessions
+([ADR 0017](decisions/0017-claude-guest-and-model-upstream.md) D3,
+[ADR 0080](decisions/0080-turns-propose-writes-go-through-actions.md)).
+Those rules are workflow control, not a security boundary.
 
 Merging stays yours. Commits carry `Co-authored-by: rusui` and
 `Rusui-Session` trailers ([configuration](configuration.md)).
 
-### Plane publication (opt-in)
+### Plane publication
 
-`RUSUI_PUBLICATION=plane` moves publication behind the plane
-([ADR 0044](decisions/0044-plane-publishes-from-turn-result.md)). It needs
-GitHub App credentials (`RUSUI_GITHUB_APP_ID`, a private key, and the
-installation) with **Contents** and **Pull requests** write on the bound
-repositories; the plane refuses to start without them. The guest then
+`RUSUI_PUBLICATION=plane` is required for apply
+([ADR 0044](decisions/0044-plane-publishes-from-turn-result.md),
+[ADR 0080](decisions/0080-turns-propose-writes-go-through-actions.md)).
+It needs GitHub App credentials (`RUSUI_GITHUB_APP_ID`, a private key, and
+the installation) with **Contents** and **Pull requests** write on the
+bound repositories; the plane refuses to start without them. The guest
 holds no GitHub credential: it pushes `rusui/<session>/<name>` through the
-plane's git proxy and writes a `publish` request to its result, and the
-plane creates or updates the pull request as the App on Complete, only
-while the branch points at the result's `candidate_sha`; a result without
-one, or a branch that moved, is blocked without a GitHub write.
-`RUSUI_AGENT_GITHUB_TOKEN` is ignored. Pull requests show the App as
-author. Keep it off until you have run the ADR 0020 pilot
-([ADR 0020](decisions/0020-turn-scoped-github-publication.md) Validation).
+plane's git proxy and writes a `publish` request to its result. Complete
+records `write.propose`. `POST /sessions/{id}/write-actions` creates or
+updates the pull request as the App, only while the branch points at the
+result's `candidate_sha`.
 
 A review-only App on a public test repository, including permissions,
 tunnel verify/cleanup, a receipt check, and signature failures:
