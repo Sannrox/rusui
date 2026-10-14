@@ -70,13 +70,18 @@ type Assignment struct {
 	// Ship is pull-request or push-base for an implement turn (ADR 0068).
 	Ship string `json:"ship,omitempty"`
 	// ShipBase is the default branch a push-base implement turn may push.
-	ShipBase       string      `json:"ship_base,omitempty"`
-	Guest          string      `json:"guest,omitempty"`
-	GuestSpec      guest.Entry `json:"guest_spec"`
-	Mode           string      `json:"mode,omitempty"`
-	ExecutionMode  string      `json:"execution_mode,omitempty"`
-	Act            string      `json:"act,omitempty"`
-	CommitTrailers []string    `json:"commit_trailers,omitempty"`
+	ShipBase      string      `json:"ship_base,omitempty"`
+	Guest         string      `json:"guest,omitempty"`
+	GuestSpec     guest.Entry `json:"guest_spec"`
+	Mode          string      `json:"mode,omitempty"`
+	ExecutionMode string      `json:"execution_mode,omitempty"`
+	Act           string      `json:"act,omitempty"`
+	ToolGrants    []string    `json:"tool_grants,omitempty"`
+	// LiveTools returns the current write-tool grants for this session.
+	// The runner consults it on every permission decision so a revoke
+	// during the turn is enforced. Unset in tests that inject ToolGrants.
+	LiveTools      func() ([]string, error) `json:"-"`
+	CommitTrailers []string                 `json:"commit_trailers,omitempty"`
 	// CommitHooksDir is where PrepareCommitHooks placed the attribution
 	// hooks for this turn; set on the runner, never by the plane.
 	CommitHooksDir string `json:"-"`

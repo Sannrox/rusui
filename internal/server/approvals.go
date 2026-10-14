@@ -163,6 +163,15 @@ func (s *Server) allowStillValid(actionID string) bool {
 	}
 	var params acp.PermissionParams
 	_ = json.Unmarshal([]byte(act.Body), &params)
+	if store.NormalizeExecutionMode(sess.ExecutionMode) == store.ExecutionSpace {
+		names, err := store.SessionToolGrantNames(s.Eng.Store, sess.ID)
+		if err != nil {
+			return false
+		}
+		if d := (acp.SpaceReadGate{Grants: names}).Decide(params); d.Matched && !d.Allow {
+			return false
+		}
+	}
 	if s.implementFenced(sess) {
 		// Implement sessions: the built-in fence overrides any approval.
 		if d := (acp.FenceGate{Next: acp.RulesGate{}}).Decide(params); d.Matched && !d.Allow {

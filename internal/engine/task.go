@@ -129,6 +129,9 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 		if err := store.SetSessionExecutionTx(tx, sid, store.ExecutionSpace, ""); err != nil {
 			return err
 		}
+		if _, err := store.GrantSessionToolTx(tx, sid, store.ToolWrite, "plane"); err != nil {
+			return err
+		}
 		if _, _, err := e.bindSessionGuestTx(tx, sid, project, spec.Guest, pol); err != nil {
 			return err
 		}

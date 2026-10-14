@@ -81,7 +81,7 @@ nav a{margin-right:1rem}
 </ul>
 {{else if eq .View "session"}}
 <h1>Session {{.Sess.ID}}</h1>
-<p>Project {{.Sess.Project}} · {{.Sess.Kind}} · {{.Sess.State}} · environment {{.Sess.EnvironmentState}}{{if .Sess.ExecutionMode}} · {{.Sess.ExecutionMode}}{{end}}{{if .Sess.Act}} · act {{.Sess.Act}}{{end}}{{if .TurnState}} · turn {{.TurnState}}{{end}}</p>
+<p>Project {{.Sess.Project}} · {{.Sess.Kind}} · {{.Sess.State}} · environment {{.Sess.EnvironmentState}}{{if .Sess.ExecutionMode}} · {{.Sess.ExecutionMode}}{{end}}{{if .Sess.Act}} · act {{.Sess.Act}}{{end}}{{if .Tools}} · tools {{range $i, $t := .Tools}}{{if $i}}, {{end}}{{$t}}{{end}}{{end}}{{if .TurnState}} · turn {{.TurnState}}{{end}}</p>
 {{if .Notice}}<p role="status">{{.Notice}}</p>{{end}}
 {{if .ProcessReceipts}}<h2>Local process activity</h2><ul>{{range .ProcessReceipts}}<li>{{.CreatedAt.Format "2006-01-02 15:04:05 MST"}}{{if .ProcessGeneration}} process {{.ProcessGeneration}}{{end}}{{if .AttachGeneration}} attach {{.AttachGeneration}}{{end}} {{.Kind}} {{.State}}</li>{{end}}</ul>{{end}}
 {{if .EnvironmentReceipts}}<h2>Environment activity</h2><ul>{{range .EnvironmentReceipts}}<li>{{.CreatedAt.Format "2006-01-02 15:04:05 MST"}} {{.Kind}} {{.State}}{{if .Detail}} — {{.Detail}}{{end}}</li>{{end}}</ul>{{end}}
@@ -244,6 +244,7 @@ type consolePage struct {
 	TermState           string
 	TermWrite           bool
 	TermGen             int
+	Tools               []string
 }
 
 type consoleApproval struct {
@@ -494,6 +495,9 @@ func (s *Server) sessionPage(r *http.Request, id int64) (consolePage, error) {
 		return consolePage{}, err
 	}
 	page := consolePage{Title: fmt.Sprintf("Session %d", id), View: "session", Sess: sess}
+	if names, err := store.SessionToolGrantNames(s.Eng.Store, id); err == nil {
+		page.Tools = store.SpaceToolSet(sess.ExecutionMode, names)
+	}
 	page.EnvironmentReceipts, err = store.ListEnvironmentReceipts(s.Eng.Store, id)
 	if err != nil {
 		page.HistoryUnavailable = true

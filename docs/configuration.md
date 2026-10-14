@@ -246,7 +246,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/readyz` | none; JSON topology report; 200 ready / 503 not ready |
 | `GET` | `/auth/oidc` | public OIDC client metadata; 404 when disabled |
 | `GET` | `/auth/oidc/session` | validate operator bearer; 204 when accepted, 401 when refused |
-| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, `execution_mode`, `act`, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, revoked grant, or another member's user-mode session |
+| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, `execution_mode`, `act`, `tools` (active ACP kinds), and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, revoked grant, or another member's user-mode session |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
 | `GET` | `/sessions/{id}/terminal` | operator, worker, or turn token; current environment terminal output; not the transcript |
 | `GET` | `/sessions/{id}/envlog` | operator token; last pre-clone, pre-setup, setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`pre-clone`/`pre-setup`/`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
@@ -281,6 +281,10 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/sessions/{id}/grants` | operator token; JSON `tenant` of the grantee; owning tenant only; 201 created, 409 duplicate live grant |
 | `DELETE` | `/sessions/{id}/grants/{tenant}` | operator token; revoke a live grant; owning tenant only; 204; 404 unknown grant |
 | `PUT` | `/sessions/{id}/execution-mode` | operator token; always 409 — execution mode is immutable after create |
+| `GET` | `/sessions/{id}/tools` | operator or worker token; active tool set for the session (`read` kinds plus live write grants); space-mode sessions start read-only |
+| `GET` | `/sessions/{id}/tool-grants` | operator token; live write-tool grants the caller owns |
+| `POST` | `/sessions/{id}/tool-grants` | operator token; JSON `tool` (`write`, `execute`, `edit`, `delete`, `move`, `other`); owning tenant only; 201 created, 409 duplicate or user-mode |
+| `DELETE` | `/sessions/{id}/tool-grants/{tool}` | operator token; revoke a live tool grant; 204; 404 unknown grant |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
 | `*` | `/model-proxy/` | guest grant (HTTPS for container guests); runner turn token refused |
 | `*` | `/git-proxy/github.com/` | prepare or guest grant; push only with a guest grant on the session ref prefix |

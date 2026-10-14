@@ -92,7 +92,7 @@ func TestClaudePermissionFailedApprovalRecordDoesNotReusePriorApproval(t *testin
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	host := &acp.Client{Rec: rec, Wait: rec.Wait, Ctx: ctx}
-	decide := claudeDecide(&Assignment{}, host)
+	decide := claudeDecide(&Assignment{ExecutionMode: "user"}, host)
 	options := []provider.Option{{ID: "allow"}}
 	if id, ok := decide(options, json.RawMessage(`{"command":"make a"}`)); !ok || id != "allow" {
 		t.Fatalf("first request = %q, %v; want allow off its own approval", id, ok)

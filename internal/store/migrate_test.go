@@ -106,6 +106,10 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT execution_mode FROM sessions LIMIT 1`).Scan(&execMode); err != nil || execMode != ExecutionSpace {
 		t.Fatalf("migrated session execution_mode %q %v", execMode, err)
 	}
+	var toolGrants int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_tool_grants'`).Scan(&toolGrants); err != nil || toolGrants != 1 {
+		t.Fatalf("session_tool_grants missing after upgrade: %d %v", toolGrants, err)
+	}
 	var attPath int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('prompt_attachments') WHERE name='path'`).Scan(&attPath); err != nil || attPath != 1 {
 		t.Fatalf("prompt_attachments.path missing after upgrade: %d %v", attPath, err)
@@ -407,5 +411,41 @@ func TestMigrateV43MovesBodyToDisk(t *testing.T) {
 	raw, err := os.ReadFile(s.AttachmentFile(digest))
 	if err != nil || !bytes.Equal(raw, body) {
 		t.Fatalf("disk %v %v", raw, err)
+	}
+}
+
+func TestMigrateV49BackfillsImplementWriteGrant(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v49.db")
+	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.Exec(`
+CREATE TABLE sessions (id INTEGER PRIMARY KEY, execution_mode TEXT NOT NULL DEFAULT 'space');
+CREATE TABLE tasks (id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL, state TEXT NOT NULL);
+INSERT INTO sessions (id, execution_mode) VALUES (1, 'space'), (2, 'space'), (3, 'user');
+INSERT INTO tasks (session_id, state) VALUES (1, 'open'), (2, 'abandoned'), (3, 'open');
+`); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateV49(db); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM session_tool_grants WHERE session_id=1 AND tool=? AND revoked_at IS NULL`, ToolWrite).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("open task backfill %d %v", n, err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM session_tool_grants WHERE session_id=2`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("abandoned task granted %d %v", n, err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM session_tool_grants WHERE session_id=3`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("user-mode task granted %d %v", n, err)
+	}
+	if err := migrateV49(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM session_tool_grants WHERE session_id=1 AND tool=? AND revoked_at IS NULL`, ToolWrite).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("retry backfill %d %v", n, err)
 	}
 }

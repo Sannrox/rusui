@@ -20,6 +20,9 @@ func TestApprovalRevalidationHonoursRejectRules(t *testing.T) {
 	if _, err := e.Store.DB.Exec(`UPDATE sessions SET project='test' WHERE id=?`, sessID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.GrantSessionTool(e.Store, sessID, store.ToolWrite, "plane"); err != nil {
+		t.Fatal(err)
+	}
 	pol := strings.Replace(slackPol, "  test:\n", "  test:\n    permissions:\n      - command: npm\n      - command: npm publish\n        action: reject\n", 1)
 	p, err := policy.Parse([]byte(pol))
 	if err != nil {

@@ -50,6 +50,18 @@ func TestConfigurationHTTPTableDocumentsPostReviews(t *testing.T) {
 	if !strings.Contains(table, "`PUT` | `/sessions/{id}/execution-mode` | operator token") {
 		t.Fatal("HTTP table missing PUT /sessions/{id}/execution-mode with operator auth")
 	}
+	if !strings.Contains(table, "`GET` | `/sessions/{id}/tools` | operator or worker token") {
+		t.Fatal("HTTP table missing GET /sessions/{id}/tools")
+	}
+	if !strings.Contains(table, "`GET` | `/sessions/{id}/tool-grants` | operator token") {
+		t.Fatal("HTTP table missing GET /sessions/{id}/tool-grants with operator auth")
+	}
+	if !strings.Contains(table, "`POST` | `/sessions/{id}/tool-grants` | operator token") {
+		t.Fatal("HTTP table missing POST /sessions/{id}/tool-grants with operator auth")
+	}
+	if !strings.Contains(table, "`DELETE` | `/sessions/{id}/tool-grants/{tool}` | operator token") {
+		t.Fatal("HTTP table missing DELETE /sessions/{id}/tool-grants/{tool} with operator auth")
+	}
 	if !strings.Contains(table, "`DELETE` | `/sessions/{id}/queued` | operator or worker token") {
 		t.Fatal("HTTP table missing DELETE /sessions/{id}/queued with operator or worker auth")
 	}

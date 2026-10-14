@@ -46,22 +46,22 @@ func permissionAnswer(t *testing.T, a *Assignment, cmd string) string {
 
 func TestImplementSessionFenceOverridesPolicyAllow(t *testing.T) {
 	allowAll := []acp.Rule{{Command: "gh"}, {Command: "git"}}
-	implement := &Assignment{GitHubToken: "tok", Permissions: allowAll}
+	implement := &Assignment{GitHubToken: "tok", Permissions: allowAll, ToolGrants: []string{"write"}}
 	if got := permissionAnswer(t, implement, "gh pr merge 7 --squash"); got != "reject-once" {
 		t.Fatalf("implement merge answered %q", got)
 	}
 	if got := permissionAnswer(t, implement, "gh pr create --fill"); got != "allow-once" {
 		t.Fatalf("implement create answered %q", got)
 	}
-	plane := &Assignment{Publication: planePublication, Permissions: allowAll}
+	plane := &Assignment{Publication: planePublication, Permissions: allowAll, ToolGrants: []string{"write"}}
 	if got := permissionAnswer(t, plane, "gh pr merge 7 --squash"); got != "reject-once" {
 		t.Fatalf("plane-publication merge answered %q", got)
 	}
-	ordinary := &Assignment{Permissions: allowAll}
+	ordinary := &Assignment{Permissions: allowAll, ToolGrants: []string{"write"}}
 	if got := permissionAnswer(t, ordinary, "gh pr merge 7 --squash"); got != "allow-once" {
 		t.Fatalf("non-implement session should follow policy, answered %q", got)
 	}
-	pushBase := &Assignment{GitHubToken: "tok", Permissions: allowAll, Ship: "push-base", ShipBase: "main"}
+	pushBase := &Assignment{GitHubToken: "tok", Permissions: allowAll, ToolGrants: []string{"write"}, Ship: "push-base", ShipBase: "main"}
 	if got := permissionAnswer(t, pushBase, "git push origin HEAD:main"); got != "allow-once" {
 		t.Fatalf("push-base push answered %q", got)
 	}
