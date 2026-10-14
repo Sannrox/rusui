@@ -74,6 +74,8 @@ type Assignment struct {
 	Guest          string      `json:"guest,omitempty"`
 	GuestSpec      guest.Entry `json:"guest_spec"`
 	Mode           string      `json:"mode,omitempty"`
+	ExecutionMode  string      `json:"execution_mode,omitempty"`
+	Act            string      `json:"act,omitempty"`
 	CommitTrailers []string    `json:"commit_trailers,omitempty"`
 	// CommitHooksDir is where PrepareCommitHooks placed the attribution
 	// hooks for this turn; set on the runner, never by the plane.
@@ -441,6 +443,12 @@ func DriverEnv(a *Assignment, home, path string) []string {
 		"HOME=" + home,
 		"RUSUI_TURN_TOKEN=" + grant,
 		"RUSUI_TURN_ID=" + fmt.Sprint(a.TurnID),
+	}
+	if a.ExecutionMode != "" {
+		env = append(env, "RUSUI_EXECUTION_MODE="+a.ExecutionMode)
+	}
+	if a.Act != "" {
+		env = append(env, "RUSUI_ACT="+a.Act)
 	}
 	switch a.Guest {
 	case acp.GuestShikigami:

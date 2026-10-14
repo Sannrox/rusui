@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 47
+const CurrentSchema = 48
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -565,7 +565,36 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 48 {
+		if err := migrateV48(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 48); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV48 records execution mode and actor. Existing sessions are space
+// mode so current tenant-wide visibility stays (#605).
+func migrateV48(db *sql.DB) error {
+	for _, col := range []struct{ name, def string }{
+		{"execution_mode", "TEXT NOT NULL DEFAULT 'space'"},
+		{"act", "TEXT NOT NULL DEFAULT ''"},
+	} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name=?`, col.name).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			if _, err := db.Exec("ALTER TABLE sessions ADD COLUMN " + col.name + " " + col.def); err != nil {
+				return err
+			}
+		}
+	}
+	_, err := db.Exec(`UPDATE sessions SET execution_mode=COALESCE(NULLIF(execution_mode,''), 'space'), act=COALESCE(NULLIF(act,''), created_by, tenant_id, 'default')`)
+	return err
 }
 
 // migrateV47 records the session creator and audited cross-tenant access

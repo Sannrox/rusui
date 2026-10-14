@@ -747,6 +747,7 @@ func GetTurn(s *Store, id int64) (*Turn, error) {
 type SessionListFilter struct {
 	Project string
 	Tenant  string
+	Actor   string
 	Limit   int
 }
 
@@ -759,7 +760,7 @@ func ListSessionsFilter(s *Store, f SessionListFilter) ([]Session, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config, COALESCE(s.tenant_id, 'default'), COALESCE(NULLIF(s.created_by,''), s.tenant_id, 'default')
+	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config, COALESCE(s.tenant_id, 'default'), COALESCE(NULLIF(s.created_by,''), s.tenant_id, 'default'), COALESCE(NULLIF(s.execution_mode,''), 'space'), COALESCE(s.act,'')
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	args := []any{}
 	var where []string
@@ -770,6 +771,10 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	if f.Tenant != "" {
 		where = append(where, `s.tenant_id=?`)
 		args = append(args, f.Tenant)
+	}
+	if f.Actor != "" {
+		where = append(where, `(COALESCE(NULLIF(s.execution_mode,''),'space')=? OR s.act=?)`)
+		args = append(args, ExecutionSpace, f.Actor)
 	}
 	if len(where) > 0 {
 		q += ` WHERE ` + strings.Join(where, ` AND `)
@@ -787,7 +792,7 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 		var created string
 		var archived int
 		var archivedAt sql.NullString
-		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig, &sess.TenantID, &sess.CreatedBy); err != nil {
+		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig, &sess.TenantID, &sess.CreatedBy, &sess.ExecutionMode, &sess.Act); err != nil {
 			return nil, err
 		}
 		if err := applySessionArchive(&sess, archived, archivedAt, created); err != nil {
@@ -964,14 +969,26 @@ func HasOpenRepoSessionsTx(tx *sql.Tx, repo string) (bool, error) {
 	return n > 0, nil
 }
 
+type sessionRow interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
 func GetSession(s *Store, id int64) (*Session, error) {
+	return scanSession(s.DB, id)
+}
+
+func GetSessionTx(tx *sql.Tx, id int64) (*Session, error) {
+	return scanSession(tx, id)
+}
+
+func scanSession(q sessionRow, id int64) (*Session, error) {
 	var sess Session
 	var created string
 	var archived int
 	var archivedAt sql.NullString
-	err := s.DB.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config, COALESCE(s.tenant_id, 'default'), COALESCE(NULLIF(s.created_by,''), s.tenant_id, 'default')
+	err := q.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config, COALESCE(s.tenant_id, 'default'), COALESCE(NULLIF(s.created_by,''), s.tenant_id, 'default'), COALESCE(NULLIF(s.execution_mode,''), 'space'), COALESCE(s.act,'')
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id WHERE s.id=?`, id).Scan(
-		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig, &sess.TenantID, &sess.CreatedBy)
+		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig, &sess.TenantID, &sess.CreatedBy, &sess.ExecutionMode, &sess.Act)
 	if err != nil {
 		return nil, err
 	}

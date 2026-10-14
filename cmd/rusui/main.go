@@ -263,11 +263,13 @@ func main() {
 		GuestHTTPSOnly:    tlsCert != "" && tlsKey != "",
 		PreviewBase:       os.Getenv("RUSUI_PREVIEW_BASE"),
 	}
-	tenantToks, err := server.LoadTenantTokens(os.Getenv("RUSUI_TENANT_TOKENS"))
+	tenantToks, members, actors, err := server.LoadTenantTokens(os.Getenv("RUSUI_TENANT_TOKENS"))
 	if err != nil {
 		log.Fatal(err)
 	}
 	srv.TenantToks = tenantToks
+	srv.MemberToks = members
+	srv.ActorToks = actors
 	if err := srv.CheckTenantTokenOverlap(); err != nil {
 		log.Fatal(err)
 	}

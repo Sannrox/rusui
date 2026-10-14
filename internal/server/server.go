@@ -34,7 +34,11 @@ type Server struct {
 	OperatorTok string
 	// TenantToks maps tenant_id to a distinct operator bearer. The default
 	// tenant uses OperatorTok. Worker and turn secrets are never keys here.
-	TenantToks       map[string]string
+	TenantToks map[string]string
+	// MemberToks maps an extra member bearer to its tenant. ActorToks maps
+	// a bearer to the actor id it presents inside that tenant (#605).
+	MemberToks       map[string]string
+	ActorToks        map[string]string
 	OIDC             *oidc.Verifier
 	SlackSec         string
 	SlackUsers       map[string]bool
@@ -140,6 +144,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /sessions/{id}/grants", s.listSessionGrants)
 	mux.HandleFunc("POST /sessions/{id}/grants", s.grantSessionAccess)
 	mux.HandleFunc("DELETE /sessions/{id}/grants/{tenant}", s.revokeSessionAccess)
+	mux.HandleFunc("PUT /sessions/{id}/execution-mode", s.changeSessionExecution)
 	mux.HandleFunc("POST /sessions/{id}/restart", s.restartLocalSession)
 	mux.HandleFunc("GET /projects/{slug}/measurements", s.projectMeasurements)
 	mux.HandleFunc("POST /results/{id}/dispositions", s.recordDisposition)
@@ -574,6 +579,12 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 			out["guest_session_id"] = sess.GuestSessionID
 			if sess.Mode != "" {
 				out["mode"] = sess.Mode
+			}
+			if sess.ExecutionMode != "" {
+				out["execution_mode"] = sess.ExecutionMode
+			}
+			if sess.Act != "" {
+				out["act"] = sess.Act
 			}
 			if envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID); err == nil {
 				out["driver"] = envRow.Driver

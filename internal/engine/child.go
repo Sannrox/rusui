@@ -110,6 +110,9 @@ func (e *Engine) StartChildGuest(parentID int64, prompt, project, requestedGuest
 		if err := store.SetSessionTenantTx(tx, sid, store.NormalizeTenantID(parent.TenantID)); err != nil {
 			return err
 		}
+		if err := store.SetSessionExecutionTx(tx, sid, parent.ExecutionMode, parent.Act); err != nil {
+			return err
+		}
 		if _, _, err := e.bindSessionGuestTx(tx, sid, project, requestedGuest, pol); err != nil {
 			return err
 		}

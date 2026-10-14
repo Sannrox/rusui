@@ -93,7 +93,7 @@ reported and exits successfully.
 | `RUSUI_WEBHOOK_SECRET` | **Yes** unless `-allow-insecure` | GitHub + generic event HMAC |
 | `RUSUI_WORKER_SECRET` | **Yes** unless `-allow-insecure` | Runner / job bearer |
 | `RUSUI_OPERATOR_TOKEN` | static operator token for console and CLI break-glass access | Distinct from worker; unset keeps console HTML and attachment disabled ([ADR 0012](decisions/0012-operator-access.md)). Binds to tenant `default` ([ADR 0076](decisions/0076-tenant-isolation.md)). |
-| `RUSUI_TENANT_TOKENS` | no | JSON object of `tenant_id` to operator bearer, or a path to that file. Each token lists, reads, decides, reviews, retries, dispositions, and measurements only for that tenant. The `default` key is refused; duplicate token values and overlap with the operator token or worker secret fail closed. |
+| `RUSUI_TENANT_TOKENS` | no | JSON object of `tenant_id` to operator bearer, or of `tenant_id` to a map of actor id to bearer, or a path to that file. Each token lists, decides, reviews, retries, dispositions, and measurements only for that tenant. User-mode transcripts are visible only to the creating actor. The `default` key is refused; duplicate token values and overlap with the operator token or worker secret fail closed. |
 | `RUSUI_OIDC_ISSUER` | no | Optional OIDC issuer for CLI operator tokens; HTTPS required except loopback HTTP. Requires audience, client ID, subject, and optional space-separated scopes. |
 | `RUSUI_OIDC_AUDIENCE` | no | OIDC API audience validated on every bearer. |
 | `RUSUI_OIDC_CLIENT_ID` | no | Public OIDC client ID used by `rusui login`. |
@@ -246,7 +246,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/readyz` | none; JSON topology report; 200 ready / 503 not ready |
 | `GET` | `/auth/oidc` | public OIDC client metadata; 404 when disabled |
 | `GET` | `/auth/oidc/session` | validate operator bearer; 204 when accepted, 401 when refused |
-| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, or revoked grant |
+| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, `execution_mode`, `act`, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, revoked grant, or another member's user-mode session |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
 | `GET` | `/sessions/{id}/terminal` | operator, worker, or turn token; current environment terminal output; not the transcript |
 | `GET` | `/sessions/{id}/envlog` | operator token; last pre-clone, pre-setup, setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`pre-clone`/`pre-setup`/`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
@@ -280,6 +280,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/sessions/{id}/grants` | operator token; live cross-tenant access grants for a session the caller owns; 404 unknown or foreign-owned |
 | `POST` | `/sessions/{id}/grants` | operator token; JSON `tenant` of the grantee; owning tenant only; 201 created, 409 duplicate live grant |
 | `DELETE` | `/sessions/{id}/grants/{tenant}` | operator token; revoke a live grant; owning tenant only; 204; 404 unknown grant |
+| `PUT` | `/sessions/{id}/execution-mode` | operator token; always 409 — execution mode is immutable after create |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
 | `*` | `/model-proxy/` | guest grant (HTTPS for container guests); runner turn token refused |
 | `*` | `/git-proxy/github.com/` | prepare or guest grant; push only with a guest grant on the session ref prefix |

@@ -165,6 +165,17 @@ func TestTenantGrantAllowsReopenAndRevoke(t *testing.T) {
 	if code := postJSONStatus(t, hs.URL+path+"/turns", "tok-globex-secret", `{"prompt":"nope"}`); code != http.StatusNotFound {
 		t.Fatalf("globex prompted via grant: %d", code)
 	}
+	if err := store.InsertAction(e.Store, store.Action{
+		ID: "act-grant-space", SessionID: &sidA, Repo: "example/test-repo", Item: 1,
+		Type: acp.ActionApproval, ReasonCode: acp.ReasonUnmatched,
+		EvidenceClass: acp.EvidenceObserved, LimitSentence: acp.LimitSentence,
+		Body: `{"tool":"shell"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if code := postJSONStatus(t, hs.URL+"/approvals/act-grant-space", "tok-globex-secret", `{"decision":"deny"}`); code != http.StatusNotFound {
+		t.Fatalf("globex decided via grant: %d", code)
+	}
 	if code := postJSONStatus(t, hs.URL+path+"/grants", "tok-acme-secret", `{"tenant":"default"}`); code != http.StatusCreated {
 		t.Fatalf("acme grant default: %d", code)
 	}
@@ -443,14 +454,14 @@ func TestConsoleTablesHideForeignTenant(t *testing.T) {
 }
 
 func TestLoadTenantTokensRejectsDefaultAndOverlap(t *testing.T) {
-	if _, err := LoadTenantTokens(`{"default":"tok"}`); err == nil {
+	if _, _, _, err := LoadTenantTokens(`{"default":"tok"}`); err == nil {
 		t.Fatal("default tenant accepted")
 	}
 	s := &Server{OperatorTok: "op", WorkerSec: "wsec", TenantToks: map[string]string{"acme": "op"}}
 	if err := s.CheckTenantTokenOverlap(); err == nil {
 		t.Fatal("operator overlap accepted")
 	}
-	if _, err := LoadTenantTokens(`{"acme":"shared-token-value","globex":"shared-token-value"}`); err == nil {
+	if _, _, _, err := LoadTenantTokens(`{"acme":"shared-token-value","globex":"shared-token-value"}`); err == nil {
 		t.Fatal("duplicate tenant token accepted")
 	}
 }

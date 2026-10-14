@@ -29,6 +29,7 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	switch p := s.identify(r); p.Class {
 	case CredOperator:
 		filter.Tenant = p.TenantID
+		filter.Actor = s.operatorActor(p)
 	case CredWorker:
 	default:
 		http.Error(w, "auth", http.StatusUnauthorized)
@@ -87,6 +88,23 @@ func (s *Server) annotateOneSessionWait(sess *store.Session) {
 	if n >= proj.MaxConcurrentLeases() {
 		sess.Wait = "lease"
 	}
+}
+
+func (s *Server) changeSessionExecution(w http.ResponseWriter, r *http.Request) {
+	if !s.OperatorAPIOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "id", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.visibleOwnedSession(r, id); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	http.Error(w, store.ErrExecutionModeImmutable.Error(), http.StatusConflict)
 }
 
 func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {

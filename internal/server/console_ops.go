@@ -30,6 +30,9 @@ func (s *Server) consoleApprovals(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]consoleApproval, 0, len(list))
 	for _, a := range list {
+		if !s.actionSessionVisible(r, &a) {
+			continue
+		}
 		item := consoleApproval{ID: a.ID, Repo: a.Repo, Item: a.Item, Reason: a.ReasonCode, Body: a.Body, Scope: a.Repo, Expiry: "turn lease"}
 		if a.SessionID != nil {
 			item.SessionID = *a.SessionID
@@ -61,13 +64,7 @@ func (s *Server) consoleDecide(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if act, err := store.GetAction(s.Eng.Store, id); err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	} else if act.SessionID == nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	} else if sess, err := store.GetSession(s.Eng.Store, *act.SessionID); err != nil || store.NormalizeTenantID(sess.TenantID) != store.DefaultTenantID {
+	if act, err := store.GetAction(s.Eng.Store, id); err != nil || !s.actionSessionVisible(r, act) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

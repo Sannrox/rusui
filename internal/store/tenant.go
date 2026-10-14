@@ -30,6 +30,15 @@ func SetSessionTenant(s *Store, sessionID int64, tenantID string) error {
 	})
 }
 
+func SetSessionCreatorTx(tx *sql.Tx, sessionID int64, creator string) error {
+	creator = strings.TrimSpace(creator)
+	if creator == "" {
+		return nil
+	}
+	_, err := tx.Exec(`UPDATE sessions SET created_by=? WHERE id=?`, creator, sessionID)
+	return err
+}
+
 func ReviewSession(s *Store, repo string, item int) (*Session, error) {
 	var id int64
 	err := s.DB.QueryRow(`SELECT id FROM sessions WHERE kind=? AND repo=? AND item=?`, SessionKindReview, repo, item).Scan(&id)
