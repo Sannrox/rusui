@@ -16,8 +16,9 @@ func validGuests(registry map[string]guest.Entry) (map[string]guest.Entry, error
 	for name, entry := range registry {
 		pinned, ok := builtin[name]
 		if !ok {
-			if entry.Protocol != guest.ProtocolACP || entry.Conformance == "" || entry.Conformance != guest.ConformanceDigest(entry) || entry.Image == "" {
-				return nil, fmt.Errorf("policy: generic ACP guest %q requires a valid conformance digest and image", name)
+			digest, err := guest.ConformanceDigest(entry)
+			if entry.Protocol != guest.ProtocolACP || err != nil || entry.Conformance == "" || entry.Conformance != digest {
+				return nil, fmt.Errorf("policy: generic ACP guest %q requires an image pinned by digest and a valid conformance digest", name)
 			}
 			if entry.Pin == "" || len(entry.Argv) == 0 || len(entry.Probe) == 0 {
 				return nil, fmt.Errorf("policy: guest %q requires argv, probe, and pin", name)

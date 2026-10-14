@@ -104,11 +104,14 @@ from a client's stored event cursor. A resumed guest uses the session's stored
 provider cursor when supported; transcript clients never read provider home
 directories. Older action rows remain readable in their original shapes.
 
-Generic ACP entries are admitted only with a container image and a
-`conformance` digest. Run `rusui acp-conformance -policy policy.yaml -guest
-NAME` after adding the entry; it runs the version probe and the isolated ACP
-subset, then prints the digest to copy into that entry. A changed argv, probe,
-pin, or image invalidates the digest. Generic ACP guests use the same
+Generic ACP entries are admitted only with a container image pinned by digest
+(`name@sha256:...` or an image ID `sha256:...`) and a `conformance` digest.
+Run `rusui acp-conformance -policy policy.yaml -guest NAME` after adding the
+entry; it starts a throwaway container from that image, runs the version probe
+and the isolated ACP subset inside it, then prints the digest to copy into that
+entry. Given a tag, it prints the resolved image ID to pin instead. A changed
+argv, probe, pin, or image digest invalidates the digest, and digests from
+earlier releases, which qualified a host binary, must be regenerated. Generic ACP guests use the same
 per-turn model grant and cannot broaden repository or permission policy.
 
 All guests use the same `RUSUI_MODEL_UPSTREAM`. A gateway serving both OpenAI
