@@ -18,7 +18,6 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/guest"
-	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/provider"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -299,11 +298,7 @@ func permissionGate(a *Assignment) acp.PermissionGate {
 	if a != nil && (a.GitHubToken != "" || a.Publication == planePublication) {
 		// Implement sessions can publish (ADR 0015, ADR 0044); the
 		// built-in fence applies whatever policy allows (ADR 0017 D3).
-		fg := acp.FenceGate{Next: gate}
-		if a.Ship == policy.ShipPushBase {
-			fg.AllowPushBase = a.ShipBase
-		}
-		gate = fg
+		gate = acp.FenceGate{Next: gate}
 	}
 	return gate
 }

@@ -12,8 +12,7 @@ import (
 )
 
 // PullPublisher creates or updates one pull request as the plane's GitHub
-// App (ADR 0020, ADR 0044). A nil Engine.Publisher keeps ADR 0015 agent
-// publication.
+// App (ADR 0020, ADR 0044, ADR 0080). A nil Engine.Publisher refuses apply.
 type PullPublisher interface {
 	PublishPull(repo string, s gh.PullSpec) (int, error)
 	// PushBase fast-forwards the repository default branch to sha.
@@ -64,29 +63,10 @@ func SessionRefAllowed(sessionID int64, ref string) bool {
 }
 
 // PushRefAllowed reports whether the session may receive-pack ref.
-// Session branches are always allowed. The default branch is allowed
-// only for an implement session whose project ship is push-base.
+// Guests may push only their session branches; default-branch writes
+// go through ApplySessionWrite (#607).
 func (e *Engine) PushRefAllowed(sessionID int64, ref string) bool {
-	if SessionRefAllowed(sessionID, ref) {
-		return true
-	}
-	sess, err := store.GetSession(e.Store, sessionID)
-	if err != nil {
-		return false
-	}
-	task, ok := e.ImplementTask(sess)
-	if !ok {
-		return false
-	}
-	p, ok := e.PolicySnapshot().Project(sess.Project)
-	if !ok || p.Ship != policy.ShipPushBase {
-		return false
-	}
-	base := strings.TrimPrefix(task.Ref, "refs/heads/")
-	if base == "" {
-		return false
-	}
-	return ref == "refs/heads/"+base
+	return SessionRefAllowed(sessionID, ref)
 }
 
 // projectShip is the project's ship behavior, default pull-request.
@@ -97,12 +77,8 @@ func (e *Engine) projectShip(project string) string {
 	return policy.ShipPullRequest
 }
 
-// publishResult performs the plane's one GitHub write for a run result
-// that asks for publication. It runs before the result transaction, so it
-// checks the lease itself first; Complete checks it again when recording.
-// Under plane publication only the plane sets the pull request number. A
-// refusal or failed write becomes a blocked result; there is no fallback
-// credential.
+// publishResult validates a run result that asks to write. It does not
+// call GitHub. Complete records write.propose; ApplySessionWrite writes.
 func (e *Engine) publishResult(jobID int64, gen, claimed int, art *Artifact) {
 	r := art.Result
 	if art.ItemKind != "run" || r == nil {
@@ -115,7 +91,6 @@ func (e *Engine) publishResult(jobID int64, gen, claimed int, art *Artifact) {
 	}
 	if r.Publish == nil {
 		if e.Publisher != nil && r.PullRequest > 0 {
-			// The guest cannot name a pull request the plane did not write.
 			block("only the plane opens pull requests")
 		}
 		return
@@ -151,10 +126,8 @@ func (e *Engine) publishResult(jobID int64, gen, claimed int, art *Artifact) {
 	}
 	task, ok := e.ImplementTask(sess)
 	if e.Publisher == nil {
-		if !ok || e.projectShip(sess.Project) != policy.ShipPushBase {
-			block("plane publication is off")
-			return
-		}
+		block("plane publication is off")
+		return
 	}
 	switch {
 	case !ok:
@@ -173,55 +146,12 @@ func (e *Engine) publishResult(jobID int64, gen, claimed int, art *Artifact) {
 		block("candidate commit required")
 		return
 	}
-	base := strings.TrimPrefix(task.Ref, "refs/heads/")
-	if e.projectShip(sess.Project) == policy.ShipPushBase {
-		if e.Publisher == nil {
-			// Agent publication: the guest pushed the default branch.
-			r.PullRequest = 0
-			return
-		}
-		if err := e.Publisher.PushBase(task.Repo, base, r.CandidateSHA); err != nil {
-			if errors.Is(err, gh.ErrHeadMismatch) {
-				block("branch head is not the candidate commit")
-				return
-			}
-			e.exception(fmt.Sprintf("publish job=%d: %v", jobID, err))
-			block("github write failed")
-			return
-		}
-		r.PullRequest = 0
-		r.Publisher = PublisherPlane
-		r.PushedRef = "refs/heads/" + base
+	if prev, ok := priorPublishAsk(e.Store, sessionID); ok && prev != req.Branch {
+		block(fmt.Sprintf("follow-up must publish branch %s", prev))
 		return
 	}
-	if e.Publisher == nil {
-		block("plane publication is off")
-		return
-	}
-	// The publisher writes only while the branch points at the candidate,
-	// so a pull request never goes live on a commit the turn did not report.
-	spec := gh.PullSpec{Head: req.Branch, SHA: r.CandidateSHA, Base: base, Title: req.Title, Body: req.Body}
-	if prev, ok := priorPublication(e.Store, jobID); ok {
-		switch {
-		case prev.Publisher != PublisherPlane:
-			block(fmt.Sprintf("pull request #%d was not published by the plane", prev.PullRequest))
-			return
-		case prev.Branch != req.Branch:
-			block(fmt.Sprintf("follow-up must publish branch %s", prev.Branch))
-			return
-		}
-		spec.Number = prev.PullRequest
-	}
-	n, err := e.Publisher.PublishPull(task.Repo, spec)
-	if errors.Is(err, gh.ErrHeadMismatch) {
-		block("branch head is not the candidate commit")
-		return
-	}
-	if err != nil {
-		e.exception(fmt.Sprintf("publish job=%d: %v", jobID, err))
-		block("github write failed")
-		return
-	}
-	r.PullRequest = n
-	r.Publisher = PublisherPlane
+	// The turn records a proposal. GitHub writes happen only when the
+	// operator applies the write Action (#607).
+	r.PullRequest = 0
+	r.Publisher = ""
 }

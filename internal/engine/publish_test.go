@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -88,11 +89,15 @@ func TestPlanePublishesImplementTurnAndUpdatesOnFollowUp(t *testing.T) {
 	h.f.Put(snapshot.Item{Repo: "example/test-repo", Item: 7, ItemKind: "pull", State: "open", HeadSHA: "sha-a"})
 
 	r := completePublish(t, h, h.claim(), branch, "sha-a")
-	if r.PullRequest != 7 || r.Publisher != engine.PublisherPlane || r.Outcome != engine.OutcomePublished || r.PushedRef != "" {
+	if r.PullRequest != 0 || r.Publisher != "" || r.Outcome != engine.OutcomeProposed || r.PushedRef != "" {
 		t.Fatalf("result %+v", r)
 	}
-	if len(pub.specs) != 1 || pub.specs[0] != (gh.PullSpec{Head: branch, SHA: "sha-a", Base: "main", Title: "fix the pin"}) {
-		t.Fatalf("specs %+v", pub.specs)
+	if len(pub.specs) != 0 {
+		t.Fatalf("turn wrote %+v", pub.specs)
+	}
+	applied := applyWrite(t, h, task.SessionID)
+	if applied.PullRequest != 7 || applied.Publisher != engine.PublisherPlane || len(pub.specs) != 1 || pub.specs[0] != (gh.PullSpec{Head: branch, SHA: "sha-a", Base: "main", Title: "fix the pin"}) {
+		t.Fatalf("apply %+v specs %+v", applied, pub.specs)
 	}
 	if len(pub.bases) != 0 {
 		t.Fatalf("pushed default branch %+v", pub.bases)
@@ -103,9 +108,22 @@ func TestPlanePublishesImplementTurnAndUpdatesOnFollowUp(t *testing.T) {
 	}
 	h.f.Put(snapshot.Item{Repo: "example/test-repo", Item: 7, ItemKind: "pull", State: "open", HeadSHA: "sha-b"})
 	r = completePublish(t, h, h.claim(), branch, "sha-b")
-	if r.Outcome != engine.OutcomePublished || len(pub.specs) != 2 || pub.specs[1].Number != 7 || pub.specs[1].SHA != "sha-b" {
-		t.Fatalf("follow-up %+v %+v", r, pub.specs)
+	if r.Outcome != engine.OutcomeProposed || len(pub.specs) != 1 {
+		t.Fatalf("follow-up turn %+v %+v", r, pub.specs)
 	}
+	applied = applyWrite(t, h, task.SessionID)
+	if applied.PullRequest != 7 || len(pub.specs) != 2 || pub.specs[1].Number != 7 || pub.specs[1].SHA != "sha-b" {
+		t.Fatalf("follow-up apply %+v %+v", applied, pub.specs)
+	}
+}
+
+func applyWrite(t *testing.T, h *harn, sessionID int64) engine.WriteApplyReceipt {
+	t.Helper()
+	rec, err := h.e.ApplySessionWrite(sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rec
 }
 
 func TestPlanePublicationRefusesWithoutWriting(t *testing.T) {
@@ -203,8 +221,12 @@ func TestPlanePublicationRefusesGuestClaimedPullRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	completePublish(t, h, h.claim(), fmt.Sprintf("rusui/%d/pin", task.SessionID), "sha-b")
-	if len(pub.specs) != 1 || pub.specs[0].Number != 0 {
-		t.Fatalf("follow-up targeted a guest-named pull request: %+v", pub.specs)
+	if len(pub.specs) != 0 {
+		t.Fatalf("follow-up turn wrote: %+v", pub.specs)
+	}
+	applied := applyWrite(t, h, task.SessionID)
+	if applied.PullRequest != 7 || len(pub.specs) != 1 || pub.specs[0].Number != 0 {
+		t.Fatalf("follow-up targeted a guest-named pull request: %+v %+v", applied, pub.specs)
 	}
 }
 
@@ -222,7 +244,7 @@ func TestPlaneFollowUpMustReuseItsBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := completePublish(t, h, h.claim(), fmt.Sprintf("rusui/%d/other", task.SessionID), "sha-b")
-	if r.Outcome != engine.OutcomeBlocked || !strings.Contains(r.BlockedReason, "follow-up must publish branch") || len(pub.specs) != 1 {
+	if r.Outcome != engine.OutcomeBlocked || !strings.Contains(r.BlockedReason, "follow-up must publish branch") || len(pub.specs) != 0 {
 		t.Fatalf("result %+v specs %+v", r, pub.specs)
 	}
 }
@@ -250,14 +272,21 @@ func TestPlanePublicationWritesOncePerCompletedTurn(t *testing.T) {
 	if err != nil || fmt.Sprint(again) != fmt.Sprint(first) {
 		t.Fatalf("retry %v %v", again, err)
 	}
-	if len(pub.specs) != 1 {
-		t.Fatalf("wrote %d times", len(pub.specs))
+	if len(pub.specs) != 0 {
+		t.Fatalf("complete wrote %d times", len(pub.specs))
+	}
+	applyWrite(t, h, task.SessionID)
+	againApply, err := h.e.ApplySessionWrite(task.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pub.specs) != 1 || againApply.PullRequest != 7 {
+		t.Fatalf("apply wrote %d times receipt %+v", len(pub.specs), againApply)
 	}
 }
 
-// Two Completes for one lease in flight at once write to GitHub once; the
-// second returns the first one's receipt.
-func TestPlanePublicationWritesOnceForConcurrentCompletes(t *testing.T) {
+// Two Applies for one proposal in flight at once write to GitHub once.
+func TestPlanePublicationWritesOnceForConcurrentApplies(t *testing.T) {
 	h := setupImplement(t)
 	pub := &fakePublisher{entered: make(chan struct{}, 2), release: make(chan struct{})}
 	h.e.Publisher = pub
@@ -266,30 +295,27 @@ func TestPlanePublicationWritesOnceForConcurrentCompletes(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.f.Put(snapshot.Item{Repo: "example/test-repo", Item: 7, ItemKind: "pull", State: "open", HeadSHA: "sha-a"})
-	c := h.claim()
-	a := art(c, "keep", "", "")
-	a.Result = &engine.TaskResult{SchemaVersion: engine.ResultSchema, SourceHash: c.ItemHash, CandidateSHA: "sha-a",
-		Publish: &engine.PublishRequest{Branch: fmt.Sprintf("rusui/%d/pin", task.SessionID), Title: "t"}}
+	completePublish(t, h, h.claim(), fmt.Sprintf("rusui/%d/pin", task.SessionID), "sha-a")
 	type out struct {
-		receipt map[string]any
+		receipt engine.WriteApplyReceipt
 		err     error
 	}
 	results := make(chan out, 2)
-	complete := func() {
-		r, err := h.e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a)
+	apply := func() {
+		r, err := h.e.ApplySessionWrite(task.SessionID)
 		results <- out{r, err}
 	}
-	go complete()
-	<-pub.entered // the first Complete is inside PublishPull
-	go complete()
+	go apply()
+	<-pub.entered
+	go apply()
 	select {
 	case <-pub.entered:
-		t.Fatal("second concurrent Complete reached PublishPull")
+		t.Fatal("second concurrent Apply reached PublishPull")
 	case <-time.After(200 * time.Millisecond):
 	}
 	close(pub.release)
 	first, second := <-results, <-results
-	if first.err != nil || second.err != nil || fmt.Sprint(first.receipt) != fmt.Sprint(second.receipt) {
+	if first.err != nil || second.err != nil || first.receipt.ActionID != second.receipt.ActionID {
 		t.Fatalf("receipts %+v %+v", first, second)
 	}
 	if len(pub.specs) != 1 {
@@ -306,8 +332,11 @@ func TestPlanePublicationBlocksWhenHeadIsNotTheCandidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := completePublish(t, h, h.claim(), fmt.Sprintf("rusui/%d/pin", task.SessionID), "sha-a")
-	if r.Outcome != engine.OutcomeBlocked || !strings.Contains(r.BlockedReason, "not the candidate commit") || r.PullRequest != 0 {
+	if r.Outcome != engine.OutcomeProposed || r.PullRequest != 0 {
 		t.Fatalf("result %+v", r)
+	}
+	if _, err := h.e.ApplySessionWrite(task.SessionID); !errors.Is(err, gh.ErrHeadMismatch) {
+		t.Fatalf("apply err %v", err)
 	}
 }
 
@@ -335,14 +364,27 @@ func TestPlanePushBaseFastForwardsDefaultBranchAndDoesNotOpenPullRequest(t *test
 	}
 	branch := fmt.Sprintf("rusui/%d/pin", task.SessionID)
 	r := completePublish(t, h, h.claim(), branch, "sha-a")
-	if r.PullRequest != 0 || r.Publisher != engine.PublisherPlane || r.Outcome != engine.OutcomePublished || r.PushedRef != "refs/heads/main" {
+	if r.PullRequest != 0 || r.Publisher != "" || r.Outcome != engine.OutcomeProposed || r.PushedRef != "" {
 		t.Fatalf("result %+v", r)
+	}
+	if len(pub.specs) != 0 || len(pub.bases) != 0 {
+		t.Fatalf("turn wrote specs %+v bases %+v", pub.specs, pub.bases)
+	}
+	applied := applyWrite(t, h, task.SessionID)
+	if applied.PullRequest != 0 || applied.Publisher != engine.PublisherPlane || applied.PushedRef != "refs/heads/main" {
+		t.Fatalf("apply %+v", applied)
 	}
 	if len(pub.specs) != 0 {
 		t.Fatalf("opened pull request %+v", pub.specs)
 	}
 	if len(pub.bases) != 1 || pub.bases[0] != (pushBaseCall{repo: "example/test-repo", branch: "main", sha: "sha-a"}) {
 		t.Fatalf("push-base %+v", pub.bases)
+	}
+}
+
+func TestGuestCannotIngestWriteActions(t *testing.T) {
+	if engine.AllowedTurnActionType(engine.ActionWritePropose) || engine.AllowedTurnActionType(engine.ActionWriteApply) {
+		t.Fatal("guest ingest of write actions")
 	}
 }
 
@@ -361,8 +403,8 @@ func TestPushRefAllowedDefaultBranchOnlyForImplementPushBase(t *testing.T) {
 		t.Fatal("omitted ship allowed main")
 	}
 	reloadShip(t, h, policy.ShipPushBase)
-	if !h.e.PushRefAllowed(sid, "refs/heads/main") {
-		t.Fatal("push-base denied main")
+	if h.e.PushRefAllowed(sid, "refs/heads/main") {
+		t.Fatal("push-base allowed main")
 	}
 	if h.e.PushRefAllowed(sid, "refs/heads/master") {
 		t.Fatal("other branch allowed")

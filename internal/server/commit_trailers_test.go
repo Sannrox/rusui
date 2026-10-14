@@ -146,8 +146,8 @@ func TestAgentGitConfigExportKeepsRunnerSettings(t *testing.T) {
 	if !strings.Contains(msg, CoauthorTrailer) || !strings.Contains(msg, "Rusui-Session: ") {
 		t.Fatalf("commit message:\n%s", msg)
 	}
-	if out := gitCredential(t, guestEnv); !strings.Contains(out, "password="+agentToken) {
-		t.Fatalf("git credential fill:\n%s", out)
+	if out := gitCredential(t, guestEnv); strings.Contains(out, agentToken) {
+		t.Fatalf("credential leaked:\n%s", out)
 	}
 	if got := gitIn(t, repo, guestEnv, "config", "--get-all", "safe.directory"); !strings.Contains(got, repo) {
 		t.Fatalf("agent setting lost:\n%s", got)

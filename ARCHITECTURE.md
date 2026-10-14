@@ -10,14 +10,13 @@ Self-hosted environment plane (留守居: the steward who keeps house while
 you are away). You write structured policy. The server admits work onto
 typed records — environment, session, turn, runner, event, action —
 records immutable review revisions, and dry-runs apply for comment and
-close. In `implement` sessions the agent pushes and opens its own pull
-requests with the operator's GitHub credential
-([ADR 0015](docs/decisions/0015-agent-publication.md)).
+close. In `implement` sessions the agent proposes a GitHub write; the operator
+applies it as a governed Action
+([ADR 0080](docs/decisions/0080-turns-propose-writes-go-through-actions.md)).
 GitHub review is the first session kind, not the identity of the system.
 
 This is not ClawSweeper, Tatara, or a Kafka fleet. GitHub is intake. The
-server is the source of truth. Slack is the human socket. Model CLIs receive a
-GitHub write credential only in `implement` sessions (ADR 0015). Schema changes are versioned migrations
+server is the source of truth. Slack is the human socket. Guests never receive a GitHub write credential (ADR 0080). Schema changes are versioned migrations
 (`schema_migrations`), not `CREATE IF NOT EXISTS` drift.
 
 ## Operator authentication
@@ -69,14 +68,13 @@ intake, claim/lease on a **turn**, immutable review artifacts in SQLite,
 deterministic **dry-run** apply for comment and close, pause/status/retry/cancel,
 daily review budget, a per-project concurrent-lease meter
 ([ADR 0011](docs/decisions/0011-unattended-session-contract.md)), and
-agent-driven publication
-([ADR 0015](docs/decisions/0015-agent-publication.md)). An `implement`
-session of a bound repository receives the operator's GitHub credential;
-the agent pushes a branch and opens or updates its pull request with
-`git` and `gh`. No proof or independent review gates publication. Commits
-carry `Co-authored-by: rusui` and `Rusui-Session` trailers. Human merge is
-required. Merge, comment, close, and land stay unauthorized by contract;
-token scope and branch protection enforce that line. The domain nouns
+publication through governed Actions
+([ADR 0080](docs/decisions/0080-turns-propose-writes-go-through-actions.md)).
+An `implement` session of a bound repository proposes a write; applying
+it is `POST /sessions/{id}/write-actions`. No proof or independent review
+gates publication. Commits carry `Co-authored-by: rusui` and
+`Rusui-Session` trailers. Human merge is required. Merge, comment, close,
+and land stay unauthorized by contract. The domain nouns
 are the environment-plane set from
 [ADR 0001](docs/decisions/0001-environment-plane.md).
 
@@ -239,9 +237,8 @@ is listed under a project.
 
 `comments` and `close` authorize **simulation**, not live GitHub writes.
 `land` remains unauthorized. `implement` lets pinned implementation tasks
-on the repository run as implement sessions that hold the operator's
-GitHub credential, so the agent can push and open or update its own pull
-request (ADR 0015); it does not authorize comment, close, or merge. Tests that need an
+on the repository run as implement sessions that may propose a GitHub
+write (ADR 0080); it does not authorize comment, close, or merge. Tests that need an
 eligible dry-run use `policy.fixture.yaml`.
 `policy.example.yaml` stays the operator default until the parser ports.
 
@@ -977,56 +974,36 @@ spend measurement.
 
 Do not promote because `confidence = high`.
 
-## Publication (ADR 0015, ADR 0044)
+## Publication (ADR 0015, ADR 0044, ADR 0080)
 
-By default the agent publishes. In an `implement` session the guest holds the
-operator's GitHub credential and runs `git push` and `gh pr create` /
-`gh pr edit` itself. The plane only decides which sessions receive the
-credential.
+Turns propose. Applying a GitHub write is an operator Action. Guests
+never hold a GitHub credential.
 
 An **implement session** is a `run` session started for an open pinned
 implementation task (`rusui run -effort … -repo … -ref … -base-sha …
 -paths …`) on a bound repository whose policy sets `implement: true`, in a
 project that admits `run`. Review, scheduled, and ordinary run sessions,
-and sessions whose task was superseded, abandoned, or cancelled, never
-receive the credential.
+and sessions whose task was superseded, abandoned, or cancelled, cannot
+propose a write.
 
+- The guest pushes only `refs/heads/rusui/<session>/*` through the git
+  proxy and asks in its result (`{"publish": {"branch", "title", "body"}}`).
+- Complete records `write.propose` and outcome `proposed`. It does not
+  call GitHub. A refusal is `blocked`.
+- `POST /sessions/{id}/write-actions` (operator) performs the GitHub write
+  as the App (`RUSUI_PUBLICATION=plane`) and records `write.apply`. A
+  retried apply of the same proposal returns the stored receipt.
 - No `proven` outcome, verifier run, or independent review gates
   publication. Those remain optional evidence.
 - Commits carry `Co-authored-by: rusui <noreply@rusui.invalid>` and
   `Rusui-Session: <session>`; operators may disable either with
   `RUSUI_DISABLE_COAUTHOR_TRAILER=1` or `RUSUI_DISABLE_SESSION_TRAILER=1`.
   Trailers are attribution, not authorization.
-- A follow-up on a session that already published a pull request updates
-  that same pull request. The plane records the turn as blocked when
-  GitHub still shows the previous head, or when the result names a
-  different pull request.
-- The pull request author is the operator. Human merge is required.
-  Merge, close, label, protection, and release are unauthorized by
-  contract. Use a fine-grained token limited to the bound repositories
-  with only contents and pull requests write, and protect the default
-  branch: pull requests and status checks required, no force pushes or
-  deletion. With more than one maintainer, also require an approving
-  review from someone other than the last pusher. A solo maintainer cannot,
-  so nothing on GitHub stops the agent from merging with that token; the
-  implement-session reject rules ([ADR 0017](docs/decisions/0017-claude-guest-and-model-upstream.md)
-  D3) guard against it and are not a security boundary. rusui does not
-  verify the profile; the operator owns it.
-
-**Plane publication (ADR 0044, opt-in).** With `RUSUI_PUBLICATION=plane`
-and GitHub App credentials, implement guests receive no GitHub
-credential. The agent pushes only `refs/heads/rusui/<session>/*` through
-the git proxy and asks for publication in its result
-(`{"publish": {"branch", "title", "body"}}`). On Complete the plane
-rechecks the lease, the implement predicate, and the branch prefix, then
-creates or updates one pull request as the App with a token scoped to the
-task repository (`contents` and `pull_requests` write). The result records
-`publisher: "plane"`; a refusal or failed write is `blocked`, with no
-fallback credential. A guest `pull_request` claim is refused in this mode,
-and a follow-up may only update the plane's own open pull request for the
-same branch. The App is the pull-request author and pusher; the
-session trailers stay attribution. The ADR 0020 controlled pilot gates
-making this the default.
+- A follow-up must reuse the proposed branch. Apply updates the plane's
+  own open pull request for that branch, or fast-forwards the default
+  branch when `ship` is `push-base`.
+- Human merge is required for `pull-request`. Merge, close, label,
+  protection, and release are unauthorized by contract.
 
 Existing PRs: land is triggered by a review verdict plus policy
 `land: true`, never by CI green alone.

@@ -83,11 +83,11 @@ func gitCredential(t *testing.T, guestEnv []string) string {
 	return string(out)
 }
 
-func TestImplementSessionPushesAsOperator(t *testing.T) {
+func TestImplementSessionNeverReceivesGitHubToken(t *testing.T) {
 	hs, e := agentCredentialEnv(t, true, agentToken)
 	a := claim(t, hs, e, true)
-	if a.GitHubToken != agentToken {
-		t.Fatalf("github token %q", a.GitHubToken)
+	if a.GitHubToken != "" || a.Publication != "plane" {
+		t.Fatalf("github token %q publication %q", a.GitHubToken, a.Publication)
 	}
 	if a.Ship != policy.ShipPullRequest || a.ShipBase != "" {
 		t.Fatalf("omitted ship assignment ship=%q base=%q", a.Ship, a.ShipBase)
@@ -95,15 +95,18 @@ func TestImplementSessionPushesAsOperator(t *testing.T) {
 	home := t.TempDir()
 	guestEnv := runner.DriverEnv(a, home, os.Getenv("PATH"))
 	joined := strings.Join(guestEnv, "\n")
-	if !strings.Contains(joined, "GH_TOKEN="+agentToken) {
-		t.Fatal("gh has no credential")
+	if strings.Contains(joined, "GH_TOKEN") {
+		t.Fatal("gh received a credential")
 	}
-	if strings.Contains(joined, "insteadof") || strings.Contains(joined, "Bearer "+a.TurnToken) || strings.Contains(joined, "Bearer "+a.GuestGrant) {
-		t.Fatalf("implement session still routed through the git proxy grant:\n%s", joined)
+	if a.GuestGrant == "" || a.GuestGrant == a.TurnToken {
+		t.Fatalf("guest grant %q turn token %q", a.GuestGrant, a.TurnToken)
+	}
+	if !strings.Contains(joined, "insteadof") || !strings.Contains(joined, "Bearer "+a.GuestGrant) {
+		t.Fatalf("implement session not routed through the git proxy grant:\n%s", joined)
 	}
 	out := gitCredential(t, guestEnv)
-	if !strings.Contains(out, "password="+agentToken) || !strings.Contains(out, "username=x-access-token") {
-		t.Fatalf("git credential fill:\n%s", out)
+	if strings.Contains(out, agentToken) {
+		t.Fatalf("credential leaked:\n%s", out)
 	}
 }
 
@@ -149,8 +152,11 @@ func TestOnlyOpenImplementTasksReceiveTheAgentCredential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s.agentGitHubToken(sess); got != agentToken {
+	if got := s.agentGitHubToken(sess); got != "" {
 		t.Fatalf("implement session: %q", got)
+	}
+	if !s.implementFenced(sess) {
+		t.Fatal("implement session not fenced")
 	}
 	for _, kind := range []string{store.SessionKindReview, store.SessionKindScheduled} {
 		other := *sess
@@ -238,8 +244,8 @@ func TestImplementPushBaseClaimNamesDefaultBranchAndKeepsReviewReadOnly(t *testi
 	hs := httptest.NewServer((&Server{Eng: e, WorkerSec: "wsec", AgentGitHubToken: agentToken}).Handler())
 	t.Cleanup(hs.Close)
 	a := claim(t, hs, e, true)
-	if a.GitHubToken != agentToken || a.Ship != policy.ShipPushBase || a.ShipBase != "main" {
-		t.Fatalf("push-base assignment token=%q ship=%q base=%q", a.GitHubToken, a.Ship, a.ShipBase)
+	if a.GitHubToken != "" || a.Publication != "plane" || a.Ship != policy.ShipPushBase || a.ShipBase != "main" {
+		t.Fatalf("push-base assignment token=%q publication=%q ship=%q base=%q", a.GitHubToken, a.Publication, a.Ship, a.ShipBase)
 	}
 
 	hsR, eR := agentCredentialEnv(t, true, agentToken)

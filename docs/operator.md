@@ -40,10 +40,9 @@ Use the [implement session how-to](implement-sessions.md).
 - Go 1.26 on `PATH`. `make` uses `GOTOOLCHAIN=go$(cat .go-version)`
   (currently 1.26.9).
 - A **read-only** GitHub token for intake of repositories listed in policy.
-  `implement` sessions additionally need your GitHub credential in
-  `RUSUI_AGENT_GITHUB_TOKEN`: a fine-grained token with contents and
-  pull-request write on the bound repositories only (ADR 0015). The guest
-  image must provide `gh`.
+  GitHub writes from implement sessions need `RUSUI_PUBLICATION=plane` and
+  a GitHub App with contents and pull-request write on the bound
+  repositories (ADR 0080). Guests hold no GitHub credential.
 - A tunnel or webhook relay if GitHub or Slack must reach the process.
 - For review turns: `-acp` (the plane's guest: Grok by default; for
   `RUSUI_GUEST=claude` the image or `PATH` needs the Claude Code CLI

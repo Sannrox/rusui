@@ -3,9 +3,9 @@
 Self-hosted environment plane for coding agents. You write `policy.yaml`.
 The server admits work onto sessions and turns, records immutable reviews,
 and **dry-runs** apply for comment and close. It does not comment, close,
-or merge on GitHub. In `implement` sessions the agent pushes and opens
-its own pull requests with the operator's credential
-([ADR 0015](docs/decisions/0015-agent-publication.md)).
+or merge on GitHub. In `implement` sessions the agent proposes a GitHub write; applying it
+is a governed Action
+([ADR 0080](docs/decisions/0080-turns-propose-writes-go-through-actions.md)).
 
 留守居 is the steward who keeps house while you are away.
 

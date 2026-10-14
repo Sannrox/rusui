@@ -7,6 +7,8 @@ import (
 
 func TestFencedCommands(t *testing.T) {
 	for _, cmd := range []string{
+		"gh pr create --fill",
+		"gh pr edit 12 --body x",
 		"gh pr merge 12 --squash",
 		"GH PR MERGE 12",
 		"gh pr close 12",
@@ -47,8 +49,6 @@ func TestFencedCommands(t *testing.T) {
 		}
 	}
 	for _, cmd := range []string{
-		"gh pr create --fill",
-		"gh pr edit 12 --body x",
 		"gh pr view 12",
 		"gh pr list",
 		"gh pr checks 12",
@@ -78,7 +78,7 @@ func TestFenceGateRejectsBeforePolicyAllows(t *testing.T) {
 	if d := ask("gh pr merge 1"); !d.Matched || d.Allow {
 		t.Fatalf("merge %+v", d)
 	}
-	if d := ask("gh pr create --fill"); !d.Matched || !d.Allow {
+	if d := ask("gh pr create --fill"); !d.Matched || d.Allow {
 		t.Fatalf("create %+v", d)
 	}
 	if d := (FenceGate{}).Decide(PermissionParams{ToolCall: json.RawMessage(`{"command":"ls"}`)}); d.Matched {
@@ -92,7 +92,7 @@ func TestFenceGatePushBaseAllowsDefaultBranchAndBlocksPullRequest(t *testing.T) 
 		raw, _ := json.Marshal(map[string]string{"toolCallId": "tc", "title": "run_terminal_command", "command": cmd})
 		return g.Decide(PermissionParams{ToolCall: raw})
 	}
-	if d := ask("git push origin HEAD:main"); d.Matched && !d.Allow {
+	if d := ask("git push origin HEAD:main"); !d.Matched || d.Allow {
 		t.Fatalf("push-base push %+v", d)
 	}
 	if d := ask("gh pr create --fill"); !d.Matched || d.Allow {
@@ -125,6 +125,7 @@ func TestRejectRulesWinOverAllowRules(t *testing.T) {
 
 func TestFenceSeesThroughQuotesWrappersAndAliases(t *testing.T) {
 	for _, cmd := range []string{
+		`sh -c "gh pr create --fill"`,
 		`bash -c 'gh pr merge 1'`,
 		`sh -c "gh pr merge 1 --squash"`,
 		`/bin/zsh -lc 'cd x && gh pr close 3'`,
@@ -159,15 +160,12 @@ func TestFenceSeesThroughQuotesWrappersAndAliases(t *testing.T) {
 	}
 	for _, cmd := range []string{
 		`bash -c 'go test ./...'`,
-		`sh -c "gh pr create --fill"`,
 		`git push origin 'feature/main-fix'`,
 		`git commit -m 'gh pr merge is fenced'`,
 		`echo "git push origin main"`,
 		`gh alias list`,
 		`git config user.name rusui`,
 		`git -c core.pager=less push origin feature`,
-		`gh pr create --body "never run \$(gh pr merge 1) here"`,
-		`gh pr create --body "use \$(make) and \` + "`" + `ls\` + "`" + ` literally"`,
 	} {
 		if FencedCommand(cmd) {
 			t.Errorf("fenced but allowed: %s", cmd)

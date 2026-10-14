@@ -54,7 +54,7 @@ func TestFenceAndRejectRulesHoldAgainstAllowOnlyOptions(t *testing.T) {
 	if got := answerFor(t, rules, "npm publish", allowOnly); got != "reject-once" {
 		t.Fatalf("reject rule answered %q", got)
 	}
-	if got := answerFor(t, fence, "gh pr create", allowOnly); got != "allow-once" {
+	if got := answerFor(t, fence, "gh pr view 1", allowOnly); got != "allow-once" {
 		t.Fatalf("allowed command answered %q", got)
 	}
 }

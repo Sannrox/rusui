@@ -115,8 +115,8 @@ reported and exits successfully.
 | `RUSUI_OTEL_ENDPOINT` | no | Optional collector URL. Unset: measurements stay on the plane and nothing is exported. A collector that is down does not fail the Turn. |
 | `RUSUI_GUEST_MODEL` | Claude or shikigami guest | Claude sends the id as `ANTHROPIC_MODEL` and requires it for readiness. Shikigami uses the id in its HTTP configuration; omitted or `auto` selects `gpt-4.1-mini` in the pinned adapter. A model list does not prove this id can prompt. The Grok harness does not take this id. |
 | `RUSUI_MODEL_UPSTREAM` | no | http(s) URL replacing the provider API, e.g. a gateway or a CLI proxy on the plane host. With it set, the provider key may be empty. |
-| `RUSUI_AGENT_GITHUB_TOKEN` | `implement` sessions | Your GitHub credential for agent publication ([ADR 0015](decisions/0015-agent-publication.md)). Given only to implement sessions — `run` sessions started for an open pinned task (`rusui run -effort …`) on repositories with `implement: true` — as `GH_TOKEN` and git's credential for `https://github.com`. Unset: no session can push. |
-| `RUSUI_PUBLICATION` | no | `agent` (default, ADR 0015) or `plane` ([ADR 0044](decisions/0044-plane-publishes-from-turn-result.md)). `plane` requires GitHub App credentials or the plane exits; implement guests then get no GitHub credential and `RUSUI_AGENT_GITHUB_TOKEN` is ignored. The plane opens or updates the pull request as the App from the turn result's `publish` request. Off until the ADR 0020 pilot passes. |
+| `RUSUI_AGENT_GITHUB_TOKEN` | ignored | Guests never receive a GitHub credential ([ADR 0080](decisions/0080-turns-propose-writes-go-through-actions.md)). Kept so existing configs start. |
+| `RUSUI_PUBLICATION` | no | `plane` is required for GitHub writes ([ADR 0044](decisions/0044-plane-publishes-from-turn-result.md), [ADR 0080](decisions/0080-turns-propose-writes-go-through-actions.md)). It needs GitHub App credentials or the plane exits. Implement guests hold no credential; Complete records `write.propose`; `POST /sessions/{id}/write-actions` applies it as the App. `agent` records proposals that cannot be applied. |
 | `RUSUI_DISABLE_COAUTHOR_TRAILER` | no | `1` drops `Co-authored-by: rusui <noreply@rusui.invalid>` from agent commits. |
 | `RUSUI_DISABLE_SESSION_TRAILER` | no | `1` drops `Rusui-Session: <session id>` from agent commits. |
 | `SUMIKA_SOCK` | local interactive profile | Optional same-user Unix socket path; otherwise Sumika's per-user default path is used. |
@@ -215,11 +215,10 @@ work is set by the provider's terms, not by rusui.
 With plane TLS, every client of an `https` plane URL (`rusui-runner`, `rusui run`, `rusui review`, `sessions`, `logs`, `approvals`, `approve`, `prompt`, `drain`) trusts `RUSUI_PLANE_CA`.
 
 GitHub token: read-only. Do not give it to the runner or the model.
-Guest `XAI_API_KEY` and git HTTP auth are the guest grant, except in
-`implement` sessions, where git and `gh` use `RUSUI_AGENT_GITHUB_TOKEN`.
-Issue that as a fine-grained token limited to the bound repositories
-(contents and pull requests write; no administration, workflow, or secrets)
-and protect default branches. The guest image must provide `gh`.
+Guest `XAI_API_KEY` and git HTTP auth are the guest grant. Implement
+sessions also use the grant for git, limited to `rusui/<session>/*`.
+GitHub writes are operator `POST /sessions/{id}/write-actions`
+([ADR 0080](decisions/0080-turns-propose-writes-go-through-actions.md)).
 
 Agent commits in `run` and `scheduled` sessions carry both trailers
 ([ADR 0015](decisions/0015-agent-publication.md) D3). The runner installs a
@@ -285,6 +284,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/sessions/{id}/tool-grants` | operator token; live write-tool grants the caller owns |
 | `POST` | `/sessions/{id}/tool-grants` | operator token; JSON `tool` (`write`, `execute`, `edit`, `delete`, `move`, `other`); owning tenant only; 201 created, 409 duplicate or user-mode |
 | `DELETE` | `/sessions/{id}/tool-grants/{tool}` | operator token; revoke a live tool grant; 204; 404 unknown grant |
+| `POST` | `/sessions/{id}/write-actions` | operator token; apply the session's latest `write.propose`; 200 receipt, 409 no proposal or publication off |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
 | `*` | `/model-proxy/` | guest grant (HTTPS for container guests); runner turn token refused |
 | `*` | `/git-proxy/github.com/` | prepare or guest grant; push only with a guest grant on the session ref prefix |

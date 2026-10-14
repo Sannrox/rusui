@@ -3,8 +3,8 @@
 `rusui` is a self-hosted environment plane. You write `policy.yaml`. The
 server admits work onto environments, sessions, turns, runners, events,
 and actions; records immutable reviews; and dry-runs apply for comment
-and close. In `implement` sessions the agent pushes and opens its own pull
-requests with the operator's credential ([ADR 0015](docs/decisions/0015-agent-publication.md)).
+and close. In `implement` sessions the agent proposes a GitHub write; applying it
+is a governed Action ([ADR 0080](docs/decisions/0080-turns-propose-writes-go-through-actions.md)).
 `ARCHITECTURE.md` is the product contract. Do not implement live comment,
 close, merge, land, or unnamed GitHub writes. Direction beyond the current
 contract is proposed in `VISION.md` and `ROADMAP.md`; decisions live in

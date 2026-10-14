@@ -23,7 +23,7 @@ Decisions that must outlive a single pull request.
 | [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077 |
 | [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
 | [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Superseded by 0023 |
-| [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted; amended by 0055, 0068 |
+| [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted; amended by 0055, 0068, 0080 |
 | [0016](0016-local-interactive-runtime.md) | Local interactive runtime boundary with Sumika | Accepted |
 | [0017](0017-claude-guest-and-model-upstream.md) | Claude Code guest, operator model upstream, and a fenced self-test | Accepted |
 | [0018](0018-rusui-setup.md) | `rusui setup` provisions a host; `rusui diagnose` verifies it | Accepted |
@@ -52,7 +52,7 @@ Decisions that must outlive a single pull request.
 | [0041](0041-ha-plane-deferred.md) | An HA plane is deferred | Accepted |
 | [0042](0042-disconnected-execution-deferred.md) | Disconnected execution is deferred | Accepted |
 | [0043](0043-extension-contract-deferred.md) | An extension contract is deferred | Accepted |
-| [0044](0044-plane-publishes-from-turn-result.md) | The plane publishes from the turn result | Accepted |
+| [0044](0044-plane-publishes-from-turn-result.md) | The plane publishes from the turn result | Accepted; amended by 0080 |
 | [0045](0045-local-unattended-promotion-deferred.md) | Local unattended promotion is deferred | Accepted |
 | [0046](0046-workspace-first-sequence.md) | Terminal-first remote workspace sequence | Accepted |
 | [0047](0047-guest-link.md) | Container guests reach the plane only through a stdio guest link | Accepted; amended by 0050, 0062 |
@@ -89,6 +89,7 @@ Decisions that must outlive a single pull request.
 | [0077](0077-session-access-grants.md) | Sessions are tenant-owned; cross-tenant access is an audited grant | Accepted on merge; amended by 0078 |
 | [0078](0078-session-execution-modes.md) | Session execution modes: user vs space | Accepted on merge; amended by 0079 |
 | [0079](0079-space-mode-read-only-tools.md) | Space-mode sessions default to read-only tools | Accepted on merge |
+| [0080](0080-turns-propose-writes-go-through-actions.md) | Agent turns only propose; writes go through governed Actions | Accepted on merge |
 
 ## When to write an ADR
 

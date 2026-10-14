@@ -141,7 +141,7 @@ Named container CPU and memory: `small` (1 CPU, 2 GiB), `medium` (2 CPU, 4 GiB),
 _Avoid_: hypervisor, second host
 
 **Per-turn grant**:
-The only credential in a P1 guest outside `implement` sessions (ADR 0015): D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets. The plane mints no third-party identity beside it ([ADR 0033](docs/decisions/0033-third-party-identity-deferred.md)).
+The only credential in a P1 guest (ADR 0080): D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets. The plane mints no third-party identity beside it ([ADR 0033](docs/decisions/0033-third-party-identity-deferred.md)).
 _Avoid_: PAT, installation token, `auth.json`, xAI API key, registry or cloud key (in the guest)
 
 **Wake secret**:
@@ -173,9 +173,9 @@ Isolated verifier output `(command, exit_code, log_digest, head_sha, base_sha)` 
 _Avoid_: CI green, author-session review, expired or drifted proof
 
 **Implement session**:
-A `run` session started for an open pinned implementation task on a bound repository with `implement: true`. The only session that holds the operator's GitHub credential (ADR 0015), or, with plane publication, the only session the plane publishes for (ADR 0044).
+A `run` session started for an open pinned implementation task on a bound repository with `implement: true`. The only session that may propose a GitHub write; applying it is an operator Action (ADR 0080).
 _Avoid_: ordinary run session, scheduled session, review session as a publisher
 
 **Publication**:
-A pull request for an `implement` session, or a fast-forward of the default branch when the project `ship` is `push-base`. Omitted or `pull-request` keeps today's path: the agent opens or updates a pull request with the operator's GitHub credential via `git` and `gh` (ADR 0015), or with `RUSUI_PUBLICATION=plane` the guest holds no credential and the plane opens or updates it as the GitHub App from the turn result's `publish` request (ADR 0044). `push-base` pushes only that default branch and does not open a pull request. Commits carry `Co-authored-by: rusui` and `Rusui-Session` trailers. No proof gates it. Human merge is required for `pull-request`. Live merge, comment, and close stay unauthorized.
+A pull request for an `implement` session, or a fast-forward of the default branch when the project `ship` is `push-base`. The turn records `write.propose`; the operator applies it (`POST /sessions/{id}/write-actions`) as the GitHub App (ADR 0080). Guests hold no GitHub credential. `push-base` fast-forwards only that default branch and does not open a pull request. Commits carry `Co-authored-by: rusui` and `Rusui-Session` trailers. No proof gates it. Human merge is required for `pull-request`. Live merge, comment, and close stay unauthorized.
 _Avoid_: guest-callable publish endpoint, agent merge or close, trailer as authorization, defaulting dogfood to `push-base`

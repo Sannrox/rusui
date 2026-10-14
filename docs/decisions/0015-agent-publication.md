@@ -11,7 +11,9 @@
   [ARCHITECTURE.md](../../ARCHITECTURE.md) current contract (publication).
 - Related: [ADR 0010](0010-hybrid-roadmap-sequence.md) D5 (humans merge
   core delivery).
-- Amended by: [ADR 0055](0055-implement-publication-is-pull-request.md)
+- Amended by: [ADR 0080](0080-turns-propose-writes-go-through-actions.md)
+  (turns propose; writes are operator Actions),
+  [ADR 0055](0055-implement-publication-is-pull-request.md)
   (pull-request only; superseded by
   [ADR 0068](0068-project-ship-behavior.md), which adds a project
   `ship` field of `pull-request` or `push-base`; dogfood stays

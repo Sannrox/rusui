@@ -12,9 +12,7 @@ import (
 // a security boundary.
 type FenceGate struct {
 	Next PermissionGate
-	// AllowPushBase is the default branch an implement session may push
-	// when the project ship is push-base. Empty keeps main and master
-	// fenced and allows gh pr create.
+	// AllowPushBase is ignored: guests never push the default branch (#607).
 	AllowPushBase string
 }
 
@@ -43,19 +41,19 @@ var protectedBranches = map[string]bool{"main": true, "master": true}
 // line is lexed like a shell (quotes, escapes, separators, substitutions),
 // and `sh -c` / `eval` payloads are checked recursively.
 func FencedCommand(line string) bool {
-	return fencedLine(line, 0, "")
+	return fencedLine(line, 0)
 }
 
 func (g FenceGate) fenced(line string) bool {
-	return fencedLine(line, 0, strings.ToLower(g.AllowPushBase))
+	return fencedLine(line, 0)
 }
 
-func fencedLine(line string, depth int, allowPushBase string) bool {
+func fencedLine(line string, depth int) bool {
 	if depth > 4 {
 		return true // refuse deeply nested wrappers rather than guess
 	}
 	for _, seg := range lexCommands(strings.ToLower(line)) {
-		if fencedSegment(seg, depth, allowPushBase) {
+		if fencedSegment(seg, depth) {
 			return true
 		}
 	}
@@ -64,24 +62,24 @@ func fencedLine(line string, depth int, allowPushBase string) bool {
 
 var shells = map[string]bool{"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true}
 
-func fencedSegment(f []string, depth int, allowPushBase string) bool {
+func fencedSegment(f []string, depth int) bool {
 	for i := range f {
 		switch base := path.Base(f[i]); {
 		case shells[base]:
 			for j := i + 1; j < len(f); j++ {
 				if strings.HasPrefix(f[j], "-") && !strings.HasPrefix(f[j], "--") && strings.Contains(f[j], "c") && j+1 < len(f) {
-					if fencedLine(f[j+1], depth+1, allowPushBase) {
+					if fencedLine(f[j+1], depth+1) {
 						return true
 					}
 					break
 				}
 			}
 		case base == "eval":
-			if fencedLine(strings.Join(f[i+1:], " "), depth+1, allowPushBase) {
+			if fencedLine(strings.Join(f[i+1:], " "), depth+1) {
 				return true
 			}
 		case base == "gh":
-			if fencedGHArgs(f[i+1:], allowPushBase != "") {
+			if fencedGHArgs(f[i+1:]) {
 				return true
 			}
 		case base == "git":
@@ -89,7 +87,7 @@ func fencedSegment(f []string, depth int, allowPushBase string) bool {
 			if gitAliasGlobal(f[i+1:]) {
 				return true
 			}
-			if len(rest) > 0 && rest[0] == "push" && fencedPush(rest[1:], allowPushBase) {
+			if len(rest) > 0 && rest[0] == "push" && fencedPush(rest[1:]) {
 				return true
 			}
 			if len(rest) > 1 && rest[0] == "config" && gitAliasKey(rest[1:]) {
@@ -228,8 +226,8 @@ func gitAliasKey(args []string) bool {
 	return false
 }
 
-func fencedGHArgs(args []string, pushBase bool) bool {
-	if pushBase && len(args) >= 2 && args[0] == "pr" && args[1] == "create" {
+func fencedGHArgs(args []string) bool {
+	if len(args) >= 2 && args[0] == "pr" && (args[1] == "create" || args[1] == "edit") {
 		return true
 	}
 	for _, p := range fencedGH {
@@ -253,7 +251,7 @@ func fencedGHArgs(args []string, pushBase bool) bool {
 	return false
 }
 
-func fencedPush(args []string, allowPushBase string) bool {
+func fencedPush(args []string) bool {
 	for _, a := range args {
 		switch {
 		case a == "-f" || a == "--force" || a == "--delete" || a == "-d" || a == "--mirror" ||
@@ -272,7 +270,7 @@ func fencedPush(args []string, allowPushBase string) bool {
 			dst = a[i+1:]
 		}
 		dst = strings.TrimPrefix(dst, "refs/heads/")
-		if protectedBranches[dst] && dst != allowPushBase {
+		if protectedBranches[dst] {
 			return true
 		}
 	}
