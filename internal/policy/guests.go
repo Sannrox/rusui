@@ -16,9 +16,11 @@ func validGuests(registry map[string]guest.Entry) (map[string]guest.Entry, error
 	for name, entry := range registry {
 		pinned, ok := builtin[name]
 		if !ok {
-			digest, err := guest.ConformanceDigest(entry)
-			if entry.Protocol != guest.ProtocolACP || err != nil || entry.Conformance == "" || entry.Conformance != digest {
-				return nil, fmt.Errorf("policy: generic ACP guest %q requires an image pinned by digest and a valid conformance digest", name)
+			if entry.Protocol != guest.ProtocolACP || entry.Receipt == nil {
+				return nil, fmt.Errorf("policy: generic ACP guest %q requires a conformance receipt", name)
+			}
+			if err := entry.Receipt.Binds(entry); err != nil {
+				return nil, fmt.Errorf("policy: generic ACP guest %q: %w", name, err)
 			}
 			if entry.Pin == "" || len(entry.Argv) == 0 || len(entry.Probe) == 0 {
 				return nil, fmt.Errorf("policy: guest %q requires argv, probe, and pin", name)
@@ -51,6 +53,25 @@ func validGuests(registry map[string]guest.Entry) (map[string]guest.Entry, error
 		}
 	}
 	return registry, nil
+}
+
+// VerifyConformance checks every generic ACP guest's receipt signature with
+// the plane's conformance key. Parse checks only what needs no key; the plane
+// calls this at load and reload, and admission verifies again.
+func (p *Effective) VerifyConformance(key []byte) error {
+	builtin := guest.Builtin()
+	for name, entry := range p.Guests {
+		if _, ok := builtin[name]; ok {
+			continue
+		}
+		if entry.Receipt == nil {
+			return fmt.Errorf("policy: generic ACP guest %q requires a conformance receipt", name)
+		}
+		if err := entry.Receipt.Verify(key, entry); err != nil {
+			return fmt.Errorf("policy: generic ACP guest %q: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func validProjectGuests(slug string, choices *ProjectGuests, registry map[string]guest.Entry) error {

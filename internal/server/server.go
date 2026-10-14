@@ -87,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /readyz", s.readyz)
 	mux.HandleFunc("POST /drain", s.drain)
 	mux.HandleFunc("POST /resume", s.resume)
+	mux.HandleFunc("POST /guests/conformance", s.qualifyGuest)
 	mux.HandleFunc("POST /hooks/github", s.githubHook)
 	mux.HandleFunc("POST /hooks/events", s.eventsHook)
 	mux.HandleFunc("POST /hooks/sessions/{id}", s.sessionWebhookHook)

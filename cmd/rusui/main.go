@@ -15,6 +15,7 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	envpkg "github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/guest"
 	"github.com/sannrox/rusui/internal/oidc"
 	"github.com/sannrox/rusui/internal/ops"
 	"github.com/sannrox/rusui/internal/policy"
@@ -147,6 +148,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	conformanceKey, err := guest.ParseConformanceKey(os.Getenv(guest.ConformanceKeyEnv))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := p.VerifyConformance(conformanceKey); err != nil {
+		log.Fatal(err)
+	}
 	token := os.Getenv("RUSUI_GITHUB_TOKEN")
 	if token == "" {
 		token = os.Getenv("GITHUB_TOKEN")
@@ -223,6 +231,7 @@ func main() {
 			return tok, err
 		},
 	}
+	eng.ConformanceKey = conformanceKey
 	eng.ReloadPolicy(p)
 	poster := &slackpkg.Poster{
 		Token:   os.Getenv("RUSUI_SLACK_BOT_TOKEN"),

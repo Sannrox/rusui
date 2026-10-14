@@ -98,7 +98,7 @@ func PathsFor(dir string) Paths {
 }
 
 // generatedSecrets are local-only values setup creates once.
-var generatedSecrets = []string{"RUSUI_WORKER_SECRET", "RUSUI_WEBHOOK_SECRET", "RUSUI_SLACK_SECRET", "RUSUI_OPERATOR_TOKEN"}
+var generatedSecrets = []string{"RUSUI_WORKER_SECRET", "RUSUI_WEBHOOK_SECRET", "RUSUI_SLACK_SECRET", "RUSUI_OPERATOR_TOKEN", guest.ConformanceKeyEnv}
 
 // modelCredentialKeys are the provider keys ModelConfigFromEnv accepts
 // (docs/configuration.md): either alias satisfies "model access", regardless
