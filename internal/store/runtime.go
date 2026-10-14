@@ -424,7 +424,14 @@ func InsertLocalSessionTx(tx *sql.Tx, project string, now time.Time) (int64, err
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if err := ensureSessionRetentionTx(tx, id, now); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 // RequestSumikaCancel durably records intent before the external Kill request.

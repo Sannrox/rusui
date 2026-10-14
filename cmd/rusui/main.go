@@ -351,6 +351,9 @@ func runScheduler(eng *engine.Engine) {
 			if err := eng.SleepIdleEnvironments(); err != nil {
 				eng.Notify("sleep idle environments: " + err.Error())
 			}
+			if err := eng.ExpireRetainedSessions(); err != nil {
+				eng.Notify("expire retained sessions: " + err.Error())
+			}
 		case <-sumikaReconcile.C:
 			if err := eng.ReconcileSumika(); err != nil {
 				eng.Notify("Sumika reconcile: " + err.Error())

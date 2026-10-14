@@ -9,7 +9,7 @@ An operator-named policy and budget domain. A session belongs to exactly one pro
 _Avoid_: Repository, environment, session, GitHub Project, workspace
 
 **Tenant**:
-The hard isolation key `tenant_id` on sessions and, through them, approvals ([ADR 0076](docs/decisions/0076-tenant-isolation.md)). Single-operator installs use `default`. Per-tenant operator credentials and optional project `tenant` bind list, decide, review, retry, disposition, and measurement to that key. A session is a tenant-owned resource with a stable id, recorded `created_by`, and an immutable execution mode ([ADR 0078](docs/decisions/0078-session-execution-modes.md)): user mode binds `act` to the creating member and hides logs from other members; space mode is a project runtime visible to the tenant and defaults to read-only tools until a per-session write grant ([ADR 0079](docs/decisions/0079-space-mode-read-only-tools.md)). Sharing across tenants is an explicit audited grant on that session ([ADR 0077](docs/decisions/0077-session-access-grants.md)). Read and reopen by id check that grant; list stays owner-tenant only, and user-mode rows stay with their actor. Unknown and forbidden ids return the same not-found response. Membership and product access stay upstream.
+The hard isolation key `tenant_id` on sessions and, through them, approvals ([ADR 0076](docs/decisions/0076-tenant-isolation.md)). Single-operator installs use `default`. Per-tenant operator credentials and optional project `tenant` bind list, decide, review, retry, disposition, and measurement to that key. A session is a tenant-owned resource with a stable id, recorded `created_by`, and an immutable execution mode ([ADR 0078](docs/decisions/0078-session-execution-modes.md)): user mode binds `act` to the creating member and hides logs from other members; space mode is a project runtime visible to the tenant and defaults to read-only tools until a per-session write grant ([ADR 0079](docs/decisions/0079-space-mode-read-only-tools.md)). Retention is per session ([ADR 0081](docs/decisions/0081-session-retention.md)): short-lived sessions expire after 72h and drop prompt data; indefinite sessions keep data but cannot use write-capable tools without an audited override. Sharing across tenants is an explicit audited grant on that session ([ADR 0077](docs/decisions/0077-session-access-grants.md)). Read and reopen by id check that grant; list stays owner-tenant only, and user-mode rows stay with their actor. Unknown and forbidden ids return the same not-found response. Membership and product access stay upstream.
 _Avoid_: second operator, namespace as isolation, caller-side filtering
 
 **Operator**:
@@ -35,7 +35,7 @@ forwarded on ACP `session/new` when set; omit keeps today's spawn. A parent
 may start bounded children; each child is a new session and a new
 environment from a snapshot. The child may be the same project or
 another project the operator already has
-([ADR 0006](docs/decisions/0006-session-start.md), [ADR 0071](docs/decisions/0071-bounded-child-session.md), [ADR 0072](docs/decisions/0072-cross-project-child-session.md)).
+([ADR 0006](docs/decisions/0006-session-start.md), [ADR 0071](docs/decisions/0071-bounded-child-session.md), [ADR 0072](docs/decisions/0072-cross-project-child-session.md)). Retention is short-lived (72h) or indefinite ([ADR 0081](docs/decisions/0081-session-retention.md)).
 _Avoid_: GitHub issue, turn, environment
 
 **Child session**:

@@ -198,7 +198,14 @@ func ensureReviewSessionTx(tx *sql.Tx, repo string, item int, kind string) (int6
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	id, err = res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if err := ensureSessionRetentionTx(tx, id, time.Now().UTC()); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func LookupIdempotencyTx(tx *sql.Tx, key string) (int64, bool, error) {
@@ -270,6 +277,9 @@ func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt strin
 	}
 	sessionID, err = res.LastInsertId()
 	if err != nil {
+		return 0, 0, err
+	}
+	if err := ensureSessionRetentionTx(tx, sessionID, time.Now().UTC()); err != nil {
 		return 0, 0, err
 	}
 	_, err = tx.Exec(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state) VALUES (?,?,?,?,?,?,?)`,
@@ -800,7 +810,16 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 		}
 		out = append(out, sess)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := fillListRetention(s, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func ListTurnsForSession(s *Store, sessionID int64) ([]Turn, error) {
@@ -1003,6 +1022,9 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id WHERE s.id=?`,
 		return nil, err
 	}
 	if err := applySessionArchive(&sess, archived, archivedAt, created); err != nil {
+		return nil, err
+	}
+	if err := fillSessionRetention(q, &sess); err != nil {
 		return nil, err
 	}
 	return &sess, nil

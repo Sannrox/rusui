@@ -38,31 +38,35 @@ type Runner struct {
 }
 
 type Session struct {
-	ID               int64
-	EnvironmentID    int64
-	EnvironmentState string `json:"environment_state"`
-	Kind             string
-	Repo             string
-	Item             int
-	ItemKind         string
-	State            string
-	Project          string
-	Prompt           string
-	GuestName        string `json:"guest_name,omitempty"`
-	GuestPin         string `json:"guest_pin,omitempty"`
-	GuestConfig      string `json:"-"`
-	GuestSessionID   string
-	Size             string     `json:"size,omitempty"`
-	Mode             string     `json:"mode,omitempty"`
-	Wait             string     `json:"wait,omitempty"`
-	Archived         bool       `json:"archived"`
-	ArchivedAt       *time.Time `json:"archived_at,omitempty"`
-	ParentSessionID  int64      `json:"parent_session_id,omitempty"`
-	TenantID         string     `json:"tenant_id,omitempty"`
-	CreatedBy        string     `json:"created_by,omitempty"`
-	ExecutionMode    string     `json:"execution_mode,omitempty"`
-	Act              string     `json:"act,omitempty"`
-	CreatedAt        time.Time
+	ID                 int64
+	EnvironmentID      int64
+	EnvironmentState   string `json:"environment_state"`
+	Kind               string
+	Repo               string
+	Item               int
+	ItemKind           string
+	State              string
+	Project            string
+	Prompt             string
+	GuestName          string `json:"guest_name,omitempty"`
+	GuestPin           string `json:"guest_pin,omitempty"`
+	GuestConfig        string `json:"-"`
+	GuestSessionID     string
+	Size               string     `json:"size,omitempty"`
+	Mode               string     `json:"mode,omitempty"`
+	Wait               string     `json:"wait,omitempty"`
+	Archived           bool       `json:"archived"`
+	ArchivedAt         *time.Time `json:"archived_at,omitempty"`
+	ParentSessionID    int64      `json:"parent_session_id,omitempty"`
+	TenantID           string     `json:"tenant_id,omitempty"`
+	CreatedBy          string     `json:"created_by,omitempty"`
+	ExecutionMode      string     `json:"execution_mode,omitempty"`
+	Act                string     `json:"act,omitempty"`
+	Retention          string     `json:"retention,omitempty"`
+	RetentionExpiresAt *time.Time `json:"retention_expires_at,omitempty"`
+	WriteOverride      bool       `json:"write_override"`
+	RetentionExpired   bool       `json:"retention_expired,omitempty"`
+	CreatedAt          time.Time
 }
 
 // ProcessReceipt is one local lifecycle transition (#414): a Process

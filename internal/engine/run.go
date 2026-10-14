@@ -97,6 +97,9 @@ func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode
 		if err := store.SetSessionExecutionTx(tx, sid, execMode, act); err != nil {
 			return err
 		}
+		if err := e.applyDefaultRetentionTx(tx, sid); err != nil {
+			return err
+		}
 		if _, _, err := e.bindSessionGuestTx(tx, sid, project, guest, pol); err != nil {
 			return err
 		}

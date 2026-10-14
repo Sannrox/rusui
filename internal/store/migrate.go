@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 49
+const CurrentSchema = 50
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -581,6 +581,14 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 50 {
+		if err := migrateV50(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 50); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -614,6 +622,60 @@ WHERE t.state NOT IN ('abandoned', 'cancelled', 'superseded')
     WHERE g.session_id = t.session_id AND g.tool = ? AND g.revoked_at IS NULL
   )`, ToolWrite, now, ToolWrite)
 	return err
+}
+
+// migrateV50 records per-session retention. Existing and new sessions
+// default to short-lived with a 72h expiry so space-mode grants keep
+// working until an operator chooses indefinite (#609).
+func migrateV50(db *sql.DB) error {
+	if _, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS session_retention (
+  session_id INTEGER PRIMARY KEY,
+  class TEXT NOT NULL,
+  expires_at TEXT,
+  write_override INTEGER NOT NULL DEFAULT 0,
+  write_override_by TEXT NOT NULL DEFAULT '',
+  write_override_at TEXT,
+  expired INTEGER NOT NULL DEFAULT 0
+)`); err != nil {
+		return err
+	}
+	rows, err := db.Query(`SELECT id, created_at FROM sessions`)
+	if err != nil {
+		return err
+	}
+	type row struct {
+		id      int64
+		created string
+	}
+	var existing []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.created); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		existing = append(existing, r)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, r := range existing {
+		t, err := time.Parse(time.RFC3339Nano, r.created)
+		if err != nil {
+			t = time.Now().UTC()
+		}
+		exp := t.Add(EnvTTL).UTC().Format(time.RFC3339Nano)
+		if _, err := db.Exec(`INSERT OR IGNORE INTO session_retention (session_id, class, expires_at) VALUES (?, ?, ?)`,
+			r.id, RetentionShort, exp); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // migrateV48 records execution mode and actor. Existing sessions are space

@@ -33,8 +33,10 @@ func (s *Server) listSessionTools(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"tools":  store.SpaceToolSet(sess.ExecutionMode, grants),
-		"grants": grants,
+		"tools":          store.SpaceToolSet(sess.ExecutionMode, grants),
+		"grants":         grants,
+		"retention":      sess.Retention,
+		"write_override": sess.WriteOverride,
 	})
 }
 

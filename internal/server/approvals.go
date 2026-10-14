@@ -172,6 +172,9 @@ func (s *Server) allowStillValid(actionID string) bool {
 			return false
 		}
 	}
+	if d := (acp.RetentionWriteGate{Class: sess.Retention, Override: sess.WriteOverride}).Decide(params); d.Matched && !d.Allow {
+		return false
+	}
 	if s.implementFenced(sess) {
 		// Implement sessions: the built-in fence overrides any approval.
 		if d := (acp.FenceGate{Next: acp.RulesGate{}}).Decide(params); d.Matched && !d.Allow {

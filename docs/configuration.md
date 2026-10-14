@@ -284,6 +284,9 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/sessions/{id}/tool-grants` | operator token; live write-tool grants the caller owns |
 | `POST` | `/sessions/{id}/tool-grants` | operator token; JSON `tool` (`write`, `execute`, `edit`, `delete`, `move`, `other`); owning tenant only; 201 created, 409 duplicate or user-mode |
 | `DELETE` | `/sessions/{id}/tool-grants/{tool}` | operator token; revoke a live tool grant; 204; 404 unknown grant |
+| `PUT` | `/sessions/{id}/retention` | operator token; JSON `class` (`short` or `indefinite`); owning tenant only; short-lived sessions expire after 72h |
+| `POST` | `/sessions/{id}/retention/write-override` | operator token; JSON `reason`; audited override so an indefinite session may use write-capable tools; 201; 409 unless indefinite and unset |
+| `POST` | `/sessions/{id}/retention/delete` | operator token; remove session data, archive, and record a deletion receipt; 204 |
 | `POST` | `/sessions/{id}/write-actions` | operator token; apply the session's latest `write.propose`; 200 receipt, 409 no proposal or publication off |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
 | `*` | `/model-proxy/` | guest grant (HTTPS for container guests); runner turn token refused |
