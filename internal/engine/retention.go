@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -31,23 +32,37 @@ func (e *Engine) ExpireRetainedSessions() error {
 }
 
 func (e *Engine) ExpireSession(sessionID int64) error {
-	return e.finishRetention(sessionID, "retention.expire", "Short-lived session data was removed after the retention TTL.")
+	return e.finishRetention(sessionID, "retention.expire", "Short-lived session data was removed after the retention TTL.", true)
 }
 
 func (e *Engine) DeleteSessionRetention(sessionID int64) error {
-	return e.finishRetention(sessionID, "retention.delete", "Session data was removed by an explicit retention deletion.")
+	return e.finishRetention(sessionID, "retention.delete", "Session data was removed by an explicit retention deletion.", false)
 }
 
-func (e *Engine) finishRetention(sessionID int64, actionType, sentence string) error {
-	if err := e.ArchiveSession(sessionID); err != nil {
-		return err
+func dueForExpiry(sess *store.Session, now time.Time) bool {
+	if sess == nil || sess.RetentionExpired {
+		return false
 	}
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	if sess.Retention != store.RetentionShort {
+		return false
+	}
+	if sess.RetentionExpiresAt == nil || sess.RetentionExpiresAt.After(now) {
+		return false
+	}
+	return true
+}
+
+func (e *Engine) finishRetention(sessionID int64, actionType, sentence string, requireDue bool) error {
+	var did bool
+	err := e.Store.Tx(func(tx *sql.Tx) error {
 		sess, err := store.GetSessionTx(tx, sessionID)
 		if err != nil {
 			return err
 		}
 		if sess.RetentionExpired {
+			return nil
+		}
+		if requireDue && !dueForExpiry(sess, e.now()) {
 			return nil
 		}
 		if err := store.ClearSessionDataTx(e.Store, tx, sessionID); err != nil {
@@ -60,10 +75,21 @@ func (e *Engine) finishRetention(sessionID int64, actionType, sentence string) e
 		if err != nil {
 			return err
 		}
-		return store.InsertActionTx(tx, store.Action{
+		if err := store.InsertActionTx(tx, store.Action{
 			ID: fmt.Sprintf("%s-%d-%d", actionType, sessionID, e.now().UnixNano()), SessionID: &sessionID,
 			Type: actionType, ReasonCode: "recorded", EvidenceClass: "plane_observed",
 			LimitSentence: sentence, Body: string(body),
-		})
+		}); err != nil {
+			return err
+		}
+		did = true
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+	if !did {
+		return nil
+	}
+	return e.ArchiveSession(sessionID)
 }

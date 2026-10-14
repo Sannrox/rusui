@@ -2,10 +2,13 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/sannrox/rusui/internal/snapshot"
 )
 
 const (
@@ -135,6 +138,12 @@ func ClearSessionDataTx(s *Store, tx *sql.Tx, sessionID int64) error {
 	if _, err := tx.Exec(`UPDATE tasks SET prompt='' WHERE session_id=?`, sessionID); err != nil {
 		return err
 	}
+	if err := scrubSteerActionPromptsTx(tx, sessionID); err != nil {
+		return err
+	}
+	if err := scrubSessionSnapshotBodiesTx(tx, sessionID); err != nil {
+		return err
+	}
 	rows, err := tx.Query(`SELECT DISTINCT digest FROM prompt_attachments WHERE session_id=? AND digest != ''`, sessionID)
 	if err != nil {
 		return err
@@ -167,6 +176,100 @@ func ClearSessionDataTx(s *Store, tx *sql.Tx, sessionID int64) error {
 			continue
 		}
 		_ = os.Remove(s.AttachmentFile(digest))
+	}
+	return nil
+}
+
+func scrubSteerActionPromptsTx(tx *sql.Tx, sessionID int64) error {
+	rows, err := tx.Query(`SELECT action_id, body FROM actions WHERE session_id=? AND action_type=?`, sessionID, "operator.steer")
+	if err != nil {
+		return err
+	}
+	type row struct {
+		id   string
+		body string
+	}
+	var list []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.body); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		list = append(list, r)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, r := range list {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(r.body), &m); err != nil {
+			m = map[string]any{}
+		}
+		m["prompt"] = ""
+		b, err := json.Marshal(m)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE actions SET body=? WHERE action_id=?`, string(b), r.id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func scrubSessionSnapshotBodiesTx(tx *sql.Tx, sessionID int64) error {
+	var kind, repo string
+	var item int
+	if err := tx.QueryRow(`SELECT kind, repo, item FROM sessions WHERE id=?`, sessionID).Scan(&kind, &repo, &item); err != nil {
+		return err
+	}
+	switch kind {
+	case SessionKindRun, SessionKindScheduled, SessionKindLocal:
+	default:
+		return nil
+	}
+	rows, err := tx.Query(`SELECT revision, payload FROM snapshots WHERE repo=? AND item=?`, repo, item)
+	if err != nil {
+		return err
+	}
+	type row struct {
+		rev     int
+		payload string
+	}
+	var list []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.rev, &r.payload); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		list = append(list, r)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, r := range list {
+		var it snapshot.Item
+		if err := json.Unmarshal([]byte(r.payload), &it); err != nil {
+			continue
+		}
+		it.Body = ""
+		b, err := json.Marshal(it)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE snapshots SET payload=? WHERE repo=? AND item=? AND revision=?`, string(b), repo, item, r.rev); err != nil {
+			return err
+		}
 	}
 	return nil
 }

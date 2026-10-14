@@ -3,6 +3,7 @@ package engine_test
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +51,35 @@ func TestShortLivedRetentionExpiresSessionData(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("missing expire action %+v", acts)
+	}
+	var payload string
+	if err := h.st.DB.QueryRow(`SELECT payload FROM snapshots WHERE repo=? AND item=? ORDER BY revision DESC LIMIT 1`, gone.Repo, gone.Item).Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(payload, "secret-prompt") {
+		t.Fatalf("snapshot kept prompt %s", payload)
+	}
+}
+
+func TestExpireSessionRechecksClass(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "keep-me", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = h.st.Tx(func(tx *sql.Tx) error {
+		return store.SetSessionRetentionTx(tx, sid, store.RetentionIndefinite, nil)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.clk.T = h.clk.T.Add(store.EnvTTL + time.Hour)
+	if err := h.e.ExpireSession(sid); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, sid)
+	if err != nil || sess.Prompt != "keep-me" || sess.RetentionExpired || sess.Archived {
+		t.Fatalf("stale expiry %+v %v", sess, err)
 	}
 }
 
