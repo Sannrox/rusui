@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
 )
 
 const (
@@ -35,19 +37,45 @@ type Entry struct {
 	Conformance string `yaml:"conformance,omitempty" json:"conformance,omitempty"`
 }
 
-const ConformanceSuite = "acp-subset-v1"
+// ConformanceSuite names the qualification procedure. v2 runs the probe and
+// the ACP subset inside the guest image; v1 digests qualified a host binary.
+const ConformanceSuite = "acp-subset-v2"
 
-func ConformanceDigest(e Entry) string {
-	e.Conformance = ""
-	b, _ := json.Marshal(struct {
+var imageDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+
+// ImageDigest returns the content digest an image reference pins: a bare
+// image ID ("sha256:...") or a "name@sha256:..." reference. A tag pins nothing.
+func ImageDigest(ref string) (string, bool) {
+	if imageDigest.MatchString(ref) {
+		return ref, true
+	}
+	i := strings.LastIndexByte(ref, '@')
+	if i <= 0 || !imageDigest.MatchString(ref[i+1:]) {
+		return "", false
+	}
+	return ref[i+1:], true
+}
+
+// ConformanceDigest binds a generic ACP entry to the suite and to the image
+// content that ran it, so a moved tag cannot reuse a qualification. It
+// refuses an image pinned only by tag.
+func ConformanceDigest(e Entry) (string, error) {
+	digest, ok := ImageDigest(e.Image)
+	if !ok {
+		return "", fmt.Errorf("guest: image %q must be pinned by digest", e.Image)
+	}
+	b, err := json.Marshal(struct {
 		Protocol string   `json:"protocol"`
 		Argv     []string `json:"argv"`
 		Probe    []string `json:"probe"`
 		Pin      string   `json:"pin"`
 		Image    string   `json:"image"`
-	}{e.Protocol, e.Argv, e.Probe, e.Pin, e.Image})
+	}{e.Protocol, e.Argv, e.Probe, e.Pin, digest})
+	if err != nil {
+		return "", err
+	}
 	h := sha256.Sum256(append([]byte(ConformanceSuite+"\x00"), b...))
-	return hex.EncodeToString(h[:])
+	return hex.EncodeToString(h[:]), nil
 }
 
 // Builtin returns fresh registry data for legacy policies.
