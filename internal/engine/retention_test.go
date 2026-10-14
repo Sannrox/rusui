@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -71,6 +72,25 @@ func TestIndefiniteRetentionDoesNotExpire(t *testing.T) {
 	sess, err := store.GetSession(h.st, sid)
 	if err != nil || sess.Prompt != "keep-me" || sess.RetentionExpired {
 		t.Fatalf("indefinite expired %+v %v", sess, err)
+	}
+}
+
+func TestExpiredSessionCannotUnarchive(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRun("test", "secret-prompt", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(h.st, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.clk.T = sess.RetentionExpiresAt.Add(time.Second)
+	if err := h.e.ExpireRetainedSessions(); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.e.UnarchiveSession(sid); !errors.Is(err, store.ErrRetentionExpired) {
+		t.Fatalf("unarchive expired %v", err)
 	}
 }
 

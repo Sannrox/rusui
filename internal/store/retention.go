@@ -72,6 +72,9 @@ VALUES (?, ?, ?, 0, '', NULL, 0)
 ON CONFLICT(session_id) DO UPDATE SET
   class=excluded.class,
   expires_at=excluded.expires_at,
+  write_override=CASE WHEN session_retention.class=excluded.class THEN session_retention.write_override ELSE 0 END,
+  write_override_by=CASE WHEN session_retention.class=excluded.class THEN session_retention.write_override_by ELSE '' END,
+  write_override_at=CASE WHEN session_retention.class=excluded.class THEN session_retention.write_override_at ELSE NULL END,
   expired=0`, sessionID, class, exp)
 	return err
 }

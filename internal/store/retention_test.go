@@ -106,6 +106,50 @@ func TestWriteOverrideRequiresIndefinite(t *testing.T) {
 	}
 }
 
+func TestClassChangeClearsWriteOverride(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	var sid int64
+	err = st.Tx(func(tx *sql.Tx) error {
+		var inner error
+		sid, _, inner = InsertRunSessionTx(tx, "test", "o/r", "hello")
+		if inner != nil {
+			return inner
+		}
+		if err := SetSessionRetentionTx(tx, sid, RetentionIndefinite, nil); err != nil {
+			return err
+		}
+		return SetRetentionWriteOverrideTx(tx, sid, "alice", time.Now().UTC())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = st.Tx(func(tx *sql.Tx) error {
+		exp := time.Now().UTC().Add(EnvTTL)
+		return SetSessionRetentionTx(tx, sid, RetentionShort, &exp)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := GetSession(st, sid)
+	if err != nil || sess.WriteOverride || sess.Retention != RetentionShort {
+		t.Fatalf("after short %+v %v", sess, err)
+	}
+	err = st.Tx(func(tx *sql.Tx) error {
+		return SetSessionRetentionTx(tx, sid, RetentionIndefinite, nil)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err = GetSession(st, sid)
+	if err != nil || sess.WriteOverride || sess.Retention != RetentionIndefinite {
+		t.Fatalf("override survived class round-trip %+v %v", sess, err)
+	}
+}
+
 func TestExpiredRetentionCannotChangeClass(t *testing.T) {
 	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {

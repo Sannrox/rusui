@@ -67,6 +67,9 @@ func (e *Engine) UnarchiveSession(sessionID int64) error {
 	if !sess.Archived {
 		return nil
 	}
+	if sess.RetentionExpired {
+		return store.ErrRetentionExpired
+	}
 	return store.SetSessionArchived(e.Store, sessionID, false, e.now())
 }
 
