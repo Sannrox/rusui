@@ -50,7 +50,7 @@ func (e *Engine) finishRetention(sessionID int64, actionType, sentence string) e
 		if sess.RetentionExpired {
 			return nil
 		}
-		if err := store.ClearSessionDataTx(tx, sessionID); err != nil {
+		if err := store.ClearSessionDataTx(e.Store, tx, sessionID); err != nil {
 			return err
 		}
 		if err := store.MarkRetentionExpiredTx(tx, sessionID); err != nil {

@@ -65,6 +65,10 @@ func (s *Server) putSessionRetention(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if errors.Is(err, store.ErrRetentionExpired) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -125,7 +129,7 @@ func (s *Server) postSessionWriteOverride(w http.ResponseWriter, r *http.Request
 	case errors.Is(err, store.ErrRetentionNotIndefinite):
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
-	case errors.Is(err, store.ErrWriteOverrideExists):
+	case errors.Is(err, store.ErrWriteOverrideExists), errors.Is(err, store.ErrRetentionExpired):
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	case err != nil:

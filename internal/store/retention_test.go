@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -49,7 +50,7 @@ func TestSetAndExpireRetention(t *testing.T) {
 		t.Fatalf("due %v %v", due, err)
 	}
 	err = st.Tx(func(tx *sql.Tx) error {
-		if err := ClearSessionDataTx(tx, sid); err != nil {
+		if err := ClearSessionDataTx(st, tx, sid); err != nil {
 			return err
 		}
 		return MarkRetentionExpiredTx(tx, sid)
@@ -102,5 +103,76 @@ func TestWriteOverrideRequiresIndefinite(t *testing.T) {
 	})
 	if !errors.Is(err, ErrWriteOverrideExists) {
 		t.Fatalf("dup override %v", err)
+	}
+}
+
+func TestExpiredRetentionCannotChangeClass(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	var sid int64
+	err = st.Tx(func(tx *sql.Tx) error {
+		var inner error
+		sid, _, inner = InsertRunSessionTx(tx, "test", "o/r", "hello")
+		if inner != nil {
+			return inner
+		}
+		return MarkRetentionExpiredTx(tx, sid)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = st.Tx(func(tx *sql.Tx) error {
+		return SetSessionRetentionTx(tx, sid, RetentionIndefinite, nil)
+	})
+	if !errors.Is(err, ErrRetentionExpired) {
+		t.Fatalf("class after expire %v", err)
+	}
+}
+
+func TestClearSessionDataRemovesQueuedPromptAndAttachmentFile(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	var sid int64
+	var digest string
+	err = st.Tx(func(tx *sql.Tx) error {
+		var inner error
+		sid, _, inner = InsertRunSessionTx(tx, "test", "o/r", "hello")
+		if inner != nil {
+			return inner
+		}
+		if _, err := EnqueueQueuedPromptTx(tx, sid, "queued secret"); err != nil {
+			return err
+		}
+		atts, err := InsertPromptAttachmentsTx(st, tx, sid, 1, []PromptFile{{Name: "note.txt", Body: []byte("attached secret")}}, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+		digest = atts[0].Digest
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(st.AttachmentFile(digest)); err != nil {
+		t.Fatalf("attachment missing before clear: %v", err)
+	}
+	err = st.Tx(func(tx *sql.Tx) error {
+		return ClearSessionDataTx(st, tx, sid)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var queued string
+	if err := st.DB.QueryRow(`SELECT prompt FROM followup_queue WHERE session_id=?`, sid).Scan(&queued); err != nil || queued != "" {
+		t.Fatalf("queued prompt %q %v", queued, err)
+	}
+	if _, err := os.Stat(st.AttachmentFile(digest)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("attachment file remained: %v", err)
 	}
 }

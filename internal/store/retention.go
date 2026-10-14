@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"os"
 	"strings"
 	"time"
 )
@@ -54,6 +55,9 @@ func SetSessionRetentionTx(tx *sql.Tx, sessionID int64, class string, expiresAt 
 	if !ValidRetention(class) {
 		return ErrInvalidRetention
 	}
+	if err := refuseExpiredRetentionTx(tx, sessionID); err != nil {
+		return err
+	}
 	var exp any
 	if class == RetentionShort {
 		if expiresAt == nil {
@@ -72,7 +76,25 @@ ON CONFLICT(session_id) DO UPDATE SET
 	return err
 }
 
+func refuseExpiredRetentionTx(tx *sql.Tx, sessionID int64) error {
+	var expired int
+	err := tx.QueryRow(`SELECT expired FROM session_retention WHERE session_id=?`, sessionID).Scan(&expired)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if expired != 0 {
+		return ErrRetentionExpired
+	}
+	return nil
+}
+
 func SetRetentionWriteOverrideTx(tx *sql.Tx, sessionID int64, actor string, now time.Time) error {
+	if err := refuseExpiredRetentionTx(tx, sessionID); err != nil {
+		return err
+	}
 	var class string
 	var override int
 	err := tx.QueryRow(`SELECT class, write_override FROM session_retention WHERE session_id=?`, sessionID).Scan(&class, &override)
@@ -97,12 +119,53 @@ func SetRetentionWriteOverrideTx(tx *sql.Tx, sessionID int64, actor string, now 
 	return err
 }
 
-func ClearSessionDataTx(tx *sql.Tx, sessionID int64) error {
+func ClearSessionDataTx(s *Store, tx *sql.Tx, sessionID int64) error {
 	if _, err := tx.Exec(`UPDATE sessions SET prompt='', guest_config='', guest_pin='', guest_session_id='' WHERE id=?`, sessionID); err != nil {
 		return err
 	}
-	_, err := tx.Exec(`DELETE FROM prompt_attachments WHERE session_id=?`, sessionID)
-	return err
+	if _, err := tx.Exec(`UPDATE followup_queue SET prompt='' WHERE session_id=?`, sessionID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE turn_steers SET prompt='' WHERE session_id=?`, sessionID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE tasks SET prompt='' WHERE session_id=?`, sessionID); err != nil {
+		return err
+	}
+	rows, err := tx.Query(`SELECT DISTINCT digest FROM prompt_attachments WHERE session_id=? AND digest != ''`, sessionID)
+	if err != nil {
+		return err
+	}
+	var digests []string
+	for rows.Next() {
+		var digest string
+		if err := rows.Scan(&digest); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		digests = append(digests, digest)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM prompt_attachments WHERE session_id=?`, sessionID); err != nil {
+		return err
+	}
+	for _, digest := range digests {
+		var n int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM prompt_attachments WHERE digest=?`, digest).Scan(&n); err != nil {
+			return err
+		}
+		if n != 0 || s == nil {
+			continue
+		}
+		_ = os.Remove(s.AttachmentFile(digest))
+	}
+	return nil
 }
 
 func MarkRetentionExpiredTx(tx *sql.Tx, sessionID int64) error {
