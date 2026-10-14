@@ -57,6 +57,7 @@ func bearerToken(r *http.Request) string {
 type Principal struct {
 	Class    CredentialClass
 	TenantID string
+	Actor    string
 }
 
 // OperatorBrowserOK is true only for the operator class. Worker and turn
@@ -108,11 +109,11 @@ func (s *Server) identify(r *http.Request) Principal {
 func (s *Server) lookupPrincipal(r *http.Request) Principal {
 	tok := bearerToken(r)
 	if tenant := s.tenantForToken(tok); tenant != "" {
-		return Principal{Class: CredOperator, TenantID: tenant}
+		return Principal{Class: CredOperator, TenantID: tenant, Actor: s.actorForToken(tok, tenant)}
 	}
 	switch ClassifyBearer(tok, s.OperatorTok, s.WorkerSec) {
 	case CredOperator:
-		return Principal{Class: CredOperator, TenantID: store.DefaultTenantID}
+		return Principal{Class: CredOperator, TenantID: store.DefaultTenantID, Actor: store.DefaultTenantID}
 	case CredWorker:
 		return Principal{Class: CredWorker}
 	}
@@ -120,13 +121,13 @@ func (s *Server) lookupPrincipal(r *http.Request) Principal {
 		return Principal{Class: CredNone}
 	}
 	if s.OIDC != nil && s.OIDC.Valid(tok) {
-		return Principal{Class: CredOperator, TenantID: store.DefaultTenantID}
+		return Principal{Class: CredOperator, TenantID: store.DefaultTenantID, Actor: store.DefaultTenantID}
 	}
 	return Principal{Class: CredNone}
 }
 
 func (s *Server) tenantForToken(tok string) string {
-	if tok == "" || len(s.TenantToks) == 0 {
+	if tok == "" {
 		return ""
 	}
 	found := ""
@@ -140,10 +141,34 @@ func (s *Server) tenantForToken(tok string) string {
 			matches++
 		}
 	}
-	if matches != 1 {
+	if matches == 1 {
+		return found
+	}
+	if matches > 1 {
 		return ""
 	}
-	return found
+	if t := s.MemberToks[tok]; t != "" {
+		return t
+	}
+	return ""
+}
+
+func (s *Server) actorForToken(tok, tenant string) string {
+	if a := s.ActorToks[tok]; a != "" {
+		return a
+	}
+	return tenant
+}
+
+func (s *Server) operatorActor(p Principal) string {
+	if p.Actor != "" {
+		return p.Actor
+	}
+	return p.TenantID
+}
+
+func userMode(sess *store.Session) bool {
+	return store.NormalizeExecutionMode(sess.ExecutionMode) == store.ExecutionUser
 }
 
 func (s *Server) operatorTenant(r *http.Request) (string, bool) {
@@ -157,20 +182,32 @@ func (s *Server) operatorTenant(r *http.Request) (string, bool) {
 func (s *Server) sessionAllowed(r *http.Request, sess *store.Session) bool {
 	switch p := s.identify(r); p.Class {
 	case CredOperator:
-		if store.NormalizeTenantID(sess.TenantID) == p.TenantID {
-			return true
+		if store.NormalizeTenantID(sess.TenantID) != p.TenantID {
+			if userMode(sess) {
+				return false
+			}
+			ok, err := store.SessionGranted(s.Eng.Store, sess.ID, p.TenantID)
+			return err == nil && ok
 		}
-		ok, err := store.SessionGranted(s.Eng.Store, sess.ID, p.TenantID)
-		return err == nil && ok
+		if userMode(sess) {
+			return store.NormalizeActor(sess.Act) == store.NormalizeActor(s.operatorActor(p))
+		}
+		return true
 	case CredWorker:
 		return true
 	}
 	if s.consoleAuthed(r) {
-		if store.NormalizeTenantID(sess.TenantID) == store.DefaultTenantID {
-			return true
+		if store.NormalizeTenantID(sess.TenantID) != store.DefaultTenantID {
+			if userMode(sess) {
+				return false
+			}
+			ok, err := store.SessionGranted(s.Eng.Store, sess.ID, store.DefaultTenantID)
+			return err == nil && ok
 		}
-		ok, err := store.SessionGranted(s.Eng.Store, sess.ID, store.DefaultTenantID)
-		return err == nil && ok
+		if userMode(sess) {
+			return store.NormalizeActor(sess.Act) == store.DefaultTenantID
+		}
+		return true
 	}
 	return false
 }
@@ -238,12 +275,18 @@ func (s *Server) visibleOwnedSession(r *http.Request, id int64) (*store.Session,
 	case CredWorker:
 		return sess, nil
 	case CredOperator:
-		if s.sessionOwner(r, sess) {
-			return sess, nil
+		if !s.sessionOwner(r, sess) {
+			return nil, sql.ErrNoRows
 		}
-		return nil, sql.ErrNoRows
+		if userMode(sess) && store.NormalizeActor(sess.Act) != store.NormalizeActor(s.operatorActor(s.identify(r))) {
+			return nil, sql.ErrNoRows
+		}
+		return sess, nil
 	}
 	if s.consoleAuthed(r) && store.NormalizeTenantID(sess.TenantID) == store.DefaultTenantID {
+		if userMode(sess) && store.NormalizeActor(sess.Act) != store.DefaultTenantID {
+			return nil, sql.ErrNoRows
+		}
 		return sess, nil
 	}
 	return nil, sql.ErrNoRows
@@ -259,64 +302,116 @@ func (s *Server) visibleApprovalAction(r *http.Request, id string) (*store.Actio
 	if err != nil {
 		return nil, err
 	}
-	tenant, ok := s.operatorTenant(r)
-	if !ok {
-		return act, nil
-	}
-	if act.SessionID == nil {
-		return nil, sql.ErrNoRows
-	}
-	sess, err := store.GetSession(s.Eng.Store, *act.SessionID)
-	if err != nil {
-		return nil, err
-	}
-	if store.NormalizeTenantID(sess.TenantID) != tenant {
+	if !s.actionSessionVisible(r, act) {
 		return nil, sql.ErrNoRows
 	}
 	return act, nil
 }
 
+func (s *Server) actionSessionVisible(r *http.Request, act *store.Action) bool {
+	if act == nil {
+		return false
+	}
+	if s.identify(r).Class == CredWorker {
+		return true
+	}
+	if act.SessionID == nil {
+		return false
+	}
+	sess, err := store.GetSession(s.Eng.Store, *act.SessionID)
+	if err != nil {
+		return false
+	}
+	if s.consoleAuthed(r) && s.identify(r).Class != CredOperator {
+		if store.NormalizeTenantID(sess.TenantID) != store.DefaultTenantID {
+			return false
+		}
+		if userMode(sess) {
+			return store.NormalizeActor(sess.Act) == store.DefaultTenantID
+		}
+		return true
+	}
+	tenant, ok := s.operatorTenant(r)
+	if !ok {
+		return false
+	}
+	if store.NormalizeTenantID(sess.TenantID) != tenant {
+		return false
+	}
+	if userMode(sess) {
+		return store.NormalizeActor(sess.Act) == store.NormalizeActor(s.operatorActor(s.identify(r)))
+	}
+	return true
+}
+
 // LoadTenantTokens parses RUSUI_TENANT_TOKENS: a JSON object of tenant_id
-// to operator token, or a path to such a file. The default tenant is the
-// static RUSUI_OPERATOR_TOKEN and must not appear here.
-func LoadTenantTokens(raw string) (map[string]string, error) {
+// to an operator bearer, or of tenant_id to a map of actor id to bearer,
+// or a path to that file. The default tenant is the static
+// RUSUI_OPERATOR_TOKEN and must not appear here.
+func LoadTenantTokens(raw string) (tokens, members, actors map[string]string, err error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return nil, nil
+		return nil, nil, nil, nil
 	}
 	body := []byte(raw)
 	if !strings.HasPrefix(raw, "{") {
 		b, err := os.ReadFile(raw)
 		if err != nil {
-			return nil, fmt.Errorf("tenant tokens: %w", err)
+			return nil, nil, nil, fmt.Errorf("tenant tokens: %w", err)
 		}
 		body = b
 	}
-	var m map[string]string
-	if err := json.Unmarshal(body, &m); err != nil {
-		return nil, fmt.Errorf("tenant tokens: %w", err)
+	var rawMap map[string]json.RawMessage
+	if err := json.Unmarshal(body, &rawMap); err != nil {
+		return nil, nil, nil, fmt.Errorf("tenant tokens: %w", err)
 	}
-	out := make(map[string]string, len(m))
+	tokens, members, actors = map[string]string{}, map[string]string{}, map[string]string{}
 	seen := map[string]string{}
-	for tenant, tok := range m {
-		tenant = strings.TrimSpace(tenant)
-		tok = strings.TrimSpace(tok)
-		if tenant == "" || tok == "" {
-			return nil, fmt.Errorf("tenant tokens: empty tenant or token")
+	add := func(tenant, actor, tok string) error {
+		tenant, actor, tok = strings.TrimSpace(tenant), strings.TrimSpace(actor), strings.TrimSpace(tok)
+		if tenant == "" || actor == "" || tok == "" {
+			return fmt.Errorf("tenant tokens: empty tenant, actor, or token")
 		}
 		if tenant == store.DefaultTenantID {
-			return nil, fmt.Errorf("tenant tokens: default tenant uses RUSUI_OPERATOR_TOKEN")
+			return fmt.Errorf("tenant tokens: default tenant uses RUSUI_OPERATOR_TOKEN")
 		}
 		if err := validTenantID(tenant); err != nil {
-			return nil, err
+			return err
+		}
+		if err := validTenantID(actor); err != nil {
+			return fmt.Errorf("tenant tokens: invalid actor %q", actor)
 		}
 		if other, ok := seen[tok]; ok {
-			return nil, fmt.Errorf("tenant tokens: %s and %s share a token", other, tenant)
+			return fmt.Errorf("tenant tokens: %s and %s share a token", other, tenant+"/"+actor)
 		}
-		seen[tok] = tenant
-		out[tenant] = tok
+		seen[tok] = tenant + "/" + actor
+		actors[tok] = actor
+		return nil
 	}
-	return out, nil
+	for tenant, val := range rawMap {
+		var tok string
+		if json.Unmarshal(val, &tok) == nil {
+			if err := add(tenant, tenant, tok); err != nil {
+				return nil, nil, nil, err
+			}
+			tokens[strings.TrimSpace(tenant)] = strings.TrimSpace(tok)
+			continue
+		}
+		var inner map[string]string
+		if err := json.Unmarshal(val, &inner); err != nil {
+			return nil, nil, nil, fmt.Errorf("tenant tokens: %w", err)
+		}
+		if len(inner) == 0 {
+			return nil, nil, nil, fmt.Errorf("tenant tokens: empty tenant %q", tenant)
+		}
+		for actor, tok := range inner {
+			if err := add(tenant, actor, tok); err != nil {
+				return nil, nil, nil, err
+			}
+			members[strings.TrimSpace(tok)] = strings.TrimSpace(tenant)
+		}
+	}
+	return tokens, members, actors, nil
 }
 
 func validTenantID(id string) error {
@@ -334,17 +429,35 @@ func validTenantID(id string) error {
 
 func (s *Server) CheckTenantTokenOverlap() error {
 	seen := map[string]string{}
-	for tenant, tok := range s.TenantToks {
+	check := func(label, tok string) error {
+		if tok == "" {
+			return nil
+		}
 		if s.OperatorTok != "" && tok == s.OperatorTok {
-			return fmt.Errorf("tenant tokens: %s collides with operator token", tenant)
+			return fmt.Errorf("tenant tokens: %s collides with operator token", label)
 		}
 		if s.WorkerSec != "" && tok == s.WorkerSec {
-			return fmt.Errorf("tenant tokens: %s collides with worker secret", tenant)
+			return fmt.Errorf("tenant tokens: %s collides with worker secret", label)
 		}
 		if other, ok := seen[tok]; ok {
-			return fmt.Errorf("tenant tokens: %s and %s share a token", other, tenant)
+			return fmt.Errorf("tenant tokens: %s and %s share a token", other, label)
 		}
-		seen[tok] = tenant
+		seen[tok] = label
+		return nil
+	}
+	for tenant, tok := range s.TenantToks {
+		if err := check(tenant, tok); err != nil {
+			return err
+		}
+	}
+	for tok, tenant := range s.MemberToks {
+		actor := s.ActorToks[tok]
+		if actor == "" {
+			actor = tenant
+		}
+		if err := check(tenant+"/"+actor, tok); err != nil {
+			return err
+		}
 	}
 	return nil
 }

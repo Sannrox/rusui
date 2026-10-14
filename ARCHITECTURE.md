@@ -49,9 +49,14 @@ is a tenant-owned resource with a stable id; the ACP conversation
 (`guest_session_id`) is that session's thread
 ([ADR 0077](docs/decisions/0077-session-access-grants.md)). Operator
 list, decide, review, retry, disposition, and measurement stay inside
-the owning tenant. Read and reopen by id also succeed for an explicit
-audited cross-tenant grant. Unknown and forbidden ids return the same
-not-found response. Membership and product access stay upstream.
+the owning tenant. A session also stores an immutable execution mode
+([ADR 0078](docs/decisions/0078-session-execution-modes.md)): user mode
+runs as the creating member (`act`) and hides logs from other members;
+space mode is a project runtime visible to the tenant. Tool environments
+receive `RUSUI_ACT` and `RUSUI_EXECUTION_MODE`. Read and reopen by id
+also succeed for an explicit audited cross-tenant grant on space-mode
+sessions. Unknown and forbidden ids return the same not-found response.
+Membership and product access stay upstream.
 
 ## Milestones
 

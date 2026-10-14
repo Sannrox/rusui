@@ -1,6 +1,6 @@
 # ADR 0077: Sessions are tenant-owned; cross-tenant access is an audited grant
 
-- Status: Accepted
+- Status: Accepted; amended by 0078
 - Date: 2026-10-13
 - Amends: [ADR 0076](0076-tenant-isolation.md) (by-id read and reopen
   may follow an explicit grant); [ADR 0012](0012-operator-access.md)

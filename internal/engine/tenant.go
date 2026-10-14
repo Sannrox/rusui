@@ -21,7 +21,10 @@ func (e *Engine) stampReviewTenantTx(tx *sql.Tx, repo string, item int) error {
 	if err := tx.QueryRow(`SELECT id FROM sessions WHERE kind=? AND repo=? AND item=?`, store.SessionKindReview, repo, item).Scan(&sid); err != nil {
 		return err
 	}
-	return store.SetSessionTenantTx(tx, sid, tenant)
+	if err := store.SetSessionTenantTx(tx, sid, tenant); err != nil {
+		return err
+	}
+	return store.SetSessionExecutionTx(tx, sid, store.ExecutionSpace, "")
 }
 
 func (e *Engine) reviewTenantMismatchTx(tx *sql.Tx, repo string, item int) (bool, error) {

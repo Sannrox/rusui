@@ -85,8 +85,9 @@ Decisions that must outlive a single pull request.
 
 | [0074](0074-single-operator-oidc-cli.md) | Optional OIDC CLI authentication for one operator | Accepted on merge |
 | [0075](0075-split-guest-grant-from-runner.md) | Guest grant is model and git only; runner token records actions | Accepted on merge |
-| [0076](0076-tenant-isolation.md) | Tenant isolation on the session plane | Accepted on merge; amended by 0077 |
-| [0077](0077-session-access-grants.md) | Sessions are tenant-owned; cross-tenant access is an audited grant | Accepted on merge |
+| [0076](0076-tenant-isolation.md) | Tenant isolation on the session plane | Accepted on merge; amended by 0077, 0078 |
+| [0077](0077-session-access-grants.md) | Sessions are tenant-owned; cross-tenant access is an audited grant | Accepted on merge; amended by 0078 |
+| [0078](0078-session-execution-modes.md) | Session execution modes: user vs space | Accepted on merge |
 
 ## When to write an ADR
 

@@ -98,6 +98,14 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_access_grants'`).Scan(&grants); err != nil || grants != 1 {
 		t.Fatalf("session_access_grants missing after upgrade: %d %v", grants, err)
 	}
+	var execCol int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='execution_mode'`).Scan(&execCol); err != nil || execCol != 1 {
+		t.Fatalf("sessions.execution_mode missing after upgrade: %d %v", execCol, err)
+	}
+	var execMode string
+	if err := s.DB.QueryRow(`SELECT execution_mode FROM sessions LIMIT 1`).Scan(&execMode); err != nil || execMode != ExecutionSpace {
+		t.Fatalf("migrated session execution_mode %q %v", execMode, err)
+	}
 	var attPath int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('prompt_attachments') WHERE name='path'`).Scan(&attPath); err != nil || attPath != 1 {
 		t.Fatalf("prompt_attachments.path missing after upgrade: %d %v", attPath, err)

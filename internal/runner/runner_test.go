@@ -379,6 +379,14 @@ func TestDriverEnvIncludesAssignedSecrets(t *testing.T) {
 	}
 }
 
+func TestDriverEnvCarriesExecutionPrincipal(t *testing.T) {
+	a := &runner.Assignment{TurnID: 9, TurnToken: "runner-tok", GuestGrant: "tok", ExecutionMode: "user", Act: "alice"}
+	joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")
+	if !strings.Contains(joined, "RUSUI_EXECUTION_MODE=user") || !strings.Contains(joined, "RUSUI_ACT=alice") {
+		t.Fatalf("env %s", joined)
+	}
+}
+
 func TestDriverEnvHasTurnTokenNotPlaneSecret(t *testing.T) {
 	a := &runner.Assignment{TurnID: 9, TurnToken: "runner-tok", GuestGrant: "tok"}
 	env := runner.DriverEnv(a, "/tmp/home", "/bin")

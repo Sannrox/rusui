@@ -60,6 +60,8 @@ type Session struct {
 	ParentSessionID  int64      `json:"parent_session_id,omitempty"`
 	TenantID         string     `json:"tenant_id,omitempty"`
 	CreatedBy        string     `json:"created_by,omitempty"`
+	ExecutionMode    string     `json:"execution_mode,omitempty"`
+	Act              string     `json:"act,omitempty"`
 	CreatedAt        time.Time
 }
 

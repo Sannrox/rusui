@@ -8,33 +8,54 @@ import (
 	"strings"
 
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/store"
 )
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
-	if !s.workerOK(r) {
+	if !s.workerOK(r) && !s.OperatorAPIOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
 	var req struct {
-		Kind         string   `json:"kind"`
-		Guest        string   `json:"guest"`
-		Prompt       string   `json:"prompt"`
-		Size         string   `json:"size"`
-		Mode         string   `json:"mode"`
-		EffortKey    string   `json:"effort_key"`
-		Repo         string   `json:"repo"`
-		Ref          string   `json:"ref"`
-		BaseSHA      string   `json:"base_sha"`
-		AllowedPaths []string `json:"allowed_paths"`
-		ContextRefs  []string `json:"context_refs"`
-		Argv         []string `json:"argv"`
-		Cwd          string   `json:"cwd"`
+		Kind          string   `json:"kind"`
+		Guest         string   `json:"guest"`
+		Prompt        string   `json:"prompt"`
+		Size          string   `json:"size"`
+		Mode          string   `json:"mode"`
+		ExecutionMode string   `json:"execution_mode"`
+		EffortKey     string   `json:"effort_key"`
+		Repo          string   `json:"repo"`
+		Ref           string   `json:"ref"`
+		BaseSHA       string   `json:"base_sha"`
+		AllowedPaths  []string `json:"allowed_paths"`
+		ContextRefs   []string `json:"context_refs"`
+		Argv          []string `json:"argv"`
+		Cwd           string   `json:"cwd"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if req.ExecutionMode != "" && !store.ValidExecutionMode(req.ExecutionMode) {
+		http.Error(w, "execution_mode", http.StatusBadRequest)
+		return
+	}
+	userMode := store.NormalizeExecutionMode(req.ExecutionMode) == store.ExecutionUser
+	p := s.identify(r)
+	worker := s.workerOK(r)
+	if p.Class == CredOperator && !s.projectAllowed(r, r.PathValue("slug")) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	if req.Kind == "local" {
+		if !worker {
+			http.Error(w, "auth", http.StatusUnauthorized)
+			return
+		}
+		if userMode {
+			http.Error(w, "execution_mode", http.StatusConflict)
+			return
+		}
 		if req.Guest != "" || req.Prompt != "" || req.EffortKey != "" || req.Repo != "" || req.Ref != "" || req.BaseSHA != "" || len(req.AllowedPaths) > 0 || len(req.ContextRefs) > 0 {
 			http.Error(w, "local session uses its policy-configured runtime", http.StatusBadRequest)
 			return
@@ -66,6 +87,14 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	pinned := req.EffortKey != "" || req.Repo != "" || req.Ref != "" || req.BaseSHA != "" || len(req.AllowedPaths) > 0
 	if pinned {
+		if !worker {
+			http.Error(w, "auth", http.StatusUnauthorized)
+			return
+		}
+		if userMode {
+			http.Error(w, "execution_mode", http.StatusConflict)
+			return
+		}
 		task, err := s.Eng.StartTask(r.PathValue("slug"), engine.TaskSpec{
 			EffortKey: req.EffortKey, Prompt: req.Prompt, Repo: req.Repo, Ref: req.Ref, Guest: req.Guest,
 			BaseSHA: req.BaseSHA, AllowedPaths: req.AllowedPaths, ContextRefs: req.ContextRefs,
@@ -81,7 +110,19 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	id, err := s.Eng.StartRunGuest(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size, req.Mode, req.Guest)
+	act, createdBy := "", ""
+	if p.Class == CredOperator {
+		createdBy = s.operatorActor(p)
+		if userMode {
+			act = createdBy
+		} else {
+			act = p.TenantID
+		}
+	} else if userMode {
+		http.Error(w, "execution_mode", http.StatusConflict)
+		return
+	}
+	id, err := s.Eng.StartRunExec(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size, req.Mode, req.Guest, req.ExecutionMode, act, createdBy)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return

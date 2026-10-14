@@ -97,6 +97,15 @@ func (s *Server) listApprovals(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []store.Action{}
 	}
+	if p := s.identify(r); p.Class == CredOperator {
+		visible := list[:0]
+		for i := range list {
+			if s.actionSessionVisible(r, &list[i]) {
+				visible = append(visible, list[i])
+			}
+		}
+		list = visible
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(list)
 }

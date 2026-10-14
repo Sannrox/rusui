@@ -27,8 +27,7 @@ func (s *Server) listSessionGrants(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", http.StatusBadRequest)
 		return
 	}
-	sess, err := store.GetSession(s.Eng.Store, id)
-	if err != nil || sess == nil || !s.sessionOwner(r, sess) {
+	if _, err := s.visibleOwnedSession(r, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -51,8 +50,7 @@ func (s *Server) grantSessionAccess(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", http.StatusBadRequest)
 		return
 	}
-	sess, err := store.GetSession(s.Eng.Store, id)
-	if err != nil || sess == nil || !s.sessionOwner(r, sess) {
+	if _, err := s.visibleOwnedSession(r, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -95,8 +93,7 @@ func (s *Server) revokeSessionAccess(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", http.StatusBadRequest)
 		return
 	}
-	sess, err := store.GetSession(s.Eng.Store, id)
-	if err != nil || sess == nil || !s.sessionOwner(r, sess) {
+	if _, err := s.visibleOwnedSession(r, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

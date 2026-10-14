@@ -3,6 +3,7 @@ package engine
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/snapshot"
@@ -22,6 +23,10 @@ func (e *Engine) StartRunMode(project, prompt, idem, size, mode string) (int64, 
 }
 
 func (e *Engine) StartRunGuest(project, prompt, idem, size, mode, guest string) (int64, error) {
+	return e.StartRunExec(project, prompt, idem, size, mode, guest, "", "", "")
+}
+
+func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode, act, createdBy string) (int64, error) {
 	pol := e.PolicySnapshot()
 	p, ok := pol.Project(project)
 	if !ok || !p.AllowsKind(policy.KindRun) {
@@ -37,6 +42,9 @@ func (e *Engine) StartRunGuest(project, prompt, idem, size, mode, guest string) 
 	}
 	if !ValidSessionMode(mode) {
 		return 0, fmt.Errorf("mode")
+	}
+	if !store.ValidExecutionMode(execMode) {
+		return 0, fmt.Errorf("execution_mode")
 	}
 	if prompt == "" {
 		return 0, fmt.Errorf("prompt required")
@@ -57,6 +65,21 @@ func (e *Engine) StartRunGuest(project, prompt, idem, size, mode, guest string) 
 				return err
 			}
 			if ok {
+				sess, err := store.GetSessionTx(tx, id)
+				if err != nil {
+					return err
+				}
+				wantMode := store.NormalizeExecutionMode(execMode)
+				wantAct := strings.TrimSpace(act)
+				if wantAct == "" {
+					wantAct = sessionTenant(p)
+				}
+				if sess.Project != project ||
+					store.NormalizeTenantID(sess.TenantID) != sessionTenant(p) ||
+					store.NormalizeExecutionMode(sess.ExecutionMode) != wantMode ||
+					store.NormalizeActor(sess.Act) != store.NormalizeActor(wantAct) {
+					return fmt.Errorf("idempotency")
+				}
 				sessionID = id
 				return nil
 			}
@@ -66,6 +89,12 @@ func (e *Engine) StartRunGuest(project, prompt, idem, size, mode, guest string) 
 			return err
 		}
 		if err := store.SetSessionTenantTx(tx, sid, sessionTenant(p)); err != nil {
+			return err
+		}
+		if err := store.SetSessionCreatorTx(tx, sid, createdBy); err != nil {
+			return err
+		}
+		if err := store.SetSessionExecutionTx(tx, sid, execMode, act); err != nil {
 			return err
 		}
 		if _, _, err := e.bindSessionGuestTx(tx, sid, project, guest, pol); err != nil {
