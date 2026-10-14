@@ -20,6 +20,7 @@ import (
 	"github.com/sannrox/rusui/internal/guest"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/provider"
+	"github.com/sannrox/rusui/internal/store"
 )
 
 // ACPHost starts the ACP client for one claimed turn.
@@ -192,7 +193,7 @@ func GuestHost(c *Client) ACPHost {
 				return nil, nil, err
 			}
 			started = true
-			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait, TermOutput: term}, func() { stop(); cleanHome() }, nil
+			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(c.bindLiveTools(a)), Wait: rec.Wait, TermOutput: term}, func() { stop(); cleanHome() }, nil
 		}
 		cmd, err := acp.Command(argv)
 		if err != nil {
@@ -220,7 +221,7 @@ func GuestHost(c *Client) ACPHost {
 			}
 			_ = cmd.Wait()
 		}
-		return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(a), Wait: rec.Wait, TermOutput: term}, stop, nil
+		return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(c.bindLiveTools(a)), Wait: rec.Wait, TermOutput: term}, stop, nil
 	}
 }
 
@@ -250,10 +251,50 @@ func guestTermOutput(rec *HTTPRecorder, sessionID int64) func() string {
 	}
 }
 
+func (c *Client) bindLiveTools(a *Assignment) *Assignment {
+	if a == nil || a.LiveTools != nil || c == nil || c.Base == "" || c.Bootstrap == "" || a.SessionID < 1 {
+		return a
+	}
+	base, tok, sid, httpc := c.Base, c.Bootstrap, a.SessionID, c.HTTP
+	a.LiveTools = func() ([]string, error) {
+		client := httpc
+		if client == nil {
+			client = http.DefaultClient
+		}
+		req, err := http.NewRequest("GET", fmt.Sprintf("%s/sessions/%d/tools", base, sid), nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+tok)
+		res, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = res.Body.Close() }()
+		if res.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("session tools: %s", res.Status)
+		}
+		var out struct {
+			Grants []string `json:"grants"`
+		}
+		if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+			return nil, err
+		}
+		if out.Grants == nil {
+			out.Grants = []string{}
+		}
+		return out.Grants, nil
+	}
+	return a
+}
+
 func permissionGate(a *Assignment) acp.PermissionGate {
 	var gate acp.PermissionGate = acp.DenyUnmatched{}
 	if a != nil && len(a.Permissions) > 0 {
 		gate = acp.RulesGate{Rules: a.Permissions}
+	}
+	if a != nil && store.NormalizeExecutionMode(a.ExecutionMode) == store.ExecutionSpace {
+		gate = acp.SpaceReadGate{Next: gate, Grants: a.ToolGrants, Live: a.LiveTools}
 	}
 	if a != nil && (a.GitHubToken != "" || a.Publication == planePublication) {
 		// Implement sessions can publish (ADR 0015, ADR 0044); the

@@ -1,6 +1,6 @@
 # ADR 0078: Session execution modes (user vs space)
 
-- Status: Accepted
+- Status: Accepted; amended by 0079
 - Date: 2026-10-13
 - Amends: [ADR 0076](0076-tenant-isolation.md) (visibility inside a
   tenant); [ADR 0077](0077-session-access-grants.md) (user-mode rows
@@ -45,8 +45,8 @@ mode with `act` copied from `created_by`.
 
 A tenant can host personal and shared sessions without a second
 operator table. Schema v48 is a migration; rollback after mode-qualified
-writes must keep the columns. Space-mode write policy (read-only tools)
-is a later issue.
+writes must keep the columns. Space-mode write policy is
+[ADR 0079](0079-space-mode-read-only-tools.md).
 
 ## Rejected alternatives
 

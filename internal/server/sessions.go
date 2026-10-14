@@ -204,9 +204,15 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.annotateOneSessionWait(sess)
+	grants, err := store.SessionToolGrantNames(s.Eng.Store, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	response := map[string]any{
 		"session": sess, "turns": turns, "processes": processes,
 		"environment_state": envState, "cancelled": cancelled,
+		"tools": store.SpaceToolSet(sess.ExecutionMode, grants),
 	}
 	publication, published, err := engine.SessionPublication(s.Eng.Store, id)
 	if err != nil {

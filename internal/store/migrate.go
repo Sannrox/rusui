@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 48
+const CurrentSchema = 49
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -573,7 +573,47 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 49 {
+		if err := migrateV49(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 49); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV49 records per-session write-tool grants. Space-mode sessions
+// start with none so write-capable tools stay denied until granted (#608).
+func migrateV49(db *sql.DB) error {
+	if _, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS session_tool_grants (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  tool TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT
+)`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS session_tool_grants_live ON session_tool_grants(session_id, tool) WHERE revoked_at IS NULL`); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := db.Exec(`
+INSERT INTO session_tool_grants (session_id, tool, created_by, created_at)
+SELECT t.session_id, ?, 'plane', ?
+FROM tasks t
+JOIN sessions s ON s.id = t.session_id
+WHERE t.state NOT IN ('abandoned', 'cancelled', 'superseded')
+  AND IFNULL(s.execution_mode, 'space') != 'user'
+  AND NOT EXISTS (
+    SELECT 1 FROM session_tool_grants g
+    WHERE g.session_id = t.session_id AND g.tool = ? AND g.revoked_at IS NULL
+  )`, ToolWrite, now, ToolWrite)
+	return err
 }
 
 // migrateV48 records execution mode and actor. Existing sessions are space

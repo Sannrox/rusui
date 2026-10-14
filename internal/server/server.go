@@ -145,6 +145,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /sessions/{id}/grants", s.grantSessionAccess)
 	mux.HandleFunc("DELETE /sessions/{id}/grants/{tenant}", s.revokeSessionAccess)
 	mux.HandleFunc("PUT /sessions/{id}/execution-mode", s.changeSessionExecution)
+	mux.HandleFunc("GET /sessions/{id}/tools", s.listSessionTools)
+	mux.HandleFunc("GET /sessions/{id}/tool-grants", s.listSessionToolGrants)
+	mux.HandleFunc("POST /sessions/{id}/tool-grants", s.grantSessionTool)
+	mux.HandleFunc("DELETE /sessions/{id}/tool-grants/{tool}", s.revokeSessionTool)
 	mux.HandleFunc("POST /sessions/{id}/restart", s.restartLocalSession)
 	mux.HandleFunc("GET /projects/{slug}/measurements", s.projectMeasurements)
 	mux.HandleFunc("POST /results/{id}/dispositions", s.recordDisposition)
@@ -585,6 +589,9 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 			}
 			if sess.Act != "" {
 				out["act"] = sess.Act
+			}
+			if names, err := store.SessionToolGrantNames(s.Eng.Store, sess.ID); err == nil {
+				out["tool_grants"] = names
 			}
 			if envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID); err == nil {
 				out["driver"] = envRow.Driver

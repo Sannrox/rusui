@@ -770,3 +770,22 @@ func TestChildWithoutRepositoryKeepsEmptyPin(t *testing.T) {
 		t.Fatalf("project-only pin %+v %+v: %v", cs, snap, err)
 	}
 }
+
+func TestChildDoesNotInheritParentToolGrants(t *testing.T) {
+	h := setup(t)
+	parent, err := h.e.StartRun("test", "parent-tools", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GrantSessionTool(h.st, parent, store.ToolWrite, "plane"); err != nil {
+		t.Fatal(err)
+	}
+	child, err := h.e.StartChild(parent, "child-tools", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ok, err := store.SessionHasToolGrant(h.st, child, store.ToolWrite)
+	if err != nil || ok {
+		t.Fatalf("child inherited write grant %v %v", ok, err)
+	}
+}

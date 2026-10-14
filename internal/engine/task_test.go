@@ -37,6 +37,10 @@ func TestStartTaskRecordsPinAndReusesSpec(t *testing.T) {
 	if err != nil || got.BaseSHA != "aaa" || got.Repo != "example/test-repo" || got.PolicyHash == "" {
 		t.Fatalf("%+v %v", got, err)
 	}
+	ok, err := store.SessionHasToolGrant(h.st, a.SessionID, store.ToolWrite)
+	if err != nil || !ok {
+		t.Fatalf("implement write grant %v %v", ok, err)
+	}
 }
 
 func TestStartTaskReusesEffortWhenPromptChanges(t *testing.T) {
