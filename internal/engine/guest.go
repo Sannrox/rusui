@@ -43,8 +43,16 @@ func (e *Engine) chooseGuest(project, requested string, pol *policy.Effective) (
 	if !ok {
 		return "", guest.Entry{}, fmt.Errorf("guest: %q is not registered", name)
 	}
-	if _, builtin := guest.Builtin()[name]; !builtin && entry.Protocol == guest.ProtocolACP && e.Container == nil {
-		return "", guest.Entry{}, fmt.Errorf("guest: generic ACP guests require a container driver")
+	if _, builtin := guest.Builtin()[name]; !builtin {
+		if e.Container == nil {
+			return "", guest.Entry{}, fmt.Errorf("guest: generic ACP guests require a container driver")
+		}
+		if entry.Receipt == nil {
+			return "", guest.Entry{}, fmt.Errorf("guest: %q has no conformance receipt", name)
+		}
+		if err := entry.Receipt.Verify(e.ConformanceKey, entry); err != nil {
+			return "", guest.Entry{}, fmt.Errorf("guest: %q: %w", name, err)
+		}
 	}
 	return name, entry, nil
 }
@@ -67,6 +75,16 @@ func (e *Engine) bindSessionGuestTx(tx *sql.Tx, sessionID int64, project, reques
 		}
 		if entry.Pin != pin || len(entry.Argv) == 0 {
 			return "", guest.Entry{}, fmt.Errorf("guest: invalid session pin")
+		}
+		// The frozen entry is what spawns, so its own receipt must verify
+		// with the current key, not only the registry entry's.
+		if _, builtin := guest.Builtin()[name]; !builtin {
+			if entry.Receipt == nil {
+				return "", guest.Entry{}, fmt.Errorf("guest: session pin for %q has no conformance receipt", name)
+			}
+			if err := entry.Receipt.Verify(e.ConformanceKey, entry); err != nil {
+				return "", guest.Entry{}, fmt.Errorf("guest: session pin for %q: %w", name, err)
+			}
 		}
 		return name, entry, nil
 	}

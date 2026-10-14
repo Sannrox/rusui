@@ -1,116 +1,114 @@
 package main
 
 import (
-	"context"
-	"crypto/rand"
-	"encoding/hex"
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"strings"
 	"time"
 
-	"github.com/sannrox/rusui/internal/acp"
-	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/guest"
+	"github.com/sannrox/rusui/internal/ops"
 	"github.com/sannrox/rusui/internal/policy"
 	"gopkg.in/yaml.v3"
 )
 
-// acpConformanceCLI qualifies one policy ACP entry inside its guest image and
-// prints the conformance digest to copy into policy. It uses a throwaway
-// container and no plane or GitHub credential.
 func acpConformanceCLI(args []string) {
-	fs := flag.NewFlagSet("acp-conformance", flag.ExitOnError)
+	os.Exit(acpConformanceMain(args, os.Stdout, os.Stderr))
+}
+
+// acpConformanceMain asks the plane to qualify one policy ACP entry inside
+// its pinned guest image and prints the signed receipt to paste beside the
+// entry (ADR 0082). The plane runs the suite and holds the signing key.
+func acpConformanceMain(args []string, out, errOut io.Writer) int {
+	fs := flag.NewFlagSet("acp-conformance", flag.ContinueOnError)
+	fs.SetOutput(errOut)
 	policyPath := fs.String("policy", "policy.yaml", "policy file")
 	name := fs.String("guest", "", "ACP guest name")
-	_ = fs.Parse(args)
-	if *name == "" {
-		fmt.Fprintln(os.Stderr, "acp-conformance: -guest required")
-		os.Exit(2)
+	url := fs.String("url", ops.PlaneBaseURL("127.0.0.1:8080", os.Getenv), "plane URL")
+	token := fs.String("token", os.Getenv("RUSUI_WORKER_SECRET"), "worker token")
+	if err := fs.Parse(args); err != nil {
+		return 2
 	}
+	if *name == "" {
+		_, _ = fmt.Fprintln(errOut, "acp-conformance: -guest required")
+		return 2
+	}
+	// The entry has no receipt yet, so the file is decoded without policy
+	// validation, which would refuse it.
 	raw, err := os.ReadFile(*policyPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "acp-conformance:", err)
-		os.Exit(1)
+		_, _ = fmt.Fprintln(errOut, "acp-conformance:", err)
+		return 1
 	}
 	var file policy.File
 	if err := yaml.Unmarshal(raw, &file); err != nil {
-		fmt.Fprintln(os.Stderr, "acp-conformance:", err)
-		os.Exit(1)
+		_, _ = fmt.Fprintln(errOut, "acp-conformance:", err)
+		return 1
 	}
 	entry, ok := file.Guests[*name]
 	if !ok || entry.Protocol != guest.ProtocolACP {
-		fmt.Fprintln(os.Stderr, "acp-conformance: guest is not an ACP registry entry")
-		os.Exit(1)
+		_, _ = fmt.Fprintln(errOut, "acp-conformance: guest is not an ACP registry entry")
+		return 1
 	}
-	rt, err := env.LookRuntime()
+	if _, builtin := guest.Builtin()[*name]; builtin {
+		_, _ = fmt.Fprintln(errOut, "acp-conformance: built-in guests keep their pins")
+		return 1
+	}
+	entry.Receipt = nil
+	receipt, err := requestReceipt(*url, *token, entry)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "acp-conformance:", err)
-		os.Exit(1)
+		_, _ = fmt.Fprintln(errOut, "acp-conformance:", err)
+		return 1
 	}
-	docker, ok := rt.(env.DockerCLI)
-	if !ok {
-		fmt.Fprintln(os.Stderr, "acp-conformance: container runtime cannot exec guests")
-		os.Exit(1)
-	}
-	if _, pinned := guest.ImageDigest(entry.Image); !pinned {
-		// Turns run exactly the qualified content, so a tag is resolved
-		// once here and the operator pins the entry to it.
-		if id, err := docker.ImageID(entry.Image); err == nil {
-			fmt.Fprintf(os.Stderr, "acp-conformance: pin the guest image by digest, for example image: %s\n", id)
-		} else {
-			fmt.Fprintln(os.Stderr, "acp-conformance: pin the guest image by digest")
-		}
-		os.Exit(1)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	defer cancel()
-	digest, err := qualifyInImage(ctx, docker, entry)
+	b, err := yaml.Marshal(struct {
+		Receipt guest.Receipt `yaml:"receipt"`
+	}{receipt})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "acp-conformance:", err)
-		os.Exit(1)
+		_, _ = fmt.Fprintln(errOut, "acp-conformance:", err)
+		return 1
 	}
-	fmt.Println(digest)
+	_, _ = out.Write(b)
+	return 0
 }
 
-// guestRuntime is the container exec surface turns use for a guest.
-type guestRuntime interface {
-	env.Runtime
-	env.StdioExecutor
-	ExecOutput(id string, cmd []string) ([]byte, bool, error)
-}
-
-// qualifyInImage starts a throwaway container from entry.Image, runs the
-// version probe and the ACP subset in it through the same exec path as a
-// turn, and returns the conformance digest for the entry.
-func qualifyInImage(ctx context.Context, rt guestRuntime, entry guest.Entry) (string, error) {
-	digest, err := guest.ConformanceDigest(entry)
+// requestReceipt posts entry to the plane's conformance endpoint.
+func requestReceipt(base, token string, entry guest.Entry) (guest.Receipt, error) {
+	body, err := json.Marshal(entry)
 	if err != nil {
-		return "", err
+		return guest.Receipt{}, err
 	}
-	if len(entry.Argv) == 0 || len(entry.Probe) == 0 {
-		return "", fmt.Errorf("guest requires argv and probe")
-	}
-	var suffix [4]byte
-	if _, err := rand.Read(suffix[:]); err != nil {
-		return "", err
-	}
-	container := env.Container{RT: rt, Image: entry.Image}
-	handle, err := container.Create("acp-conformance-" + hex.EncodeToString(suffix[:]))
+	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(base, "/")+"/guests/conformance", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return guest.Receipt{}, err
 	}
-	defer func() { _ = container.Destroy(handle) }()
-	if _, _, err := rt.ExecOutput(handle, entry.Probe); err != nil {
-		return "", fmt.Errorf("probe: %w", err)
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	stdin, stdout, stop, err := rt.ExecStdio(handle, entry.Argv, []string{"RUSUI_ACP_CONFORMANCE=1"})
+	shared, err := planeHTTP(base)
 	if err != nil {
-		return "", err
+		return guest.Receipt{}, err
 	}
-	defer stop()
-	if err := acp.Conform(ctx, stdout, stdin, env.WorkspaceDir); err != nil {
-		return "", err
+	// planeHTTP may return the shared default client; bound a copy.
+	client := *shared
+	client.Timeout = 2 * time.Minute
+	res, err := client.Do(req)
+	if err != nil {
+		return guest.Receipt{}, err
 	}
-	return digest, nil
+	defer func() { _ = res.Body.Close() }()
+	b, _ := io.ReadAll(io.LimitReader(res.Body, 64<<10))
+	if res.StatusCode != http.StatusOK {
+		return guest.Receipt{}, fmt.Errorf("plane: %s: %s", res.Status, strings.TrimSpace(string(b)))
+	}
+	var receipt guest.Receipt
+	if err := json.Unmarshal(b, &receipt); err != nil {
+		return guest.Receipt{}, err
+	}
+	return receipt, nil
 }

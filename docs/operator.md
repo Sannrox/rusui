@@ -104,13 +104,17 @@ provider cursor when supported; transcript clients never read provider home
 directories. Older action rows remain readable in their original shapes.
 
 Generic ACP entries are admitted only with a container image pinned by digest
-(`name@sha256:...` or an image ID `sha256:...`) and a `conformance` digest.
-Run `rusui acp-conformance -policy policy.yaml -guest NAME` after adding the
-entry; it starts a throwaway container from that image, runs the version probe
-and the isolated ACP subset inside it, then prints the digest to copy into that
-entry. Given a tag, it prints the resolved image ID to pin instead. A changed
-argv, probe, pin, or image digest invalidates the digest, and digests from
-earlier releases, which qualified a host binary, must be regenerated. Generic ACP guests use the same
+(`name@sha256:...` or an image ID `sha256:...`) and a conformance `receipt`
+signed by the plane ([ADR 0082](decisions/0082-signed-conformance-receipts.md)).
+After adding the entry, run `rusui acp-conformance -policy policy.yaml -guest
+NAME` against the plane (`-url`, `-token` default to the worker secret). The
+plane starts a throwaway container from that image, runs the version probe and
+the isolated ACP subset inside it, and signs a receipt with its
+`RUSUI_CONFORMANCE_KEY`; the command prints the `receipt:` block to paste into
+the entry. Given a tag, the plane names the resolved image ID to pin instead. A
+changed argv, probe, pin, or image digest invalidates the receipt, as does a new
+conformance key, and the plane refuses to load or admit a guest whose receipt
+is missing, stale, or not signed by its key. Generic ACP guests use the same
 per-turn model grant and cannot broaden repository or permission policy.
 
 All guests use the same `RUSUI_MODEL_UPSTREAM`. A gateway serving both OpenAI

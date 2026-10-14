@@ -58,11 +58,14 @@ type Engine struct {
 	HookIDs   map[string]string
 	Notify    func(string)
 
-	FetchTimeout         time.Duration
-	OwnerTTL             time.Duration
-	ExecDeadline         time.Duration
-	Env                  env.Driver
-	Container            env.Driver
+	FetchTimeout time.Duration
+	OwnerTTL     time.Duration
+	ExecDeadline time.Duration
+	Env          env.Driver
+	Container    env.Driver
+	// ConformanceKey signs and verifies generic ACP guest receipts
+	// (ADR 0082). Without it no generic ACP guest is admitted.
+	ConformanceKey       []byte
 	EnvTTL               time.Duration
 	EnvIdleSleep         time.Duration
 	CancelEnvWait        time.Duration
@@ -1920,6 +1923,9 @@ func (e *Engine) Status(repo string) (string, error) {
 func (e *Engine) ReloadPolicyBytes(raw []byte) error {
 	p, err := policy.Parse(raw)
 	if err != nil {
+		return err
+	}
+	if err := p.VerifyConformance(e.ConformanceKey); err != nil {
 		return err
 	}
 	e.ReloadPolicy(p)

@@ -91,6 +91,7 @@ Decisions that must outlive a single pull request.
 | [0079](0079-space-mode-read-only-tools.md) | Space-mode sessions default to read-only tools | Accepted on merge |
 | [0080](0080-turns-propose-writes-go-through-actions.md) | Agent turns only propose; writes go through governed Actions | Accepted on merge |
 | [0081](0081-session-retention.md) | Session retention: short-lived vs indefinite | Accepted on merge |
+| [0082](0082-signed-conformance-receipts.md) | Signed ACP conformance receipts | Accepted on merge |
 
 ## When to write an ADR
 
