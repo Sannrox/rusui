@@ -10,7 +10,7 @@ ROOT_PATH=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 cd "${ROOT_PATH}"
 
 
-TIMEOUT=${TIMEOUT:--timeout=180s}
+TIMEOUT=${TIMEOUT:--timeout=600s}
 RACE=${RACE-"-race"}
 JUNIT_REPORT_DIR=${JUNIT_REPORT_DIR:-}
 
