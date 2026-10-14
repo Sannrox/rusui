@@ -255,34 +255,46 @@ func (c *Client) bindLiveTools(a *Assignment) *Assignment {
 		return a
 	}
 	base, tok, sid, httpc := c.Base, c.Bootstrap, a.SessionID, c.HTTP
-	a.LiveTools = func() ([]string, error) {
+	fetch := func() (grants []string, retention string, override bool, err error) {
 		client := httpc
 		if client == nil {
 			client = http.DefaultClient
 		}
 		req, err := http.NewRequest("GET", fmt.Sprintf("%s/sessions/%d/tools", base, sid), nil)
 		if err != nil {
-			return nil, err
+			return nil, "", false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+tok)
 		res, err := client.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, "", false, err
 		}
 		defer func() { _ = res.Body.Close() }()
 		if res.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("session tools: %s", res.Status)
+			return nil, "", false, fmt.Errorf("session tools: %s", res.Status)
 		}
 		var out struct {
-			Grants []string `json:"grants"`
+			Grants        []string `json:"grants"`
+			Retention     string   `json:"retention"`
+			WriteOverride bool     `json:"write_override"`
 		}
 		if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
-			return nil, err
+			return nil, "", false, err
 		}
 		if out.Grants == nil {
 			out.Grants = []string{}
 		}
-		return out.Grants, nil
+		return out.Grants, out.Retention, out.WriteOverride, nil
+	}
+	a.LiveTools = func() ([]string, error) {
+		grants, _, _, err := fetch()
+		return grants, err
+	}
+	if a.LiveRetention == nil {
+		a.LiveRetention = func() (string, bool, error) {
+			_, retention, override, err := fetch()
+			return retention, override, err
+		}
 	}
 	return a
 }
@@ -294,6 +306,9 @@ func permissionGate(a *Assignment) acp.PermissionGate {
 	}
 	if a != nil && store.NormalizeExecutionMode(a.ExecutionMode) == store.ExecutionSpace {
 		gate = acp.SpaceReadGate{Next: gate, Grants: a.ToolGrants, Live: a.LiveTools}
+	}
+	if a != nil {
+		gate = acp.RetentionWriteGate{Next: gate, Class: a.Retention, Override: a.WriteOverride, Live: a.LiveRetention}
 	}
 	if a != nil && (a.GitHubToken != "" || a.Publication == planePublication) {
 		// Implement sessions can publish (ADR 0015, ADR 0044); the

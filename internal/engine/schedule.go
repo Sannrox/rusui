@@ -136,6 +136,9 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string) (int64, error) {
 		if err := store.SetSessionExecutionTx(tx, sid, store.ExecutionSpace, ""); err != nil {
 			return err
 		}
+		if err := e.applyDefaultRetentionTx(tx, sid); err != nil {
+			return err
+		}
 		it := snapshot.Item{
 			Repo: repo, Item: item, ItemKind: "scheduled", State: "open",
 			Title: "scheduled:" + sc.Name, Body: sc.Prompt, DefaultBranch: "main", MainSHA: sha,

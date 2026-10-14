@@ -53,7 +53,10 @@ the owning tenant. A session also stores an immutable execution mode
 runs as the creating member (`act`) and hides logs from other members;
 space mode is a project runtime visible to the tenant and starts
 read-only: write-capable ACP tools need an audited per-session grant
-([ADR 0079](docs/decisions/0079-space-mode-read-only-tools.md)). Tool
+([ADR 0079](docs/decisions/0079-space-mode-read-only-tools.md)). A
+session is short-lived (72h, then prompt data is removed) or
+indefinite; indefinite sessions also need an audited write override
+before write-capable tools ([ADR 0081](docs/decisions/0081-session-retention.md)). Tool
 environments receive `RUSUI_ACT` and `RUSUI_EXECUTION_MODE`. Read and reopen by id
 also succeed for an explicit audited cross-tenant grant on space-mode
 sessions. Unknown and forbidden ids return the same not-found response.

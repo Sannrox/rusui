@@ -34,6 +34,9 @@ func (e *Engine) promptFollowUp(sessionID int64, prompt string, files []store.Pr
 	if sess.Archived {
 		return 0, 0, errArchived
 	}
+	if sess.RetentionExpired {
+		return 0, 0, store.ErrRetentionExpired
+	}
 	turns, err := store.ListTurnsForSession(e.Store, sessionID)
 	if err != nil {
 		return 0, 0, err

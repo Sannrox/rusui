@@ -50,7 +50,9 @@ Slack `resume [project]` does the same.
    **records**), then start on that file and `rusui resume`.
 
 Durable session, approval, budget, and receipt rows stay in SQLite across
-a successful upgrade. Live grants do not.
+a successful upgrade. Live grants do not. Schema v50 defaults existing
+sessions to short-lived retention (72h from `created_at`); expiry
+removes prompt data and records `retention.expire`.
 
 ## Diagnostics
 

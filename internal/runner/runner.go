@@ -77,11 +77,16 @@ type Assignment struct {
 	ExecutionMode string      `json:"execution_mode,omitempty"`
 	Act           string      `json:"act,omitempty"`
 	ToolGrants    []string    `json:"tool_grants,omitempty"`
+	Retention     string      `json:"retention,omitempty"`
+	WriteOverride bool        `json:"write_override,omitempty"`
 	// LiveTools returns the current write-tool grants for this session.
 	// The runner consults it on every permission decision so a revoke
 	// during the turn is enforced. Unset in tests that inject ToolGrants.
-	LiveTools      func() ([]string, error) `json:"-"`
-	CommitTrailers []string                 `json:"commit_trailers,omitempty"`
+	LiveTools func() ([]string, error) `json:"-"`
+	// LiveRetention returns the current retention class and write
+	// override so an override during the turn is enforced.
+	LiveRetention  func() (class string, override bool, err error) `json:"-"`
+	CommitTrailers []string                                        `json:"commit_trailers,omitempty"`
 	// CommitHooksDir is where PrepareCommitHooks placed the attribution
 	// hooks for this turn; set on the runner, never by the plane.
 	CommitHooksDir string `json:"-"`

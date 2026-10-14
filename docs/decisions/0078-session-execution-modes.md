@@ -1,6 +1,6 @@
 # ADR 0078: Session execution modes (user vs space)
 
-- Status: Accepted; amended by 0079
+- Status: Accepted; amended by 0079, 0081
 - Date: 2026-10-13
 - Amends: [ADR 0076](0076-tenant-isolation.md) (visibility inside a
   tenant); [ADR 0077](0077-session-access-grants.md) (user-mode rows

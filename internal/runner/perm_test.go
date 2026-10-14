@@ -51,3 +51,34 @@ func TestPermissionGateLiveToolsOverrideClaimedGrants(t *testing.T) {
 		t.Fatalf("live revoke %+v", d)
 	}
 }
+
+func TestPermissionGateIndefiniteDeniesWriteWithoutOverride(t *testing.T) {
+	g := permissionGate(&Assignment{
+		Permissions:   []acp.Rule{{Tool: "shell"}},
+		ExecutionMode: "space",
+		ToolGrants:    []string{"write"},
+		Retention:     "indefinite",
+	})
+	d := g.Decide(acp.PermissionParams{ToolCall: []byte(`{"title":"shell","kind":"execute"}`)})
+	if !d.Matched || d.Allow {
+		t.Fatalf("indefinite write %+v", d)
+	}
+	read := g.Decide(acp.PermissionParams{ToolCall: []byte(`{"title":"fetch","kind":"read"}`)})
+	if read.Allow {
+		t.Fatalf("indefinite read %+v", read)
+	}
+}
+
+func TestPermissionGateIndefiniteOverrideAllowsWrite(t *testing.T) {
+	g := permissionGate(&Assignment{
+		Permissions:   []acp.Rule{{Tool: "shell"}},
+		ExecutionMode: "space",
+		ToolGrants:    []string{"write"},
+		Retention:     "indefinite",
+		WriteOverride: true,
+	})
+	d := g.Decide(acp.PermissionParams{ToolCall: []byte(`{"title":"shell","kind":"execute"}`)})
+	if !d.Matched || !d.Allow {
+		t.Fatalf("override %+v", d)
+	}
+}

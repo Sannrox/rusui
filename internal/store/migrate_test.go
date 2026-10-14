@@ -110,6 +110,14 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_tool_grants'`).Scan(&toolGrants); err != nil || toolGrants != 1 {
 		t.Fatalf("session_tool_grants missing after upgrade: %d %v", toolGrants, err)
 	}
+	var retention int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_retention'`).Scan(&retention); err != nil || retention != 1 {
+		t.Fatalf("session_retention missing after upgrade: %d %v", retention, err)
+	}
+	var retClass string
+	if err := s.DB.QueryRow(`SELECT class FROM session_retention LIMIT 1`).Scan(&retClass); err != nil || retClass != RetentionShort {
+		t.Fatalf("migrated session retention %q %v", retClass, err)
+	}
 	var attPath int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('prompt_attachments') WHERE name='path'`).Scan(&attPath); err != nil || attPath != 1 {
 		t.Fatalf("prompt_attachments.path missing after upgrade: %d %v", attPath, err)

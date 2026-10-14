@@ -62,6 +62,15 @@ func TestConfigurationHTTPTableDocumentsPostReviews(t *testing.T) {
 	if !strings.Contains(table, "`DELETE` | `/sessions/{id}/tool-grants/{tool}` | operator token") {
 		t.Fatal("HTTP table missing DELETE /sessions/{id}/tool-grants/{tool} with operator auth")
 	}
+	if !strings.Contains(table, "`PUT` | `/sessions/{id}/retention` | operator token") {
+		t.Fatal("HTTP table missing PUT /sessions/{id}/retention with operator auth")
+	}
+	if !strings.Contains(table, "`POST` | `/sessions/{id}/retention/write-override` | operator token") {
+		t.Fatal("HTTP table missing POST /sessions/{id}/retention/write-override with operator auth")
+	}
+	if !strings.Contains(table, "`POST` | `/sessions/{id}/retention/delete` | operator token") {
+		t.Fatal("HTTP table missing POST /sessions/{id}/retention/delete with operator auth")
+	}
 	if !strings.Contains(table, "`POST` | `/sessions/{id}/write-actions` | operator token") {
 		t.Fatal("HTTP table missing POST /sessions/{id}/write-actions with operator auth")
 	}
