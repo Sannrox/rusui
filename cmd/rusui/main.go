@@ -126,6 +126,9 @@ func main() {
 		case "eval":
 			evalCLI(os.Args[2:])
 			return
+		case "replay":
+			replayCLI(os.Args[2:])
+			return
 		}
 	}
 	addr := flag.String("addr", "127.0.0.1:8080", "listen")

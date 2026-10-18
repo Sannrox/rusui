@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 51
+const CurrentSchema = 52
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -597,7 +597,33 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 52 {
+		if err := migrateV52(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 52); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV52 stores one append-only flight record per turn (#610).
+func migrateV52(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS flight_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  turn_id INTEGER NOT NULL,
+  receipt_id TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(receipt_id)
+);
+CREATE INDEX IF NOT EXISTS flight_records_session ON flight_records(session_id);
+CREATE INDEX IF NOT EXISTS flight_records_turn ON flight_records(turn_id);
+`)
+	return err
 }
 
 // migrateV51 records halt and resume events for the kill-switch overlay (#611).

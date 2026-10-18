@@ -61,6 +61,12 @@ plane holds it.
 `rusui diagnostics` writes a redacted bundle (`diagnostics.json`).
 Upgrade procedure: [upgrade.md](upgrade.md).
 
+`rusui replay SESSION_ID TURN_ID` rebuilds a Shikigami schema-v1 replay
+manifest from that turn's flight record, re-runs against the recorded
+snapshot with external effects denied, and prints the comparison
+(`POST /sessions/{id}/turns/{tid}/replay`). Object parts the caller cannot
+read stay omitted. Retention follows the session.
+
 ## `rusui-runner` flags
 
 | Flag | Default | Meaning |
@@ -248,6 +254,8 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/auth/oidc/session` | validate operator bearer; 204 when accepted, 401 when refused |
 | `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, `execution_mode`, `act`, `tools` (active ACP kinds), and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, revoked grant, or another member's user-mode session |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
+| `GET` | `/sessions/{id}/turns/{tid}/flight` | operator or worker token; flight record for that turn with snapshot parts the caller cannot read omitted (`rusui replay` uses the replay route) |
+| `POST` | `/sessions/{id}/turns/{tid}/replay` | operator or worker token; rebuild a Shikigami schema-v1 manifest and re-run the turn against the recorded snapshot (optional JSON `snapshot` override); external effects are denied; reports object-revision divergence |
 | `GET` | `/sessions/{id}/terminal` | operator, worker, or turn token; current environment terminal output; not the transcript |
 | `GET` | `/sessions/{id}/envlog` | operator token; last pre-clone, pre-setup, setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`pre-clone`/`pre-setup`/`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
 | `POST` | `/sessions/{id}/workspace` | operator token; multipart `file` plus `path` query; 32 MiB cap; workspace-relative only |
