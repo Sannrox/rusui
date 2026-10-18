@@ -71,6 +71,13 @@ An empty registry image uses the existing operator image or process driver.
 The pin records the configured guest; it does not install or upgrade a binary.
 Claude and Codex retain their native protocols.
 
+Each completed turn also stores a flight record: prompt, model settings,
+tool calls, retrieved context, and the ontology snapshot (object ids and
+revisions) it read. `rusui replay SESSION TURN` rebuilds a Shikigami
+schema-v1 manifest and re-runs that turn against the snapshot with
+external effects denied. Principals without read access to an object
+cannot open that part of the record. Retention follows the session.
+
 Every protocol records the same transcript subset in the plane's existing
 `acp.session.update` actions. The body is `{"update": {...}}`, with these
 `sessionUpdate` variants:

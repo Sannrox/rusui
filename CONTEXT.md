@@ -51,6 +51,10 @@ _Avoid_: live fork, shared writable workspace, implicit grant propagation
 One leased attempt on an unattended session. A local session has no Turn.
 _Avoid_: session, job (as the product noun)
 
+**Flight record**:
+The append-only record of one turn: prompt, model settings, tool calls and results, retrieved context, and the ontology snapshot (object ids and revisions) the turn read. Tied to the turn receipt. Readable only by principals allowed to read the underlying objects. Replay rebuilds a Shikigami schema-v1 manifest, re-runs against that snapshot with external effects denied, and reports object-revision divergence. Retention follows the session (#610).
+_Avoid_: transcript, environment snapshot, eval corpus replay
+
 **Prompt attachment**:
 A file the operator attaches to a turn prompt. Bytes live on disk next to the plane store; SQLite keeps digest and path. The guest receives it as an ACP prompt part (flat `image`, nested `resource` for PDF). The plane admits only kinds the pinned HTTP guest advertises, at 8 MiB per part and 16 MiB aggregate. `rusui read` records the name and digest, not the bytes.
 _Avoid_: workspace upload, git blob, image generation

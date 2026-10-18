@@ -17,6 +17,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/clock"
 	"github.com/sannrox/rusui/internal/env"
+	"github.com/sannrox/rusui/internal/flight"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/snapshot"
@@ -84,6 +85,8 @@ type Engine struct {
 	completing           map[int64]*completeLock
 	writeMu              sync.Mutex
 	writing              map[int64]*completeLock
+	flightMu             sync.Mutex
+	flightReads          map[int64][]flight.Object
 
 	// Secrets are plane-held values keyed by policy secret id (ADR 0066).
 	// Production loads them from RUSUI_SECRET_<ID> via SecretsFromEnv.
@@ -1266,6 +1269,9 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 		}
 		rb, _ := json.Marshal(receipt)
 		if err := store.InsertReceiptTx(tx, j.ID, gen, claimed, "complete", string(rb)); err != nil {
+			return err
+		}
+		if err := e.recordFlightTx(tx, j.ID, receiptID(j.ID, gen, claimed)); err != nil {
 			return err
 		}
 		if _, err := store.PromoteSteersTx(tx, j.ID, gen); err != nil {
