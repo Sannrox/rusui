@@ -851,16 +851,19 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 		// Turns in the same class stay in id order, so catch-up reviews
 		// are still claimed once no run is waiting. A bound repository
 		// also sees leftover pinless sessions of the same project (#557).
-		rows, err := tx.Query(`SELECT t.id, t.session_id, s.environment_id FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo IN (`+placeholders(len(keys))+`) AND COALESCE(s.archived, 0)=0 AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) AND COALESCE(s.tenant_id,'default')=? ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
+		rows, err := tx.Query(`SELECT t.id, t.session_id, s.environment_id, COALESCE(s.tenant_id,'default'), COALESCE(s.project,''), COALESCE(s.act,'') FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo IN (`+placeholders(len(keys))+`) AND COALESCE(s.archived, 0)=0 AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) AND COALESCE(s.tenant_id,'default')=? ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
 			append(append(anySlice(keys), anySlice(lanes)...), sessionTenant(proj))...)
 		if err != nil {
 			return err
 		}
-		type candidate struct{ id, sessionID, envID int64 }
+		type candidate struct {
+			id, sessionID, envID int64
+			tenant, project, act string
+		}
 		var queued []candidate
 		for rows.Next() {
 			var c candidate
-			if err := rows.Scan(&c.id, &c.sessionID, &c.envID); err != nil {
+			if err := rows.Scan(&c.id, &c.sessionID, &c.envID, &c.tenant, &c.project, &c.act); err != nil {
 				_ = rows.Close()
 				return err
 			}
@@ -877,6 +880,17 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 		eligible := false
 		for _, c := range queued {
 			if e.environmentOperationInProgress(c.envID) {
+				continue
+			}
+			project := c.project
+			if project == "" {
+				project = proj.Slug
+			}
+			halted, err := store.Halted(tx, c.tenant, project, c.act)
+			if err != nil {
+				return err
+			}
+			if halted {
 				continue
 			}
 			name, _, _, err := store.SessionGuestTx(tx, c.sessionID)
@@ -1045,12 +1059,14 @@ type Claim struct {
 
 var (
 	errPaused   = fmt.Errorf("paused")
+	errHalted   = fmt.Errorf("halted")
 	errPolicy   = fmt.Errorf("policy")
 	errBudget   = fmt.Errorf("budget")
 	errArchived = fmt.Errorf("archived")
 	errSecret   = fmt.Errorf("secret")
 	ErrBudget   = errBudget
 	ErrPaused   = errPaused
+	ErrHalted   = errHalted
 	ErrArchived = errArchived
 	ErrSecret   = errSecret
 )

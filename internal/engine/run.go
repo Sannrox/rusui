@@ -59,6 +59,20 @@ func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode
 		if paused {
 			return errPaused
 		}
+		wantAct := strings.TrimSpace(act)
+		if wantAct == "" {
+			wantAct = strings.TrimSpace(createdBy)
+		}
+		if wantAct == "" {
+			wantAct = sessionTenant(p)
+		}
+		halted, err := store.Halted(tx, sessionTenant(p), project, wantAct)
+		if err != nil {
+			return err
+		}
+		if halted {
+			return errHalted
+		}
 		if idem != "" {
 			id, ok, err := store.LookupIdempotencyTx(tx, idem)
 			if err != nil {
@@ -70,10 +84,6 @@ func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode
 					return err
 				}
 				wantMode := store.NormalizeExecutionMode(execMode)
-				wantAct := strings.TrimSpace(act)
-				if wantAct == "" {
-					wantAct = sessionTenant(p)
-				}
 				if sess.Project != project ||
 					store.NormalizeTenantID(sess.TenantID) != sessionTenant(p) ||
 					store.NormalizeExecutionMode(sess.ExecutionMode) != wantMode ||

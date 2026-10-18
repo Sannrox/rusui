@@ -298,6 +298,25 @@ enqueue work. `resume` clears the overlay pause.
 Pause is persistent across process restart until `resume`. Pause is not
 cancellation.
 
+### Halt
+
+`halt` is the kill switch. Overlay keys `halt:{tenant|project|agent}:{id}`
+stop **new claims** for matching sessions and cancel **leased** turns:
+the lease is released back to `queued`, a cancelled receipt is stored,
+and the guest is stopped. Queued turns stay queued. `unhalt` clears the
+overlay so claim continues from that last state. Pause leaves in-flight
+leases alone; halt does not. The environment operation is held from
+before the overlay and lease fence commit until the guest stop, so a
+concurrent unhalt cannot claim a requeued turn onto a harness this halt
+still kills.
+
+A control-plane freeze (`POST /freeze`) writes the same overlay with
+source `control-plane`. Operator halt (`POST /halt`, `rusui halt`) uses
+source `operator`. Each halt and resume appends `halt_events`. Local
+start and restart refuse while halted. Overlay commit shares the local
+process mutex, so a successful halt cannot be followed by a pending
+launch. In-flight local processes that already started are not stopped.
+
 ### Cancel
 
 **Cancel** is a session action ([ADR 0011](docs/decisions/0011-unattended-session-contract.md)).
