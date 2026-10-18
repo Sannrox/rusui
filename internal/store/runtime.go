@@ -15,6 +15,7 @@ var (
 	ErrStaleAttach             = errors.New("stale attach generation")
 	ErrInvalidProcessState     = errors.New("invalid process state")
 	ErrLocalRuntimePaused      = errors.New("local runtime start is paused")
+	ErrLocalRuntimeHalted      = errors.New("halted")
 	ErrLocalSessionNotOpen     = errors.New("local session is not open")
 )
 
@@ -85,8 +86,8 @@ func StartSumikaProcess(s *Store, sessionID int64, identityHash string, now time
 	}
 	var processID int64
 	err := s.Tx(func(tx *sql.Tx) error {
-		var kind, project, state string
-		if err := tx.QueryRow(`SELECT kind, project, state FROM sessions WHERE id=?`, sessionID).Scan(&kind, &project, &state); err != nil {
+		var kind, project, state, tenant, act string
+		if err := tx.QueryRow(`SELECT kind, project, state, tenant_id, act FROM sessions WHERE id=?`, sessionID).Scan(&kind, &project, &state, &tenant, &act); err != nil {
 			return err
 		}
 		if kind != SessionKindLocal {
@@ -101,6 +102,13 @@ func StartSumikaProcess(s *Store, sessionID int64, identityHash string, now time
 		}
 		if paused {
 			return ErrLocalRuntimePaused
+		}
+		halted, err := Halted(tx, tenant, project, act)
+		if err != nil {
+			return err
+		}
+		if halted {
+			return ErrLocalRuntimeHalted
 		}
 		var turns int
 		if err := tx.QueryRow(`SELECT COUNT(*) FROM turns WHERE session_id=?`, sessionID).Scan(&turns); err != nil {

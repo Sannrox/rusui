@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 50
+const CurrentSchema = 51
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -589,7 +589,31 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 51 {
+		if err := migrateV51(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 51); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// migrateV51 records halt and resume events for the kill-switch overlay (#611).
+func migrateV51(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS halt_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  action TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  target TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  operator TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT ''
+)`)
+	return err
 }
 
 // migrateV49 records per-session write-tool grants. Space-mode sessions

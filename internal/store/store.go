@@ -823,7 +823,19 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 }
 
 func ListTurnsForSession(s *Store, sessionID int64) ([]Turn, error) {
-	rows, err := s.DB.Query(`SELECT id, session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state FROM turns WHERE session_id=? ORDER BY id`, sessionID)
+	return listTurnsForSession(s.DB, sessionID)
+}
+
+func ListTurnsForSessionTx(tx *sql.Tx, sessionID int64) ([]Turn, error) {
+	return listTurnsForSession(tx, sessionID)
+}
+
+type turnQuery interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}
+
+func listTurnsForSession(q turnQuery, sessionID int64) ([]Turn, error) {
+	rows, err := q.Query(`SELECT id, session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state FROM turns WHERE session_id=? ORDER BY id`, sessionID)
 	if err != nil {
 		return nil, err
 	}

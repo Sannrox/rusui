@@ -56,6 +56,13 @@ func (e *Engine) StartLocalSession(project, idem string) (LocalSessionResult, er
 		if paused {
 			return errPaused
 		}
+		halted, err := store.Halted(tx, sessionTenant(p), project, sessionTenant(p))
+		if err != nil {
+			return err
+		}
+		if halted {
+			return errHalted
+		}
 		if idem != "" {
 			id, found, err := store.LookupIdempotencyTx(tx, idem)
 			if err != nil {
@@ -117,6 +124,19 @@ func (e *Engine) RestartLocalProcess(sessionID int64) (LocalSessionResult, error
 	if sess.Kind != store.SessionKindLocal || sess.State != "open" {
 		return LocalSessionResult{}, fmt.Errorf("session is not an open local session")
 	}
+	err = e.Store.Tx(func(tx *sql.Tx) error {
+		halted, err := store.Halted(tx, sess.TenantID, sess.Project, sess.Act)
+		if err != nil {
+			return err
+		}
+		if halted {
+			return errHalted
+		}
+		return nil
+	})
+	if err != nil {
+		return LocalSessionResult{}, err
+	}
 	p, ok := e.PolicySnapshot().Project(sess.Project)
 	if !ok || !p.AllowsKind(policy.KindLocal) || p.LocalRuntime == nil {
 		return LocalSessionResult{}, fmt.Errorf("policy")
@@ -143,6 +163,19 @@ func (e *Engine) startLocalProcess(sessionID int64) (*store.Process, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = e.Store.Tx(func(tx *sql.Tx) error {
+		halted, err := store.Halted(tx, sess.TenantID, sess.Project, sess.Act)
+		if err != nil {
+			return err
+		}
+		if halted {
+			return errHalted
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	p, ok := e.PolicySnapshot().Project(sess.Project)
 	if !ok || !p.AllowsKind(policy.KindLocal) || p.LocalRuntime == nil {
 		return nil, fmt.Errorf("policy")
@@ -153,9 +186,29 @@ func (e *Engine) startLocalProcess(sessionID int64) (*store.Process, error) {
 	}
 	process, err := store.StartSumikaProcess(e.Store, sessionID, identityHash, e.now())
 	if err != nil {
+		if errors.Is(err, store.ErrLocalRuntimeHalted) {
+			return nil, errHalted
+		}
 		return nil, err
 	}
 	client, err := e.localRuntimeClient()
+	if err != nil {
+		updated, observeErr := e.observeLocalProcess(process, store.ProcessUnknown)
+		if updated == nil {
+			updated = process
+		}
+		return updated, errors.Join(err, observeErr)
+	}
+	err = e.Store.Tx(func(tx *sql.Tx) error {
+		halted, err := store.Halted(tx, sess.TenantID, sess.Project, sess.Act)
+		if err != nil {
+			return err
+		}
+		if halted {
+			return errHalted
+		}
+		return nil
+	})
 	if err != nil {
 		updated, observeErr := e.observeLocalProcess(process, store.ProcessUnknown)
 		if updated == nil {

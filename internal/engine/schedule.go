@@ -64,7 +64,7 @@ func (e *Engine) StepSchedules(now time.Time) error {
 		}
 		bucket := now.Unix() / int64(sc.EverySeconds)
 		idem := fmt.Sprintf("sched/%d/%d", sc.ID, bucket)
-		if _, err := e.StartScheduled(sc, idem); err != nil && err != errPaused {
+		if _, err := e.StartScheduled(sc, idem); err != nil && !errors.Is(err, errPaused) && !errors.Is(err, errHalted) {
 			errs = append(errs, fmt.Errorf("schedule %d: %w", sc.ID, err))
 		}
 	}
@@ -86,6 +86,13 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string) (int64, error) {
 		}
 		if paused {
 			return errPaused
+		}
+		halted, err := store.Halted(tx, sessionTenant(p), sc.Project, sessionTenant(p))
+		if err != nil {
+			return err
+		}
+		if halted {
+			return errHalted
 		}
 		if idem != "" {
 			id, ok, err := store.LookupIdempotencyTx(tx, idem)

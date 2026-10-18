@@ -92,6 +92,13 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 		if paused {
 			return errPaused
 		}
+		halted, err := store.Halted(tx, sessionTenant(p), project, sessionTenant(p))
+		if err != nil {
+			return err
+		}
+		if halted {
+			return errHalted
+		}
 		if existing, ok, err := store.LookupTaskBySpecHashTx(tx, hash); err != nil {
 			return err
 		} else if ok && taskStillBound(existing.State) {

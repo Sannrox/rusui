@@ -130,6 +130,10 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='effort_feedback'`).Scan(&fb); err != nil || fb != 1 {
 		t.Fatalf("effort_feedback missing after upgrade: %d %v", fb, err)
 	}
+	var haltEvents int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='halt_events'`).Scan(&haltEvents); err != nil || haltEvents != 1 {
+		t.Fatalf("halt_events missing after upgrade: %d %v", haltEvents, err)
+	}
 
 	j, err := JobState(s, "Sannrox/rusui", 42)
 	if err != nil {

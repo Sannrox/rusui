@@ -102,6 +102,12 @@ func main() {
 		case "drain":
 			drainCLI(os.Args[2:])
 			return
+		case "halt":
+			haltCLI(os.Args[2:])
+			return
+		case "unhalt":
+			unhaltCLI(os.Args[2:])
+			return
 		case "archive":
 			archiveCLI(os.Args[2:])
 			return
