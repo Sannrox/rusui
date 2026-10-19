@@ -24,6 +24,8 @@ type Client struct {
 	// TermOutput is the one environment terminal the guest can read
 	// (ADR 0065). Write still takes the operator lease.
 	TermOutput func() string
+	// MCPServers are sent on session/new and session/load. Empty means none.
+	MCPServers []any
 
 	mu           sync.Mutex
 	pending      map[string]chan rpcMessage
@@ -288,12 +290,19 @@ func (c *Client) SessionNew(ctx context.Context, cwd string) (string, error) {
 
 func (c *Client) SessionNewMode(ctx context.Context, cwd, mode string) (string, error) {
 	var out SessionIDResult
-	err := c.Call(ctx, MethodSessionNew, SessionNewParams{Cwd: cwd, MCPServers: []any{}, Mode: mode}, &out)
+	err := c.Call(ctx, MethodSessionNew, SessionNewParams{Cwd: cwd, MCPServers: c.mcpServers(), Mode: mode}, &out)
 	return out.SessionID, err
 }
 
 func (c *Client) SessionLoad(ctx context.Context, sessionID, cwd string) error {
-	return c.Call(ctx, MethodSessionLoad, SessionLoadParams{SessionID: sessionID, Cwd: cwd}, nil)
+	return c.Call(ctx, MethodSessionLoad, SessionLoadParams{SessionID: sessionID, Cwd: cwd, MCPServers: c.mcpServers()}, nil)
+}
+
+func (c *Client) mcpServers() []any {
+	if c.MCPServers == nil {
+		return []any{}
+	}
+	return c.MCPServers
 }
 
 func (c *Client) SessionPrompt(ctx context.Context, sessionID, text string) (*PromptResult, error) {

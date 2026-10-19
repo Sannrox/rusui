@@ -438,6 +438,24 @@ plane ([ADR 0009](decisions/0009-credential-broker.md),
 [ADR 0066](decisions/0066-inject-secret-at-wake.md)). The receipt names
 the id, not the value.
 
+Project `mcp_servers` lists remote MCP tool servers (Streamable HTTP) the
+guest connects to: `name` (`^[a-z0-9][a-z0-9_-]{0,31}$`, not `gateway`)
+and an `http` or `https` `url` without userinfo. No plane credential is
+sent to them.
+
+Defaults `mcp_gateway` turns on gateway mode (off when omitted). Every
+session then sees one MCP server, `gateway`, at that URL, and the guest
+authenticates with its short-lived turn credential. Native guests reference
+it as `RUSUI_TURN_TOKEN` rather than receiving the value in argv or a file.
+Third-party tool credentials stay in the gateway. A project that still
+names `mcp_servers` is a policy load error, and the runner refuses any
+assignment naming a direct server before the guest starts.
+
+```yaml
+defaults:
+  mcp_gateway: https://tools-gateway.example/mcp
+```
+
 Plane-stored hooks live next to `policy.yaml` in
 `hooks/<project-slug>/pre-clone` and `hooks/<project-slug>/pre-setup`.
 Pre-clone runs before the git pin is placed. Pre-setup runs immediately
