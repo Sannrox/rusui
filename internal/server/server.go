@@ -635,18 +635,24 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 				out["commit_trailers"] = t
 			}
 			pol := s.Eng.PolicySnapshot()
-			if p, ok := pol.Project(sess.Project); ok {
+			p, ok := pol.Project(sess.Project)
+			if !ok {
+				if rr, rok := pol.Repo(c.Job.Repo); rok {
+					p, ok = pol.Project(rr.Project)
+				}
+			}
+			if ok {
 				out["permissions"] = p.Permissions
 				if secrets := s.Eng.AssignmentSecrets(p); len(secrets) > 0 {
 					out["secrets"] = secrets
 				}
-			} else if rr, ok := pol.Repo(c.Job.Repo); ok {
-				if p, ok := pol.Project(rr.Project); ok {
-					out["permissions"] = p.Permissions
-					if secrets := s.Eng.AssignmentSecrets(p); len(secrets) > 0 {
-						out["secrets"] = secrets
-					}
-				}
+			}
+			// Gateway mode applies to every session, project or not.
+			if servers := pol.SessionMCPServers(p); len(servers) > 0 {
+				out["mcp_servers"] = servers
+			}
+			if pol.MCPGateway != "" {
+				out["mcp_gateway"] = pol.MCPGateway
 			}
 		}
 	}

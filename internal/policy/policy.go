@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -49,6 +51,9 @@ type DefaultsYAML struct {
 	Implement                  bool     `yaml:"implement"`
 	Land                       bool     `yaml:"land"`
 	MaxReviewsPerRepoPerUTCDay int      `yaml:"max_reviews_per_repo_per_utc_day"`
+	// MCPGateway is the governed tool gateway URL. When set, it is the only
+	// remote MCP server a session sees and projects may not name others.
+	MCPGateway string `yaml:"mcp_gateway"`
 }
 
 type ProjectGuests struct {
@@ -72,6 +77,15 @@ type ProjectYAML struct {
 	// Tenant is the isolation key for sessions created in this project.
 	// Empty means the single-operator default tenant.
 	Tenant string `yaml:"tenant"`
+	// MCPServers are remote MCP tool servers the session connects to
+	// directly. Refused when defaults.mcp_gateway is set.
+	MCPServers []MCPServer `yaml:"mcp_servers"`
+}
+
+// MCPServer is a remote MCP tool server reached over Streamable HTTP.
+type MCPServer struct {
+	Name string `yaml:"name" json:"name"`
+	URL  string `yaml:"url" json:"url"`
 }
 
 type LocalRuntimeYAML struct {
@@ -125,7 +139,8 @@ type Project struct {
 	Ship  string
 	Repos []string
 	// Tenant is the isolation key; empty means the default tenant.
-	Tenant string
+	Tenant     string
+	MCPServers []MCPServer
 }
 
 type LocalRuntime struct {
@@ -139,6 +154,8 @@ type Effective struct {
 	Raw      []byte
 	Projects map[string]Project
 	Repos    map[string]Repo
+	// MCPGateway is defaults.mcp_gateway; empty means gateway mode is off.
+	MCPGateway string
 }
 
 func Load(path string) (*Effective, error) {
@@ -172,6 +189,12 @@ func Parse(raw []byte) (*Effective, error) {
 		return nil, err
 	}
 	out.Guests = guests
+	if f.Defaults.MCPGateway != "" {
+		if err := validMCPURL(f.Defaults.MCPGateway); err != nil {
+			return nil, fmt.Errorf("policy: mcp_gateway %w", err)
+		}
+		out.MCPGateway = f.Defaults.MCPGateway
+	}
 	defKinds := f.Defaults.SessionKinds
 	if len(defKinds) == 0 {
 		defKinds = []string{KindReview, KindRun, KindScheduled}
@@ -230,6 +253,9 @@ func Parse(raw []byte) (*Effective, error) {
 		if err := validTenant(slug, y.Tenant); err != nil {
 			return nil, err
 		}
+		if err := validMCPServers(slug, y.MCPServers, out.MCPGateway); err != nil {
+			return nil, err
+		}
 		p := Project{
 			Guests:       y.Guests,
 			Slug:         slug,
@@ -242,6 +268,7 @@ func Parse(raw []byte) (*Effective, error) {
 			Secrets:      secrets,
 			Ship:         ship,
 			Tenant:       y.Tenant,
+			MCPServers:   y.MCPServers,
 		}
 		for name, ry := range y.Repos {
 			if _, ok := out.Repos[name]; ok {
@@ -389,6 +416,51 @@ func validEgress(slug, egress string) error {
 	default:
 		return fmt.Errorf("policy: %s invalid egress %q", slug, egress)
 	}
+}
+
+// MCPGatewayName is the server name a session sees for the gateway.
+const MCPGatewayName = "gateway"
+
+var mcpName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
+
+// validMCPServers refuses every direct server while a gateway is configured,
+// so gateway mode fails closed instead of mixing direct and governed calls.
+func validMCPServers(slug string, servers []MCPServer, gateway string) error {
+	seen := map[string]bool{}
+	for _, s := range servers {
+		if gateway != "" {
+			return fmt.Errorf("policy: %s mcp server %q connects directly; mcp_gateway routes every remote MCP server through the gateway", slug, s.Name)
+		}
+		if !mcpName.MatchString(s.Name) || s.Name == MCPGatewayName {
+			return fmt.Errorf("policy: %s invalid mcp server name %q", slug, s.Name)
+		}
+		if seen[s.Name] {
+			return fmt.Errorf("policy: %s duplicate mcp server %q", slug, s.Name)
+		}
+		seen[s.Name] = true
+		if err := validMCPURL(s.URL); err != nil {
+			return fmt.Errorf("policy: %s mcp server %q %w", slug, s.Name, err)
+		}
+	}
+	return nil
+}
+
+func validMCPURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil {
+		return fmt.Errorf("url must be http(s) with a host and no userinfo")
+	}
+	return nil
+}
+
+// SessionMCPServers is the remote MCP server list for a session in p. In
+// gateway mode it is the gateway alone; the runner authenticates it with the
+// turn credential.
+func (e *Effective) SessionMCPServers(p Project) []MCPServer {
+	if e.MCPGateway != "" {
+		return []MCPServer{{Name: MCPGatewayName, URL: e.MCPGateway}}
+	}
+	return p.MCPServers
 }
 
 func validSecrets(slug string, ids []string) ([]string, error) {

@@ -145,6 +145,10 @@ func (r *HTTPRecorder) poll(ctx context.Context, id string) acp.Decision {
 // ADR 0017 D1) and records receipts on the plane.
 func GuestHost(c *Client) ACPHost {
 	return func(a *Assignment, dir string) (*acp.Client, func(), error) {
+		servers, err := a.mcpServers()
+		if err != nil {
+			return nil, nil, err
+		}
 		home, cleanHome, err := prepareGuestHome(c.Exec, a, dir)
 		if err != nil {
 			return nil, nil, err
@@ -176,7 +180,7 @@ func GuestHost(c *Client) ACPHost {
 				state = kept
 			}
 		}
-		argv = guestHomeArgv(a, argv, state)
+		argv = mcpArgv(a, guestHomeArgv(a, argv, state), servers)
 		if a.Guest == guest.KindShikigami {
 			argv, err = prepareShikigamiConfig(c.Exec, a, argv, home)
 			if err != nil {
@@ -192,7 +196,7 @@ func GuestHost(c *Client) ACPHost {
 				return nil, nil, err
 			}
 			started = true
-			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(c.bindLiveTools(a)), Wait: rec.Wait, TermOutput: term}, func() { stop(); cleanHome() }, nil
+			return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(c.bindLiveTools(a)), Wait: rec.Wait, TermOutput: term, MCPServers: acpMCPServers(a, servers)}, func() { stop(); cleanHome() }, nil
 		}
 		cmd, err := acp.Command(argv)
 		if err != nil {
@@ -220,7 +224,7 @@ func GuestHost(c *Client) ACPHost {
 			}
 			_ = cmd.Wait()
 		}
-		return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(c.bindLiveTools(a)), Wait: rec.Wait, TermOutput: term}, stop, nil
+		return &acp.Client{In: stdout, Out: stdin, Rec: rec, Perm: permissionGate(c.bindLiveTools(a)), Wait: rec.Wait, TermOutput: term, MCPServers: acpMCPServers(a, servers)}, stop, nil
 	}
 }
 

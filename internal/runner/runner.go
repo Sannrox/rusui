@@ -98,6 +98,11 @@ type Assignment struct {
 	ExecutionDeadline *time.Time        `json:"execution_deadline"`
 	Input             json.RawMessage   `json:"input"`
 	GuestSessionID    string            `json:"guest_session_id,omitempty"`
+	// MCPServers are the remote MCP tool servers for the turn. When
+	// MCPGateway is set the plane sends only the gateway, which the guest
+	// reaches with the turn credential; third-party credentials stay there.
+	MCPServers []MCPServer `json:"mcp_servers,omitempty"`
+	MCPGateway string      `json:"mcp_gateway,omitempty"`
 	// Attachments are prompt files stored outside the workspace (#508).
 	Attachments   []PromptAttachment `json:"attachments,omitempty"`
 	steerReceipts *steerReceiptState
@@ -451,7 +456,7 @@ func DriverEnv(a *Assignment, home, path string) []string {
 	env := []string{
 		"PATH=" + path,
 		"HOME=" + home,
-		"RUSUI_TURN_TOKEN=" + grant,
+		turnTokenEnv + "=" + grant,
 		"RUSUI_TURN_ID=" + fmt.Sprint(a.TurnID),
 	}
 	if a.ExecutionMode != "" {

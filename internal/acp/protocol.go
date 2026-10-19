@@ -112,13 +112,27 @@ type SessionNewParams struct {
 	Mode       string `json:"mode,omitempty"`
 }
 
+// MCPServer is the ACP entry for a Streamable HTTP tool server.
+type MCPServer struct {
+	Type    string       `json:"type"`
+	Name    string       `json:"name"`
+	URL     string       `json:"url"`
+	Headers []HTTPHeader `json:"headers"`
+}
+
+type HTTPHeader struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
 type SessionIDResult struct {
 	SessionID string `json:"sessionId"`
 }
 
 type SessionLoadParams struct {
-	SessionID string `json:"sessionId"`
-	Cwd       string `json:"cwd,omitempty"`
+	SessionID  string `json:"sessionId"`
+	Cwd        string `json:"cwd,omitempty"`
+	MCPServers []any  `json:"mcpServers,omitempty"`
 }
 
 type PromptParams struct {
