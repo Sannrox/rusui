@@ -62,6 +62,9 @@ guest:
 rusui run -project rusui -guest shikigami 'Inspect the project'
 ```
 
+`GET /projects/{slug}/guests` returns the default and allowed names with pins
+(#631). Argv, image, and secrets stay off that response.
+
 An unlisted guest is refused before a session or environment is created.
 The session records `guest_name` and `guest_pin` and freezes the full spawn
 entry. Registry edits affect new sessions; a resumed session keeps its argv,
