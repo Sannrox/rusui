@@ -3,6 +3,8 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/sannrox/rusui/internal/guest"
 )
 
 type projectGuest struct {
@@ -23,7 +25,7 @@ func (s *Server) projectGuests(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	pol := s.Eng.PolicySnapshot()
 	project, ok := pol.Project(slug)
-	if !ok {
+	if !ok || !s.projectAllowed(r, slug) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -37,6 +39,17 @@ func (s *Server) projectGuests(w http.ResponseWriter, r *http.Request) {
 			}
 			out.Allowed = append(out.Allowed, projectGuest{Name: name, Pin: pin})
 		}
+	} else {
+		name := s.Eng.DefaultGuest
+		if name == "" {
+			name = guest.KindGrok
+		}
+		pin := ""
+		if entry, ok := pol.Guests[name]; ok {
+			pin = entry.Pin
+		}
+		out.Default = name
+		out.Allowed = []projectGuest{{Name: name, Pin: pin}}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
