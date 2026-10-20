@@ -47,7 +47,7 @@ Decisions that must outlive a single pull request.
 | [0036](0036-environment-desktop-deferred.md) | A graphical desktop in the environment is deferred | Accepted |
 | [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Accepted |
 | [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
-| [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted; amended by 0059, 0074 |
+| [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted; amended by 0059, 0074, 0083 |
 | [0040](0040-child-session-delegation-deferred.md) | Child-session delegation is deferred | Superseded by 0071 |
 | [0041](0041-ha-plane-deferred.md) | An HA plane is deferred | Accepted |
 | [0042](0042-disconnected-execution-deferred.md) | Disconnected execution is deferred | Accepted |
@@ -92,6 +92,7 @@ Decisions that must outlive a single pull request.
 | [0080](0080-turns-propose-writes-go-through-actions.md) | Agent turns only propose; writes go through governed Actions | Accepted on merge |
 | [0081](0081-session-retention.md) | Session retention: short-lived vs indefinite | Accepted on merge |
 | [0082](0082-signed-conformance-receipts.md) | Signed ACP conformance receipts | Accepted on merge |
+| [0083](0083-retain-single-operator-access.md) | Retain single-operator access for shared sessions | Accepted on merge |
 
 ## When to write an ADR
 
