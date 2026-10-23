@@ -41,7 +41,7 @@ public benchmark.
 You need:
 
 - Go 1.26 on `PATH`. `make` pins the toolchain to [`.go-version`](.go-version)
-  (currently `1.26.9`).
+  (currently `1.26.10`).
 - `make`, `git`, and (for `make validate`) `shellcheck`.
 - Docker only for `make release-images` or `./build/run.sh`.
 
