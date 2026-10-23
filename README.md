@@ -14,6 +14,7 @@ comment and close. Not a hosted product.
 
 [Docs](docs/README.md) · [Architecture](ARCHITECTURE.md) ·
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) ·
+[Changelog](CHANGELOG.md) ·
 [License](LICENSE)
 
 ## What it is
