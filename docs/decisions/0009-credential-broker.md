@@ -12,6 +12,8 @@
   which injects allowed secret ids at wake and removes them on sleep.
   [ADR 0075](0075-split-guest-grant-from-runner.md) splits the
   guest-held grant from the runner turn token.
+  [ADR 0084](0084-core-draft-actions.md) keeps a core credential on the
+  plane; the guest still holds none.
 - Date: 2026-09-15
 - Amends: [ADR 0001](0001-environment-plane.md) D5 (how the plane
   redeems secrets). D3’s per-turn credential (32 bytes, ten-minute

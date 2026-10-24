@@ -17,7 +17,7 @@ Decisions that must outlive a single pull request.
 | [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted; amended by 0069, 0071, 0072 |
 | [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048, 0049, 0054, 0063, 0067 |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
-| [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066, 0075 |
+| [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066, 0075, 0084 |
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
 | [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077 |
@@ -89,10 +89,11 @@ Decisions that must outlive a single pull request.
 | [0077](0077-session-access-grants.md) | Sessions are tenant-owned; cross-tenant access is an audited grant | Accepted on merge; amended by 0078 |
 | [0078](0078-session-execution-modes.md) | Session execution modes: user vs space | Accepted on merge; amended by 0079 |
 | [0079](0079-space-mode-read-only-tools.md) | Space-mode sessions default to read-only tools | Accepted on merge |
-| [0080](0080-turns-propose-writes-go-through-actions.md) | Agent turns only propose; writes go through governed Actions | Accepted on merge |
+| [0080](0080-turns-propose-writes-go-through-actions.md) | Agent turns only propose; writes go through governed Actions | Accepted on merge; amended by 0084 |
 | [0081](0081-session-retention.md) | Session retention: short-lived vs indefinite | Accepted on merge |
 | [0082](0082-signed-conformance-receipts.md) | Signed ACP conformance receipts | Accepted on merge |
 | [0083](0083-retain-single-operator-access.md) | Retain single-operator access for shared sessions | Accepted on merge |
+| [0084](0084-core-draft-actions.md) | Definition drafts are operator-applied core Actions | Accepted on merge |
 
 ## When to write an ADR
 

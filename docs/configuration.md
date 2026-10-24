@@ -124,6 +124,8 @@ reported and exits successfully.
 | `RUSUI_MODEL_UPSTREAM` | no | http(s) URL replacing the provider API, e.g. a gateway or a CLI proxy on the plane host. With it set, the provider key may be empty. |
 | `RUSUI_AGENT_GITHUB_TOKEN` | ignored | Guests never receive a GitHub credential ([ADR 0080](decisions/0080-turns-propose-writes-go-through-actions.md)). Kept so existing configs start. |
 | `RUSUI_PUBLICATION` | no | `plane` is required for GitHub writes ([ADR 0044](decisions/0044-plane-publishes-from-turn-result.md), [ADR 0080](decisions/0080-turns-propose-writes-go-through-actions.md)). It needs GitHub App credentials or the plane exits. Implement guests hold no credential; Complete records `write.propose`; `POST /sessions/{id}/write-actions` applies it as the App. `agent` records proposals that cannot be applied. |
+| `RUSUI_CORE_URL` | no | Core HTTP/JSON base URL for definition drafts ([ADR 0084](decisions/0084-core-draft-actions.md)). Draft RPCs are experimental on core (`SEKAI_EXPERIMENTAL_RPCS`). Unset: Complete still records `core.draft`; apply refuses. The guest never receives this URL. |
+| `RUSUI_CORE_TOKEN` | with `RUSUI_CORE_URL` | Plane-held bearer for `RUSUI_CORE_URL`. Required when the URL is set. Never injected into the guest. |
 | `RUSUI_DISABLE_COAUTHOR_TRAILER` | no | `1` drops `Co-authored-by: rusui <noreply@rusui.invalid>` from agent commits. |
 | `RUSUI_DISABLE_SESSION_TRAILER` | no | `1` drops `Rusui-Session: <session id>` from agent commits. |
 | `SUMIKA_SOCK` | local interactive profile | Optional same-user Unix socket path; otherwise Sumika's per-user default path is used. |
@@ -226,6 +228,8 @@ Guest `XAI_API_KEY` and git HTTP auth are the guest grant. Implement
 sessions also use the grant for git, limited to `rusui/<session>/*`.
 GitHub writes are operator `POST /sessions/{id}/write-actions`
 ([ADR 0080](decisions/0080-turns-propose-writes-go-through-actions.md)).
+Definition drafts are operator `POST /sessions/{id}/draft-actions`
+([ADR 0084](decisions/0084-core-draft-actions.md)).
 
 Agent commits in `run` and `scheduled` sessions carry both trailers
 ([ADR 0015](decisions/0015-agent-publication.md) D3). The runner installs a
@@ -237,12 +241,13 @@ will not carry them.
 ### Run turn results
 
 The runner gives each run-turn guest `RUSUI_RESULT`, a file path. The
-agent writes one JSON object there: `{"pull_request": N}` or
-`{"blocked_reason": "..."}`. Prose is not a result; a turn without one
-fails closed. The plane records its own outcome: `published` only when
-GitHub shows pull request N at the workspace `HEAD`, otherwise
-`unconfirmed` for a claimed pull request or `blocked` for a reported
-reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
+agent writes one JSON object there: `{"pull_request": N}`,
+`{"draft": {...}}`, or `{"blocked_reason": "..."}`. Prose is not a
+result; a turn without one fails closed. The plane records its own
+outcome: `published` only when GitHub shows pull request N at the
+workspace `HEAD`, `proposed` when the turn asked to write or draft,
+otherwise `unconfirmed` for a claimed pull request or `blocked` for a
+reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 
 ## HTTP
 
@@ -297,6 +302,7 @@ reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/sessions/{id}/retention/write-override` | operator token; JSON `reason`; audited override so an indefinite session may use write-capable tools; 201; 409 unless indefinite and unset |
 | `POST` | `/sessions/{id}/retention/delete` | operator token; remove session data, archive, and record a deletion receipt; 204 |
 | `POST` | `/sessions/{id}/write-actions` | operator token; apply the session's latest `write.propose`; 200 receipt, 409 no proposal or publication off |
+| `POST` | `/sessions/{id}/draft-actions` | operator token; apply the session's latest `core.draft`; 200 receipt (including a recorded PermissionDenied), 409 no proposal or core client off |
 | `GET` | `/approvals/{id}` | worker secret or turn token |
 | `*` | `/model-proxy/` | guest grant (HTTPS for container guests); runner turn token refused |
 | `*` | `/git-proxy/github.com/` | prepare or guest grant; push only with a guest grant on the session ref prefix |

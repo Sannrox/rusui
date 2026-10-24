@@ -36,6 +36,9 @@ type TaskResult struct {
 	// Publish asks the plane to publish the pushed session branch
 	// (ADR 0044). Only honored when plane publication is on.
 	Publish *PublishRequest `json:"publish,omitempty"`
+	// Draft asks the plane to draft definition members (ADR 0084).
+	// Applying it is a separate operator Action.
+	Draft *DraftRequest `json:"draft,omitempty"`
 	// PublishedSHA, Outcome, Publisher, and PushedRef are observed by
 	// the plane on Complete; values sent by the runner or guest are discarded.
 	PublishedSHA string `json:"published_sha,omitempty"`
@@ -83,7 +86,7 @@ func ValidateResult(art Artifact) error {
 	if r.AgentVerified {
 		return fmt.Errorf("agent cannot declare verified")
 	}
-	if len(r.Findings) == 0 && r.BlockedReason == "" && r.PullRequest <= 0 && r.Publish == nil {
+	if len(r.Findings) == 0 && r.BlockedReason == "" && r.PullRequest <= 0 && r.Publish == nil && r.Draft == nil {
 		return fmt.Errorf("empty result")
 	}
 	return nil
@@ -126,7 +129,7 @@ func (e *Engine) observeResult(art *Artifact) {
 		}
 	case r.BlockedReason != "":
 		r.Outcome = OutcomeBlocked
-	case r.Publish != nil:
+	case r.Publish != nil || r.Draft != nil:
 		r.Outcome = OutcomeProposed
 	default:
 		r.Outcome = OutcomeReported

@@ -49,6 +49,18 @@ func TestCollectResultReportsNestedWorktreeBranch(t *testing.T) {
 	}
 }
 
+func TestCollectResultReadsDefinitionDraft(t *testing.T) {
+	resultPath := filepath.Join(t.TempDir(), "result.json")
+	body := `{"draft":{"namespace":"sales","branch_id":"interview-7","parent_revision_digest":"sha256:p","members":[{"member_kind":"object_type","member_id":"Order","definition_json":"{\"source_turn\":\"interview-7#turn-1\"}"}]}}`
+	if err := os.WriteFile(resultPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := collectResult(nil, &Assignment{ResultPath: resultPath}, t.TempDir(), "src")
+	if r == nil || r.Draft == nil || r.Draft.Namespace != "sales" || len(r.Draft.Members) != 1 || r.Draft.Members[0].MemberID != "Order" {
+		t.Fatalf("result %+v", r)
+	}
+}
+
 func TestBranchHeadsDedupesAndBounds(t *testing.T) {
 	sha := func(c byte) string { return strings.Repeat(string(c), 40) }
 	var lines []string

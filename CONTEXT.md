@@ -183,3 +183,7 @@ _Avoid_: ordinary run session, scheduled session, review session as a publisher
 **Publication**:
 A pull request for an `implement` session, or a fast-forward of the default branch when the project `ship` is `push-base`. The turn records `write.propose`; the operator applies it (`POST /sessions/{id}/write-actions`) as the GitHub App (ADR 0080). Guests hold no GitHub credential. `push-base` fast-forwards only that default branch and does not open a pull request. Commits carry `Co-authored-by: rusui` and `Rusui-Session` trailers. No proof gates it. Human merge is required for `pull-request`. Live merge, comment, and close stay unauthorized.
 _Avoid_: guest-callable publish endpoint, agent merge or close, trailer as authorization, defaulting dogfood to `push-base`
+
+**Definition draft**:
+A scoped core branch plus members proposed by a run turn. The turn records `core.draft`; the operator applies it (`POST /sessions/{id}/draft-actions`) with a plane-held core credential (ADR 0084). Every drafted member carries `source_turn`. Apply lints and opens a definition proposal; it does not publish or merge. A core PermissionDenied is stored on the session.
+_Avoid_: guest-held core credential, core MCP in the guest, auto-apply on Complete, agent merge

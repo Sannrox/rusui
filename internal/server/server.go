@@ -159,6 +159,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /sessions/{id}/retention/write-override", s.postSessionWriteOverride)
 	mux.HandleFunc("POST /sessions/{id}/retention/delete", s.postSessionRetentionDelete)
 	mux.HandleFunc("POST /sessions/{id}/write-actions", s.applySessionWrite)
+	mux.HandleFunc("POST /sessions/{id}/draft-actions", s.applySessionDraft)
 	mux.HandleFunc("POST /sessions/{id}/restart", s.restartLocalSession)
 	mux.HandleFunc("GET /projects/{slug}/measurements", s.projectMeasurements)
 	mux.HandleFunc("POST /results/{id}/dispositions", s.recordDisposition)

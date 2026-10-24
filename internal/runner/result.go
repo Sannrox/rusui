@@ -19,7 +19,9 @@ const GuestResultPath = "/tmp/rusui-result.json"
 
 // resultInstructions tells a run-turn agent how to report its outcome.
 const resultInstructions = "\n\nWhen you finish, write one JSON object to the file named by $RUSUI_RESULT: " +
-	`{"pull_request": <number>} if you opened or updated a pull request, otherwise {"blocked_reason": "<why you stopped>"}.`
+	`{"pull_request": <number>} if you opened or updated a pull request, ` +
+	`{"draft": {"namespace": "...", "branch_id": "...", "parent_revision_digest": "...", "members": [{"member_kind": "object_type", "member_id": "...", "definition_json": "{\"source_turn\":\"...\"}"}, {"member_kind": "link_type", "member_id": "...", "definition_json": "{\"source_turn\":\"...\"}"}]}} ` +
+	`to propose a definition draft (the plane applies it; you never call core), otherwise {"blocked_reason": "<why you stopped>"}.`
 
 const planePublication = "plane"
 
@@ -35,7 +37,9 @@ func resultInstructionsFor(a *Assignment) string {
 		"`git push origin HEAD:refs/heads/" + branch + "`; pushes to any other ref are refused. " +
 		"When you finish, write one JSON object to the file named by $RUSUI_RESULT: " +
 		`{"publish": {"branch": "` + branch + `", "title": "<title>", "body": "<description>"}} ` +
-		`to have the plane open or update the pull request, otherwise {"blocked_reason": "<why you stopped>"}.`
+		`to have the plane open or update the pull request, ` +
+		`{"draft": {"namespace": "...", "branch_id": "...", "parent_revision_digest": "...", "members": [{"member_kind": "object_type", "member_id": "...", "definition_json": "{\"source_turn\":\"...\"}"}, {"member_kind": "link_type", "member_id": "...", "definition_json": "{\"source_turn\":\"...\"}"}]}} ` +
+		`to propose a definition draft, otherwise {"blocked_reason": "<why you stopped>"}.`
 }
 
 // maxResultBytes bounds what the runner reads back from the guest.
@@ -89,12 +93,13 @@ func collectResult(x StdioExec, a *Assignment, cwd, sourceHash string) *engine.T
 		PullRequest   int                    `json:"pull_request"`
 		BlockedReason string                 `json:"blocked_reason"`
 		Publish       *engine.PublishRequest `json:"publish"`
+		Draft         *engine.DraftRequest   `json:"draft"`
 	}
 	if json.Unmarshal(raw, &claim) != nil {
 		return nil
 	}
 	claim.BlockedReason = strings.TrimSpace(claim.BlockedReason)
-	if claim.PullRequest <= 0 && claim.BlockedReason == "" && claim.Publish == nil {
+	if claim.PullRequest <= 0 && claim.BlockedReason == "" && claim.Publish == nil && claim.Draft == nil {
 		return nil
 	}
 	git := []string{"git"}
@@ -112,6 +117,7 @@ func collectResult(x StdioExec, a *Assignment, cwd, sourceHash string) *engine.T
 		PullRequest:   max(claim.PullRequest, 0),
 		BlockedReason: claim.BlockedReason,
 		Publish:       claim.Publish,
+		Draft:         claim.Draft,
 	}
 }
 
