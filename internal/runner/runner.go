@@ -578,7 +578,7 @@ func sqQuote(s string) string {
 	return "'" + r.Replace(s) + "'"
 }
 
-func RunProcess(ctx context.Context, command []string, env []string, dir string) ([]byte, error) {
+func runProcess(ctx context.Context, command []string, env []string, dir string) ([]byte, error) {
 	if len(command) == 0 {
 		return nil, fmt.Errorf("empty driver command")
 	}
@@ -664,7 +664,7 @@ func OneTurnWithOutcome(ctx context.Context, c *Client, command []string) (Claim
 			}
 		}
 	}()
-	out, err := RunProcess(runCtx, command, env, dir)
+	out, err := runProcess(runCtx, command, env, dir)
 	if err != nil {
 		_ = c.Fail(a)
 		return outcome, err

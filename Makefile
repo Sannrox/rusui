@@ -39,7 +39,7 @@ release-images:
 	./build/release-images.sh
 
 .PHONY: guest-image
-# Build the reference guest image (git, gh, Node.js, Go, Chromium, Claude Code CLI).
+# Build the reference guest image (git, gh, Node.js, Go, Chromium, Claude Code CLI, shikigami).
 # Example: make guest-image CONTAINER_RUNTIME=podman
 guest-image:
 	./scripts/make-targets/guest-image.sh

@@ -1176,10 +1176,6 @@ func scanEnvironment(row interface{ Scan(...any) error }) (*Environment, error) 
 	return &e, nil
 }
 
-func ListPendingApprovals(s *Store) ([]Action, error) {
-	return ListPendingApprovalsTenant(s, "")
-}
-
 func ListPendingApprovalsTenant(s *Store, tenant string) ([]Action, error) {
 	q := `SELECT a.action_id, a.session_id, a.turn_id, a.review_revision_id, a.repo, a.item, a.action_type, a.reason_code, a.evidence_class, a.limit_sentence, a.body
 FROM actions a LEFT JOIN approval_decisions d ON d.action_id=a.action_id

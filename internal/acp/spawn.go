@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 
 	"github.com/sannrox/rusui/internal/guest"
 )
@@ -59,10 +58,6 @@ func Command(argv []string) (*exec.Cmd, error) {
 	cmd := exec.Command(path, argv[1:]...)
 	cmd.Env = append(os.Environ(), "HOME="+os.Getenv("HOME"))
 	return cmd, nil
-}
-
-func SpawnArgs() []string {
-	return strings.Fields(GrokStdio)
 }
 
 // SpawnArgsFor is the stdio argv for a guest. Empty means Grok; an unknown
