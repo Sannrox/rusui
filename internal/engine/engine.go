@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/sannrox/rusui/internal/clock"
+	"github.com/sannrox/rusui/internal/core"
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/flight"
 	"github.com/sannrox/rusui/internal/gh"
@@ -53,11 +54,14 @@ type Engine struct {
 	GitHub       gh.Client
 	// Publisher is set only when plane publication is on (ADR 0044).
 	Publisher PullPublisher
-	Clock     clock.Clock
-	Log       *log.Logger
-	HookID    string
-	HookIDs   map[string]string
-	Notify    func(string)
+	// Core is the plane-held definition-draft client (ADR 0084). A nil
+	// Core records core.draft and refuses apply.
+	Core    core.Client
+	Clock   clock.Clock
+	Log     *log.Logger
+	HookID  string
+	HookIDs map[string]string
+	Notify  func(string)
 
 	FetchTimeout time.Duration
 	OwnerTTL     time.Duration
@@ -1182,6 +1186,7 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 	// Outside the transaction: these may call GitHub. The transaction still
 	// checks the lease and that art.Repo is the job's repository.
 	e.publishResult(jobID, gen, claimed, &art)
+	e.draftResult(jobID, gen, claimed, &art)
 	e.observeResult(&art)
 	e.observeFollowUpPublication(jobID, &art)
 	var out map[string]any
@@ -1266,6 +1271,27 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 				return err
 			}
 			receipt["proposal_id"] = pid
+		}
+		if art.Result != nil && art.Result.Outcome == OutcomeProposed && art.Result.Draft != nil {
+			pid, err := newActionID()
+			if err != nil {
+				return err
+			}
+			body, err := json.Marshal(art.Result.Draft)
+			if err != nil {
+				return err
+			}
+			sid, tid := turn.SessionID, j.ID
+			if err := store.InsertActionTx(tx, store.Action{
+				ID: pid, SessionID: &sid, TurnID: &tid, ReviewRevisionID: &revID,
+				Repo: j.Repo, Item: j.Item, Type: ActionCoreDraft, ReasonCode: "recorded",
+				EvidenceClass: "plane_observed",
+				LimitSentence: "The turn proposed a definition draft; applying it is a separate Action.",
+				Body:          string(body),
+			}); err != nil {
+				return err
+			}
+			receipt["draft_id"] = pid
 		}
 		rb, _ := json.Marshal(receipt)
 		if err := store.InsertReceiptTx(tx, j.ID, gen, claimed, "complete", string(rb)); err != nil {

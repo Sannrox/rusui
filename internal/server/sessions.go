@@ -222,6 +222,14 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	if published {
 		response["publication"] = publication
 	}
+	draft, drafted, err := engine.SessionDraft(s.Eng.Store, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if drafted {
+		response["draft"] = draft
+	}
 	if reviewResult != nil {
 		response["review_result"] = reviewResult
 	}

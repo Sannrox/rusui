@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sannrox/rusui/internal/clock"
+	"github.com/sannrox/rusui/internal/core"
 	"github.com/sannrox/rusui/internal/engine"
 	envpkg "github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
@@ -206,6 +207,13 @@ func main() {
 		eng.Publisher = &gh.Publisher{Tokens: app, BaseURL: api.BaseURL, HTTP: api.HTTP}
 	default:
 		log.Fatal("RUSUI_PUBLICATION must be agent or plane")
+	}
+	if u := os.Getenv("RUSUI_CORE_URL"); u != "" {
+		tok := os.Getenv("RUSUI_CORE_TOKEN")
+		if tok == "" {
+			log.Fatal("RUSUI_CORE_URL requires RUSUI_CORE_TOKEN")
+		}
+		eng.Core = core.NewHTTP(u, tok)
 	}
 	eng.EnvIdleSleep = *envIdleSleep
 	eng.HookIDs = api.HookIDs

@@ -13,6 +13,9 @@ records immutable review revisions, and dry-runs apply for comment and
 close. In `implement` sessions the agent proposes a GitHub write; the operator
 applies it as a governed Action
 ([ADR 0080](docs/decisions/0080-turns-propose-writes-go-through-actions.md)).
+A run session may propose a definition draft; the operator applies it as
+`core.draft` through a plane-held core client
+([ADR 0084](docs/decisions/0084-core-draft-actions.md)).
 GitHub review is the first session kind, not the identity of the system.
 
 This is not ClawSweeper, Tatara, or a Kafka fleet. GitHub is intake. The
@@ -74,7 +77,9 @@ daily review budget, a per-project concurrent-lease meter
 publication through governed Actions
 ([ADR 0080](docs/decisions/0080-turns-propose-writes-go-through-actions.md)).
 An `implement` session of a bound repository proposes a write; applying
-it is `POST /sessions/{id}/write-actions`. No proof or independent review
+it is `POST /sessions/{id}/write-actions`. A run session may propose a
+definition draft; applying it is `POST /sessions/{id}/draft-actions`
+([ADR 0084](docs/decisions/0084-core-draft-actions.md)). No proof or independent review
 gates publication. Commits carry `Co-authored-by: rusui` and
 `Rusui-Session` trailers. Human merge is required. Merge, comment, close,
 and land stay unauthorized by contract. The domain nouns
@@ -674,14 +679,16 @@ operator's own, scoped where it is issued
 ([ADR 0015](docs/decisions/0015-agent-publication.md)).
 
 A run turn completes only with a structured result. The runner gives the
-guest `RUSUI_RESULT`, a file for one JSON object: `{"pull_request": N}`
-or `{"blocked_reason": "..."}`. Prose is not a result; a turn without
-one fails closed. The runner adds the workspace `HEAD` it observes as
-the candidate SHA. On `complete` the plane discards any outcome in the
-payload and records its own: `published` only when the read-only GitHub
-client shows pull request N in the turn's repository at that candidate
-SHA, `unconfirmed` for any other claimed pull request, `blocked` for a
-reported reason. The outcome is a record, not a proof or a merge gate.
+guest `RUSUI_RESULT`, a file for one JSON object: `{"pull_request": N}`,
+`{"draft": {...}}`, or `{"blocked_reason": "..."}`. Prose is not a
+result; a turn without one fails closed. The runner adds the workspace
+`HEAD` it observes as the candidate SHA. On `complete` the plane
+discards any outcome in the payload and records its own: `published`
+only when the read-only GitHub client shows pull request N in the
+turn's repository at that candidate SHA, `proposed` when the turn asked
+to write or draft, `unconfirmed` for any other claimed pull request,
+`blocked` for a reported reason. The outcome is a record, not a proof
+or a merge gate. Guests never receive a core credential.
 
 `internal/provider` is the guest boundary
 ([ADR 0025](docs/decisions/0025-provider-boundary.md)). The plane names
@@ -1026,6 +1033,25 @@ propose a write.
   branch when `ship` is `push-base`.
 - Human merge is required for `pull-request`. Merge, close, label,
   protection, and release are unauthorized by contract.
+
+## Definition drafts (ADR 0084)
+
+Turns propose. Applying a core definition draft is an operator Action.
+Guests never hold a core credential.
+
+- The guest asks in its result (`{"draft": {"namespace", "branch_id",
+  "parent_revision_digest", "members"}}`). Each member's
+  `definition_json` carries `source_turn`. Agent members are refused.
+- Complete records `core.draft` and outcome `proposed`. It does not call
+  the core. A refusal is `blocked`.
+- `POST /sessions/{id}/draft-actions` (operator) creates the branch,
+  applies the members, lints the branch, and opens a definition proposal.
+  It records `core.draft.apply`. It does not approve, merge, or publish.
+  A retried apply of the same proposal returns the stored receipt.
+- A core PermissionDenied is stored on that receipt (`refused`,
+  `code: permission_denied`) and is visible on `GET /sessions/{id}`.
+- `RUSUI_CORE_URL` and `RUSUI_CORE_TOKEN` stay on the plane. Unset, apply
+  refuses. Draft RPCs are experimental on core (`SEKAI_EXPERIMENTAL_RPCS`).
 
 Existing PRs: land is triggered by a review verdict plus policy
 `land: true`, never by CI green alone.

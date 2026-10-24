@@ -5,6 +5,9 @@ server admits work onto environments, sessions, turns, runners, events,
 and actions; records immutable reviews; and dry-runs apply for comment
 and close. In `implement` sessions the agent proposes a GitHub write; applying it
 is a governed Action ([ADR 0080](docs/decisions/0080-turns-propose-writes-go-through-actions.md)).
+A run session may propose a definition draft; applying it is `core.draft`
+([ADR 0084](docs/decisions/0084-core-draft-actions.md)). Guests never receive a
+core credential.
 `ARCHITECTURE.md` is the product contract. Do not implement live comment,
 close, merge, land, or unnamed GitHub writes. Direction beyond the current
 contract is proposed in `VISION.md` and `ROADMAP.md`; decisions live in
