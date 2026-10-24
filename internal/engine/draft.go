@@ -43,17 +43,26 @@ type DraftMember struct {
 // DraftApplyReceipt is returned by ApplySessionDraft and stored as
 // core.draft.apply. A PermissionDenied is a refused receipt, not a lost write.
 type DraftApplyReceipt struct {
-	ActionID       string           `json:"action_id"`
-	ProposalID     string           `json:"proposal_id"`
-	Namespace      string           `json:"namespace,omitempty"`
-	BranchID       string           `json:"branch_id,omitempty"`
-	HeadDigest     string           `json:"head_digest,omitempty"`
-	CoreProposalID string           `json:"core_proposal_id,omitempty"`
-	ProposalDigest string           `json:"proposal_digest,omitempty"`
-	Lint           *core.LintReport `json:"lint,omitempty"`
-	Refused        bool             `json:"refused,omitempty"`
-	Code           string           `json:"code,omitempty"`
-	Message        string           `json:"message,omitempty"`
+	ActionID           string           `json:"action_id"`
+	ProposalID         string           `json:"proposal_id"`
+	Namespace          string           `json:"namespace,omitempty"`
+	BranchID           string           `json:"branch_id,omitempty"`
+	ExpectedHeadDigest string           `json:"expected_head_digest,omitempty"`
+	HeadDigest         string           `json:"head_digest,omitempty"`
+	CoreProposalID     string           `json:"core_proposal_id,omitempty"`
+	ProposalDigest     string           `json:"proposal_digest,omitempty"`
+	Lint               *core.LintReport `json:"lint,omitempty"`
+	Refused            bool             `json:"refused,omitempty"`
+	Code               string           `json:"code,omitempty"`
+	Message            string           `json:"message,omitempty"`
+}
+
+func draftApplyDone(rec DraftApplyReceipt) bool {
+	return rec.Refused || rec.CoreProposalID != ""
+}
+
+func draftHeadPinID(proposalID string) string {
+	return "draftexp" + proposalID
 }
 
 // draftResult validates a run result that asks to draft. It does not call
@@ -189,7 +198,7 @@ func (e *Engine) ApplySessionDraft(sessionID int64) (DraftApplyReceipt, error) {
 	}
 	if existing, err := store.ActionByReason(e.Store, sessionID, ActionCoreDraftApply, proposal.ID); err == nil {
 		var rec DraftApplyReceipt
-		if json.Unmarshal([]byte(existing.Body), &rec) == nil {
+		if json.Unmarshal([]byte(existing.Body), &rec) == nil && draftApplyDone(rec) {
 			rec.ActionID = existing.ID
 			return rec, nil
 		}
@@ -198,7 +207,7 @@ func (e *Engine) ApplySessionDraft(sessionID int64) (DraftApplyReceipt, error) {
 	if err := json.Unmarshal([]byte(proposal.Body), &ask); err != nil {
 		return DraftApplyReceipt{}, err
 	}
-	rec, err := e.executeDraft(proposal.ID, ask)
+	rec, err := e.executeDraft(sessionID, proposal, ask)
 	if err != nil && !core.IsPermissionDenied(err) {
 		return DraftApplyReceipt{}, err
 	}
@@ -242,8 +251,12 @@ func (e *Engine) ApplySessionDraft(sessionID int64) (DraftApplyReceipt, error) {
 	return rec, nil
 }
 
-func (e *Engine) executeDraft(proposalID string, ask DraftRequest) (DraftApplyReceipt, error) {
-	branch, err := e.resolveDraftBranch(ask, proposalID)
+func (e *Engine) executeDraft(sessionID int64, proposal store.Action, ask DraftRequest) (DraftApplyReceipt, error) {
+	branch, err := e.resolveDraftBranch(ask, proposal.ID)
+	if err != nil {
+		return DraftApplyReceipt{}, err
+	}
+	expected, err := e.pinDraftExpectedHead(sessionID, proposal, ask, branch.HeadRevisionDigest)
 	if err != nil {
 		return DraftApplyReceipt{}, err
 	}
@@ -251,48 +264,101 @@ func (e *Engine) executeDraft(proposalID string, ask DraftRequest) (DraftApplyRe
 	for _, m := range ask.Members {
 		upserts = append(upserts, core.MemberInput{MemberKind: m.MemberKind, MemberID: m.MemberID, DefinitionJSON: m.DefinitionJSON})
 	}
-	edit, err := e.Core.ApplyDefinitionBranchEdit(core.ApplyEditRequest{
+	req := core.ApplyEditRequest{
 		Namespace:          ask.Namespace,
 		BranchID:           ask.BranchID,
-		ExpectedHeadDigest: branch.HeadRevisionDigest,
+		ExpectedHeadDigest: expected,
 		Upserts:            upserts,
-		IdempotencyKey:     "rusui-draft-edit-" + proposalID,
-	})
+		IdempotencyKey:     "rusui-draft-edit-" + proposal.ID,
+	}
+	edit, err := e.Core.ApplyDefinitionBranchEdit(req)
 	if core.IsAlreadyExists(err) {
-		// lockWrite serializes session apply. AlreadyExists on this
-		// proposal's edit key means that edit committed.
-		recovered, getErr := e.Core.GetDefinitionBranch(ask.Namespace, ask.BranchID)
-		if getErr != nil {
-			return DraftApplyReceipt{}, getErr
-		}
-		edit = core.ApplyEditResult{Branch: recovered, PreviousHeadDigest: recovered.HeadRevisionDigest}
-	} else if err != nil {
+		// Same key and pinned expected head replays this proposal's
+		// committed edit. A different expected head fails closed.
+		edit, err = e.Core.ApplyDefinitionBranchEdit(req)
+	}
+	if err != nil {
 		return DraftApplyReceipt{}, err
 	}
 	lint, err := e.Core.GetOntologyLintReport(ask.Namespace, ask.BranchID)
 	if err != nil {
 		return DraftApplyReceipt{}, err
 	}
-	coreProposalID := "rusui-" + proposalID
+	if lint.RevisionDigest != edit.Branch.HeadRevisionDigest {
+		return DraftApplyReceipt{}, fmt.Errorf("draft: lint revision %s does not match candidate %s", lint.RevisionDigest, edit.Branch.HeadRevisionDigest)
+	}
+	coreProposalID := "rusui-" + proposal.ID
 	prop, err := e.Core.CreateDefinitionProposal(core.CreateProposalRequest{
 		Namespace:       ask.Namespace,
 		BranchID:        ask.BranchID,
 		ProposalID:      coreProposalID,
 		BaseDigest:      ask.ParentRevisionDigest,
 		CandidateDigest: edit.Branch.HeadRevisionDigest,
-		IdempotencyKey:  "rusui-draft-propose-" + proposalID,
+		IdempotencyKey:  "rusui-draft-propose-" + proposal.ID,
 	})
 	if err != nil {
 		return DraftApplyReceipt{}, err
 	}
 	return DraftApplyReceipt{
-		Namespace:      ask.Namespace,
-		BranchID:       ask.BranchID,
-		HeadDigest:     edit.Branch.HeadRevisionDigest,
-		CoreProposalID: prop.ProposalID,
-		ProposalDigest: prop.ProposalDigest,
-		Lint:           &lint,
+		Namespace:          ask.Namespace,
+		BranchID:           ask.BranchID,
+		ExpectedHeadDigest: expected,
+		HeadDigest:         edit.Branch.HeadRevisionDigest,
+		CoreProposalID:     prop.ProposalID,
+		ProposalDigest:     prop.ProposalDigest,
+		Lint:               &lint,
 	}, nil
+}
+
+// pinDraftExpectedHead records the CAS head this proposal will edit.
+// The action id is the fence: the first persisted head wins across plane instances.
+func (e *Engine) pinDraftExpectedHead(sessionID int64, proposal store.Action, ask DraftRequest, head string) (string, error) {
+	id := draftHeadPinID(proposal.ID)
+	if existing, err := store.GetAction(e.Store, id); err == nil {
+		var rec DraftApplyReceipt
+		if json.Unmarshal([]byte(existing.Body), &rec) == nil && rec.ExpectedHeadDigest != "" {
+			return rec.ExpectedHeadDigest, nil
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	rec := DraftApplyReceipt{
+		ActionID: id, ProposalID: proposal.ID,
+		Namespace: ask.Namespace, BranchID: ask.BranchID,
+		ExpectedHeadDigest: head,
+	}
+	body, err := json.Marshal(rec)
+	if err != nil {
+		return "", err
+	}
+	a := store.Action{
+		ID: id, SessionID: &sessionID, Repo: proposal.Repo, Item: proposal.Item,
+		Type: ActionCoreDraftApply, ReasonCode: proposal.ID,
+		EvidenceClass: "plane_observed",
+		LimitSentence: "The plane pinned the expected definition-branch head for this draft.",
+		Body:          string(body),
+	}
+	if proposal.TurnID != nil {
+		a.TurnID = proposal.TurnID
+	}
+	if proposal.ReviewRevisionID != nil {
+		a.ReviewRevisionID = proposal.ReviewRevisionID
+	}
+	if err := store.InsertAction(e.Store, a); err != nil {
+		if !strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return "", err
+		}
+		existing, getErr := store.GetAction(e.Store, id)
+		if getErr != nil {
+			return "", err
+		}
+		var pinned DraftApplyReceipt
+		if json.Unmarshal([]byte(existing.Body), &pinned) != nil || pinned.ExpectedHeadDigest == "" {
+			return "", err
+		}
+		return pinned.ExpectedHeadDigest, nil
+	}
+	return head, nil
 }
 
 func (e *Engine) resolveDraftBranch(ask DraftRequest, proposalID string) (core.DefinitionBranch, error) {
@@ -318,19 +384,24 @@ func (e *Engine) resolveDraftBranch(ask DraftRequest, proposalID string) (core.D
 	return core.DefinitionBranch{}, err
 }
 
-// SessionDraft is the latest draft apply receipt, including a refusal.
+// SessionDraft is the latest completed draft apply receipt, including a refusal.
 func SessionDraft(s *store.Store, sessionID int64) (DraftApplyReceipt, bool, error) {
-	a, err := store.LatestAction(s, sessionID, ActionCoreDraftApply)
-	if errors.Is(err, sql.ErrNoRows) {
-		return DraftApplyReceipt{}, false, nil
-	}
+	rows, err := s.DB.Query(`SELECT action_id, body FROM actions WHERE session_id=? AND action_type=? ORDER BY rowid DESC`, sessionID, ActionCoreDraftApply)
 	if err != nil {
 		return DraftApplyReceipt{}, false, err
 	}
-	var rec DraftApplyReceipt
-	if json.Unmarshal([]byte(a.Body), &rec) != nil {
-		return DraftApplyReceipt{}, false, nil
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id, body string
+		if err := rows.Scan(&id, &body); err != nil {
+			return DraftApplyReceipt{}, false, err
+		}
+		var rec DraftApplyReceipt
+		if json.Unmarshal([]byte(body), &rec) != nil || !draftApplyDone(rec) {
+			continue
+		}
+		rec.ActionID = id
+		return rec, true, nil
 	}
-	rec.ActionID = a.ID
-	return rec, true, nil
+	return DraftApplyReceipt{}, false, rows.Err()
 }

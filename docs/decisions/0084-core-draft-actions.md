@@ -32,8 +32,10 @@ core MCP tools in the guest would hand a write credential to the guest
    The plane-held core client creates the branch, applies the edits, lints
    the branch (`GetOntologyLintReport` with `branch_id`), and opens a
    definition proposal. It does not approve, merge, or publish. The
-   receipt is `core.draft.apply`. A retried apply of the same proposal
-   returns the stored receipt.
+   receipt is `core.draft.apply`. Apply pins the expected branch head in a
+   durable apply record before the edit so a retried apply cannot adopt
+   another writer's head. A retried apply of the same proposal returns the
+   stored receipt.
 3. One new Action pair on the existing `actions` table: `core.draft` and
    `core.draft.apply`. No schema migration. Guest ingest of both types is
    refused. Review apply stays dry-run and does not auto-apply drafts.

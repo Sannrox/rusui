@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/sannrox/rusui/internal/core"
@@ -167,6 +168,34 @@ func TestDraftApplyRecoversAfterLintFailure(t *testing.T) {
 	creates, edits, lints, proposals, merges, approves := fake.Snapshot()
 	if creates != 1 || edits != 1 || lints != 1 || proposals != 1 || merges != 0 || approves != 0 {
 		t.Fatalf("recovered create=%d edit=%d lint=%d propose=%d merge=%d approve=%d", creates, edits, lints, proposals, merges, approves)
+	}
+}
+
+func TestDraftApplyRefusesLintFromAnotherHead(t *testing.T) {
+	h := setup(t)
+	fake := &core.Fake{FailLint: 1}
+	h.e.Core = fake
+	sid, err := h.e.StartRun("test", "describe the sales domain", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := completeDraft(t, h, h.claim(), interviewDraft(sid)); r.Draft == nil {
+		t.Fatalf("result %+v", r)
+	}
+	if _, err := h.e.ApplySessionDraft(sid); err == nil {
+		t.Fatal("expected lint failure")
+	}
+	fake.SetHead("sales", fmt.Sprintf("interview-%d", sid), "sha256:other-author")
+	rec, err := h.e.ApplySessionDraft(sid)
+	if err == nil || rec.CoreProposalID != "" {
+		t.Fatalf("retry %+v %v", rec, err)
+	}
+	if !strings.Contains(err.Error(), "does not match candidate") {
+		t.Fatalf("err %v", err)
+	}
+	creates, edits, lints, proposals, merges, approves := fake.Snapshot()
+	if creates != 1 || edits != 1 || lints != 1 || proposals != 0 || merges != 0 || approves != 0 {
+		t.Fatalf("create=%d edit=%d lint=%d propose=%d merge=%d approve=%d", creates, edits, lints, proposals, merges, approves)
 	}
 }
 

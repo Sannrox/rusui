@@ -148,3 +148,18 @@ func (f *Fake) Snapshot() (creates, edits, lints, proposals, merges, approves in
 	defer f.mu.Unlock()
 	return len(f.Creates), len(f.Edits), len(f.Lints), len(f.Proposals), f.Merges, f.Approves
 }
+
+// SetHead moves the branch independently of this client's edits.
+func (f *Fake) SetHead(namespace, branchID, head string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.branches == nil {
+		f.branches = map[string]DefinitionBranch{}
+	}
+	key := branchKey(namespace, branchID)
+	branch := f.branches[key]
+	branch.Namespace = namespace
+	branch.BranchID = branchID
+	branch.HeadRevisionDigest = head
+	f.branches[key] = branch
+}
