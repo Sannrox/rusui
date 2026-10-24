@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -301,15 +300,4 @@ func ParseWebhook(body []byte) (repo string, item int, kind string, err error) {
 		return repo, p.Issue.Number, kind, nil
 	}
 	return "", 0, "", fmt.Errorf("no item")
-}
-
-func ReadBody(r *http.Request) ([]byte, error) {
-	return io.ReadAll(r.Body)
-}
-
-func EventKind(event string) string {
-	if strings.HasPrefix(event, "pull") {
-		return "pull"
-	}
-	return "issue"
 }

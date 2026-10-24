@@ -62,7 +62,6 @@ delivering, verifying, assessing, and releasing work:
 | `verify-change` | collecting exact local evidence |
 | `capture-project-decision` | promoting an accepted choice into an ADR or doc |
 | `prepare-release` | assembling release readiness |
-| `sekai-ontology` | consulting the local Sekai ontology |
 
 ## Build, Test, and Development Commands
 

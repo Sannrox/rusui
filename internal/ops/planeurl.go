@@ -35,10 +35,3 @@ func PlaneBaseURL(addr string, getenv func(string) string) string {
 func GitProxyURL(addr string, getenv func(string) string) string {
 	return strings.TrimRight(PlaneBaseURL(addr, getenv), "/") + "/git-proxy/github.com/"
 }
-
-func PlaneCAFile(getenv func(string) string) string {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-	return getenv("RUSUI_PLANE_CA")
-}

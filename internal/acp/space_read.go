@@ -27,7 +27,7 @@ func ToolKind(p PermissionParams) string {
 	return kind
 }
 
-func HasToolGrant(grants []string, kind string) bool {
+func hasToolGrant(grants []string, kind string) bool {
 	kind = strings.ToLower(strings.TrimSpace(kind))
 	for _, g := range grants {
 		switch strings.ToLower(strings.TrimSpace(g)) {
@@ -60,7 +60,7 @@ func (g SpaceReadGate) Decide(p PermissionParams) Decision {
 		}
 		grants = live
 	}
-	if WriteCapable(p) && !HasToolGrant(grants, ToolKind(p)) {
+	if WriteCapable(p) && !hasToolGrant(grants, ToolKind(p)) {
 		return Decision{Matched: true, Allow: false}
 	}
 	if g.Next == nil {
