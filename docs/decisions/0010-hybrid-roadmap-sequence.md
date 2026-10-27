@@ -1,6 +1,6 @@
 # ADR 0010: Hybrid core-1.0 sequence and earlier gate mapping
 
-- Status: Accepted
+- Status: Accepted; amended by 0046
 - Amended by: [ADR 0046](0046-workspace-first-sequence.md) on the core
   sequence and release gates.
 - Date: 2026-09-20

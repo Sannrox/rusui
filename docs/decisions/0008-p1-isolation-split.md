@@ -1,6 +1,7 @@
 # ADR 0008: P1 isolation split
 
-- Status: Accepted; [ADR 0022](0022-public-repo-isolation.md) names the
+- Status: Accepted
+- Status notes: [ADR 0022](0022-public-repo-isolation.md) names the
   public-repository default and diagnose fail-closed when the container
   topology is missing. [ADR 0027](0027-guest-reachability-ask.md) keeps
   the reachability grant in policy until a final image ask exists.

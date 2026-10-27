@@ -1,6 +1,6 @@
 # ADR NNNN: Title
 
-- Status: Proposed | Accepted | Superseded by `NNNN-slug.md`
+- Status: Proposed | Accepted | Superseded by NNNN
 - Date: YYYY-MM-DD
 - Resolves: issue or pull request links
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md) (product contract unless this

@@ -1,6 +1,6 @@
 # ADR 0015: The agent publishes its own pull requests
 
-- Status: Accepted
+- Status: Accepted; amended by 0055, 0068, 0080
 - Date: 2026-09-23
 - Supersedes: [ADR 0013](0013-publication-authority.md) (exact-artifact
   verification and plane-owned publication).

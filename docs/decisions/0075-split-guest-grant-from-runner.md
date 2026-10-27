@@ -1,4 +1,4 @@
-# ADR 0075: Split the guest grant from the runner turn token
+# ADR 0075: Guest grant is model and git only; runner token records actions
 
 - Status: Accepted
 - Date: 2026-10-13

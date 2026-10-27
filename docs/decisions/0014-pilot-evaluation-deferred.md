@@ -1,7 +1,7 @@
 # ADR 0014: Ten-task pilot evaluation is deferred pending live plane-owned publication
 
-- Status: Superseded by [ADR 0023](0023-p8-pilot-narrow.md); amended by
-  [ADR 0015](0015-agent-publication.md)
+- Status: Superseded by [ADR 0023](0023-p8-pilot-narrow.md)
+- Status notes: amended by [ADR 0015](0015-agent-publication.md)
   (preconditions 1–2 and the identity-collapse failure criterion no
   longer apply; the live cohort ran 2026-09-26)
 - Date: 2026-09-22

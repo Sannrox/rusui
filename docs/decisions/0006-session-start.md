@@ -1,6 +1,7 @@
 # ADR 0006: How review, run, and schedule sessions start
 
-- Status: Accepted; [ADR 0030](0030-schedule-new-session.md) retains
+- Status: Accepted; amended by 0069, 0071, 0072
+- Status notes: [ADR 0030](0030-schedule-new-session.md) retains
   new session per unbound fire. [ADR 0069](0069-schedule-binds-a-session.md)
   lets a schedule bind to a session id.
   [ADR 0071](0071-bounded-child-session.md) lets a session start

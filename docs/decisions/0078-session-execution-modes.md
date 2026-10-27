@@ -1,4 +1,4 @@
-# ADR 0078: Session execution modes (user vs space)
+# ADR 0078: Session execution modes: user vs space
 
 - Status: Accepted; amended by 0079, 0081
 - Date: 2026-10-13

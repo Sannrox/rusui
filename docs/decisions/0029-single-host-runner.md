@@ -1,6 +1,6 @@
 # ADR 0029: The supported runner topology remains one host
 
-- Status: Accepted
+- Status: Accepted; amended by 0064
 - Date: 2026-09-27
 - Amends: [ADR 0007](0007-environment-snapshot.md) (snapshot cache is
   runner-local; P1 is one runner) and

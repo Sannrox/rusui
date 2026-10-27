@@ -1,6 +1,6 @@
 # ADR 0044: The plane publishes from the turn result
 
-- Status: Accepted
+- Status: Accepted; amended by 0080
 - Date: 2026-09-29
 - Resolves: [#382](https://github.com/Sannrox/rusui/issues/382)
 - Amended by: [ADR 0080](0080-turns-propose-writes-go-through-actions.md)
