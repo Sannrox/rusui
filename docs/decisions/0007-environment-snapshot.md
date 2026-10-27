@@ -1,6 +1,7 @@
 # ADR 0007: P1 environment snapshot identity
 
-- Status: Accepted; [ADR 0028](0028-container-isolation-profile.md)
+- Status: Accepted; amended by 0048, 0049, 0054, 0063, 0067
+- Status notes: [ADR 0028](0028-container-isolation-profile.md)
   keeps this snapshot as the prepared tree. A hypervisor memory image
   is not the snapshot noun. [ADR 0029](0029-single-host-runner.md)
   keeps P1 as one runner on the plane host.

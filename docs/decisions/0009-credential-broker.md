@@ -1,6 +1,7 @@
 # ADR 0009: P1 credential broker
 
-- Status: Accepted; [ADR 0015](0015-agent-publication.md) records the
+- Status: Accepted; amended by 0053, 0066, 0075, 0084
+- Status notes: [ADR 0015](0015-agent-publication.md) records the
   implemented `implement` publication path; [ADR 0020](0020-turn-scoped-github-publication.md)
   accepts its future target. The model proxy and read-only grants stand.
   [ADR 0027](0027-guest-reachability-ask.md) does not move that grant

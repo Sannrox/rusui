@@ -1,7 +1,7 @@
 # ADR 0080: Agent turns only propose; writes go through governed Actions
 
 - Status: Accepted; amended by [ADR 0084](0084-core-draft-actions.md)
-  (definition drafts are a second propose/apply target).
+- Status notes: definition drafts are a second propose/apply target.
 - Date: 2026-10-14
 - Amends: [ADR 0015](0015-agent-publication.md) (guest GitHub credential),
   [ADR 0044](0044-plane-publishes-from-turn-result.md) (plane writes on

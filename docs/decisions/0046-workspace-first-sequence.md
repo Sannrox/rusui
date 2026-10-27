@@ -1,4 +1,4 @@
-# ADR 0046: The supported core prioritizes a terminal-first remote workspace
+# ADR 0046: Terminal-first remote workspace sequence
 
 - Status: Accepted
 - Date: 2026-10-01

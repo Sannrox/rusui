@@ -1,6 +1,6 @@
 # ADR 0030: A schedule fire starts a new session
 
-- Status: Accepted
+- Status: Accepted; amended by 0056, 0069
 - Date: 2026-09-28
 - Amends: none. [ADR 0006](0006-session-start.md) scheduled start
   contract stands.

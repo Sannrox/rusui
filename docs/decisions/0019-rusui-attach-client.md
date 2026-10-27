@@ -1,6 +1,6 @@
 # ADR 0019: One Rusui attach command selects the runtime-owned transport
 
-- Status: Accepted
+- Status: Accepted; amended by 0052, 0065
 - Date: 2026-09-24
 - Resolves: [Issue #185](https://github.com/Sannrox/rusui/issues/185)
 - Discussion: none. Merging with this status is the acceptance act; the

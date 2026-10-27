@@ -7,6 +7,11 @@ Decisions that must outlive a single pull request.
 > current contract. [ARCHITECTURE.md](../../ARCHITECTURE.md) remains the
 > product contract. Proposed direction remains proposed until accepted.
 
+The table below is generated from each record's heading and `- Status:` line
+by `scripts/adr-index`. Do not edit it by hand; `make validate` fails when it
+is stale.
+
+<!-- adr-index:start -->
 | ADR | Title | Status |
 | --- | --- | --- |
 | [0001](0001-environment-plane.md) | rusui becomes the environment plane for coding agents | Accepted |
@@ -82,18 +87,18 @@ Decisions that must outlive a single pull request.
 | [0071](0071-bounded-child-session.md) | Bounded child-session delegation | Accepted; amended by 0072, 0073 |
 | [0072](0072-cross-project-child-session.md) | Bounded cross-project child sessions | Accepted |
 | [0073](0073-session-plane-guest-registry.md) | The session is the product; the guest is chosen per session | Accepted |
-
-| [0074](0074-single-operator-oidc-cli.md) | Optional OIDC CLI authentication for one operator | Accepted on merge |
-| [0075](0075-split-guest-grant-from-runner.md) | Guest grant is model and git only; runner token records actions | Accepted on merge |
-| [0076](0076-tenant-isolation.md) | Tenant isolation on the session plane | Accepted on merge; amended by 0077, 0078 |
-| [0077](0077-session-access-grants.md) | Sessions are tenant-owned; cross-tenant access is an audited grant | Accepted on merge; amended by 0078 |
-| [0078](0078-session-execution-modes.md) | Session execution modes: user vs space | Accepted on merge; amended by 0079 |
-| [0079](0079-space-mode-read-only-tools.md) | Space-mode sessions default to read-only tools | Accepted on merge |
-| [0080](0080-turns-propose-writes-go-through-actions.md) | Agent turns only propose; writes go through governed Actions | Accepted on merge; amended by 0084 |
-| [0081](0081-session-retention.md) | Session retention: short-lived vs indefinite | Accepted on merge |
-| [0082](0082-signed-conformance-receipts.md) | Signed ACP conformance receipts | Accepted on merge |
+| [0074](0074-single-operator-oidc-cli.md) | Optional OIDC CLI authentication for one operator | Accepted |
+| [0075](0075-split-guest-grant-from-runner.md) | Guest grant is model and git only; runner token records actions | Accepted |
+| [0076](0076-tenant-isolation.md) | Tenant isolation on the session plane | Accepted; amended by 0077, 0078 |
+| [0077](0077-session-access-grants.md) | Sessions are tenant-owned; cross-tenant access is an audited grant | Accepted; amended by 0078 |
+| [0078](0078-session-execution-modes.md) | Session execution modes: user vs space | Accepted; amended by 0079, 0081 |
+| [0079](0079-space-mode-read-only-tools.md) | Space-mode sessions default to read-only tools | Accepted |
+| [0080](0080-turns-propose-writes-go-through-actions.md) | Agent turns only propose; writes go through governed Actions | Accepted; amended by 0084 |
+| [0081](0081-session-retention.md) | Session retention: short-lived vs indefinite | Accepted |
+| [0082](0082-signed-conformance-receipts.md) | Signed ACP conformance receipts | Accepted |
 | [0083](0083-retain-single-operator-access.md) | Retain single-operator access for shared sessions | Accepted on merge |
-| [0084](0084-core-draft-actions.md) | Definition drafts are operator-applied core Actions | Accepted on merge |
+| [0084](0084-core-draft-actions.md) | Definition drafts are operator-applied core Actions | Accepted |
+<!-- adr-index:end -->
 
 ## When to write an ADR
 
@@ -115,6 +120,11 @@ tests, and the pull request description instead.
   ADR as a delivered dependency.
 - **Superseded**: a newer ADR links here and this file links forward. Historical
   text is retained.
+
+To add or change a record, edit the record and run `scripts/adr-index`. The
+`- Status:` line is the index status: keep it short (`Accepted`,
+`Accepted; amended by NNNN`, `Superseded by NNNN`) and put any prose in a
+`- Status notes:` line below it.
 
 Template: [template.md](template.md). Title, status block, context, decision,
 consequences, rejected alternatives, validation and reversal, sources. See

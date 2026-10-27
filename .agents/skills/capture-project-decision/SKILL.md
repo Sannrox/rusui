@@ -24,9 +24,10 @@ Promote the durable result, not the conversation that produced it.
    contract; link to it rather than restating the whole system. Put rationale
    in the ADR and usage in docs. Complete when the same rule is not maintained
    in multiple prose locations.
-4. Allocate the next number from `docs/decisions/README.md` and follow
-   `docs/decisions/template.md`. Supersede by adding a new ADR and
-   cross-linking both; retain historical text. Complete when status and
+4. Allocate the next number from `docs/decisions/` and follow
+   `docs/decisions/template.md`. Regenerate the index with
+   `scripts/adr-index`; never edit its table by hand. Supersede by adding a
+   new ADR and cross-linking both; retain historical text. Complete when status and
    relationships are explicit. An accepted ADR does not change
    `ARCHITECTURE.md` until that file is rewritten.
 5. Check links, examples, Skill metadata, and affected indexes. Complete when a

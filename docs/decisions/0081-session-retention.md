@@ -1,4 +1,4 @@
-# ADR 0081: Session retention (short-lived vs indefinite)
+# ADR 0081: Session retention: short-lived vs indefinite
 
 - Status: Accepted
 - Date: 2026-10-14
