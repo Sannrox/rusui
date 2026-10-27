@@ -128,6 +128,7 @@ reported and exits successfully.
 | `RUSUI_CORE_TOKEN` | with `RUSUI_CORE_URL` | Plane-held bearer for `RUSUI_CORE_URL`. Required when the URL is set. Never injected into the guest. |
 | `RUSUI_DISABLE_COAUTHOR_TRAILER` | no | `1` drops `Co-authored-by: rusui <noreply@rusui.invalid>` from agent commits. |
 | `RUSUI_DISABLE_SESSION_TRAILER` | no | `1` drops `Rusui-Session: <session id>` from agent commits. |
+| `RUSUI_SESSION_URL` | no | Template that makes the `Rusui-Session` trailer a link: an absolute `https` URL with exactly one `{session}` in its path, replaced by the session id, for example `https://<plane origin>/console/sessions/{session}`. Userinfo, a query or a fragment fail startup. Unset, the trailer is the session id. Attribution only; the URL grants no access. |
 | `SUMIKA_SOCK` | local interactive profile | Optional same-user Unix socket path; otherwise Sumika's per-user default path is used. |
 | `RUSUI_PREVIEW_BASE` | no | Absolute preview origin, e.g. `http://127.0.0.1:8090`. Must be a different loopback origin from `-addr` ([ADR 0012](decisions/0012-operator-access.md) D5). Unset: mint refuses. When set, `rusui` serves `PreviewHandler` on that host:port beside the plane; it is never mounted on the plane mux. |
 

@@ -289,6 +289,11 @@ func main() {
 		GuestHTTPSOnly:    tlsCert != "" && tlsKey != "",
 		PreviewBase:       os.Getenv("RUSUI_PREVIEW_BASE"),
 	}
+	sessionURL, err := server.ParseSessionURL(os.Getenv("RUSUI_SESSION_URL"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	srv.SessionURL = sessionURL
 	tenantToks, members, actors, err := server.LoadTenantTokens(os.Getenv("RUSUI_TENANT_TOKENS"))
 	if err != nil {
 		log.Fatal(err)

@@ -61,6 +61,9 @@ type Server struct {
 	}
 	NoCoauthorTrailer   bool // RUSUI_DISABLE_COAUTHOR_TRAILER
 	NoSessionTrailer    bool // RUSUI_DISABLE_SESSION_TRAILER
+	// SessionURL, when set, makes the session trailer a link to the
+	// session (RUSUI_SESSION_URL, #497); unset, the trailer is the id.
+	SessionURL *SessionURL
 	GitOrigin           *url.URL
 	GuestHTTPSOnly      bool
 	Addr                string
@@ -700,7 +703,11 @@ func (s *Server) commitTrailers(sess *store.Session) []string {
 		out = append(out, CoauthorTrailer)
 	}
 	if !s.NoSessionTrailer {
-		out = append(out, fmt.Sprintf("Rusui-Session: %d", sess.ID))
+		if s.SessionURL != nil {
+			out = append(out, "Rusui-Session: "+s.SessionURL.For(sess.ID))
+		} else {
+			out = append(out, fmt.Sprintf("Rusui-Session: %d", sess.ID))
+		}
 	}
 	return out
 }
