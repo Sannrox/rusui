@@ -59,11 +59,11 @@ type Server struct {
 	RepoTokens interface {
 		RepoToken(repo string) (string, error)
 	}
-	NoCoauthorTrailer   bool // RUSUI_DISABLE_COAUTHOR_TRAILER
-	NoSessionTrailer    bool // RUSUI_DISABLE_SESSION_TRAILER
+	NoCoauthorTrailer bool // RUSUI_DISABLE_COAUTHOR_TRAILER
+	NoSessionTrailer  bool // RUSUI_DISABLE_SESSION_TRAILER
 	// SessionURL, when set, makes the session trailer a link to the
 	// session (RUSUI_SESSION_URL, #497); unset, the trailer is the id.
-	SessionURL *SessionURL
+	SessionURL          *SessionURL
 	GitOrigin           *url.URL
 	GuestHTTPSOnly      bool
 	Addr                string
