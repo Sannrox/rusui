@@ -59,7 +59,7 @@ is stale.
 | [0043](0043-extension-contract-deferred.md) | An extension contract is deferred | Accepted |
 | [0044](0044-plane-publishes-from-turn-result.md) | The plane publishes from the turn result | Accepted; amended by 0080 |
 | [0045](0045-local-unattended-promotion-deferred.md) | Local unattended promotion is deferred | Accepted |
-| [0046](0046-workspace-first-sequence.md) | Terminal-first remote workspace sequence | Accepted |
+| [0046](0046-workspace-first-sequence.md) | Terminal-first remote workspace sequence | Accepted; amended by 0085 |
 | [0047](0047-guest-link.md) | Container guests reach the plane only through a stdio guest link | Accepted; amended by 0050, 0062 |
 | [0048](0048-pinless-run-session.md) | A project without a repository runs pinless sessions claimed by project key | Accepted |
 | [0049](0049-idle-environment-expiry-retained.md) | Idle environment expiry remains 72 hours | Superseded by 0063 |
@@ -98,6 +98,7 @@ is stale.
 | [0082](0082-signed-conformance-receipts.md) | Signed ACP conformance receipts | Accepted |
 | [0083](0083-retain-single-operator-access.md) | Retain single-operator access for shared sessions | Accepted on merge |
 | [0084](0084-core-draft-actions.md) | Definition drafts are operator-applied core Actions | Accepted |
+| [0085](0085-freeze-on-author-validated-journey.md) | The stable-core freeze starts on the author-validated journey | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR
