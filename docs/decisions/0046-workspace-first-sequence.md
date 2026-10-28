@@ -1,6 +1,8 @@
 # ADR 0046: Terminal-first remote workspace sequence
 
-- Status: Accepted
+- Status: Accepted; amended by 0085
+- Status notes: [ADR 0085](0085-freeze-on-author-validated-journey.md) moves the
+  independent self-hosting proof from a freeze prerequisite to the 1.0 publish gate.
 - Date: 2026-10-01
 - Amends: [ADR 0010](0010-hybrid-roadmap-sequence.md) D1–D5. The core 1.0
   sequence and release gates change here. Its human-merge rule, bounded

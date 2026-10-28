@@ -96,9 +96,12 @@ their completeness is not a core-1.0 gate under
 [ADR 0046](docs/decisions/0046-workspace-first-sequence.md).
 
 The [U8 self-hosting journey](docs/proofs/u8-operator-journey.md) was an
-in-process author exercise. Core exit needs a documented terminal-only
-exercise with shipped binaries and an independent self-hosting maintainer,
-including installation, disconnect/reconnect, upgrade, and restore.
+author exercise on a clean machine. Under
+[ADR 0085](docs/decisions/0085-freeze-on-author-validated-journey.md) the
+stable-core freeze may start on it. A documented terminal-only exercise
+with shipped binaries and an independent self-hosting maintainer, including
+installation, disconnect/reconnect, upgrade, and restore, is the 1.0
+publish gate instead.
 
 Planning issues: [#111](https://github.com/Sannrox/rusui/issues/111)–[#118](https://github.com/Sannrox/rusui/issues/118).
 
@@ -123,7 +126,12 @@ Planning issues: [#119](https://github.com/Sannrox/rusui/issues/119)–[#140](ht
 ## M6 Stable core
 
 Freeze what was demonstrated in M1, M2, and M4. Security review and
-contract freeze are required. M3's thirty-day observation and M5's
+contract freeze are required. The freeze may start on the author-validated
+self-hosting journey; until an independent journey with a go outcome is
+recorded, the contract inventory claims no external self-hosting readiness,
+and publishing 1.0 ([#146](https://github.com/Sannrox/rusui/issues/146))
+requires that journey
+([ADR 0085](docs/decisions/0085-freeze-on-author-validated-journey.md)). M3's thirty-day observation and M5's
 optional tracks are not required for the remote-workspace 1.0; a
 maintenance or optional-capability release keeps its own gates.
 
