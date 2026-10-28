@@ -52,9 +52,9 @@ Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
 - Implement from `docs/v1-build-prompt.md` (historical `BUILD.md`).
 - Invent live apply from model `confidence = high`.
 
-GitHub Issues are the planning source of truth. Project-specific Skills
-under `.agents/skills/` define the expected workflows for shaping,
-delivering, verifying, assessing, and releasing work:
+GitHub Issues are the planning source of truth. The shared agent-kit Skills
+define the expected workflows for shaping, delivering, verifying, assessing,
+and releasing work (see [Shared agent skills](#shared-agent-skills)):
 
 | Skill | Use when |
 | --- | --- |
@@ -65,6 +65,8 @@ delivering, verifying, assessing, and releasing work:
 | `verify-change` | collecting exact local evidence |
 | `capture-project-decision` | promoting an accepted choice into an ADR or doc |
 | `prepare-release` | assembling release readiness |
+| `technical-documentation` | writing or reviewing docs and agent instructions |
+| `refactor-docs` | restructuring documentation |
 
 ## Build, Test, and Development Commands
 
@@ -98,7 +100,7 @@ Each delivered issue is one lane: one claim branch `<type>/<issue>` on GitHub,
 one worktree at `.worktrees/issue-<issue>` (or a dedicated clone on another
 machine), one pull request, one owner. Claims live on GitHub because lanes run
 on several machines; claim with
-`bash .agents/skills/deliver-ready-issue/scripts/issue-lane.sh claim <issue>` before
+`bash "${AGENT_KIT_HOME:-$HOME/.agents/agent-kit}"/skills/deliver-ready-issue/scripts/issue-lane.sh claim <issue>` before
 implementing. Agents never switch, reset, or stash the primary checkout;
 inspect `git status -sb` and `git worktree list` before Git or GitHub work and
 preserve other lanes. See [Parallel delivery lanes](#parallel-delivery-lanes).
@@ -129,7 +131,7 @@ confirmation, unless the lead of the same parallel run owns the stalled lane.
 
 A lane claims before it implements, under Publish or Land authority or with an
 explicit claim authorization under Implement, using
-`bash .agents/skills/deliver-ready-issue/scripts/issue-lane.sh claim <issue>`:
+`bash "${AGENT_KIT_HOME:-$HOME/.agents/agent-kit}"/skills/deliver-ready-issue/scripts/issue-lane.sh claim <issue>`:
 
 - the branch `<type>/<issue>` is created on GitHub from the default branch by
   an atomic ref creation, so when two machines race exactly one claim
@@ -178,31 +180,34 @@ Parallel lanes must not collide. Collision surfaces in this repository are
 Lanes that would both change one of these surfaces run in sequence, not in
 parallel.
 
-A lane publishes its first commit to the claim branch with
-`git push -u origin HEAD` (or `git push` if upstream is already set) unless
-the user asked otherwise, as a draft pull request that closes the issue and
-includes a scrubbed public lane brief: agent role or opaque agent ID, claim
-branch, base SHA, authority ceiling, relative worktree path (or `fresh clone`),
-and verification evidence. Do not include hostnames, home paths, or absolute
-worktree paths in GitHub content. Keep machine and checkout identity in the
-private lead ledger; never copy it into a public issue, pull request, or
-comment. Mark the pull request ready when verification and review are complete.
-Immediately before publishing, the lane fetches and confirms that the default
-branch is an ancestor of its head; it refreshes onto `main` only for a
+A lane publishes from its worktree with
+`bash "${AGENT_KIT_HOME:-$HOME/.agents/agent-kit}"/skills/deliver-ready-issue/scripts/issue-lane.sh push <issue>`,
+which creates GitHub-verified commits on the claim branch and resets the
+worktree to the published commit, so local `HEAD` is the pull request head.
+Open the pull request as a draft that closes the issue and includes a scrubbed
+public lane brief: agent role or opaque agent ID, claim branch, base SHA,
+authority ceiling, relative worktree path (or `fresh clone`), and verification
+evidence. Do not include hostnames, home paths, or absolute worktree paths in
+GitHub content. Keep machine and checkout identity in the private lead ledger;
+never copy it into a public issue, pull request, or comment. Mark the pull
+request ready when verification and review are complete.
+Immediately before the first publish, the lane fetches and confirms that the
+default branch is an ancestor of its head; it refreshes onto `main` only for a
 conflict, a failing gate, an explicit request, or a sibling landing on a
 shared surface, not merely because `main` advanced.
 
-Landing is sequential. After each merge, fetch, recompute the frontier, and let
-the remaining lanes recheck `mergeable` against the new `main`. A failed or
-timed-out merge response may still have merged; reconcile the remote state
-before retrying.
+Land with
+`bash "${AGENT_KIT_HOME:-$HOME/.agents/agent-kit}"/skills/deliver-ready-issue/scripts/issue-lane.sh land <issue> --pr <pr>`.
+It squash-merges only the reviewed head and confirms the merge and the closed
+issue. Landing is sequential. After each merge, fetch, recompute the frontier,
+and let the remaining lanes recheck `mergeable` against the new `main`.
 
 The lead of a parallel run keeps a private ledger per lane: issue, branch,
 machine and checkout, base SHA, owner, state, pull request, evidence, blockers,
 and cleanup. Keep that ledger private; GitHub content uses only the scrubbed
 public lane brief above. Report verified outcomes, not launched work. The
-executable lead procedure is
-`.agents/skills/deliver-ready-issue/references/parallel-delivery.md`.
+executable lead procedure is `references/parallel-delivery.md` in the shared
+`deliver-ready-issue` Skill.
 
 ## Security
 
@@ -211,4 +216,98 @@ secrets, local SQLite databases, `.version`, or `_output/`. Bind examples
 to loopback. The intake GitHub client is read-only. Model CLIs receive
 a GitHub write credential only in `implement` sessions (ADR 0015). This repository is public; do not link private
 repos. Canonical agent policy is this file; `AGENT.md` and `CLAUDE.md`
-are pointers. Skills live in `.agents/skills/`.
+are pointers. Skill stubs live in `.agents/skills/`.
+
+## Shared agent skills
+
+The workflow Skills (`advance-issue-frontier`, `assess-change-impact`,
+`capture-project-decision`, `deliver-ready-issue`, `prepare-release`,
+`refactor-docs`, `shape-work-item`, `technical-documentation`, `verify-change`)
+are canonical in [Sannrox/agent-kit](https://github.com/Sannrox/agent-kit).
+There is no pin: this repository always uses the latest `main`.
+`.agents/skills/<name>/` holds only a generated stub that points to the shared
+skill; read the installed skill under `~/.agents/agent-kit/` (or
+`$AGENT_KIT_HOME`). Run `bash scripts/validate-workflow-skills.sh` to clone or
+update it; `make validate` runs the same check.
+
+- Repository-specific facts the shared Skills need come from this file. Edit
+  this file, not the stubs.
+- Never edit the stubs or the vendored `scripts/validate-workflow-skills.sh`
+  here; change them upstream in agent-kit, then run
+  `bash scripts/validate-workflow-skills.sh --render` here when the check
+  reports drift.
+- Repository-only Skills live next to the stubs as full folders and stay local.
+
+## Agent skill profile
+
+Facts the shared agent-kit skills read that the sections above do not already
+state.
+
+Feature: a new observable operator or integration outcome.
+
+- Read `ARCHITECTURE.md` (the product contract), `CONTEXT.md`, and
+  `docs/README.md` alongside `README.md`. Do not implement behavior beyond the
+  current contract except as types or comments needed to keep state machines
+  honest.
+- Issue dependencies live under `## Dependencies` (not
+  `## GitHub dependencies`). An explicit statement that prerequisites are
+  completed counts as delivered; `None` means no dependencies.
+- GitHub Discussions are disabled. Route cross-boundary, trust-model,
+  policy-capability, or difficult-to-reverse choices to an ADR pull request.
+- ADRs: allocate the next number in `docs/decisions/`, follow
+  `docs/decisions/template.md`, and regenerate the index with
+  `scripts/adr-index`; never edit its table by hand. An accepted ADR does not
+  change `ARCHITECTURE.md` until that file is rewritten.
+- CI is `.github/workflows/build.yml`; its gates are the commands in
+  [Build, Test, and Development Commands](#build-test-and-development-commands).
+- Before publishing, inspect the diff for SQLite databases, `.version`,
+  `_output/`, secrets, and runtime state.
+
+### Compatibility and failure obligations
+
+Fresh and upgraded SQLite state, immutable review revisions, policy reload
+(the SQLite overlay may only narrow `policy.yaml`), old clients and
+configuration, error semantics, and rollback or recovery impact.
+
+### Additional impact boundaries
+
+- hard defaults versus `policy.yaml` baseline versus SQLite overlay;
+- webhook ACK (no live fetch) versus refresh coordinator versus admit;
+- GitHub as intake versus the server as source of truth versus Slack as the
+  human socket;
+- read-only GitHub client versus apply (dry-run);
+- model CLI review artifacts versus credentials (only `implement` sessions
+  receive a GitHub write credential, ADR 0015);
+- `review` / `apply` / `implement` lanes and lease generations;
+- loopback bind versus operator tunnel;
+- SQLite recovery truth versus optional JSON/MD exports;
+- durable artifacts: docs, `policy.example.yaml`, `policy.fixture.yaml`, ADRs.
+
+### Verification matrix
+
+Rows beyond [Build, Test, and Development Commands](#build-test-and-development-commands):
+
+| Surface | Required evidence |
+| --- | --- |
+| Go source | focused `make test WHAT=./internal/<pkg>`, then the relevant build |
+| admit, lease, refresh, or apply | state-transition tests for success, expiry, steal-deny, and recovery |
+| GitHub client | read-only client tests; never require a write token |
+| Slack commands | HMAC, skew, allowlist, and command-routing tests |
+| policy | parse/default/fail-closed tests; `policy.example.yaml` vs `policy.fixture.yaml` |
+| SQLite persistence | store tests for revisions, leases, and immutable review blobs |
+| review eval | `eval/set.md` path when review-quality claims change |
+| packaging or runtime images | `make release-images` when Docker is intentionally available |
+| live GitHub, Slack, tunnel, or image behavior | the real boundary with isolated state; unit or mocked tests do not establish it |
+
+### Release audit
+
+- version comes from git tags via `scripts/lib/version.sh`; generated
+  `.version` is not a source;
+- `go.mod` / `.go-version` consistency;
+- `policy.example.yaml` defaults and fail-closed unknown fields;
+- HTTP, Slack, and worker endpoint compatibility;
+- SQLite schema and immutable review-artifact compatibility;
+- environment variables, secrets, loopback bind, and operator tunnel docs;
+- security, backup, rollback, and operator actions;
+- `rusui` / `rusui-runner` binaries and runtime images;
+- credit contributors through GitHub's generated release notes.
