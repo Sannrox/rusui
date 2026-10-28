@@ -123,6 +123,14 @@ func StartLink(x StdioExecutor, handle string, targets []LinkTarget) (*Link, err
 	case <-l.ready:
 		return l, nil
 	case <-l.done:
+		// A link that became ready and ended right after is reported as a
+		// link whose Done is closed, not as one that never became ready:
+		// with both closed, select would pick either at random (#643).
+		select {
+		case <-l.ready:
+			return l, nil
+		default:
+		}
 		stop()
 		return nil, fmt.Errorf("env: guest link exited before ready: %w", l.err)
 	case <-time.After(linkStartLimit):
