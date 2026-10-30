@@ -145,6 +145,13 @@ func (s *Store) migrate() error {
 )`); err != nil {
 		return err
 	}
+	if _, err := s.DB.Exec(`CREATE TABLE IF NOT EXISTS schema_upgrade_lock (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  target INTEGER NOT NULL,
+  started_at TEXT NOT NULL
+)`); err != nil {
+		return err
+	}
 	ver, err := currentVersion(s.DB)
 	if err != nil {
 		return err
@@ -169,6 +176,18 @@ func (s *Store) migrate() error {
 			return err
 		}
 		ver = 1
+	}
+	if ver > CurrentSchema {
+		return fmt.Errorf("store: schema version %d is newer than this binary (%d); restore the pre-upgrade copy or use a matching rusui", ver, CurrentSchema)
+	}
+	if err := recoverUpgradeLock(s.DB, ver); err != nil {
+		return err
+	}
+	upgrading := ver < CurrentSchema
+	if upgrading {
+		if err := setUpgradeLock(s.DB, CurrentSchema); err != nil {
+			return err
+		}
 	}
 	if ver < 2 {
 		if err := migrateV2(s.DB); err != nil {
@@ -602,6 +621,11 @@ func (s *Store) migrate() error {
 			return err
 		}
 		if err := stamp(s.DB, 52); err != nil {
+			return err
+		}
+	}
+	if upgrading {
+		if err := clearUpgradeLock(s.DB); err != nil {
 			return err
 		}
 	}
@@ -1635,10 +1659,44 @@ func currentVersion(db *sql.DB) (int, error) {
 	return ver, err
 }
 
+// SchemaVersion is the highest applied schema_migrations.version.
+func SchemaVersion(s *Store) (int, error) {
+	return currentVersion(s.DB)
+}
+
 func stamp(db *sql.DB, version int) error {
 	_, err := db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)`,
 		version, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
+}
+
+func setUpgradeLock(db *sql.DB, target int) error {
+	_, err := db.Exec(`INSERT OR REPLACE INTO schema_upgrade_lock(id, target, started_at) VALUES (1, ?, ?)`,
+		target, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
+
+func clearUpgradeLock(db *sql.DB) error {
+	_, err := db.Exec(`DELETE FROM schema_upgrade_lock WHERE id=1`)
+	return err
+}
+
+// recoverUpgradeLock fails closed when a previous start died mid-upgrade.
+// A lock left after the schema already reached CurrentSchema is cleared:
+// the steps finished and only the unlock was lost.
+func recoverUpgradeLock(db *sql.DB, ver int) error {
+	var target int
+	err := db.QueryRow(`SELECT target FROM schema_upgrade_lock WHERE id=1`).Scan(&target)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if ver >= CurrentSchema {
+		return clearUpgradeLock(db)
+	}
+	return fmt.Errorf("store: interrupted upgrade toward schema %d (at %d); restore the pre-upgrade copy", target, ver)
 }
 
 func migrateV2(db *sql.DB) error {

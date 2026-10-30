@@ -9,7 +9,9 @@
 
 `rusui` and `rusui-runner` from the same git commit, one runner on the
 plane host, Docker or Podman CLI, digest-pinned `$RUSUI_GUEST_IMAGE`,
-default guest shikigami ACP. Mixing commits is unsupported.
+default guest shikigami ACP. Mixing commits is unsupported; release
+binaries refuse a runner hello from a different commit. Schema, policy,
+restore, and export versions: [compatibility.md](compatibility.md).
 
 | Piece | 1.0 value |
 | --- | --- |

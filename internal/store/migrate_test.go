@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,6 +40,12 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	}
 	if _, err := db.Exec(`INSERT INTO deliveries (delivery_id, repo, item, item_kind, received_at) VALUES ('del-1', 'Sannrox/rusui', 42, 'issue', ?)`,
 		time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO policy_revisions (id, hash, payload) VALUES (3, 'pol-v1', ?)`, "version: 2\nprojects: {}\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO daily_review_counts (repo, day, count) VALUES ('Sannrox/rusui', '2026-01-01', 3)`); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -186,6 +193,18 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	var handle sql.NullString
 	if err := s.DB.QueryRow(`SELECT handle FROM environments WHERE id=?`, DefaultEnvironmentID).Scan(&handle); err != nil {
 		t.Fatalf("v4 handle column: %v", err)
+	}
+	payload, err := LatestPolicyPayload(s)
+	if err != nil || string(payload) != "version: 2\nprojects: {}\n" {
+		t.Fatalf("policy revision %q %v", payload, err)
+	}
+	var budget int
+	if err := s.DB.QueryRow(`SELECT count FROM daily_review_counts WHERE repo=? AND day=?`, "Sannrox/rusui", "2026-01-01").Scan(&budget); err != nil || budget != 3 {
+		t.Fatalf("budget count %d %v", budget, err)
+	}
+	var lock int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM schema_upgrade_lock`).Scan(&lock); err != nil || lock != 0 {
+		t.Fatalf("upgrade lock left behind %d %v", lock, err)
 	}
 }
 
@@ -459,5 +478,72 @@ INSERT INTO tasks (session_id, state) VALUES (1, 'open'), (2, 'abandoned'), (3, 
 	}
 	if err := db.QueryRow(`SELECT COUNT(*) FROM session_tool_grants WHERE session_id=1 AND tool=? AND revoked_at IS NULL`, ToolWrite).Scan(&n); err != nil || n != 1 {
 		t.Fatalf("retry backfill %d %v", n, err)
+	}
+}
+
+func TestNewerSchemaIsRejected(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "future.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`,
+		CurrentSchema+1, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Open(path)
+	if err == nil || !strings.Contains(err.Error(), "newer than this binary") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestInterruptedUpgradeFailsClosed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mid.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`DELETE FROM schema_migrations WHERE version=?`, CurrentSchema); err != nil {
+		t.Fatal(err)
+	}
+	if err := setUpgradeLock(st.DB, CurrentSchema); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Open(path)
+	if err == nil || !strings.Contains(err.Error(), "interrupted upgrade") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCompletedUpgradeClearsStaleLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "done.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := setUpgradeLock(st.DB, CurrentSchema); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	st, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	var n int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM schema_upgrade_lock`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("lock %d %v", n, err)
+	}
+	ver, err := SchemaVersion(st)
+	if err != nil || ver != CurrentSchema {
+		t.Fatalf("schema %d %v", ver, err)
 	}
 }

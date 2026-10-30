@@ -59,7 +59,10 @@ session's environment and refuses prompts until `rusui unarchive SESSION`.
 database offline and prints its inventory. Do not open `rusui.db` while the
 plane holds it.
 `rusui diagnostics` writes a redacted bundle (`diagnostics.json`).
+`rusui compat-conformance [-dir DIR]` runs the 1.0 compatibility checks
+and prints JSON bound to this binary's commit and schema.
 Upgrade procedure: [upgrade.md](upgrade.md).
+Compatibility contract: [compatibility.md](compatibility.md).
 
 `rusui replay SESSION_ID TURN_ID` rebuilds a Shikigami schema-v1 replay
 manifest from that turn's flight record, re-runs against the recorded
