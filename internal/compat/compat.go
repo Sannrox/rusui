@@ -48,6 +48,7 @@ func Surfaces() []Surface {
 		{Name: "schema-upgrade", Version: "forward-only", Class: ClassSupported, Positive: "TestCompletedUpgradeClearsStaleLock", Negative: "TestInterruptedUpgradeFailsClosed"},
 		{Name: "policy", Version: "v2", Class: ClassSupported, Positive: "TestParseExampleAndFixture", Negative: "TestPolicyV1AndUnknownFieldsFailClosed"},
 		{Name: "operator-api", Version: "http+sse", Class: ClassSupported, Positive: "TestCreateAndFollowUpOmitOptionalRequestFields", Negative: ""},
+		{Name: "independent-client", Version: "http+sse", Class: ClassSupported, Positive: "TestIndependentClientJourney", Negative: "TestIndependentClientAuthRefused"},
 		{Name: "runner-protocol", Version: "hello/claim/heartbeat/complete/fail", Class: ClassSupported, Positive: "TestRunnerHelloAcceptsMatchingAndUnknownCommits", Negative: "TestRunnerHelloRejectsMismatchedCommit"},
 		{Name: "restore", Version: "rusui restore -db", Class: ClassSupported, Positive: "TestRestorePreservesIdentitiesRetentionAndReceipts", Negative: "TestRestoreMissingAndCorruptArtifacts"},
 		{Name: "diagnostics-export", Version: "redacted-bundle", Class: ClassSupported, Positive: "TestWriteBundleRedactsSecretsAndRecordsIdentity", Negative: "TestWriteBundleRedactsOperatorTokenAndModelUpstreamUserinfo"},

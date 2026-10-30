@@ -63,6 +63,7 @@ plane holds it.
 and prints JSON bound to this binary's commit and schema.
 Upgrade procedure: [upgrade.md](upgrade.md).
 Compatibility contract: [compatibility.md](compatibility.md).
+Independent HTTP+SSE client: [independent-client.md](independent-client.md).
 
 `rusui replay SESSION_ID TURN_ID` rebuilds a Shikigami schema-v1 replay
 manifest from that turn's flight record, re-runs against the recorded
@@ -261,8 +262,11 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/readyz` | none; JSON topology report; 200 ready / 503 not ready |
 | `GET` | `/auth/oidc` | public OIDC client metadata; 404 when disabled |
 | `GET` | `/auth/oidc/session` | validate operator bearer; 204 when accepted, 401 when refused |
+| `POST` | `/projects/{slug}/sessions` | operator or worker token; JSON `kind` `run` (prompt) or `local`; optional `Idempotency-Key`; 201 `{session_id, kind}`; unknown `kind` is 400 |
 | `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, `execution_mode`, `act`, `tools` (active ACP kinds), and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, revoked grant, or another member's user-mode session |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
+| `GET` | `/sessions/{id}/read/follow` | operator token; SSE of the transcript then live `entry` / `state` / `turn` until completed, failed, or cancelled; query `after=<seq>` resumes without a gap or a repeat; worker token is 401 |
+| `GET` | `/sessions/{id}/logs` | operator or worker token; action receipts for the session |
 | `GET` | `/sessions/{id}/turns/{tid}/flight` | operator or worker token; flight record for that turn with snapshot parts the caller cannot read omitted (`rusui replay` uses the replay route) |
 | `POST` | `/sessions/{id}/turns/{tid}/replay` | operator or worker token; rebuild a Shikigami schema-v1 manifest and re-run the turn against the recorded snapshot (optional JSON `snapshot` override); external effects are denied; reports object-revision divergence |
 | `GET` | `/sessions/{id}/terminal` | operator, worker, or turn token; current environment terminal output; not the transcript |
@@ -307,7 +311,9 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/sessions/{id}/retention/delete` | operator token; remove session data, archive, and record a deletion receipt; 204 |
 | `POST` | `/sessions/{id}/write-actions` | operator token; apply the session's latest `write.propose`; 200 receipt, 409 no proposal or publication off |
 | `POST` | `/sessions/{id}/draft-actions` | operator token; apply the session's latest `core.draft`; 200 receipt (including a recorded PermissionDenied), 409 no proposal or core client off |
-| `GET` | `/approvals/{id}` | worker secret or turn token |
+| `GET` | `/approvals` | operator or worker token; pending approvals (JSON uses exported Go field names) |
+| `GET` | `/approvals/{id}` | operator, worker, or turn token |
+| `POST` | `/approvals/{id}` | operator or worker token; JSON `decision` `allow` or `deny`; 204 |
 | `*` | `/model-proxy/` | guest grant (HTTPS for container guests); runner turn token refused |
 | `*` | `/git-proxy/github.com/` | prepare or guest grant; push only with a guest grant on the session ref prefix |
 
