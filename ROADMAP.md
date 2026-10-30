@@ -23,10 +23,11 @@ ADR 0015 lets the agent in an implement session push and open its own pull
 request with the operator's credential. Human merge remains required.
 No live comment, close, merge, or land action is enabled by this sequence.
 
-[#141](https://github.com/Sannrox/rusui/issues/141) still lists
-[#110](https://github.com/Sannrox/rusui/issues/110) as a dependency. Its
-Issue body requires a separate authorized update before the new core path
-can be treated as ready. A changed roadmap does not silently edit Issue
+[#141](https://github.com/Sannrox/rusui/issues/141) is the M6 freeze
+([ADR 0086](docs/decisions/0086-supported-1.0-core-contract.md)).
+[#110](https://github.com/Sannrox/rusui/issues/110) remains a
+maintenance-track gate, not a freeze dependency. GitHub Issues remain
+the planning source of truth; this file does not silently edit Issue
 dependencies.
 
 ## Shape
@@ -125,15 +126,16 @@ Planning issues: [#119](https://github.com/Sannrox/rusui/issues/119)–[#140](ht
 
 ## M6 Stable core
 
-Freeze what was demonstrated in M1, M2, and M4. Security review and
-contract freeze are required. The freeze may start on the author-validated
-self-hosting journey; until an independent journey with a go outcome is
-recorded, the contract inventory claims no external self-hosting readiness,
-and publishing 1.0 ([#146](https://github.com/Sannrox/rusui/issues/146))
-requires that journey
-([ADR 0085](docs/decisions/0085-freeze-on-author-validated-journey.md)). M3's thirty-day observation and M5's
-optional tracks are not required for the remote-workspace 1.0; a
-maintenance or optional-capability release keeps its own gates.
+[ADR 0086](docs/decisions/0086-supported-1.0-core-contract.md) freezes
+the demonstrated terminal workflow and support limits. The freeze
+started on the author-validated self-hosting journey
+([ADR 0085](docs/decisions/0085-freeze-on-author-validated-journey.md)).
+Until an independent journey with a go outcome is recorded, the
+contract claims no external self-hosting readiness, and publishing 1.0
+([#146](https://github.com/Sannrox/rusui/issues/146)) requires that
+journey. M3's thirty-day observation and M5's excluded optional tracks
+are not required for the remote-workspace 1.0; a maintenance or
+optional-capability release keeps its own gates.
 
 Planning issues: [#141](https://github.com/Sannrox/rusui/issues/141)–[#146](https://github.com/Sannrox/rusui/issues/146).
 
@@ -147,8 +149,9 @@ Planning issues: [#141](https://github.com/Sannrox/rusui/issues/141)–[#146](ht
 - Merge authority: humans merge core delivery.
 - Persistence: SQLite with WAL and one writer.
 - Reasoning: ACP-owned guest loop; rusui owns environments, admission,
-  credentials, evidence, and permitted external actions. P1 guest remains
-  Grok CLI ([ADR 0002](docs/decisions/0002-grok-acp-agent-set.md)).
+  credentials, evidence, and permitted external actions. Default guest
+  is shikigami ACP
+  ([ADR 0073](docs/decisions/0073-session-plane-guest-registry.md)).
 
 Explicitly deferred: native mobile clients, a new model-training effort,
 a generalized workflow DSL, a plugin marketplace, transparent cross-

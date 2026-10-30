@@ -1,6 +1,6 @@
 # ADR 0016: Local interactive runtime boundary with Sumika
 
-- Status: Accepted
+- Status: Accepted; amended by 0086
 - Date: 2026-09-23
 - Resolves: [#182](https://github.com/Sannrox/rusui/issues/182)
 - Narrows: [#183](https://github.com/Sannrox/rusui/issues/183)
@@ -210,8 +210,8 @@ and the embedded console open the session.
 
 ### D8. Scope
 
-- Core: none yet. The local profile is not part of the supported 1.0 core;
-  decision #141 must explicitly include it before that claim changes.
+- Core: none. The local profile is not part of the supported 1.0 core
+  ([ADR 0086](0086-supported-1.0-core-contract.md)).
 - Experimental: the local session kind, same-user Sumika start/list/attach/kill
   integration, status observations, cancellation intent, and orphan reporting.
   Issue #183 adds the additive Process/Attach observation records; #184 adds

@@ -1,8 +1,11 @@
 # ADR 0046: Terminal-first remote workspace sequence
 
-- Status: Accepted; amended by 0085
+- Status: Accepted; amended by 0085, 0086
 - Status notes: [ADR 0085](0085-freeze-on-author-validated-journey.md) moves the
-  independent self-hosting proof from a freeze prerequisite to the 1.0 publish gate.
+  independent self-hosting proof from a freeze prerequisite to the 1.0 publish
+  gate. [ADR 0086](0086-supported-1.0-core-contract.md) is the M6 freeze;
+  [#141](https://github.com/Sannrox/rusui/issues/141) no longer waits on
+  [#110](https://github.com/Sannrox/rusui/issues/110).
 - Date: 2026-10-01
 - Amends: [ADR 0010](0010-hybrid-roadmap-sequence.md) D1–D5. The core 1.0
   sequence and release gates change here. Its human-merge rule, bounded
@@ -29,7 +32,7 @@ The D6 proof covers a bounded lifecycle but no live guest in its twenty-run matr
 
 ## Consequences
 
-The first release claim becomes narrower and easier for another self-hosting maintainer to verify. Maintenance beta loses its place on the core critical path, while its safety and observation gates stay intact. The existing M1–M6 identifiers remain for Issue links; the core order is M1 → M2 → M4 → M6, with M3 and M5 as optional tracks. In particular, [#141](https://github.com/Sannrox/rusui/issues/141) still names [#110](https://github.com/Sannrox/rusui/issues/110) as a required dependency. It requires a separately authorized Issue update before a workspace-focused 1.0 can advance. Changing prose alone cannot make blocked issues ready. No schema, policy, API, runner, or credential migration follows from this decision.
+The first release claim becomes narrower and easier for another self-hosting maintainer to verify. Maintenance beta loses its place on the core critical path, while its safety and observation gates stay intact. The existing M1–M6 identifiers remain for Issue links; the core order is M1 → M2 → M4 → M6, with M3 and M5 as optional tracks. [#110](https://github.com/Sannrox/rusui/issues/110) stays a maintenance-track gate. [ADR 0086](0086-supported-1.0-core-contract.md) records the freeze; the [#141](https://github.com/Sannrox/rusui/issues/141) issue body does not list #110. Changing prose alone cannot make blocked issues ready. No schema, policy, API, runner, or credential migration follows from this decision.
 
 ## Rejected alternatives
 

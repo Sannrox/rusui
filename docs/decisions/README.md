@@ -29,7 +29,7 @@ is stale.
 | [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
 | [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Superseded by 0023 |
 | [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted; amended by 0055, 0068, 0080 |
-| [0016](0016-local-interactive-runtime.md) | Local interactive runtime boundary with Sumika | Accepted |
+| [0016](0016-local-interactive-runtime.md) | Local interactive runtime boundary with Sumika | Accepted; amended by 0086 |
 | [0017](0017-claude-guest-and-model-upstream.md) | Claude Code guest, operator model upstream, and a fenced self-test | Accepted |
 | [0018](0018-rusui-setup.md) | `rusui setup` provisions a host; `rusui diagnose` verifies it | Accepted |
 | [0019](0019-rusui-attach-client.md) | One Rusui attach command selects the runtime-owned transport | Accepted; amended by 0052, 0065 |
@@ -58,8 +58,8 @@ is stale.
 | [0042](0042-disconnected-execution-deferred.md) | Disconnected execution is deferred | Accepted |
 | [0043](0043-extension-contract-deferred.md) | An extension contract is deferred | Accepted |
 | [0044](0044-plane-publishes-from-turn-result.md) | The plane publishes from the turn result | Accepted; amended by 0080 |
-| [0045](0045-local-unattended-promotion-deferred.md) | Local unattended promotion is deferred | Accepted |
-| [0046](0046-workspace-first-sequence.md) | Terminal-first remote workspace sequence | Accepted; amended by 0085 |
+| [0045](0045-local-unattended-promotion-deferred.md) | Local unattended promotion is deferred | Accepted; amended by 0086 |
+| [0046](0046-workspace-first-sequence.md) | Terminal-first remote workspace sequence | Accepted; amended by 0085, 0086 |
 | [0047](0047-guest-link.md) | Container guests reach the plane only through a stdio guest link | Accepted; amended by 0050, 0062 |
 | [0048](0048-pinless-run-session.md) | A project without a repository runs pinless sessions claimed by project key | Accepted |
 | [0049](0049-idle-environment-expiry-retained.md) | Idle environment expiry remains 72 hours | Superseded by 0063 |
@@ -98,7 +98,8 @@ is stale.
 | [0082](0082-signed-conformance-receipts.md) | Signed ACP conformance receipts | Accepted |
 | [0083](0083-retain-single-operator-access.md) | Retain single-operator access for shared sessions | Accepted on merge |
 | [0084](0084-core-draft-actions.md) | Definition drafts are operator-applied core Actions | Accepted |
-| [0085](0085-freeze-on-author-validated-journey.md) | The stable-core freeze starts on the author-validated journey | Accepted |
+| [0085](0085-freeze-on-author-validated-journey.md) | The stable-core freeze starts on the author-validated journey | Accepted; amended by 0086 |
+| [0086](0086-supported-1.0-core-contract.md) | Freeze the supported 1.0 core contract | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR

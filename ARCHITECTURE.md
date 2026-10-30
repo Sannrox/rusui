@@ -22,6 +22,49 @@ This is not ClawSweeper, Tatara, or a Kafka fleet. GitHub is intake. The
 server is the source of truth. Slack is the human socket. Guests never receive a GitHub write credential (ADR 0080). Schema changes are versioned migrations
 (`schema_migrations`), not `CREATE IF NOT EXISTS` drift.
 
+## Supported 1.0 core
+
+[ADR 0086](docs/decisions/0086-supported-1.0-core-contract.md) freezes this
+file as the 1.0 product contract. The supported claim is the
+terminal-first remote workspace on one version tuple: `rusui` and
+`rusui-runner` from the same git commit, one runner on the plane host,
+Docker or Podman CLI, digest-pinned `$RUSUI_GUEST_IMAGE`, default guest
+shikigami ACP, SQLite WAL, loopback listen. Named guests `shikigami`,
+`grok`, `claude` (Claude Code CLI 2.1.283), and `codex` are in that
+tuple; generic ACP guests need a plane-signed conformance receipt.
+
+**Supported:** session/turn/environment identity in [CONTEXT.md](CONTEXT.md);
+CLI and HTTP+SSE (`run`, `read`/`read -follow`, `attach`, `prompt`,
+`approve`, `drain`, `resume`, `restore`, `diagnose`); policy v2 with
+narrowing overlay; pause/halt/cancel; governed implement Actions with
+human merge; receipts in SQLite; session retention short or indefinite;
+environment until archive; versioned migrations; copy-and-`rusui restore`
+backup (live leases and grants do not survive).
+
+**Author-validated only:** install, disconnect/reconnect, upgrade, and
+restore as run in U8. Independent self-hosting is the 1.0 publish gate
+([#146](https://github.com/Sannrox/rusui/issues/146)), not this freeze.
+
+**Narrowed:** bounded issue-to-PR is one pinned-path implement task and
+one pull request at a time. `rusui read` does not promise a workspace
+diff for container sessions. Lost claim-response recovery is not a 1.0
+guarantee.
+
+**Experimental:** local-interactive Sumika profile, process driver,
+core definition drafts, browser-console completeness, editor-ACP
+completeness.
+
+**Excluded:** microVMs, runner fleet, HA/Postgres, shared-operator
+governance, live fork, desktop, unauthenticated preview, third-party
+identity minting, plugins, disconnected execution, Docker Desktop /
+Podman Desktop guest link, live comment/close/merge/land, the thirty-day
+maintenance observation (that remains a maintenance-release gate), and
+signed portable session bundles.
+
+Dropping a supported guarantee needs a later ADR. Details below remain
+the runtime contract; where they conflict with ADR 0086, ADR 0086 wins
+until this file is edited.
+
 ## Operator authentication
 
 One operator authenticates API calls with `RUSUI_OPERATOR_TOKEN` or,
@@ -151,11 +194,13 @@ credential and machine-isolation guarantees. The integration uses Sumika's
 same-host, same-user socket only; remote pairing is out of scope.
 
 The managed runner, container, terminal write lease, and ACP editor contracts
-remain unchanged. The local profile is not part of the supported 1.0 core
-unless [#141](https://github.com/Sannrox/rusui/issues/141) explicitly includes
-it. Issues #183 and #184 established the observation API and runtime adapter;
-#185 provides the unified attach client, and #186 owns the cross-profile
-evidence.
+remain unchanged. The local profile is experimental and is not part of the
+supported 1.0 core
+([ADR 0086](docs/decisions/0086-supported-1.0-core-contract.md),
+[ADR 0045](docs/decisions/0045-local-unattended-promotion-deferred.md)).
+Issues #183 and #184 established the observation API and runtime adapter;
+#185 provides the unified attach client, and #186 deferred cross-profile
+promotion.
 
 ## System
 
@@ -691,8 +736,10 @@ to write or draft, `unconfirmed` for any other claimed pull request,
 or a merge gate. Guests never receive a core credential.
 
 `internal/provider` is the guest boundary
-([ADR 0025](docs/decisions/0025-provider-boundary.md)). The plane names
-the guest per turn (`RUSUI_GUEST`): Grok (default) spawns
+([ADR 0025](docs/decisions/0025-provider-boundary.md),
+[ADR 0073](docs/decisions/0073-session-plane-guest-registry.md)). The
+session names the guest. Fresh `rusui setup` defaults to shikigami.
+`RUSUI_GUEST` is the fallback when policy names none. Grok spawns
 `agent --permission-mode default agent stdio` at ACP protocolVersion 1;
 Claude Code spawns the `claude` CLI at stream-json with
 `@anthropic-ai/claude-code` 2.1.283; Codex spawns
@@ -752,11 +799,13 @@ snapshot locally under that hash. On hit, the session environment is
 created from the cache with no setup. Wake runs `.agents/resume` only.
 The plane stores the hash string, not the bytes.
 
-Idle 72 hours from last wake or last turn end expires the environment.
-The session row stays; the next turn re-materializes from the
-snapshot. A new git pin on a live session replaces the environment
-for that turn. Sleep/wake on a live environment keeps in-container
-dirt.
+The environment stays until the operator archives the session
+([ADR 0063](docs/decisions/0063-keep-environment-until-archive.md)).
+Sleep stops the container; wake keeps in-container dirt. The session
+row stays across sleep. A new git pin on a live session replaces the
+environment for that turn. Session prompt data still follows retention
+`short` (72h) or `indefinite`
+([ADR 0081](docs/decisions/0081-session-retention.md)).
 
 ## Review artifacts
 
