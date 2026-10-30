@@ -39,7 +39,7 @@ func (e *Effective) ExplainRepo(name string) (RepoExplanation, bool, error) {
 		return RepoExplanation{}, false, fmt.Errorf("policy: source values for %q are missing", name)
 	}
 	sources := map[string]string{}
-	for _, field := range []string{"visibility", "review", "comments", "close", "implement", "land", "max_reviews_per_repo_per_utc_day"} {
+	for _, field := range []string{"visibility", "review", "comments", "comment", "close", "implement", "land", "max_reviews_per_repo_per_utc_day"} {
 		sources[field] = repoSource(field, repository, defaults)
 	}
 	sources["never_release"] = "enforced by v2 parser"

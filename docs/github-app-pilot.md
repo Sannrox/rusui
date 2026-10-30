@@ -56,13 +56,14 @@ repository under a project. Keep:
 ```yaml
 review: true
 comments: false
+comment: false
 close: false
 implement: false
 land: false
 ```
 
-`comments` and `close` authorize dry-run intended-actions only. They do
-not write to GitHub even if you later set them true.
+`comments` and `close` authorize dry-run intended-actions only. `comment`
+is the live GitHub comment switch and stays false in this pilot.
 
 ## Tunnel
 

@@ -11,7 +11,8 @@ Report security issues through [SECURITY.md](SECURITY.md), not a public issue.
 
 GitHub Issues are the planning source of truth. Prefer issues labeled
 `status:ready` whose `## Dependencies` are satisfied. Do not implement live
-comment, close, merge, land, or unnamed GitHub writes.
+close, merge, land, or unnamed GitHub writes. Live comments are the
+`comment` policy path only.
 
 Direction beyond the current contract lives in [VISION.md](VISION.md),
 [ROADMAP.md](ROADMAP.md), and [docs/decisions/](docs/decisions/). An accepted

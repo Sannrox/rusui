@@ -21,7 +21,8 @@ safety or correctness gate.
 
 ADR 0015 lets the agent in an implement session push and open its own pull
 request with the operator's credential. Human merge remains required.
-No live comment, close, merge, or land action is enabled by this sequence.
+Live comments stay off in the default profile (`comment: false`). Close,
+merge, and land stay unauthorized by this sequence.
 
 [#141](https://github.com/Sannrox/rusui/issues/141) is the M6 freeze
 ([ADR 0086](docs/decisions/0086-supported-1.0-core-contract.md)).

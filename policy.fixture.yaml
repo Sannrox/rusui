@@ -8,6 +8,7 @@ defaults:
   egress: trusted
   review: true
   comments: false
+  comment: false
   close: false
   implement: false
   land: false
@@ -19,6 +20,7 @@ projects:
         visibility: public
         review: true
         comments: true
+        comment: false
         close: true
         implement: false
         land: false

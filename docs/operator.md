@@ -2,7 +2,7 @@
 
 Run rusui against a real repository. This how-to covers setup, the main
 loopback path, GitHub intake, optional Slack, restart, removal, and
-troubleshooting. Apply is dry-run: nothing is commented, closed, or merged
+troubleshooting. Close stays dry-run. Live comments require `comment: true`.
 on GitHub.
 
 For a first credential-free session, start with [the tutorial](tutorial.md).
@@ -215,7 +215,8 @@ make all
 ```
 
 Policy is version 2, keyed by **project**. `comments: true` / `close: true`
-authorize **simulated** intended-action rows, not GitHub writes.
+authorize **simulated** intended-action rows. `comment: true` authorizes
+one live GitHub review comment per durable result and stays false here.
 
 ## 2. Secrets
 
@@ -430,5 +431,5 @@ unset the env vars listed in [configuration.md](configuration.md).
 | Slack 401 | Signing secret / timestamp skew > 5 minutes |
 | Claim never returns work | Repo not bound in policy, paused, or daily budget exhausted |
 | Reconcile skipped | `RUSUI_GITHUB_HOOK_IDS` unset |
-| No GitHub comment appeared | Apply is dry-run; look at intended-actions in SQLite |
+| No GitHub comment appeared | Live comments need `comment: true`; otherwise look at intended-actions in SQLite |
 | Policy change ignored | Slack `reload` or restart |

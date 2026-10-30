@@ -343,7 +343,7 @@ A two-project plan is one parent prompt plus an independent review of
 each repository's pull request or blocked reason. Private context stays
 in the session that loaded it. Recovery is cancel on the parent, which
 fails live children, then start a new child on the repository that still
-needs work. Live merge, comment, and close stay unauthorized.
+needs work. Live merge and close stay unauthorized. Live comments require `comment: true`.
 
 ## Preview origin
 
@@ -369,9 +369,10 @@ Operator default: [policy.example.yaml](../policy.example.yaml). Tests that
 need eligible dry-run comments/close load [policy.fixture.yaml](../policy.fixture.yaml).
 
 The current operator starter is the managed policy v2 profile: review, run,
-and scheduled session kinds, with review enabled and comments, close,
+and scheduled session kinds, with review enabled and comments, comment, close,
 implement, and land disabled. `comments` and `close` authorize dry-run
-intended-actions only; rusui does not write either action to GitHub. The
+intended-actions only. `comment: true` authorizes one live GitHub review
+comment per durable result; it stays false in the starter. The
 `implement` field is an opt-in for the accepted agent-publication path and
 requires the configured agent GitHub credential; it is off in the starter.
 `land` remains unauthorized by the current contract and should stay false.
@@ -389,6 +390,7 @@ defaults:
   egress: trusted
   review: true
   comments: false
+  comment: false
   close: false
   implement: false
   land: false
@@ -400,6 +402,7 @@ projects:
         visibility: public
         review: true
         comments: false
+        comment: false
         close: false
         implement: false
         land: false

@@ -18,7 +18,8 @@ rusui is a **self-hosted environment plane**. The product contract is
   read-only. Guests never receive a GitHub credential. Implement turns propose a
   write; the operator applies it as an Action
   ([ADR 0080](docs/decisions/0080-turns-propose-writes-go-through-actions.md)).
-  The plane never comments, closes, or merges.
+  The plane comments only when policy `comment` is true. It never closes
+  or merges.
 - Model CLIs never receive GitHub write credentials.
 - The HTTP server **defaults** to loopback (`127.0.0.1:8080`). That default is
   not a network jail. `-addr 0.0.0.0:8080` listens on every interface with no

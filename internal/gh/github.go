@@ -60,6 +60,12 @@ type Comment struct {
 	Bot       bool
 }
 
+type PostedComment struct {
+	ID      int64
+	Body    string
+	Deleted bool
+}
+
 type Fake struct {
 	Mu            sync.Mutex
 	Items         map[string]*ItemRec // repo#n
@@ -72,6 +78,11 @@ type Fake struct {
 	BlockVerify   chan struct{}
 	FetchCalls    int
 	HookCalls     int
+	Comments      map[string][]PostedComment // repo#n
+	nextCommentID int64
+	CommentErr    error
+	CommentDrop   bool // write, then return uncertain
+	CommentDeny   bool
 }
 
 func NewFake() *Fake {
@@ -79,6 +90,7 @@ func NewFake() *Fake {
 		Items:         map[string]*ItemRec{},
 		DetailFailIDs: map[string]int{},
 		DetailFails:   map[string]int{},
+		Comments:      map[string][]PostedComment{},
 	}
 }
 
@@ -244,6 +256,90 @@ func (f *Fake) GetDelivery(repo, id string) (*DeliveryDetail, error) {
 		}
 	}
 	return nil, fmt.Errorf("no delivery")
+}
+
+// PublishComment implements CommentPublisher against in-memory comments.
+func (f *Fake) PublishComment(repo string, item int, spec CommentSpec) (CommentReceipt, error) {
+	if spec.ActionID == "" || !strings.Contains(spec.Body, ActionMarker(spec.ActionID)) {
+		return CommentReceipt{}, fmt.Errorf("%w: missing action marker", ErrCommentDenied)
+	}
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	if f.CommentDeny {
+		return CommentReceipt{}, ErrCommentDenied
+	}
+	if f.CommentErr != nil {
+		err := f.CommentErr
+		return CommentReceipt{}, err
+	}
+	k := key(repo, item)
+	if f.Comments == nil {
+		f.Comments = map[string][]PostedComment{}
+	}
+	list := f.Comments[k]
+	marker := ActionMarker(spec.ActionID)
+	idx := -1
+	for i, c := range list {
+		if c.Deleted {
+			continue
+		}
+		if strings.Contains(c.Body, marker) || (spec.ID > 0 && c.ID == spec.ID) {
+			idx = i
+			break
+		}
+	}
+	if idx >= 0 {
+		if list[idx].Body == spec.Body {
+			return CommentReceipt{ID: list[idx].ID, Body: list[idx].Body}, nil
+		}
+		list[idx].Body = spec.Body
+		f.Comments[k] = list
+		return CommentReceipt{ID: list[idx].ID, Body: spec.Body}, nil
+	}
+	f.nextCommentID++
+	id := f.nextCommentID
+	list = append(list, PostedComment{ID: id, Body: spec.Body})
+	f.Comments[k] = list
+	if f.CommentDrop {
+		f.CommentDrop = false
+		return CommentReceipt{}, ErrCommentUncertain
+	}
+	return CommentReceipt{ID: id, Body: spec.Body}, nil
+}
+
+func (f *Fake) IssueComments(repo string, item int) []PostedComment {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	src := f.Comments[key(repo, item)]
+	out := make([]PostedComment, 0, len(src))
+	for _, c := range src {
+		if !c.Deleted {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (f *Fake) DeleteComment(repo string, item int, id int64) {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	list := f.Comments[key(repo, item)]
+	for i := range list {
+		if list[i].ID == id {
+			list[i].Deleted = true
+		}
+	}
+}
+
+func (f *Fake) EditComment(repo string, item int, id int64, body string) {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	list := f.Comments[key(repo, item)]
+	for i := range list {
+		if list[i].ID == id && !list[i].Deleted {
+			list[i].Body = body
+		}
+	}
 }
 
 func (f *Fake) Handler(secret string) http.Handler {

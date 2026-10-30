@@ -214,6 +214,13 @@ func main() {
 	default:
 		log.Fatal("RUSUI_PUBLICATION must be agent or plane")
 	}
+	if app, ok := tokens.(*gh.InstallationTokens); ok {
+		if p, ok := eng.Publisher.(*gh.Publisher); ok {
+			eng.Comments = p
+		} else {
+			eng.Comments = &gh.Publisher{Tokens: app, BaseURL: api.BaseURL, HTTP: api.HTTP}
+		}
+	}
 	if u := os.Getenv("RUSUI_CORE_URL"); u != "" {
 		tok := os.Getenv("RUSUI_CORE_TOKEN")
 		if tok == "" {
