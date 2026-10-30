@@ -46,6 +46,11 @@ the [configuration reference](docs/configuration.md).
 
 Contributor gate before a PR: `make all && make test && make validate`.
 
+Tagged releases follow the family policy in
+[tenkai ADR 0040](https://github.com/Sannrox/tenkai/blob/main/docs/decisions/0040-family-versioning-and-release-policy.md).
+Maintainer steps for this repository: [RELEASING.md](RELEASING.md).
+Changelog: [CHANGELOG.md](CHANGELOG.md).
+
 ## Next
 
 | I want to… | Read |

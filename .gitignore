@@ -10,6 +10,7 @@
 /server
 /worker
 _output/
+/dist/
 .version
 coverage.out
 coverage.html
