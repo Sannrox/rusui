@@ -105,6 +105,10 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_access_grants'`).Scan(&grants); err != nil || grants != 1 {
 		t.Fatalf("session_access_grants missing after upgrade: %d %v", grants, err)
 	}
+	var commentIDCol int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('apply_attempts') WHERE name='github_comment_id'`).Scan(&commentIDCol); err != nil || commentIDCol != 1 {
+		t.Fatalf("apply_attempts.github_comment_id missing after upgrade: %d %v", commentIDCol, err)
+	}
 	var execCol int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='execution_mode'`).Scan(&execCol); err != nil || execCol != 1 {
 		t.Fatalf("sessions.execution_mode missing after upgrade: %d %v", execCol, err)

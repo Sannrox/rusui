@@ -47,6 +47,7 @@ type DefaultsYAML struct {
 	Visibility                 string   `yaml:"visibility"`
 	Review                     *bool    `yaml:"review"`
 	Comments                   bool     `yaml:"comments"`
+	Comment                    bool     `yaml:"comment"`
 	Close                      bool     `yaml:"close"`
 	Implement                  bool     `yaml:"implement"`
 	Land                       bool     `yaml:"land"`
@@ -97,6 +98,7 @@ type RepoYAML struct {
 	Visibility                 *string `yaml:"visibility"`
 	Review                     *bool   `yaml:"review"`
 	Comments                   *bool   `yaml:"comments"`
+	Comment                    *bool   `yaml:"comment"`
 	Close                      *bool   `yaml:"close"`
 	Implement                  *bool   `yaml:"implement"`
 	Land                       *bool   `yaml:"land"`
@@ -115,6 +117,7 @@ type Repo struct {
 	Visibility                 string
 	Review                     bool
 	Comments                   bool
+	Comment                    bool
 	Close                      bool
 	Implement                  bool
 	Land                       bool
@@ -292,6 +295,7 @@ func Parse(raw []byte) (*Effective, error) {
 				r.Review = *f.Defaults.Review
 			}
 			r.Comments = f.Defaults.Comments
+			r.Comment = f.Defaults.Comment
 			r.Close = f.Defaults.Close
 			r.Implement = f.Defaults.Implement
 			r.Land = f.Defaults.Land
@@ -303,6 +307,9 @@ func Parse(raw []byte) (*Effective, error) {
 			}
 			if ry.Comments != nil {
 				r.Comments = *ry.Comments
+			}
+			if ry.Comment != nil {
+				r.Comment = *ry.Comment
 			}
 			if ry.Close != nil {
 				r.Close = *ry.Close

@@ -15,12 +15,15 @@ import (
 // fakePulls is a GitHub stand-in for the App publisher: it mints scoped
 // tokens and keeps pull requests by number.
 type fakePulls struct {
-	mu       sync.Mutex
-	mints    []map[string]any
-	pulls    map[int]fakePull
-	heads    map[string]string // branch -> commit
-	calls    []string
-	dropNext bool // create the next pull request but fail the response
+	mu          sync.Mutex
+	mints       []map[string]any
+	pulls       map[int]fakePull
+	heads       map[string]string // branch -> commit
+	calls       []string
+	dropNext    bool // create the next pull request but fail the response
+	comments    map[int64]string
+	nextComment int64
+	dropComment bool
 }
 
 type fakePull struct {
@@ -93,6 +96,37 @@ func (f *fakePulls) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		branch := strings.TrimPrefix(r.URL.Path, "/repos/o/r/git/refs/heads/")
 		f.heads[branch] = sha
 		_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": sha}})
+	case r.Method == http.MethodGet && r.URL.Path == "/repos/o/r/issues/1/comments":
+		out := []map[string]any{}
+		for id, body := range f.comments {
+			out = append(out, map[string]any{"id": id, "body": body})
+		}
+		_ = json.NewEncoder(w).Encode(out)
+	case r.Method == http.MethodPost && r.URL.Path == "/repos/o/r/issues/1/comments":
+		var in map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		if f.comments == nil {
+			f.comments = map[int64]string{}
+		}
+		f.nextComment++
+		id := f.nextComment
+		f.comments[id] = in["body"]
+		if f.dropComment {
+			f.dropComment = false
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "body": in["body"]})
+	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/repos/o/r/issues/comments/"):
+		id, _ := strconv.ParseInt(strings.TrimPrefix(r.URL.Path, "/repos/o/r/issues/comments/"), 10, 64)
+		if _, ok := f.comments[id]; !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var in map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		f.comments[id] = in["body"]
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "body": in["body"]})
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -214,5 +248,63 @@ func TestPublisherPushBaseFastForwardsAndDoesNotOpenPullRequest(t *testing.T) {
 	}
 	if err := p.PushBase("o/r", "../main", "c1"); !errors.Is(err, ErrHeadMismatch) {
 		t.Fatalf("dotdot: %v", err)
+	}
+}
+
+func TestPublishCommentCreatesOnceAndSkipsUnchanged(t *testing.T) {
+	f, p := newFakePublisher(t)
+	spec := CommentSpec{ActionID: "act-1", Body: "hello\n\n" + ActionMarker("act-1")}
+	rec, err := p.PublishComment("o/r", 1, spec)
+	if err != nil || rec.ID != 1 {
+		t.Fatalf("create %+v %v", rec, err)
+	}
+	again, err := p.PublishComment("o/r", 1, spec)
+	if err != nil || again.ID != 1 {
+		t.Fatalf("retry %+v %v", again, err)
+	}
+	if got := f.count("POST /repos/o/r/issues/1/comments"); got != 1 {
+		t.Fatalf("posted %d comments", got)
+	}
+	scope, _ := json.Marshal(f.mints[0])
+	if string(scope) != `{"permissions":{"issues":"write"},"repositories":["r"]}` {
+		t.Fatalf("scope %s", scope)
+	}
+}
+
+func TestPublishCommentRecoversLostCreate(t *testing.T) {
+	f, p := newFakePublisher(t)
+	f.dropComment = true
+	spec := CommentSpec{ActionID: "act-2", Body: "n\n\n" + ActionMarker("act-2")}
+	rec, err := p.PublishComment("o/r", 1, spec)
+	if err != nil || rec.ID != 1 || f.count("POST /repos/o/r/issues/1/comments") != 1 {
+		t.Fatalf("recover %+v %v %v", rec, err, f.calls)
+	}
+}
+
+func TestPublishCommentUpdatesAndRecreatesDeleted(t *testing.T) {
+	_, p := newFakePublisher(t)
+	spec := CommentSpec{ActionID: "act-3", Body: "v1\n\n" + ActionMarker("act-3")}
+	rec, err := p.PublishComment("o/r", 1, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec.Body = "v2\n\n" + ActionMarker("act-3")
+	up, err := p.PublishComment("o/r", 1, spec)
+	if err != nil || up.ID != rec.ID || up.Body != spec.Body {
+		t.Fatalf("update %+v %v", up, err)
+	}
+	f2, p2 := newFakePublisher(t)
+	f2.comments = map[int64]string{}
+	spec.ID = 9
+	rec, err = p2.PublishComment("o/r", 1, spec)
+	if err != nil || rec.ID == 0 {
+		t.Fatalf("recreate %+v %v", rec, err)
+	}
+}
+
+func TestPublishCommentRefusesMissingMarker(t *testing.T) {
+	_, p := newFakePublisher(t)
+	if _, err := p.PublishComment("o/r", 1, CommentSpec{ActionID: "x", Body: "no marker"}); !errors.Is(err, ErrCommentDenied) {
+		t.Fatalf("err %v", err)
 	}
 }

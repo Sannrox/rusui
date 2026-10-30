@@ -2,14 +2,15 @@
 
 `rusui` is a self-hosted environment plane. You write `policy.yaml`. The
 server admits work onto environments, sessions, turns, runners, events,
-and actions; records immutable reviews; and dry-runs apply for comment
-and close. In `implement` sessions the agent proposes a GitHub write; applying it
+and actions; records immutable reviews; dry-runs apply for close; and
+posts live review comments only when policy `comment` is true. In `implement` sessions the agent proposes a GitHub write; applying it
 is a governed Action ([ADR 0080](docs/decisions/0080-turns-propose-writes-go-through-actions.md)).
 A run session may propose a definition draft; applying it is `core.draft`
 ([ADR 0084](docs/decisions/0084-core-draft-actions.md)). Guests never receive a
 core credential.
-`ARCHITECTURE.md` is the product contract. Do not implement live comment,
-close, merge, land, or unnamed GitHub writes. Direction beyond the current
+`ARCHITECTURE.md` is the product contract. Do not implement live close,
+merge, land, or unnamed GitHub writes. Live comments are the `comment`
+policy path only. Direction beyond the current
 contract is proposed in `VISION.md` and `ROADMAP.md`; decisions live in
 `docs/decisions/`. A proposed ADR does not change the contract until it
 is accepted.
@@ -34,7 +35,8 @@ Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
 
 ## Ask first
 
-- Enabling `comments` or `close` as live GitHub writes (they are dry-run).
+- Enabling `comment: true` on a bound repository (live GitHub comments).
+- Enabling `close` as a live GitHub write (it is dry-run).
 - Passing `-addr 0.0.0.0` or `-allow-insecure` in a runbook.
 - Rewriting `ARCHITECTURE.md`, or implementing VISION/ROADMAP as if shipped.
 - Opening, labeling, or merging GitHub issues and pull requests.
@@ -43,7 +45,7 @@ Human contributor path: [CONTRIBUTING.md](CONTRIBUTING.md). Docs map:
 
 ## Never
 
-- Implement live comment, close, merge, land, or unnamed GitHub writes.
+- Implement live close, merge, land, or unnamed GitHub writes.
 - Give a model process a GitHub write token outside an `implement`
   session, or commit secrets, webhook
   secrets, worker secrets, Slack tokens, `*.db`, `.version`, or `_output/`.

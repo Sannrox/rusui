@@ -25,8 +25,9 @@ type PullSpec struct {
 
 // Publisher creates or updates pull requests as the GitHub App with a
 // token scoped to the one repository (ADR 0020, ADR 0044). PushBase
-// fast-forwards the default branch (ADR 0068). It has no merge, close,
-// label, or release call.
+// fast-forwards the default branch (ADR 0068). PublishComment posts one
+// issue comment with issues:write. It has no merge, close, label, or
+// release call.
 type Publisher struct {
 	Tokens  *InstallationTokens
 	BaseURL string

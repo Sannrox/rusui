@@ -47,7 +47,7 @@ projects:
 		t.Fatal(err)
 	}
 	r, ok := e.Repo("Sannrox/rusui")
-	if !ok || r.Project != "rusui" || !r.Review || r.Comments {
+	if !ok || r.Project != "rusui" || !r.Review || r.Comments || r.Comment {
 		t.Fatalf("repo %+v ok=%v", r, ok)
 	}
 	p, ok := e.Project("rusui")
@@ -59,6 +59,31 @@ projects:
 	}
 	if _, err := Parse([]byte("version: 1\nrepos: {}\n")); err == nil {
 		t.Fatal("v1 accepted")
+	}
+}
+
+func TestParseLiveComment(t *testing.T) {
+	raw := []byte(`
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+  comments: true
+  comment: false
+projects:
+  rusui:
+    repos:
+      Sannrox/rusui:
+        visibility: public
+        comment: true
+`)
+	e, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, ok := e.Repo("Sannrox/rusui")
+	if !ok || !r.Comments || !r.Comment {
+		t.Fatalf("live comment %+v ok=%v", r, ok)
 	}
 }
 

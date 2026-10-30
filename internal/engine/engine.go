@@ -54,6 +54,8 @@ type Engine struct {
 	GitHub       gh.Client
 	// Publisher is set only when plane publication is on (ADR 0044).
 	Publisher PullPublisher
+	// Comments posts live review comments when policy comment is on.
+	Comments gh.CommentPublisher
 	// Core is the plane-held definition-draft client (ADR 0084). A nil
 	// Core records core.draft and refuses apply.
 	Core    core.Client
@@ -1334,6 +1336,11 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 		// recorded; the operator needs to know.
 		e.exception(fmt.Sprintf("publish job=%d: wrote %s#%d but Complete rejected the result: %v", jobID, art.Repo, art.Result.PullRequest, err))
 	}
+	if err == nil && art.Repo != "" {
+		if pubErr := e.publishPendingComments(art.Repo, art.Item); pubErr != nil {
+			e.exception(fmt.Sprintf("comment %s#%d: %v", art.Repo, art.Item, pubErr))
+		}
+	}
 	return out, err
 }
 
@@ -1577,7 +1584,7 @@ func eligible(verdict string, a ProposedAction, pol policy.Repo) bool {
 			return false
 		}
 	}
-	if verdict == "propose_comment" && a.Type == "comment" && pol.Comments {
+	if verdict == "propose_comment" && a.Type == "comment" && (pol.Comments || pol.Comment) {
 		return true
 	}
 	return false
@@ -1630,6 +1637,16 @@ func (e *Engine) verifyEvidence(repo string, snap snapshot.Item, a ProposedActio
 }
 
 func (e *Engine) runApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Item, revID int64, art Artifact, a ProposedAction, actionID, class, sentence string) error {
+	var state string
+	switch err := tx.QueryRow(`SELECT state FROM apply_attempts WHERE action_id=?`, actionID).Scan(&state); err {
+	case nil:
+		if state == "succeeded" || state == "cancelled" || state == "failed" {
+			return nil
+		}
+	case sql.ErrNoRows:
+	default:
+		return err
+	}
 	paused, err := e.repoPaused(tx, j.Repo)
 	if err != nil {
 		return err
@@ -1643,7 +1660,7 @@ func (e *Engine) runApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Item, revID 
 		return err
 	}
 	pol, ok := e.PolicySnapshot().Repo(j.Repo)
-	if !ok || (a.Type == "close" && !pol.Close) || (a.Type == "comment" && !pol.Comments) {
+	if !ok || (a.Type == "close" && !pol.Close) || (a.Type == "comment" && !pol.Comments && !pol.Comment) {
 		_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
 		return err
 	}
@@ -1659,13 +1676,29 @@ func (e *Engine) runApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Item, revID 
 		_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
 		return err
 	}
+	live := a.Type == "comment" && pol.Comment
+	if live && (e.Comments == nil || liveCommentBlocked(snap)) {
+		_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
+		return err
+	}
 	body := fmt.Sprintf("dry-run %s %s evidence_class=%s. %s", a.Type, a.ReasonCode, class, sentence)
+	if live {
+		pub, deny := publicCommentBody(a, actionID, class, sentence, art.Publishable)
+		if deny != "" {
+			_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
+			return err
+		}
+		body = pub
+	}
 	var sid sql.NullInt64
 	_ = tx.QueryRow(`SELECT id FROM sessions WHERE kind=? AND repo=? AND item=?`, store.SessionKindReview, j.Repo, j.Item).Scan(&sid)
 	_, err = tx.Exec(`INSERT OR IGNORE INTO actions (action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 		actionID, nullableInt(sid), j.ID, revID, j.Repo, j.Item, a.Type, a.ReasonCode, class, sentence, body)
 	if err != nil {
 		return err
+	}
+	if live {
+		return nil
 	}
 	_, err = tx.Exec(`UPDATE apply_attempts SET state='succeeded' WHERE action_id=?`, actionID)
 	return err
@@ -1708,7 +1741,7 @@ func (e *Engine) ApplyAttempt(repo string, item int) error {
 	if err != nil {
 		return err
 	}
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *sql.Tx) error {
 		j, err := store.GetJobTx(tx, repo, item, "review")
 		if err != nil {
 			return err
@@ -1754,6 +1787,10 @@ func (e *Engine) ApplyAttempt(repo string, item int) error {
 		}
 		return e.maybeEnqueueApplyTx(tx, j, snap, revID, art)
 	})
+	if err != nil {
+		return err
+	}
+	return e.publishPendingComments(repo, item)
 }
 
 func (e *Engine) repoPaused(tx *sql.Tx, repo string) (bool, error) {

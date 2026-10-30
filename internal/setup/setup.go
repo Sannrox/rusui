@@ -624,6 +624,7 @@ defaults:
   egress: trusted
   review: true
   comments: false
+  comment: false
   close: false
   implement: false
   land: false

@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 52
+const CurrentSchema = 53
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -624,8 +624,30 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 53 {
+		if err := migrateV53(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 53); err != nil {
+			return err
+		}
+	}
 	if upgrading {
 		if err := clearUpgradeLock(s.DB); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// migrateV53 records the GitHub comment id for live comment apply (#107).
+func migrateV53(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('apply_attempts') WHERE name='github_comment_id'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := db.Exec(`ALTER TABLE apply_attempts ADD COLUMN github_comment_id INTEGER NOT NULL DEFAULT 0`); err != nil {
 			return err
 		}
 	}

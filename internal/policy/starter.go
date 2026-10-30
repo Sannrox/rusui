@@ -2,6 +2,7 @@ package policy
 
 const starterYAML = `# Operator default (policy v2, keyed by project). Copy to policy.yaml.
 # comments/close authorize v1 dry-run intended-actions, not live GitHub writes.
+# comment authorizes live GitHub comments (default off).
 # Unknown fields fail closed.
 version: 2
 defaults:
@@ -11,6 +12,7 @@ defaults:
   egress: trusted
   review: true
   comments: false
+  comment: false
   close: false
   implement: false
   land: false
@@ -88,6 +90,7 @@ projects:
         visibility: public
         review: true
         comments: false
+        comment: false
         close: false
         implement: false
         land: false

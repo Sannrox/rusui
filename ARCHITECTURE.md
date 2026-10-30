@@ -9,8 +9,9 @@
 Self-hosted environment plane (留守居: the steward who keeps house while
 you are away). You write structured policy. The server admits work onto
 typed records — environment, session, turn, runner, event, action —
-records immutable review revisions, and dry-runs apply for comment and
-close. In `implement` sessions the agent proposes a GitHub write; the operator
+records immutable review revisions, dry-runs apply for close, and
+publishes one live review comment per result when repository `comment`
+is true. In `implement` sessions the agent proposes a GitHub write; the operator
 applies it as a governed Action
 ([ADR 0080](docs/decisions/0080-turns-propose-writes-go-through-actions.md)).
 A run session may propose a definition draft; the operator applies it as
@@ -59,9 +60,10 @@ completeness.
 **Excluded:** microVMs, runner fleet, HA/Postgres, shared-operator
 governance, live fork, desktop, unauthenticated preview, third-party
 identity minting, plugins, disconnected execution, Docker Desktop /
-Podman Desktop guest link, live comment/close/merge/land, the thirty-day
+Podman Desktop guest link, live close/merge/land, the thirty-day
 maintenance observation (that remains a maintenance-release gate), and
-signed portable session bundles.
+signed portable session bundles. Live comments are off in the default
+profile (`comment: false`) and independently gated.
 
 Dropping a supported guarantee needs a later ADR. Details below remain
 the runtime contract; where they conflict with ADR 0086, ADR 0086 wins
@@ -226,7 +228,7 @@ flowchart LR
   Runner -->|process driver + per-turn token| Driver[process driver]
   Driver -->|JSON artifact on stdout| Runner
 
-  Apply[apply executor] -->|dry-run comment/close| GitHub
+  Apply[apply executor] -->|live comment / dry-run close| GitHub
   Runner -->|implement session: git push / gh pr| GitHub
   Server --> Apply
   Server -->|exceptions only| Slack
@@ -276,6 +278,7 @@ projects:
         visibility: public
         review: true
         comments: false
+        comment: false
         close: false
         implement: false
         land: false
@@ -291,9 +294,11 @@ revision is out of scope. Boolean GitHub capabilities default to
 is listed under a project.
 
 `comments` and `close` authorize **simulation**, not live GitHub writes.
-`land` remains unauthorized. `implement` lets pinned implementation tasks
+`comment` (default false) authorizes one live GitHub review comment per
+durable result identity. Overlay cannot enable it. `land` remains
+unauthorized. `implement` lets pinned implementation tasks
 on the repository run as implement sessions that may propose a GitHub
-write (ADR 0080); it does not authorize comment, close, or merge. Tests that need an
+write (ADR 0080); it does not authorize live comment, close, or merge. Tests that need an
 eligible dry-run use `policy.fixture.yaml`.
 `policy.example.yaml` stays the operator default until the parser ports.
 
@@ -330,7 +335,7 @@ off.
 2. **`policy.yaml` baseline** loaded into SQLite as an immutable
    `policy_revision`.
 3. **Durable overlay** in SQLite: `pause` per project or globally.
-   Overlay may only **narrow**. It cannot enable comments, close,
+   Overlay may only **narrow**. It cannot enable comments, comment, close,
    implement, land, a session kind, an egress class, or a permission
    allow-rule if the baseline has them off.
 4. **Slack commands** write overlay or enqueue jobs through the same
@@ -1020,12 +1025,21 @@ in one SQLite transaction:
   require review.claimed_revision == pending_revision
   require review item hash == pending item hash
   if denied or mismatch: cancelled; do not insert intended-action
-  else: insert intended-action once under action_id; succeeded
+  else: insert intended-action once under action_id
+  if comment and policy comment: leave in_flight; GitHub write after commit
+  else: succeeded
 ```
 
 **v1 reconcile** uses the local intended-action record, not GitHub.
-Success means that record exists for `action_id`. GitHub-side outcome
-checks are **v2**.
+Success means that record exists for `action_id`. Close stays v1.
+
+**Live comments** (`comment: true`): after the transaction, the plane
+writes one issue comment whose body carries `<!-- rusui-action:{action_id} -->`.
+A lost response, restart, or deleted comment is reconciled by that
+marker. An unchanged GitHub body is left alone. Protected items
+(`rusui:hold`, `security`, drafts) and stale hashes are cancelled.
+Private-key material is refused; credential-shaped tokens are redacted.
+Repair, close, and merge stay independently disabled.
 
 ## Review quality
 

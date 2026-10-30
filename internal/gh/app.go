@@ -159,6 +159,39 @@ func (a *InstallationTokens) RepoToken(repo string) (string, error) {
 	return tok, nil
 }
 
+// CommentToken mints an installation token limited to one repository
+// with issues write only. Live review comments use it; it is cached
+// separately from RepoToken.
+func (a *InstallationTokens) CommentToken(repo string) (string, error) {
+	_, name, err := splitRepo(repo)
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	if a.Now != nil {
+		now = a.Now()
+	}
+	key := "comment:" + repo
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if c, ok := a.repos[key]; ok && now.Add(time.Minute).Before(c.expiry) {
+		return c.token, nil
+	}
+	body, _ := json.Marshal(map[string]any{
+		"repositories": []string{name},
+		"permissions":  map[string]string{"issues": "write"},
+	})
+	tok, exp, err := a.mint(now, body)
+	if err != nil {
+		return "", err
+	}
+	if a.repos == nil {
+		a.repos = map[string]cachedToken{}
+	}
+	a.repos[key] = cachedToken{tok, exp}
+	return tok, nil
+}
+
 func (a *InstallationTokens) mint(now time.Time, scope []byte) (string, time.Time, error) {
 	jwt, err := appJWT(a.AppID, a.Key, now)
 	if err != nil {
