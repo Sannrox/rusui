@@ -1,6 +1,6 @@
 # ADR 0045: Local unattended promotion is deferred
 
-- Status: Accepted
+- Status: Accepted; amended by 0086
 - Date: 2026-09-29
 - Amends: none. [ADR 0016](0016-local-interactive-runtime.md) stands:
   local is experimental, default-off, human-driven.
@@ -10,8 +10,9 @@
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0023](0023-p8-pilot-narrow.md) (P8 is narrow; it does not
   satisfy a pass gate),
-  [#141](https://github.com/Sannrox/rusui/issues/141) (1.0 freeze still
-  requires a passing unattended cohort),
+  [#141](https://github.com/Sannrox/rusui/issues/141)
+  ([ADR 0086](0086-supported-1.0-core-contract.md) excludes local from
+  the 1.0 unattended claim),
   [docs/proofs/186-unified-workflow-matrix.md](../proofs/186-unified-workflow-matrix.md),
   [docs/proofs/186-unified-workflow-results.md](../proofs/186-unified-workflow-results.md).
 - Discussion: none. GitHub Discussions are disabled. Merging with this
@@ -91,7 +92,8 @@ make them one.
   `local_runtime`. Rusui never stores PTY bytes.
 - Managed: the supported unattended path, within ADR 0023's recorded
   limits.
-- #141 must not treat local as a supported 1.0 unattended claim.
+- #141 / [ADR 0086](0086-supported-1.0-core-contract.md) must not treat
+  local as a supported 1.0 unattended claim.
 
 No implementation follow-up is authorized. This ADR does not rewrite
 [ARCHITECTURE.md](../../ARCHITECTURE.md).

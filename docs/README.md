@@ -55,6 +55,8 @@ Use these for precise commands, fields, interfaces, and source layout.
 Read these for rationale, boundaries, direction, and the evidence behind claims.
 
 - [Product contract](../ARCHITECTURE.md) and [noun glossary](../CONTEXT.md).
+  The 1.0 freeze is
+  [ADR 0086](decisions/0086-supported-1.0-core-contract.md).
 - [Vision](../VISION.md) and [roadmap](../ROADMAP.md) describe proposed or
   sequenced work; they do not change the current contract.
 - [Architecture decisions](decisions/README.md), including their status and

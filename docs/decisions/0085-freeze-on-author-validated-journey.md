@@ -1,13 +1,15 @@
 # ADR 0085: The stable-core freeze starts on the author-validated journey
 
-- Status: Accepted
+- Status: Accepted; amended by 0086
 - Date: 2026-10-28
 - Amends: [ADR 0046](0046-workspace-first-sequence.md) decision 2 (the
   independent self-hosting proof as a freeze prerequisite). Every other
   part of ADR 0046 stands.
 - Resolves: [#653](https://github.com/Sannrox/rusui/issues/653).
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
-  [ROADMAP.md](../../ROADMAP.md).
+  [ROADMAP.md](../../ROADMAP.md),
+  [ADR 0086](0086-supported-1.0-core-contract.md) (the freeze this
+  decision authorized).
 - Discussion: none. The owner decided this on 2026-10-28; merging with this
   status is the acceptance act.
 
