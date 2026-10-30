@@ -59,6 +59,11 @@ session's environment and refuses prompts until `rusui unarchive SESSION`.
 database offline and prints its inventory. Do not open `rusui.db` while the
 plane holds it.
 `rusui diagnostics` writes a redacted bundle (`diagnostics.json`).
+`rusui receipt [-url URL] [-token TOKEN] [-format md|json] [-out DIR] SESSION_ID`
+writes a versioned JSON and Markdown copy of that session's latest completed
+review. Default stdout is Markdown for pasting onto a pull request. `-out DIR`
+writes `r{id}.json` and `r{id}.md`. The files are regenerated from SQLite; they
+are not recovery inputs and do not authorize GitHub writes. They are unsigned.
 `rusui compat-conformance [-dir DIR]` runs the 1.0 compatibility checks
 and prints JSON bound to this binary's commit and schema.
 Upgrade procedure: [upgrade.md](upgrade.md).
@@ -226,7 +231,7 @@ Run a CLI proxy on loopback with its own client key; rusui does not ship
 or manage it. Whether a subscription may be used this way for automated
 work is set by the provider's terms, not by rusui.
 
-With plane TLS, every client of an `https` plane URL (`rusui-runner`, `rusui run`, `rusui review`, `sessions`, `logs`, `approvals`, `approve`, `prompt`, `drain`) trusts `RUSUI_PLANE_CA`.
+With plane TLS, every client of an `https` plane URL (`rusui-runner`, `rusui run`, `rusui review`, `rusui receipt`, `sessions`, `logs`, `approvals`, `approve`, `prompt`, `drain`) trusts `RUSUI_PLANE_CA`.
 
 GitHub token: read-only. Do not give it to the runner or the model.
 Guest `XAI_API_KEY` and git HTTP auth are the guest grant. Implement
@@ -271,6 +276,7 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/sessions/{id}/turns/{tid}/replay` | operator or worker token; rebuild a Shikigami schema-v1 manifest and re-run the turn against the recorded snapshot (optional JSON `snapshot` override); external effects are denied; reports object-revision divergence |
 | `GET` | `/sessions/{id}/terminal` | operator, worker, or turn token; current environment terminal output; not the transcript |
 | `GET` | `/sessions/{id}/envlog` | operator token; last pre-clone, pre-setup, setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`pre-clone`/`pre-setup`/`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
+| `GET` | `/sessions/{id}/receipt` | operator or worker token; versioned JSON review receipt (`rusui receipt`); Markdown when `Accept: text/markdown` or `?format=md`; 404 unknown session or no completed review |
 | `POST` | `/sessions/{id}/workspace` | operator token; multipart `file` plus `path` query; 32 MiB cap; workspace-relative only |
 | `GET` | `/sessions/{id}?include=receipts[&receipt_after_id={id}][&process_receipt_after_id={id}]` | operator or worker token; up to 100 environment and 100 local process receipts in ID order; follow `environment_receipts_next_after_id` and `process_receipts_next_after_id` when present |
 | `GET` | `/sessions/{id}?view=review-status&turn_id={turn}` | operator or worker token; compact turn state and revisions for polling |

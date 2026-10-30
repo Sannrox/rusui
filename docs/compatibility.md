@@ -22,6 +22,7 @@ and the plane returns 409 when they differ. Dev builds that report
 | Runner protocol | hello / claim / heartbeat / complete / fail | runner commit != plane commit |
 | Restore | `rusui restore -db <copy>` | missing or corrupt file |
 | Diagnostics export | redacted `diagnostics.json` | using the bundle as recovery input |
+| Review receipt export | JSON+Markdown schema 1 (`rusui receipt`) | using the files as recovery input; signed bundles |
 | Signed portable session bundles | excluded | not defined |
 | Postgres / HA plane | excluded | not a 1.0 store |
 
@@ -48,8 +49,9 @@ live leases, drops grants, expires managed guests, and rotates the plane
 id. Guest handles and live credentials are not portable.
 
 `rusui diagnostics` is an operator bundle with secrets redacted. Optional
-`records/` JSON and Markdown files are regenerated exports, not recovery
-inputs.
+`records/` JSON and Markdown files from `rusui receipt SESSION_ID`
+(`GET /sessions/{id}/receipt`) are regenerated exports, not recovery
+inputs. They are unsigned.
 
 ## Reproduce
 

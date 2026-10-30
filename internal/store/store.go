@@ -617,13 +617,31 @@ func LatestReviewJSON(s *Store, jobID int64) (string, error) {
 	return p, err
 }
 
+// ReviewRevision is one immutable stored review row.
+type ReviewRevision struct {
+	ID              int64
+	JobID           int64
+	ClaimedRevision int
+	ItemHash        string
+	MainSHA         string
+	Payload         string
+}
+
 // LatestReviewForSession returns the latest immutable review for a session.
 func LatestReviewForSession(s *Store, sessionID int64) (revisionID int64, payload string, ok bool, err error) {
-	err = s.DB.QueryRow(`SELECT r.id, r.payload FROM review_revisions r JOIN turns t ON t.id=r.job_id WHERE t.session_id=? ORDER BY r.id DESC LIMIT 1`, sessionID).Scan(&revisionID, &payload)
+	rev, ok, err := LatestReviewRecord(s, sessionID)
+	return rev.ID, rev.Payload, ok, err
+}
+
+// LatestReviewRecord returns the latest immutable review row for a session.
+func LatestReviewRecord(s *Store, sessionID int64) (ReviewRevision, bool, error) {
+	var r ReviewRevision
+	err := s.DB.QueryRow(`SELECT r.id, r.job_id, r.claimed_revision, r.item_hash, r.main_sha, r.payload FROM review_revisions r JOIN turns t ON t.id=r.job_id WHERE t.session_id=? ORDER BY r.id DESC LIMIT 1`, sessionID).Scan(
+		&r.ID, &r.JobID, &r.ClaimedRevision, &r.ItemHash, &r.MainSHA, &r.Payload)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, "", false, nil
+		return ReviewRevision{}, false, nil
 	}
-	return revisionID, payload, err == nil, err
+	return r, err == nil, err
 }
 
 // SessionCancelled reports whether a session is cancelled now: a local

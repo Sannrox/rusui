@@ -814,8 +814,9 @@ environment for that turn. Session prompt data still follows retention
 Canonical review JSON lives in SQLite on the `review_revisions` row,
 committed in the same transaction as the completion receipt and job
 transition. Optional `records/.../r{id}.json` and `.md` files are
-**exports** regenerated from SQLite. They are not the executor input
-and are not required for recovery.
+**exports** regenerated from SQLite (`rusui receipt`, `GET /sessions/{id}/receipt`).
+They are not the executor input, are not required for recovery, and are
+unsigned.
 
 Each accepted `/complete` inserts an **immutable** review revision.
 Apply stores `review_revision_id` and never reads a superseded row.
