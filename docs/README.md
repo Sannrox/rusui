@@ -48,6 +48,7 @@ Use these for precise commands, fields, interfaces, and source layout.
 - [Configuration, CLI flags, environment, HTTP, policy, and Slack](configuration.md).
 - [Compatibility: versions, upgrades, restore, and conformance](compatibility.md).
 - [Build targets, toolchain, layout, and CI](build-reference.md).
+- [Maintainer release steps](../RELEASING.md) and [changelog](../CHANGELOG.md).
 - [ACP editor shim](acp-editor.md).
 - [Build and runtime image internals](../build/README.md).
 - [Maintenance evaluation corpus and measures](../eval/set.md).

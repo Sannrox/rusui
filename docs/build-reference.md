@@ -21,7 +21,7 @@ sessions require the container topology
 | --- | --- |
 | `make all` | Host-platform binaries into `_output/local/bin/$(go env GOOS)/$(go env GOARCH)/` |
 | `make test` | Unit tests (`COVER=1` writes coverage HTML) |
-| `make validate` | documentation links and reachability, golangci-lint, govulncheck, go-fix, shellcheck, workflow skills |
+| `make validate` | documentation links and reachability, golangci-lint, govulncheck, go-fix, shellcheck, workflow skills, release scripts |
 | `make update` | Apply go-fix modernizations |
 | `make release-images` | Docker build image, linux binaries, `rusui` / `rusui-runner` runtime images |
 | `make docker-clean` | Remove docker build containers/tags and `_output` |
@@ -51,3 +51,10 @@ On push to `main` and on pull requests, GitHub Actions runs `make all`,
 `make test`, `make validate`, and `make release-images`. Branch protection
 requires a pull request to `main` and the `build` and `images` checks.
 Do not push commits to `main` directly.
+
+A signed annotated `v*` tag runs [`.github/workflows/release.yml`](../.github/workflows/release.yml):
+tag verification against `VERSION`, packaging, SBOM, provenance, and a
+GitHub Release whose notes come from [CHANGELOG.md](../CHANGELOG.md).
+Pull requests and dry runs never attest or publish. Images are version-tagged
+only; there is no `latest` tag. Agents never push `v*` tags; see
+[RELEASING.md](../RELEASING.md).

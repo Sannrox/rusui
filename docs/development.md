@@ -42,6 +42,7 @@ Bump `build/build-image/VERSION` after changing the toolchain Dockerfile.
 `BUILD_PLATFORMS` and wraps each in `build/server-image/Dockerfile`.
 
 Tags look like `rusui-arm64:v0.0.0-dev_<sha>` until a `v*` git tag exists.
+A release image uses the version tag only. There is no `latest` tag.
 
 ```bash
 make release-images
