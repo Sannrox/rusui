@@ -33,9 +33,12 @@ type Client struct {
 	Repo      string // legacy single-repository configuration
 	Repos     []string
 	Name      string
-	HTTP      *http.Client
-	Exec      StdioExec
-	nextRepo  int
+	// Commit is the runner binary's git commit. The plane refuses a
+	// hello from a different commit when both sides know theirs.
+	Commit   string
+	HTTP     *http.Client
+	Exec     StdioExec
+	nextRepo int
 }
 
 // StdioExec runs a command inside a container handle with ACP stdio.
@@ -146,7 +149,7 @@ func (c *Client) http() *http.Client {
 }
 
 func (c *Client) Hello() error {
-	body, _ := json.Marshal(map[string]string{"name": c.Name})
+	body, _ := json.Marshal(map[string]string{"name": c.Name, "commit": c.Commit})
 	req, err := http.NewRequest("POST", c.Base+"/runners/hello", bytes.NewReader(body))
 	if err != nil {
 		return err

@@ -49,6 +49,11 @@ Slack `resume [project]` does the same.
    release guests and rotate the plane id, keep receipts and approval
    **records**), then start on that file and `rusui resume`.
 
+A schema newer than this binary, or an interrupted upgrade
+(`schema_upgrade_lock`), fails closed. Restore the copy; do not retry
+start on the half-upgraded file. Versions and checks:
+[compatibility.md](compatibility.md).
+
 Durable session, approval, budget, and receipt rows stay in SQLite across
 a successful upgrade. Live grants do not. Schema v50 defaults existing
 sessions to short-lived retention (72h from `created_at`); expiry

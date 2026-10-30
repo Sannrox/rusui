@@ -39,7 +39,9 @@ CLI and HTTP+SSE (`run`, `read`/`read -follow`, `attach`, `prompt`,
 narrowing overlay; pause/halt/cancel; governed implement Actions with
 human merge; receipts in SQLite; session retention short or indefinite;
 environment until archive; versioned migrations; copy-and-`rusui restore`
-backup (live leases and grants do not survive).
+backup (live leases and grants do not survive). Versions, failure
+behavior, and conformance checks:
+[docs/compatibility.md](docs/compatibility.md).
 
 **Author-validated only:** install, disconnect/reconnect, upgrade, and
 restore as run in U8. Independent self-hosting is the 1.0 publish gate

@@ -43,6 +43,7 @@ Use these when you already have a task to complete.
 Use these for precise commands, fields, interfaces, and source layout.
 
 - [Configuration, CLI flags, environment, HTTP, policy, and Slack](configuration.md).
+- [Compatibility: versions, upgrades, restore, and conformance](compatibility.md).
 - [Build targets, toolchain, layout, and CI](build-reference.md).
 - [ACP editor shim](acp-editor.md).
 - [Build and runtime image internals](../build/README.md).
@@ -63,6 +64,8 @@ Read these for rationale, boundaries, direction, and the evidence behind claims.
   superseded records.
 - [Supported unattended topology](supported-topology.md) explains what the
   current evidence supports and its limits.
+- [Compatibility](compatibility.md) maps the 1.0 versions to executable
+  checks and the restore path.
 - [Proof and research records](proofs/README.md) explain what was observed
   at a recorded revision; they are historical evidence, not current setup steps.
 - [Timed macOS walkthrough record](proofs/operator-timed-macos-walkthrough.md)

@@ -68,7 +68,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "need at least one -repo or -project, and -driver or -acp")
 		os.Exit(1)
 	}
-	c := &runner.Client{Base: *base, Bootstrap: *token, Repos: append([]string(nil), repos...), Name: *name}
+	c := &runner.Client{Base: *base, Bootstrap: *token, Repos: append([]string(nil), repos...), Name: *name, Commit: GitCommit}
 	if strings.HasPrefix(*base, "https://") {
 		if *caFile == "" {
 			fmt.Fprintln(os.Stderr, "need -ca or RUSUI_PLANE_CA for an https plane URL")

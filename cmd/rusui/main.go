@@ -55,6 +55,9 @@ func main() {
 		case "acp-conformance":
 			acpConformanceCLI(os.Args[2:])
 			return
+		case "compat-conformance":
+			compatConformanceCLI(os.Args[2:])
+			return
 		case "sessions":
 			sessionsCLI(os.Args[2:])
 			return
@@ -288,6 +291,7 @@ func main() {
 		NoSessionTrailer:  os.Getenv("RUSUI_DISABLE_SESSION_TRAILER") == "1",
 		GuestHTTPSOnly:    tlsCert != "" && tlsKey != "",
 		PreviewBase:       os.Getenv("RUSUI_PREVIEW_BASE"),
+		GitCommit:         GitCommit,
 	}
 	sessionURL, err := server.ParseSessionURL(os.Getenv("RUSUI_SESSION_URL"))
 	if err != nil {

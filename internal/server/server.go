@@ -72,6 +72,9 @@ type Server struct {
 	DiagnoseEnv         func(string) string
 	DiagnoseHTTP        *http.Client
 	PreviewBase         string // different origin from the plane, e.g. http://127.0.0.1:9xxx
+	// GitCommit is this plane binary's git commit. A runner hello with a
+	// different known commit is refused (ADR 0086 version tuple).
+	GitCommit string
 
 	termMu sync.Mutex
 	terms  map[int64]*termSess
@@ -188,17 +191,34 @@ func (s *Server) runnerHello(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name string `json:"name"`
+		Name   string `json:"name"`
+		Commit string `json:"commit"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	if req.Name == "" {
 		req.Name = store.LocalRunnerName
+	}
+	if err := runnerCommitMatch(s.GitCommit, req.Commit); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
 	}
 	if err := store.TouchRunner(s.Eng.Store, req.Name, s.Eng.Clock.Now()); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
 	w.WriteHeader(200)
+}
+
+// runnerCommitMatch enforces the 1.0 version tuple when both binaries
+// know their git commit. Dev builds ("unknown" or empty) skip the check.
+func runnerCommitMatch(plane, runner string) error {
+	if plane == "" || plane == "unknown" || runner == "" || runner == "unknown" {
+		return nil
+	}
+	if plane != runner {
+		return fmt.Errorf("runner commit %s does not match plane %s", runner, plane)
+	}
+	return nil
 }
 
 func (s *Server) githubHook(w http.ResponseWriter, r *http.Request) {

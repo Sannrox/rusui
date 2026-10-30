@@ -171,3 +171,78 @@ func TestRestoreReleasesGuestHandlesAndPlaneIdentity(t *testing.T) {
 		t.Fatalf("plane id %q (source %q) %v", restoredPlane, sourcePlane, err)
 	}
 }
+
+func TestRestorePreservesIdentitiesRetentionAndReceipts(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "rusui.db")
+	st, err := Open(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sid, tid int64
+	err = st.Tx(func(tx *sql.Tx) error {
+		id, _, err := InsertRunSessionTx(tx, "test", "example/test-repo", "keep me")
+		if err != nil {
+			return err
+		}
+		sid = id
+		return SetSessionRetentionTx(tx, sid, RetentionIndefinite, nil)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DB.QueryRow(`SELECT id FROM turns WHERE session_id=?`, sid).Scan(&tid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO receipts (job_id, lease_generation, claimed_revision, kind, payload) VALUES (?, 1, 1, 'complete', '{"kept":true}')`, tid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO policy_revisions (hash, payload) VALUES ('pol-keep', ?)`, "version: 2\nprojects: {}\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := PutApprovalDecision(st, "act-keep", "allow"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO daily_review_counts (repo, day, count) VALUES ('example/test-repo', '2026-01-02', 4)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "restore.db")
+	b, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dst, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st2, _, err := Restore(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st2.Close() })
+	sess, err := GetSession(st2, sid)
+	if err != nil || sess.Prompt != "keep me" || sess.ID != sid {
+		t.Fatalf("session %+v %v", sess, err)
+	}
+	if sess.Retention != RetentionIndefinite {
+		t.Fatalf("retention %q", sess.Retention)
+	}
+	n, err := CountReceipts(st2, tid)
+	if err != nil || n != 1 {
+		t.Fatalf("receipts %d %v", n, err)
+	}
+	payload, err := LatestPolicyPayload(st2)
+	if err != nil || string(payload) != "version: 2\nprojects: {}\n" {
+		t.Fatalf("policy %q %v", payload, err)
+	}
+	dec, found, err := GetApprovalDecision(st2, "act-keep")
+	if err != nil || !found || dec != "allow" {
+		t.Fatalf("approval %s found=%v %v", dec, found, err)
+	}
+	var budget int
+	if err := st2.DB.QueryRow(`SELECT count FROM daily_review_counts WHERE repo=?`, "example/test-repo").Scan(&budget); err != nil || budget != 4 {
+		t.Fatalf("budget %d %v", budget, err)
+	}
+}
