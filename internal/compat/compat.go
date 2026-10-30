@@ -52,6 +52,7 @@ func Surfaces() []Surface {
 		{Name: "runner-protocol", Version: "hello/claim/heartbeat/complete/fail", Class: ClassSupported, Positive: "TestRunnerHelloAcceptsMatchingAndUnknownCommits", Negative: "TestRunnerHelloRejectsMismatchedCommit"},
 		{Name: "restore", Version: "rusui restore -db", Class: ClassSupported, Positive: "TestRestorePreservesIdentitiesRetentionAndReceipts", Negative: "TestRestoreMissingAndCorruptArtifacts"},
 		{Name: "diagnostics-export", Version: "redacted-bundle", Class: ClassSupported, Positive: "TestWriteBundleRedactsSecretsAndRecordsIdentity", Negative: "TestWriteBundleRedactsOperatorTokenAndModelUpstreamUserinfo"},
+		{Name: "review-receipt-export", Version: "json-md-v1", Class: ClassSupported, Positive: "TestExportReceiptFromStoredReview", Negative: "TestExportReceiptIsNotRecoveryInput"},
 		{Name: "signed-portable-session-bundle", Version: "", Class: ClassExcluded, Positive: "", Negative: ""},
 		{Name: "postgres", Version: "", Class: ClassExcluded, Positive: "", Negative: ""},
 		{Name: "ha-plane", Version: "", Class: ClassExcluded, Positive: "", Negative: ""},

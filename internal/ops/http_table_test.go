@@ -23,6 +23,9 @@ func TestConfigurationHTTPTableDocumentsPostReviews(t *testing.T) {
 		t.Fatal("docs/configuration.md missing ## HTTP")
 	}
 	table, _, _ := strings.Cut(rest, "## ")
+	if !strings.Contains(table, "`GET` | `/sessions/{id}/receipt` | operator or worker token") {
+		t.Fatal("HTTP table missing GET /sessions/{id}/receipt with operator or worker auth")
+	}
 	if !strings.Contains(table, "`POST` | `/reviews` | operator or worker token") {
 		t.Fatal("HTTP table missing POST /reviews with operator or worker auth")
 	}

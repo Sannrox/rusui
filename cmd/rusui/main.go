@@ -49,6 +49,9 @@ func main() {
 		case "review":
 			reviewCLI(os.Args[2:])
 			return
+		case "receipt":
+			receiptCLI(os.Args[2:])
+			return
 		case "acp":
 			acpCLI(os.Args[2:])
 			return

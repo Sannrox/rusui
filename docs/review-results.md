@@ -34,3 +34,11 @@ dry-run comment. Below 20 it says `incomplete`; otherwise `fail` or
 `shadow_pass`, which covers the shadow thresholds only. Held-out cases, replay
 duplicates, and private-context leaks are listed as `not_measured`;
 `rusui eval` covers the first two. Promotion stays a `policy.yaml` edit.
+
+## Review receipt export
+
+`rusui receipt SESSION_ID` prints a Markdown summary of that session's latest
+completed review. `-format json` prints the versioned receipt; `-out DIR`
+writes `r{id}.json` and `r{id}.md`. `GET /sessions/{id}/receipt` is the same
+export. SQLite remains authoritative. The copy is unsigned and is not a
+recovery input.
