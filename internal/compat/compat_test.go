@@ -33,7 +33,7 @@ func TestSurfacesCoverContractAndStayOptionalWhenExcluded(t *testing.T) {
 			t.Fatalf("%s unknown class %s", s.Name, s.Class)
 		}
 	}
-	for _, name := range []string{"sqlite-schema", "policy", "operator-api", "runner-protocol", "restore", "diagnostics-export", "postgres", "ha-plane"} {
+	for _, name := range []string{"sqlite-schema", "policy", "operator-api", "independent-client", "runner-protocol", "restore", "diagnostics-export", "postgres", "ha-plane"} {
 		if _, ok := seen[name]; !ok {
 			t.Fatalf("missing surface %s", name)
 		}

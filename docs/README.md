@@ -16,6 +16,9 @@ Follow an experience from start to finish, with expected observations.
 
 - [Your first rusui session](tutorial.md) runs a disposable sample without
   GitHub, Slack, or model credentials; it also has an optional loopback exercise.
+- [Independent operator client](independent-client.md) dispatches, follows,
+  approves, and reads receipts against the public HTTP+SSE API without
+  importing internal packages.
 
 ## Do: how-to guides
 
@@ -66,6 +69,8 @@ Read these for rationale, boundaries, direction, and the evidence behind claims.
   current evidence supports and its limits.
 - [Compatibility](compatibility.md) maps the 1.0 versions to executable
   checks and the restore path.
+- [Independent operator client](independent-client.md) is the C4 evidence
+  that a contributor can integrate from the published contract.
 - [Proof and research records](proofs/README.md) explain what was observed
   at a recorded revision; they are historical evidence, not current setup steps.
 - [Timed macOS walkthrough record](proofs/operator-timed-macos-walkthrough.md)

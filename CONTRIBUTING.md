@@ -30,7 +30,10 @@ ADR does not change the contract until `ARCHITECTURE.md` is rewritten.
 
 For a Go contributor, the fake ACP conformance case is
 [`TestConformanceFakeAgent`](internal/acp/client_test.go); run it with
-`go test ./internal/acp -run '^TestConformanceFakeAgent$'`. The maintenance
+`go test ./internal/acp -run '^TestConformanceFakeAgent$'`. The independent
+HTTP+SSE client is
+[`examples/independent-client`](examples/independent-client/); the scenario
+is [docs/independent-client.md](docs/independent-client.md). The maintenance
 evaluation corpus is described in [`eval/set.md`](eval/set.md); `rusui eval`
 replays it. [docs/proofs/t2-maintenance-eval.md](docs/proofs/t2-maintenance-eval.md)
 is the sanitized project record. Its results are project evidence, not a
