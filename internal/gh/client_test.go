@@ -34,9 +34,9 @@ func TestParseHookIDs(t *testing.T) {
 }
 
 func TestParseLinked(t *testing.T) {
-	body := "see #2 and #2, also other/repo#5 and example/test-repo#3, it&#39;s not #4&#39; done"
-	got := parseLinked(body, 1)
-	if len(got) != 2 || got[0] != 2 || got[1] != 4 {
+	body := "see #2 and #2, also other/repo#5 and example/test-repo#3, it&#39;s not #4&#39; done, https://github.com/example/test-repo/issues/6 and github.com/other/repo/pull/7"
+	got := LinkedSameRepo(body, "example/test-repo", 1)
+	if len(got) != 4 || got[0] != 2 || got[1] != 3 || got[2] != 4 || got[3] != 6 {
 		t.Fatalf("linked %v", got)
 	}
 }
@@ -59,7 +59,9 @@ func TestAPIGetItemIssueAndPR(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"number": 1, "title": "bug", "body": "see #2 and #2", "state": "open",
 			"created_at": "2025-01-01T00:00:00Z", "updated_at": "2026-01-01T00:00:00Z",
-			"labels": []map[string]string{{"name": "bug"}},
+			"labels":             []map[string]string{{"name": "bug"}},
+			"assignees":          []map[string]string{{"login": "alice", "type": "User"}},
+			"author_association": "OWNER",
 		})
 	})
 	mux.HandleFunc("/repos/example/test-repo/issues/1/comments", func(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +112,9 @@ func TestAPIGetItemIssueAndPR(t *testing.T) {
 	}
 	if len(it.LinkedSameRepoItems) != 1 || it.LinkedSameRepoItems[0] != 2 {
 		t.Fatalf("linked %v", it.LinkedSameRepoItems)
+	}
+	if it.AuthorAssociation != "OWNER" || len(it.Assignees) != 1 || it.Assignees[0] != "alice" {
+		t.Fatalf("assignees %+v", it)
 	}
 
 	pr, err := api.GetItem("example/test-repo", 7, "issue")
@@ -260,6 +265,43 @@ func TestAPIListOpenItems(t *testing.T) {
 	}
 }
 
+func TestAPIListOpenItemsPages(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/example/test-repo", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"default_branch": "main"})
+	})
+	mux.HandleFunc("/repos/example/test-repo/issues", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") != "2" {
+			next := "http://" + r.Host + r.URL.Path + "?state=open&per_page=100&page=2"
+			w.Header().Set("Link", `<`+next+`>; rel="next"`)
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"number": 1, "state": "open", "body": "issue", "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z"},
+			})
+			return
+		}
+		pr := map[string]string{"url": "https://example/pulls"}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"number": 9, "state": "open", "body": "Fixes example/test-repo#1", "pull_request": pr, "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z"},
+		})
+	})
+	mux.HandleFunc("/repos/example/test-repo/pulls", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"number": 9, "draft": false, "base": map[string]string{"ref": "main"}, "body": "Fixes example/test-repo#1"},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	api := NewAPI("tok", nil)
+	api.BaseURL = srv.URL
+	list, err := api.ListOpenItems("example/test-repo")
+	if err != nil || len(list) != 2 {
+		t.Fatalf("%v %v", list, err)
+	}
+	if list[1].Item != 9 || list[1].ItemKind != "pull" || len(list[1].LinkedSameRepoItems) != 1 || list[1].LinkedSameRepoItems[0] != 1 {
+		t.Fatalf("%+v", list[1])
+	}
+}
+
 func TestAPIErrorStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(403)
@@ -271,5 +313,44 @@ func TestAPIErrorStatus(t *testing.T) {
 	_, err := api.GetItem("example/test-repo", 1, "issue")
 	if err == nil || !strings.Contains(err.Error(), "403") {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestAPIListHeads(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/example/test-repo/git/matching-refs/heads", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]string{
+			{"ref": "refs/heads/main"},
+			{"ref": "refs/heads/feat/108"},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	api := NewAPI("tok", nil)
+	api.BaseURL = srv.URL
+	heads, err := api.ListHeads("example/test-repo")
+	if err != nil || len(heads) != 2 || heads[0] != "main" || heads[1] != "feat/108" {
+		t.Fatalf("%v %v", heads, err)
+	}
+}
+
+func TestAPIListHeadsPages(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/example/test-repo/git/matching-refs/heads", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") != "2" {
+			next := "http://" + r.Host + r.URL.Path + "?per_page=100&page=2"
+			w.Header().Set("Link", `<`+next+`>; rel="next"`)
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"ref": "refs/heads/main"}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]string{{"ref": "refs/heads/feat/1"}})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	api := NewAPI("tok", nil)
+	api.BaseURL = srv.URL
+	heads, err := api.ListHeads("example/test-repo")
+	if err != nil || len(heads) != 2 || heads[0] != "main" || heads[1] != "feat/1" {
+		t.Fatalf("%v %v", heads, err)
 	}
 }

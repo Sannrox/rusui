@@ -218,7 +218,7 @@ func commentGate(held *Metrics) Gate {
 
 func repairGate() Gate {
 	return Gate{Class: "repair", Status: GateIncomplete, Requirements: []Requirement{
-		{Name: "plane-owned publication", Status: GateIncomplete, Detail: "ADR 0038 D4: not implemented"},
+		{Name: "plane-owned publication", Status: GatePass, Detail: "ADR 0044 Complete-path publish; ADR 0080 ApplySessionWrite"},
 		{Name: "held-out eligibility and 10-attempt cohort", Status: GateIncomplete, Detail: "not measured by replay"},
 	}}
 }

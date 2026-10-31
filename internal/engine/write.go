@@ -117,6 +117,9 @@ func (e *Engine) ApplySessionWrite(sessionID int64) (WriteApplyReceipt, error) {
 }
 
 func (e *Engine) executePublication(sess *store.Session, task *store.Task, ask WriteProposal) (WriteApplyReceipt, error) {
+	if err := e.recheckRepair(task, ask); err != nil {
+		return WriteApplyReceipt{}, err
+	}
 	base := strings.TrimPrefix(task.Ref, "refs/heads/")
 	if e.projectShip(sess.Project) == policy.ShipPushBase {
 		if err := e.Publisher.PushBase(task.Repo, base, ask.CandidateSHA); err != nil {

@@ -10,7 +10,10 @@ defaults:
   close: false
   implement: false
   land: false
+  repair: ""
+  protected_labels: [rusui:hold, security]
   max_reviews_per_repo_per_utc_day: 50
+  max_repairs_per_repo_per_utc_day: 1
 projects:
   rusui:
     repos:
@@ -22,3 +25,4 @@ projects:
         close: false
         implement: false
         land: false
+        repair: ""

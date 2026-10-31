@@ -69,7 +69,7 @@ asking for a close (E11) does not pass the stale check.
 |---|---|---|
 | advisory | incomplete | no held-out split in the repository; the rollback rule reads the last 20 held-out dispositions |
 | comment | incomplete | no held-out split in the repository; live shadow results and leak checks are not measured by replay |
-| repair | incomplete | plane-owned publication (ADR 0038 D4) does not exist |
+| repair | incomplete | held-out eligibility and 10-attempt cohort are not measured by replay |
 | close, merge | unauthorized | not promotable under ADR 0038 |
 
 ## Limitations

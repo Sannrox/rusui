@@ -2,6 +2,7 @@ package policy
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -398,4 +399,72 @@ projects:
 	if len(p.Permissions) != 2 || p.Permissions[1].Action != "reject" {
 		t.Fatalf("permissions %+v", p.Permissions)
 	}
+}
+
+func TestParseRepair(t *testing.T) {
+	base := `
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+projects:
+  rusui:
+    repos:
+      Sannrox/rusui:
+        visibility: public
+`
+	t.Run("default off", func(t *testing.T) {
+		e, err := Parse([]byte(base))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, ok := e.Repo("Sannrox/rusui")
+		if !ok || r.Repair != "" || r.MaxRepairsPerRepoPerUTCDay != DefaultMaxRepairs {
+			t.Fatalf("%+v ok=%v", r, ok)
+		}
+		if len(r.ProtectedLabels) < 2 || r.ProtectedLabels[0] != LabelHold || r.ProtectedLabels[1] != LabelSecurity {
+			t.Fatalf("protected %+v", r.ProtectedLabels)
+		}
+	})
+	t.Run("docs", func(t *testing.T) {
+		raw := strings.Replace(base, "projects:\n", "  repair: docs\n  implement: true\nprojects:\n", 1)
+		e, err := Parse([]byte(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, ok := e.Repo("Sannrox/rusui")
+		if !ok || r.Repair != RepairDocs || !r.Implement {
+			t.Fatalf("%+v ok=%v", r, ok)
+		}
+	})
+	t.Run("unknown fails closed", func(t *testing.T) {
+		raw := strings.Replace(base, "projects:\n", "  repair: go-fixes\nprojects:\n", 1)
+		if _, err := Parse([]byte(raw)); err == nil {
+			t.Fatal("unknown category accepted")
+		}
+	})
+	t.Run("off aliases", func(t *testing.T) {
+		for _, v := range []string{"off", "false", ""} {
+			raw := strings.Replace(base, "projects:\n", "  repair: "+v+"\nprojects:\n", 1)
+			e, err := Parse([]byte(raw))
+			if err != nil {
+				t.Fatalf("%q: %v", v, err)
+			}
+			r, _ := e.Repo("Sannrox/rusui")
+			if r.Repair != "" {
+				t.Fatalf("%q -> %q", v, r.Repair)
+			}
+		}
+	})
+	t.Run("protected labels merge defaults", func(t *testing.T) {
+		raw := strings.Replace(base, "        visibility: public\n", "        visibility: public\n        protected_labels: [custom]\n", 1)
+		e, err := Parse([]byte(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, _ := e.Repo("Sannrox/rusui")
+		if !slices.Contains(r.ProtectedLabels, LabelHold) || !slices.Contains(r.ProtectedLabels, LabelSecurity) || !slices.Contains(r.ProtectedLabels, "custom") {
+			t.Fatalf("protected %+v", r.ProtectedLabels)
+		}
+	})
 }

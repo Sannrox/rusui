@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 53
+const CurrentSchema = 54
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -632,12 +632,38 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 54 {
+		if err := migrateV54(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 54); err != nil {
+			return err
+		}
+	}
 	if upgrading {
 		if err := clearUpgradeLock(s.DB); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// migrateV54 records why a repair candidate was selected or declined (#108).
+func migrateV54(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS repair_decisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  repo TEXT NOT NULL,
+  item INTEGER NOT NULL,
+  item_hash TEXT NOT NULL,
+  decision TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS repair_decisions_repo_item ON repair_decisions(repo, item);
+CREATE INDEX IF NOT EXISTS repair_decisions_repo_created ON repair_decisions(repo, created_at);
+`)
+	return err
 }
 
 // migrateV53 records the GitHub comment id for live comment apply (#107).

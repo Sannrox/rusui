@@ -60,10 +60,12 @@ comment: false
 close: false
 implement: false
 land: false
+repair: ""
 ```
 
 `comments` and `close` authorize dry-run intended-actions only. `comment`
-is the live GitHub comment switch and stays false in this pilot.
+is the live GitHub comment switch and stays false in this pilot. `repair`
+stays empty; overlay cannot enable it.
 
 ## Tunnel
 

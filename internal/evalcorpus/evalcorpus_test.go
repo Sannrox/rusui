@@ -79,6 +79,20 @@ func requirement(t *testing.T, g Gate, name string) Requirement {
 	return Requirement{}
 }
 
+func TestRepairGatePlanePublication(t *testing.T) {
+	r := Report{Gates: Gates(nil)}
+	g := gate(t, r, "repair")
+	if q := requirement(t, g, "plane-owned publication"); q.Status != GatePass {
+		t.Fatalf("plane-owned publication %s (%s)", q.Status, q.Detail)
+	}
+	if q := requirement(t, g, "held-out eligibility and 10-attempt cohort"); q.Status != GateIncomplete {
+		t.Fatalf("cohort %s (%s)", q.Status, q.Detail)
+	}
+	if g.Status != GateIncomplete {
+		t.Fatalf("repair gate %s, want incomplete", g.Status)
+	}
+}
+
 func TestKnownRegressionFailsCommentGate(t *testing.T) {
 	dev, err := Load(devPath, SplitDevelopment)
 	if err != nil {

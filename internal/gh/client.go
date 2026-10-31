@@ -100,10 +100,20 @@ func (a *API) DefaultSHA(repo string) (string, error) {
 }
 
 func (a *API) get(path string, dst any) error {
-	u := strings.TrimRight(a.BaseURL, "/") + path
+	_, err := a.getPage(path, dst)
+	return err
+}
+
+const maxGitHubPages = 50
+
+func (a *API) getPage(pathOrURL string, dst any) (next string, err error) {
+	u := pathOrURL
+	if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+		u = strings.TrimRight(a.BaseURL, "/") + pathOrURL
+	}
 	req, err := http.NewRequest(http.MethodGet, u, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
@@ -113,23 +123,64 @@ func (a *API) get(path string, dst any) error {
 	}
 	res, err := a.HTTP.Do(req)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if res.StatusCode == http.StatusNotFound {
-		return errNotFound
+		return "", errNotFound
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("github %s: %s %s", path, res.Status, truncate(body, 200))
+		return "", fmt.Errorf("github %s: %s %s", pathOrURL, res.Status, truncate(body, 200))
+	}
+	next, err = a.nextPage(res.Header.Get("Link"))
+	if err != nil {
+		return "", err
 	}
 	if dst == nil {
-		return nil
+		return next, nil
 	}
-	return json.Unmarshal(body, dst)
+	if err := json.Unmarshal(body, dst); err != nil {
+		return "", err
+	}
+	return next, nil
+}
+
+func (a *API) nextPage(link string) (string, error) {
+	next := parseLinkNext(link)
+	if next == "" {
+		return "", nil
+	}
+	u, err := url.Parse(next)
+	if err != nil {
+		return "", fmt.Errorf("github: bad Link next")
+	}
+	base, err := url.Parse(a.BaseURL)
+	if err != nil {
+		return "", err
+	}
+	if !strings.EqualFold(u.Host, base.Host) {
+		return "", fmt.Errorf("github: Link next host %q refused", u.Host)
+	}
+	return next, nil
+}
+
+func parseLinkNext(h string) string {
+	for part := range strings.SplitSeq(h, ",") {
+		part = strings.TrimSpace(part)
+		if !strings.Contains(part, `rel="next"`) && !strings.Contains(part, "rel=next") {
+			continue
+		}
+		start := strings.Index(part, "<")
+		end := strings.Index(part, ">")
+		if start >= 0 && end > start {
+			return part[start+1 : end]
+		}
+	}
+	return ""
 }
 
 var errNotFound = fmt.Errorf("github: not found")
@@ -152,16 +203,23 @@ type ghRef struct {
 	} `json:"object"`
 }
 
+type ghUser struct {
+	Login string `json:"login"`
+	Type  string `json:"type"`
+}
+
 type ghIssue struct {
-	Number      int       `json:"number"`
-	Title       string    `json:"title"`
-	Body        string    `json:"body"`
-	State       string    `json:"state"`
-	Draft       bool      `json:"draft"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	Labels      []ghLabel `json:"labels"`
-	PullRequest *struct {
+	Number            int       `json:"number"`
+	Title             string    `json:"title"`
+	Body              string    `json:"body"`
+	State             string    `json:"state"`
+	Draft             bool      `json:"draft"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	Labels            []ghLabel `json:"labels"`
+	Assignees         []ghUser  `json:"assignees"`
+	AuthorAssociation string    `json:"author_association"`
+	PullRequest       *struct {
 		URL string `json:"url"`
 	} `json:"pull_request"`
 }
@@ -171,18 +229,20 @@ type ghLabel struct {
 }
 
 type ghPR struct {
-	Number         int       `json:"number"`
-	Title          string    `json:"title"`
-	Body           string    `json:"body"`
-	HTMLURL        string    `json:"html_url"`
-	State          string    `json:"state"`
-	Draft          bool      `json:"draft"`
-	Merged         bool      `json:"merged"`
-	MergeCommitSHA string    `json:"merge_commit_sha"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	Labels         []ghLabel `json:"labels"`
-	Base           struct {
+	Number            int       `json:"number"`
+	Title             string    `json:"title"`
+	Body              string    `json:"body"`
+	HTMLURL           string    `json:"html_url"`
+	State             string    `json:"state"`
+	Draft             bool      `json:"draft"`
+	Merged            bool      `json:"merged"`
+	MergeCommitSHA    string    `json:"merge_commit_sha"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+	Labels            []ghLabel `json:"labels"`
+	Assignees         []ghUser  `json:"assignees"`
+	AuthorAssociation string    `json:"author_association"`
+	Base              struct {
 		Ref string `json:"ref"`
 		SHA string `json:"sha"`
 	} `json:"base"`
@@ -230,20 +290,26 @@ func (a *API) GetItem(repo string, item int, kind string) (snapshot.Item, error)
 	}
 	isPR := kind == "pull" || issue.PullRequest != nil
 	it := snapshot.Item{
-		Repo:          repo,
-		Item:          item,
-		ItemKind:      "issue",
-		State:         issue.State,
-		Title:         issue.Title,
-		Body:          issue.Body,
-		Draft:         issue.Draft,
-		UpdatedAt:     issue.UpdatedAt.UTC().Format(time.RFC3339),
-		CreatedAt:     issue.CreatedAt.UTC().Format(time.RFC3339),
-		DefaultBranch: defaultBranch,
-		MainSHA:       mainSHA,
+		Repo:              repo,
+		Item:              item,
+		ItemKind:          "issue",
+		State:             issue.State,
+		Title:             issue.Title,
+		Body:              issue.Body,
+		Draft:             issue.Draft,
+		UpdatedAt:         issue.UpdatedAt.UTC().Format(time.RFC3339),
+		CreatedAt:         issue.CreatedAt.UTC().Format(time.RFC3339),
+		DefaultBranch:     defaultBranch,
+		MainSHA:           mainSHA,
+		AuthorAssociation: issue.AuthorAssociation,
 	}
 	for _, l := range issue.Labels {
 		it.Labels = append(it.Labels, l.Name)
+	}
+	for _, a := range issue.Assignees {
+		if a.Login != "" {
+			it.Assignees = append(it.Assignees, a.Login)
+		}
 	}
 	if isPR {
 		it.ItemKind = "pull"
@@ -270,6 +336,17 @@ func (a *API) GetItem(repo string, item int, kind string) (snapshot.Item, error)
 				it.Labels = append(it.Labels, l.Name)
 			}
 		}
+		if pr.AuthorAssociation != "" {
+			it.AuthorAssociation = pr.AuthorAssociation
+		}
+		if len(pr.Assignees) > 0 {
+			it.Assignees = nil
+			for _, a := range pr.Assignees {
+				if a.Login != "" {
+					it.Assignees = append(it.Assignees, a.Login)
+				}
+			}
+		}
 	}
 
 	var comments []ghComment
@@ -287,7 +364,7 @@ func (a *API) GetItem(repo string, item int, kind string) (snapshot.Item, error)
 	if !last.IsZero() {
 		it.LastNonBotCommentAt = last.UTC().Format(time.RFC3339)
 	}
-	it.LinkedSameRepoItems = parseLinked(it.Body, item)
+	it.LinkedSameRepoItems = LinkedSameRepo(it.Body, repo, item)
 	return it, nil
 }
 
@@ -298,26 +375,40 @@ func isBot(typ, login string) bool {
 	return strings.HasSuffix(strings.ToLower(login), "[bot]")
 }
 
-var hashNum = regexp.MustCompile(`([\w.-]+/[\w.-]+)?#(\d+)`)
+var (
+	hashNum       = regexp.MustCompile(`([\w.-]+/[\w.-]+)?#(\d+)`)
+	githubItemURL = regexp.MustCompile(`(?:https?://)?github\.com/([\w.-]+/[\w.-]+)/(?:issues|pull)/(\d+)`)
+)
 
-func parseLinked(body string, self int) []int {
+// LinkedSameRepo returns same-repository item numbers referenced in body,
+// excluding self. Bare #N, owner/repo#N for this repo, and github.com
+// issue/pull URLs for this repo count; other repositories do not.
+func LinkedSameRepo(body, repo string, self int) []int {
 	seen := map[int]bool{self: true}
 	var out []int
-	for _, m := range hashNum.FindAllStringSubmatchIndex(body, -1) {
-		if m[2] != -1 {
-			// owner/repo#N: a cross-repository reference, not same-repo.
-			continue
-		}
-		if m[0] > 0 && body[m[0]-1] == '&' {
-			// &#N;: an HTML numeric character entity, not an issue link.
-			continue
-		}
-		n, _ := strconv.Atoi(body[m[4]:m[5]])
+	add := func(n int) {
 		if n == 0 || seen[n] {
-			continue
+			return
 		}
 		seen[n] = true
 		out = append(out, n)
+	}
+	for _, m := range hashNum.FindAllStringSubmatchIndex(body, -1) {
+		if m[0] > 0 && body[m[0]-1] == '&' {
+			continue
+		}
+		if m[2] != -1 && !strings.EqualFold(body[m[2]:m[3]], repo) {
+			continue
+		}
+		n, _ := strconv.Atoi(body[m[4]:m[5]])
+		add(n)
+	}
+	for _, m := range githubItemURL.FindAllStringSubmatch(body, -1) {
+		if !strings.EqualFold(m[1], repo) {
+			continue
+		}
+		n, _ := strconv.Atoi(m[2])
+		add(n)
 	}
 	return out
 }
@@ -440,12 +531,12 @@ func (a *API) ListOpenItems(repo string) ([]snapshot.Item, error) {
 	if err := a.get(fmt.Sprintf("/repos/%s/%s", owner, name), &rr); err != nil {
 		return nil, err
 	}
-	var issues []ghIssue
-	if err := a.get(fmt.Sprintf("/repos/%s/%s/issues?state=open&per_page=100", owner, name), &issues); err != nil {
+	issues, err := getJSONPages[ghIssue](a, fmt.Sprintf("/repos/%s/%s/issues?state=open&per_page=100", owner, name))
+	if err != nil {
 		return nil, err
 	}
-	var pulls []ghPR
-	if err := a.get(fmt.Sprintf("/repos/%s/%s/pulls?state=open&per_page=100", owner, name), &pulls); err != nil {
+	pulls, err := getJSONPages[ghPR](a, fmt.Sprintf("/repos/%s/%s/pulls?state=open&per_page=100", owner, name))
+	if err != nil {
 		return nil, err
 	}
 	byNumber := make(map[int]ghPR, len(pulls))
@@ -455,7 +546,17 @@ func (a *API) ListOpenItems(repo string) ([]snapshot.Item, error) {
 	out := make([]snapshot.Item, 0, len(issues))
 	for _, issue := range issues {
 		it := snapshot.Item{Repo: repo, Item: issue.Number, ItemKind: "issue", State: issue.State,
-			CreatedAt: issue.CreatedAt.UTC().Format(time.RFC3339), UpdatedAt: issue.UpdatedAt.UTC().Format(time.RFC3339)}
+			Title: issue.Title, Body: issue.Body,
+			CreatedAt: issue.CreatedAt.UTC().Format(time.RFC3339), UpdatedAt: issue.UpdatedAt.UTC().Format(time.RFC3339),
+			AuthorAssociation: issue.AuthorAssociation}
+		for _, l := range issue.Labels {
+			it.Labels = append(it.Labels, l.Name)
+		}
+		for _, a := range issue.Assignees {
+			if a.Login != "" {
+				it.Assignees = append(it.Assignees, a.Login)
+			}
+		}
 		if issue.PullRequest != nil {
 			it.ItemKind = "pull"
 			it.DefaultBranch = rr.DefaultBranch
@@ -464,9 +565,48 @@ func (a *API) ListOpenItems(repo string) ([]snapshot.Item, error) {
 			if pr, ok := byNumber[issue.Number]; ok {
 				it.Draft = pr.Draft
 				it.BaseRef = pr.Base.Ref
+				if pr.Body != "" {
+					it.Body = pr.Body
+				}
 			}
 		}
+		it.LinkedSameRepoItems = LinkedSameRepo(it.Body, repo, issue.Number)
 		out = append(out, it)
 	}
 	return out, nil
+}
+
+func (a *API) ListHeads(repo string) ([]string, error) {
+	owner, name, err := splitRepo(repo)
+	if err != nil {
+		return nil, err
+	}
+	refs, err := getJSONPages[struct {
+		Ref string `json:"ref"`
+	}](a, fmt.Sprintf("/repos/%s/%s/git/matching-refs/heads?per_page=100", owner, name))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(refs))
+	for _, r := range refs {
+		out = append(out, strings.TrimPrefix(r.Ref, "refs/heads/"))
+	}
+	return out, nil
+}
+
+func getJSONPages[T any](a *API, path string) ([]T, error) {
+	var all []T
+	for n := 0; path != "" && n < maxGitHubPages; n++ {
+		var page []T
+		next, err := a.getPage(path, &page)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page...)
+		path = next
+	}
+	if path != "" {
+		return nil, fmt.Errorf("github: list truncated after %d pages", maxGitHubPages)
+	}
+	return all, nil
 }

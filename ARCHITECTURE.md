@@ -63,7 +63,8 @@ identity minting, plugins, disconnected execution, Docker Desktop /
 Podman Desktop guest link, live close/merge/land, the thirty-day
 maintenance observation (that remains a maintenance-release gate), and
 signed portable session bundles. Live comments are off in the default
-profile (`comment: false`) and independently gated.
+profile (`comment: false`) and independently gated. Repair is off
+(`repair` empty) until a maintainer sets the `docs` category.
 
 Dropping a supported guarantee needs a later ADR. Details below remain
 the runtime contract; where they conflict with ADR 0086, ADR 0086 wins
@@ -282,7 +283,10 @@ projects:
         close: false
         implement: false
         land: false
+        repair: ""
+        protected_labels: [rusui:hold, security]
         max_reviews_per_repo_per_utc_day: 50
+        max_repairs_per_repo_per_utc_day: 1
     session_kinds: [review, run, scheduled]
     egress: trusted
 ```
@@ -295,7 +299,10 @@ is listed under a project.
 
 `comments` and `close` authorize **simulation**, not live GitHub writes.
 `comment` (default false) authorizes one live GitHub review comment per
-durable result identity. Overlay cannot enable it. `land` remains
+durable result identity. Overlay cannot enable it. `repair` is a category
+name or empty (off). The first category is `docs`: an issue opted in with
+`rusui:repair` whose allowed paths are documentation only. Repair also
+requires `implement: true`. Overlay cannot enable it. `land` remains
 unauthorized. `implement` lets pinned implementation tasks
 on the repository run as implement sessions that may propose a GitHub
 write (ADR 0080); it does not authorize live comment, close, or merge. Tests that need an
@@ -336,7 +343,7 @@ off.
    `policy_revision`.
 3. **Durable overlay** in SQLite: `pause` per project or globally.
    Overlay may only **narrow**. It cannot enable comments, comment, close,
-   implement, land, a session kind, an egress class, or a permission
+   implement, land, repair, a session kind, an egress class, or a permission
    allow-rule if the baseline has them off.
 4. **Slack commands** write overlay or enqueue jobs through the same
    admit path. Slack cannot bypass (1)–(3).
@@ -1039,7 +1046,37 @@ A lost response, restart, or deleted comment is reconciled by that
 marker. An unchanged GitHub body is left alone. Protected items
 (`rusui:hold`, `security`, drafts) and stale hashes are cancelled.
 Private-key material is refused; credential-shaped tokens are redacted.
-Repair, close, and merge stay independently disabled.
+Repair stays independently gated (`repair` empty in the default profile).
+Close and merge stay independently disabled.
+
+## Maintenance profile
+
+Action classes are separate ([ADR 0038](docs/decisions/0038-maintenance-eligibility-and-promotion.md)).
+Enabling one grants nothing to another.
+
+| Class | Effect | Default |
+| --- | --- | --- |
+| Advisory | Durable review result. No GitHub write. | On for eligible items |
+| Comment | One live comment per result identity | `comment: false` |
+| Repair | One pinned task, published by the plane | `repair` empty |
+| Close / merge / land | Live GitHub write | Unauthorized |
+
+**Repair (docs).** When `repair: docs` and `implement: true`, refresh
+admits an open issue labeled `rusui:repair` as a pinned implement task
+whose allowed paths are documentation only. Protected work (draft,
+`protected_labels` default `rusui:hold` and `security`, assigned to a
+human) is refused. Competing effort is an open rusui task for
+`repair:<repo>#<item>`, an open pull request that links the issue, or a
+branch `*/<issue>` or `*/<issue>-*`. A declined candidate is not
+reconsidered for seven days unless its item hash changes.
+`max_repairs_per_repo_per_utc_day` (default 1) caps selections.
+
+The plane rechecks eligibility, item hash, `main_sha`, policy, overlay,
+protection, and competing effort in `ApplySessionWrite` before it pushes
+or opens the pull request, and refuses on any change. Overlay cannot
+enable repair. Promotion of the category is a maintainer edit to
+`policy.yaml`. The held-out eligibility check and 10-attempt cohort
+remain operator closeout, not a start block.
 
 ## Review quality
 
