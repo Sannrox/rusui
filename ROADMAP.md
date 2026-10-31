@@ -135,7 +135,9 @@ started on the author-validated self-hosting journey
 Until an independent journey with a go outcome is recorded, the
 contract claims no external self-hosting readiness, and publishing 1.0
 ([#146](https://github.com/Sannrox/rusui/issues/146)) requires that
-journey. M3's thirty-day observation and M5's excluded optional tracks
+journey. The C3 independent-review brief is
+[docs/independent-review.md](docs/independent-review.md)
+([#664](https://github.com/Sannrox/rusui/issues/664)). M3's thirty-day observation and M5's excluded optional tracks
 are not required for the remote-workspace 1.0; a maintenance or
 optional-capability release keeps its own gates.
 

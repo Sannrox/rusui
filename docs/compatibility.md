@@ -68,3 +68,5 @@ code they cover. The independent HTTP+SSE client is
 [independent-client.md](independent-client.md).
 
 Record the printed `commit` and `schema` with the candidate you tested.
+The C3 independent-review brief freezes one candidate in
+[independent-review.md](independent-review.md).
