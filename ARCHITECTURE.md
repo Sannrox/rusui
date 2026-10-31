@@ -47,6 +47,9 @@ behavior, and conformance checks:
 **Author-validated only:** install, disconnect/reconnect, upgrade, and
 restore as run in U8. Independent self-hosting is the 1.0 publish gate
 ([#146](https://github.com/Sannrox/rusui/issues/146)), not this freeze.
+The C3 review brief is
+[docs/independent-review.md](docs/independent-review.md); it does not
+change this contract.
 
 **Narrowed:** bounded issue-to-PR is one pinned-path implement task and
 one pull request at a time. `rusui read` does not promise a workspace

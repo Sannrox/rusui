@@ -72,6 +72,9 @@ Read these for rationale, boundaries, direction, and the evidence behind claims.
   checks and the restore path.
 - [Independent operator client](independent-client.md) is the C4 evidence
   that a contributor can integrate from the published contract.
+- [Independent security review brief](independent-review.md) is the C3
+  scope, independence rules, frozen candidate identities, and abuse
+  cases for [#143](https://github.com/Sannrox/rusui/issues/143).
 - [Proof and research records](proofs/README.md) explain what was observed
   at a recorded revision; they are historical evidence, not current setup steps.
 - [Timed macOS walkthrough record](proofs/operator-timed-macos-walkthrough.md)

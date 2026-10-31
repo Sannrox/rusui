@@ -60,4 +60,6 @@ Out of scope: the operator tunnel, GitHub or Slack themselves, and guest CLIs
 
 ## Supported versions
 
-There is no numbered release yet. Report against `main`.
+There is no numbered release yet. Report against `main`. The 1.0
+independent-review candidate is named in
+[docs/independent-review.md](docs/independent-review.md).
