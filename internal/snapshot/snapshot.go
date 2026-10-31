@@ -56,7 +56,7 @@ func ItemHash(it Item) string {
 		Title               string   `json:"title"`
 		Body                string   `json:"body"`
 		Labels              []string `json:"labels"`
-		Assignees           []string `json:"assignees"`
+		Assignees           []string `json:"assignees,omitempty"`
 		Draft               bool     `json:"draft"`
 		Merged              bool     `json:"merged"`
 		HeadSHA             string   `json:"head_sha"`
