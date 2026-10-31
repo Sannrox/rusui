@@ -84,7 +84,7 @@ make all && make test && make validate
 - `make all` builds host-platform binaries into `_output/`.
 - `make test` runs unit tests. Narrow with
   `make test WHAT=./internal/engine TEST_ARGS='-run ^TestClaim'`.
-- `make validate` runs golangci-lint, govulncheck, go-fix, and shellcheck.
+- `make validate` runs golangci-lint, govulncheck, go-fix, shellcheck, workflow skills, and release-script checks.
 - `make release-images` builds Linux binaries and runtime images when
   Docker is available.
 - `make guest-image` builds the reference guest image
@@ -306,8 +306,12 @@ Rows beyond [Build, Test, and Development Commands](#build-test-and-development-
 
 ### Release audit
 
-- version comes from git tags via `scripts/lib/version.sh`; generated
-  `.version` is not a source;
+- workspace version is the `VERSION` file; a `v*` tag must equal `v` plus
+  that value. Binary ldflags still come from git tags via
+  `scripts/lib/version.sh`; generated `.version` is not a source;
+- `scripts/validate-release.sh` checks the tag-triggered release path: signed
+  annotated tags, CHANGELOG notes, SBOM, and the family release manifest.
+  Pull requests and dry runs must not publish or attest;
 - `go.mod` / `.go-version` consistency;
 - `policy.example.yaml` defaults and fail-closed unknown fields;
 - HTTP, Slack, and worker endpoint compatibility;
@@ -315,4 +319,4 @@ Rows beyond [Build, Test, and Development Commands](#build-test-and-development-
 - environment variables, secrets, loopback bind, and operator tunnel docs;
 - security, backup, rollback, and operator actions;
 - `rusui` / `rusui-runner` binaries and runtime images;
-- credit contributors through GitHub's generated release notes.
+- GitHub Release notes come from the matching CHANGELOG section.
