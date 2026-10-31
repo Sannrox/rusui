@@ -570,6 +570,9 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 	if err != nil {
 		return true, err
 	}
+	if ferr == nil {
+		e.maybeAdmitRepair(it)
+	}
 	if budgetDenied {
 		return true, ErrReviewBudget
 	}

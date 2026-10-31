@@ -48,7 +48,7 @@ Corpus digest `a9d704006dba3b80cc50f924c61e4b53fcedbb261d499c411d6dcc1b8396ff9f`
 |---|---|---|---|---|
 | advisory | incomplete | held-out split | incomplete | no held-out corpus replayed |
 | comment | incomplete | held-out split | incomplete | no held-out corpus replayed |
-| repair | incomplete | plane-owned publication | incomplete | ADR 0038 D4: not implemented |
+| repair | incomplete | plane-owned publication | pass | ADR 0044 Complete-path publish; ADR 0080 ApplySessionWrite |
 | repair | incomplete | held-out eligibility and 10-attempt cohort | incomplete | not measured by replay |
 | close | unauthorized | — | — | — |
 | merge | unauthorized | — | — | — |

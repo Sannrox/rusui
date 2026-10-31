@@ -21,6 +21,7 @@ func TestGitHubAppPilotGuideIsReviewOnly(t *testing.T) {
 		"close: false",
 		"implement: false",
 		"land: false",
+		"repair: \"\"",
 		"cloudflared tunnel --url http://127.0.0.1:8080",
 		"X-Hub-Signature-256",
 		"401",
@@ -54,7 +55,7 @@ func TestGitHubAppPilotGuideIsReviewOnly(t *testing.T) {
 		t.Fatal("policy.example.yaml must bind a repository")
 	}
 	for name, repo := range p.Repos {
-		if repo.Comments || repo.Comment || repo.Close || repo.Implement || repo.Land {
+		if repo.Comments || repo.Comment || repo.Close || repo.Implement || repo.Land || repo.Repair != "" {
 			t.Fatalf("policy.example.yaml %s must disable writes: %+v", name, repo)
 		}
 		if !repo.Review {

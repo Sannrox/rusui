@@ -30,6 +30,10 @@ const (
 	BudgetMaxConcurrentLeases = "max_concurrent_leases"
 	ShipPullRequest           = "pull-request"
 	ShipPushBase              = "push-base"
+	RepairDocs                = "docs"
+	LabelHold                 = "rusui:hold"
+	LabelSecurity             = "security"
+	DefaultMaxRepairs         = 1
 )
 
 type File struct {
@@ -51,7 +55,10 @@ type DefaultsYAML struct {
 	Close                      bool     `yaml:"close"`
 	Implement                  bool     `yaml:"implement"`
 	Land                       bool     `yaml:"land"`
+	Repair                     string   `yaml:"repair"`
+	ProtectedLabels            []string `yaml:"protected_labels"`
 	MaxReviewsPerRepoPerUTCDay int      `yaml:"max_reviews_per_repo_per_utc_day"`
+	MaxRepairsPerRepoPerUTCDay int      `yaml:"max_repairs_per_repo_per_utc_day"`
 	// MCPGateway is the governed tool gateway URL. When set, it is the only
 	// remote MCP server a session sees and projects may not name others.
 	MCPGateway string `yaml:"mcp_gateway"`
@@ -97,12 +104,15 @@ type LocalRuntimeYAML struct {
 type RepoYAML struct {
 	Visibility                 *string `yaml:"visibility"`
 	Review                     *bool   `yaml:"review"`
-	Comments                   *bool   `yaml:"comments"`
-	Comment                    *bool   `yaml:"comment"`
-	Close                      *bool   `yaml:"close"`
-	Implement                  *bool   `yaml:"implement"`
-	Land                       *bool   `yaml:"land"`
-	MaxReviewsPerRepoPerUTCDay *int    `yaml:"max_reviews_per_repo_per_utc_day"`
+	Comments                   *bool    `yaml:"comments"`
+	Comment                    *bool    `yaml:"comment"`
+	Close                      *bool    `yaml:"close"`
+	Implement                  *bool    `yaml:"implement"`
+	Land                       *bool    `yaml:"land"`
+	Repair                     *string  `yaml:"repair"`
+	ProtectedLabels            []string `yaml:"protected_labels"`
+	MaxReviewsPerRepoPerUTCDay *int     `yaml:"max_reviews_per_repo_per_utc_day"`
+	MaxRepairsPerRepoPerUTCDay *int     `yaml:"max_repairs_per_repo_per_utc_day"`
 }
 
 type AllowRule struct {
@@ -121,7 +131,10 @@ type Repo struct {
 	Close                      bool
 	Implement                  bool
 	Land                       bool
+	Repair                     string
+	ProtectedLabels            []string
 	MaxReviewsPerRepoPerUTCDay int
+	MaxRepairsPerRepoPerUTCDay int
 	NeverRelease               bool
 	NeverLeakPrivateToPublic   bool
 }
@@ -282,6 +295,7 @@ func Parse(raw []byte) (*Effective, error) {
 				Visibility:                 "private",
 				Review:                     true,
 				MaxReviewsPerRepoPerUTCDay: 50,
+				MaxRepairsPerRepoPerUTCDay: DefaultMaxRepairs,
 				NeverRelease:               true,
 				NeverLeakPrivateToPublic:   true,
 			}
@@ -299,6 +313,15 @@ func Parse(raw []byte) (*Effective, error) {
 			r.Close = f.Defaults.Close
 			r.Implement = f.Defaults.Implement
 			r.Land = f.Defaults.Land
+			repair, err := parseRepairCategory(f.Defaults.Repair)
+			if err != nil {
+				return nil, fmt.Errorf("policy: %s %w", name, err)
+			}
+			r.Repair = repair
+			r.ProtectedLabels = mergeProtectedLabels(f.Defaults.ProtectedLabels)
+			if f.Defaults.MaxRepairsPerRepoPerUTCDay != 0 {
+				r.MaxRepairsPerRepoPerUTCDay = f.Defaults.MaxRepairsPerRepoPerUTCDay
+			}
 			if ry.Visibility != nil {
 				r.Visibility = *ry.Visibility
 			}
@@ -320,8 +343,24 @@ func Parse(raw []byte) (*Effective, error) {
 			if ry.Land != nil {
 				r.Land = *ry.Land
 			}
+			if ry.Repair != nil {
+				repair, err := parseRepairCategory(*ry.Repair)
+				if err != nil {
+					return nil, fmt.Errorf("policy: %s %w", name, err)
+				}
+				r.Repair = repair
+			}
+			if len(ry.ProtectedLabels) > 0 {
+				r.ProtectedLabels = mergeProtectedLabels(append(append([]string(nil), r.ProtectedLabels...), ry.ProtectedLabels...))
+			}
 			if ry.MaxReviewsPerRepoPerUTCDay != nil {
 				r.MaxReviewsPerRepoPerUTCDay = *ry.MaxReviewsPerRepoPerUTCDay
+			}
+			if ry.MaxRepairsPerRepoPerUTCDay != nil {
+				r.MaxRepairsPerRepoPerUTCDay = *ry.MaxRepairsPerRepoPerUTCDay
+			}
+			if r.MaxRepairsPerRepoPerUTCDay < 0 {
+				return nil, fmt.Errorf("policy: %s max_repairs_per_repo_per_utc_day must be >= 0", name)
 			}
 			if r.Visibility != "public" && r.Visibility != "private" {
 				return nil, fmt.Errorf("policy: %s invalid visibility", name)
@@ -579,4 +618,28 @@ func (p Project) MaxConcurrentLeases() int {
 		return 1
 	}
 	return n
+}
+
+func parseRepairCategory(raw string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "off", "false":
+		return "", nil
+	case RepairDocs:
+		return RepairDocs, nil
+	default:
+		return "", fmt.Errorf("unknown repair category %q", raw)
+	}
+}
+
+func mergeProtectedLabels(in []string) []string {
+	seen := map[string]bool{LabelHold: true, LabelSecurity: true}
+	out := []string{LabelHold, LabelSecurity}
+	for _, l := range in {
+		if l == "" || seen[l] {
+			continue
+		}
+		seen[l] = true
+		out = append(out, l)
+	}
+	return out
 }

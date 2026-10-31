@@ -141,7 +141,7 @@ func TestStarterYAMLMatchesOperatorExample(t *testing.T) {
 		t.Fatal("starter overrides the environment guest fallback")
 	}
 	repo, ok := effective.Repo("Sannrox/rusui")
-	if !ok || !repo.Review || repo.Comments || repo.Comment || repo.Close || repo.Implement || repo.Land {
+	if !ok || !repo.Review || repo.Comments || repo.Comment || repo.Close || repo.Implement || repo.Land || repo.Repair != "" {
 		t.Fatalf("starter capabilities are not review-only: %+v", repo)
 	}
 }

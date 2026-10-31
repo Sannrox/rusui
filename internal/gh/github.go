@@ -21,6 +21,7 @@ type Client interface {
 	ListDeliveries(repo string) ([]DeliveryListItem, error)
 	GetDelivery(repo, id string) (*DeliveryDetail, error)
 	ListOpenItems(repo string) ([]snapshot.Item, error)
+	ListHeads(repo string) ([]string, error)
 }
 
 type DeliveryListItem struct {
@@ -83,6 +84,8 @@ type Fake struct {
 	CommentErr    error
 	CommentDrop   bool // write, then return uncertain
 	CommentDeny   bool
+	Heads         []string
+	HeadsErr      error
 }
 
 func NewFake() *Fake {
@@ -238,6 +241,15 @@ func (f *Fake) ListOpenItems(repo string) ([]snapshot.Item, error) {
 		}
 	}
 	return out, nil
+}
+
+func (f *Fake) ListHeads(repo string) ([]string, error) {
+	f.Mu.Lock()
+	defer f.Mu.Unlock()
+	if f.HeadsErr != nil {
+		return nil, f.HeadsErr
+	}
+	return append([]string(nil), f.Heads...), nil
 }
 
 func (f *Fake) GetDelivery(repo, id string) (*DeliveryDetail, error) {

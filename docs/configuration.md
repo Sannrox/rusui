@@ -370,12 +370,15 @@ need eligible dry-run comments/close load [policy.fixture.yaml](../policy.fixtur
 
 The current operator starter is the managed policy v2 profile: review, run,
 and scheduled session kinds, with review enabled and comments, comment, close,
-implement, and land disabled. `comments` and `close` authorize dry-run
+implement, land, and repair disabled. `comments` and `close` authorize dry-run
 intended-actions only. `comment: true` authorizes one live GitHub review
 comment per durable result; it stays false in the starter. The
 `implement` field is an opt-in for the accepted agent-publication path and
 requires the configured agent GitHub credential; it is off in the starter.
-`land` remains unauthorized by the current contract and should stay false.
+`repair` is a category name or empty (off). `repair: docs` admits
+`rusui:repair` documentation issues through the same implement path;
+it also requires `implement: true`. Overlay cannot enable it. `land`
+remains unauthorized by the current contract and should stay false.
 The test fixture's comments/close settings are for dry-run coverage, not an
 operator profile. The `local` session kind is experimental, default-off, and
 outside the supported 1.0 core; enabling it requires the explicit
@@ -394,7 +397,10 @@ defaults:
   close: false
   implement: false
   land: false
+  repair: ""
+  protected_labels: [rusui:hold, security]
   max_reviews_per_repo_per_utc_day: 50
+  max_repairs_per_repo_per_utc_day: 1
 projects:
   rusui:
     repos:
@@ -406,6 +412,7 @@ projects:
         close: false
         implement: false
         land: false
+        repair: ""
 ```
 
 `visibility` is a policy attribute of the **bound GitHub repository**, not of

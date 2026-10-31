@@ -3,6 +3,7 @@ package policy
 const starterYAML = `# Operator default (policy v2, keyed by project). Copy to policy.yaml.
 # comments/close authorize v1 dry-run intended-actions, not live GitHub writes.
 # comment authorizes live GitHub comments (default off).
+# repair is a category name or empty (off). Overlay cannot enable it.
 # Unknown fields fail closed.
 version: 2
 defaults:
@@ -16,7 +17,10 @@ defaults:
   close: false
   implement: false
   land: false
+  repair: ""
+  protected_labels: [rusui:hold, security]
   max_reviews_per_repo_per_utc_day: 50
+  max_repairs_per_repo_per_utc_day: 1
 # The four existing protocols. Empty image uses RUSUI_GUEST_IMAGE.
 # Omitting this registry preserves the built-in entries.
 guests:
@@ -94,6 +98,7 @@ projects:
         close: false
         implement: false
         land: false
+        repair: ""
 `
 
 // StarterYAML returns a copy of the conservative operator policy template.

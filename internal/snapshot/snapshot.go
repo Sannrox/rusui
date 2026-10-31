@@ -15,6 +15,8 @@ type Item struct {
 	Title               string   `json:"title"`
 	Body                string   `json:"body"`
 	Labels              []string `json:"labels"`
+	Assignees           []string `json:"assignees,omitempty"`
+	AuthorAssociation   string   `json:"author_association,omitempty"`
 	Draft               bool     `json:"draft"`
 	Merged              bool     `json:"merged"`
 	HeadSHA             string   `json:"head_sha"`
@@ -42,6 +44,8 @@ func (it Item) GitPin() string {
 func ItemHash(it Item) string {
 	labels := append([]string(nil), it.Labels...)
 	sort.Strings(labels)
+	assignees := append([]string(nil), it.Assignees...)
+	sort.Strings(assignees)
 	linked := append([]int(nil), it.LinkedSameRepoItems...)
 	sort.Ints(linked)
 	type hashable struct {
@@ -52,6 +56,7 @@ func ItemHash(it Item) string {
 		Title               string   `json:"title"`
 		Body                string   `json:"body"`
 		Labels              []string `json:"labels"`
+		Assignees           []string `json:"assignees"`
 		Draft               bool     `json:"draft"`
 		Merged              bool     `json:"merged"`
 		HeadSHA             string   `json:"head_sha"`
@@ -62,7 +67,8 @@ func ItemHash(it Item) string {
 	}
 	h := hashable{
 		Repo: it.Repo, Item: it.Item, ItemKind: it.ItemKind, State: it.State,
-		Title: it.Title, Body: it.Body, Labels: labels, Draft: it.Draft, Merged: it.Merged,
+		Title: it.Title, Body: it.Body, Labels: labels, Assignees: assignees,
+		Draft: it.Draft, Merged: it.Merged,
 		HeadSHA: it.HeadSHA, BaseSHA: it.BaseSHA, UpdatedAt: it.UpdatedAt,
 		NonBotCommentCount: it.NonBotCommentCount, LinkedSameRepoItems: linked,
 	}
