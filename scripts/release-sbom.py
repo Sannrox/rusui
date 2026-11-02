@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 MAIN_MODULE = "github.com/sannrox/rusui"
@@ -64,7 +65,7 @@ def bom_from_modules(modules: list[dict], version: str) -> dict:
         raise SystemExit("go list did not include the main module")
     root_name = main.get("Path") or MAIN_MODULE
     root_purl = f"pkg:golang/{root_name}@v{version}"
-    return {
+    bom = {
         "bomFormat": "CycloneDX",
         "specVersion": "1.5",
         "version": 1,
@@ -79,6 +80,10 @@ def bom_from_modules(modules: list[dict], version: str) -> dict:
         },
         "components": sorted(components, key=lambda item: item["bom-ref"]),
     }
+
+    document = json.dumps(bom, sort_keys=True, separators=(",", ":"))
+    bom["serialNumber"] = uuid.uuid5(uuid.NAMESPACE_URL, document).urn
+    return bom
 
 
 def workspace_version(root: Path) -> str:
@@ -102,6 +107,12 @@ def self_test() -> None:
     assert bom["bomFormat"] == "CycloneDX"
     assert bom["metadata"]["component"]["version"] == "0.1.0"
     assert bom["metadata"]["component"]["type"] == "application"
+    serial = bom["serialNumber"]
+    assert serial.startswith("urn:uuid:")
+    assert uuid.UUID(serial.removeprefix("urn:uuid:")).version == 5
+    assert bom_from_modules(modules, "0.1.0")["serialNumber"] == serial
+    modules[1]["Version"] = "v0.8.1"
+    assert bom_from_modules(modules, "0.1.0")["serialNumber"] != serial
     assert len(bom["components"]) == 1
     assert bom["components"][0]["name"] == "golang.org/x/sync"
     print("release-sbom self-test passed")
