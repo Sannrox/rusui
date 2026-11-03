@@ -8,11 +8,14 @@
 # The release client has only public WebPKI roots. Build the pinned source
 # with explicit extra-CA trust so the mounted plane CA is honored.
 FROM rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97 AS shikigami-build
-ARG SHIKIGAMI_SOURCE_REF=9e53d723018c4f89f9f2d0dd4373ff725962b330
-ARG SHIKIGAMI_SOURCE_SHA256=387f8522fbf701be571de081ea4cb94a2f0f03bbc94c4e6351d459a76750ee80
+# Signed release tag v3.0.0 (commit 9bce035da58e46c97d94818bcea1e07f126274be).
+# The SHA-256 pins the tag's source archive; a moved tag fails the check.
+# Built from source because the release binary has no extra-CA hook.
+ARG SHIKIGAMI_VERSION=3.0.0
+ARG SHIKIGAMI_SOURCE_SHA256=54973d9e09c34184d4dfc63a4edd6e8fc8162f68806bdfdbfb00d881060f2c1e
 RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
-RUN curl -fsSLo /tmp/source.tgz "https://codeload.github.com/Sannrox/shikigami/tar.gz/${SHIKIGAMI_SOURCE_REF}" \
+RUN curl -fsSLo /tmp/source.tgz "https://codeload.github.com/Sannrox/shikigami/tar.gz/refs/tags/v${SHIKIGAMI_VERSION}" \
  && echo "$SHIKIGAMI_SOURCE_SHA256  /tmp/source.tgz" | sha256sum -c - \
  && tar -xzf /tmp/source.tgz --strip-components=1 -C /src
 RUN python3 - <<'PYCODE'
