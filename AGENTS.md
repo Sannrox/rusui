@@ -309,9 +309,11 @@ Rows beyond [Build, Test, and Development Commands](#build-test-and-development-
 - workspace version is the `VERSION` file; a `v*` tag must equal `v` plus
   that value. Binary ldflags still come from git tags via
   `scripts/lib/version.sh`; generated `.version` is not a source;
-- `scripts/validate-release.sh` checks the tag-triggered release path: signed
-  annotated tags, CHANGELOG notes, SBOM, and the family release manifest.
-  Pull requests and dry runs must not publish or attest;
+- `scripts/validate-release.sh` checks the release path: a `v*` tag push only
+  dispatches `release.yml` on `main` for that tag, which verifies the signed
+  annotated tag and builds the tagged commit; CHANGELOG notes, SBOM, the
+  family release manifest, and `-rc.N` / `-beta.N` pre-releases. Pull
+  requests and dry runs must not publish or attest;
 - `go.mod` / `.go-version` consistency;
 - `policy.example.yaml` defaults and fail-closed unknown fields;
 - HTTP, Slack, and worker endpoint compatibility;

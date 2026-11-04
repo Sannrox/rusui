@@ -52,9 +52,13 @@ On push to `main` and on pull requests, GitHub Actions runs `make all`,
 requires a pull request to `main` and the `build` and `images` checks.
 Do not push commits to `main` directly.
 
-A signed annotated `v*` tag runs [`.github/workflows/release.yml`](../.github/workflows/release.yml):
-tag verification against `VERSION`, packaging, SBOM, provenance, and a
-GitHub Release whose notes come from [CHANGELOG.md](../CHANGELOG.md).
+A signed annotated `v*` tag push makes
+[`.github/workflows/release-dispatch.yml`](../.github/workflows/release-dispatch.yml)
+run [`.github/workflows/release.yml`](../.github/workflows/release.yml) on
+`main` for that tag: tag verification against the tagged commit's `VERSION`,
+packaging, SBOM, provenance, and a GitHub Release whose notes come from
+[CHANGELOG.md](../CHANGELOG.md). A `-rc.N` or `-beta.N` tag publishes as a
+pre-release.
 Pull requests and dry runs never attest or publish. Images are version-tagged
 only; there is no `latest` tag. Agents never push `v*` tags; see
 [RELEASING.md](../RELEASING.md).
