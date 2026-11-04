@@ -50,8 +50,15 @@ sha_checkouts="$(grep -c 'ref: ${{ needs.verify-tag.outputs.sha }}' "$workflow")
 head_checks="$(grep -c 'test "$(git rev-parse HEAD)" = "$SHA"' "$workflow")"
 [[ "$checkouts" -eq $((sha_checkouts + 2)) ]] || fail "${workflow} must check out the release commit in every job after verify-tag"
 [[ "$head_checks" -eq "$sha_checkouts" ]] || fail "${workflow} must check HEAD after every release-commit checkout"
-grep -F 'test "$(git describe --tags --exact-match HEAD)" = "$TAG"' "$workflow" >/dev/null \
+grep -F "test \"\$(git describe --tags --match='v*' --exact-match HEAD)\" = \"\$TAG\"" "$workflow" >/dev/null \
   || fail "${workflow} must require the release tag on HEAD where image tags come from git describe"
+python3 - "$workflow" <<'PY_MAIN' || fail "${workflow} must run main's validate-release.sh on main's workflow in a tagged run"
+import re, sys
+body = open(sys.argv[1]).read().split("\njobs:\n", 1)[1]
+block = next(b for b in re.split(r"(?m)^(?=  [a-z][a-z0-9-]*:\n)", body) if b.startswith("  verify-tag:"))
+step = "        working-directory: main-tree\n        run: bash scripts/validate-release.sh\n"
+sys.exit(0 if step in block else 1)
+PY_MAIN
 if grep -E 'github\.sha|github\.ref_name|GITHUB_SHA|GITHUB_REF|github\.event_name' "$workflow" >/dev/null; then
   fail "${workflow} must use the tagged commit and tag input, not the event SHA or ref name"
 fi

@@ -56,6 +56,7 @@ runs **main's** `release.yml`, never the copy at the tagged commit.
 
 `release.yml` refuses a tagged run that does not start from `main`. It then:
 
+- runs main's `scripts/validate-release.sh` on main's workflow files
 - checks out the tag and fetches the annotated tag object
 - verifies the signed tag with main's `scripts/verify-release-tag.sh` and
   main's allowed keys against the tagged commit's `VERSION`
@@ -74,7 +75,8 @@ same tag:
 gh workflow run release.yml --ref main -f tag=vX.Y.Z
 ```
 
-A retry picks up fixes to `release.yml` and to the tag verifier and keys.
+A retry picks up fixes to `release.yml`, its validator, and the tag verifier
+and keys.
 Everything else (the release scripts, `CHANGELOG.md`, the image build, and the
 sources) comes from the tagged commit, so a bug there needs a new rc or patch
 version.
