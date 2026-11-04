@@ -38,6 +38,10 @@ type Client struct {
 	promptCtx    context.Context
 	promptCancel context.CancelFunc
 	err          atomic.Value
+	// loading is set while session/load is in flight. The guest replays the
+	// stored conversation as session/update before it answers; the plane
+	// already holds those turns, so they are not recorded again.
+	loading atomic.Bool
 }
 
 type writeReq struct {
@@ -115,6 +119,9 @@ func (c *Client) handleInbound(msg rpcMessage) {
 }
 
 func (c *Client) recordUpdate(params json.RawMessage) {
+	if c.loading.Load() {
+		return
+	}
 	var p SessionUpdateParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		return
@@ -294,7 +301,11 @@ func (c *Client) SessionNewMode(ctx context.Context, cwd, mode string) (string, 
 	return out.SessionID, err
 }
 
+// SessionLoad restores a guest session. Updates the guest replays before it
+// answers are dropped; the read loop handles them before the response.
 func (c *Client) SessionLoad(ctx context.Context, sessionID, cwd string) error {
+	c.loading.Store(true)
+	defer c.loading.Store(false)
 	return c.Call(ctx, MethodSessionLoad, SessionLoadParams{SessionID: sessionID, Cwd: cwd, MCPServers: c.mcpServers()}, nil)
 }
 

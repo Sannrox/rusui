@@ -434,6 +434,13 @@ func TestHostACPReusesGuestSession(t *testing.T) {
 		t.Fatalf("load kept %q", art.GuestSessionID)
 	}
 	assertResume(t, log, "succeeded")
+	// The plane already holds the turns the guest replays on load.
+	log.mu.Lock()
+	rows, _ := json.Marshal(log.rows)
+	log.mu.Unlock()
+	if strings.Contains(string(rows), "replayed earlier turn") {
+		t.Fatalf("load replay was recorded: %s", rows)
+	}
 }
 
 func TestHostACPSendsImageAttachment(t *testing.T) {

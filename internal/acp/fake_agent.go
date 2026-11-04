@@ -105,6 +105,16 @@ func (a *FakeAgent) handle(msg rpcMessage) error {
 				Error:   &rpcError{Code: -32000, Message: "session/load failed"},
 			})
 		}
+		// ACP guests replay the stored conversation before answering a load.
+		if err := a.notify(MethodSessionUpdate, map[string]any{
+			"sessionId": p.SessionID,
+			"update": map[string]any{
+				"sessionUpdate": "user_message_chunk",
+				"content":       map[string]any{"type": "text", "text": "replayed earlier turn"},
+			},
+		}); err != nil {
+			return err
+		}
 		return a.reply(msg.ID, map[string]any{})
 	case MethodSessionPrompt:
 		var p PromptParams
