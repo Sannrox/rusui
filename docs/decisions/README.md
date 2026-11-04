@@ -73,7 +73,7 @@ is stale.
 | [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Superseded by 0070 |
 | [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Superseded by 0071 |
 | [0059](0059-unattributed-operator-retained.md) | Plane calls stay one unattributed operator | Accepted; amended by 0074 |
-| [0060](0060-shikigami-acp-guest-pin.md) | Pin shikigami acp as a supported guest | Accepted; amended by 0073 |
+| [0060](0060-shikigami-acp-guest-pin.md) | Pin shikigami acp as a supported guest | Accepted; amended by 0073, 0087 |
 | [0061](0061-one-model-upstream-retained.md) | One model upstream retained | Accepted |
 | [0062](0062-guest-link-desktop-podman-deferred.md) | Docker Desktop and Podman stay unverified for the guest link | Accepted |
 | [0063](0063-keep-environment-until-archive.md) | Keep the environment until the operator archives it | Accepted |
@@ -100,6 +100,7 @@ is stale.
 | [0084](0084-core-draft-actions.md) | Definition drafts are operator-applied core Actions | Accepted |
 | [0085](0085-freeze-on-author-validated-journey.md) | The stable-core freeze starts on the author-validated journey | Accepted; amended by 0086 |
 | [0086](0086-supported-1.0-core-contract.md) | Freeze the supported 1.0 core contract | Accepted |
+| [0087](0087-acp-guest-session-load.md) | Resume ACP guests with session/load | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR
