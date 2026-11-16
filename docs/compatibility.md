@@ -64,7 +64,9 @@ scripts/compat-conformance.sh
 That runs the mapped tests and `rusui compat-conformance`, which prints
 JSON bound to this binary's commit and schema. Package `internal/compat`
 is the catalog. Positive and incompatible-input checks live next to the
-code they cover. The independent HTTP+SSE client is
+code they cover. The script selects them from the catalog
+(`rusui compat-conformance -list-tests`), and a renamed or deleted
+mapped test fails `TestMappedTestsExist`. The independent HTTP+SSE client is
 [independent-client.md](independent-client.md).
 
 Operator HTTP+SSE response fields are pinned in

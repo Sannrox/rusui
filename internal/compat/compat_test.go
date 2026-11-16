@@ -1,6 +1,10 @@
 package compat
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -81,6 +85,48 @@ func TestSelfCheckPasses(t *testing.T) {
 	for _, c := range rep.Checks {
 		if !c.OK {
 			t.Fatalf("%s: %s", c.Name, c.Err)
+		}
+	}
+}
+
+// TestMappedTestsExist fails when a test named in a surface's Positive or
+// Negative is renamed or deleted: `go test -run` would otherwise report
+// "no tests to run" and the surface would lose its check silently.
+func TestMappedTestsExist(t *testing.T) {
+	root := filepath.Join("..", "..")
+	defined := map[string]bool{}
+	fset := token.NewFileSet()
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", ".worktrees", "_output", "node_modules", "testdata":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return err
+		}
+		for _, decl := range f.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Recv == nil && strings.HasPrefix(fn.Name.Name, "Test") {
+				defined[fn.Name.Name] = true
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range MappedTests() {
+		if !defined[name] {
+			t.Errorf("surface test %s does not exist", name)
 		}
 	}
 }

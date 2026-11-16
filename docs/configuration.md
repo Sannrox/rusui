@@ -65,7 +65,8 @@ review. Default stdout is Markdown for pasting onto a pull request. `-out DIR`
 writes `r{id}.json` and `r{id}.md`. The files are regenerated from SQLite; they
 are not recovery inputs and do not authorize GitHub writes. They are unsigned.
 `rusui compat-conformance [-dir DIR]` runs the 1.0 compatibility checks
-and prints JSON bound to this binary's commit and schema.
+and prints JSON bound to this binary's commit and schema. `-list-tests`
+prints the `go test -run` pattern for the tests the surfaces map to.
 Upgrade procedure: [upgrade.md](upgrade.md).
 Compatibility contract: [compatibility.md](compatibility.md).
 Independent HTTP+SSE client: [independent-client.md](independent-client.md).
