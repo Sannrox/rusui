@@ -16,12 +16,18 @@ func compatConformanceCLI(args []string) {
 
 // compatConformanceMain runs the 1.0 compatibility checks and prints a
 // JSON report bound to this binary's commit and schema (issue #142).
+// -list-tests prints the mapped tests' -run pattern instead.
 func compatConformanceMain(args []string, out, errOut io.Writer) int {
 	fs := flag.NewFlagSet("compat-conformance", flag.ContinueOnError)
 	fs.SetOutput(errOut)
 	dir := fs.String("dir", "", "working directory for throwaway databases (default: temp)")
+	listTests := fs.Bool("list-tests", false, "print the go test -run pattern for the mapped surface tests and exit")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if *listTests {
+		_, _ = fmt.Fprintln(out, compat.MappedTestPattern())
+		return 0
 	}
 	work := *dir
 	if work == "" {

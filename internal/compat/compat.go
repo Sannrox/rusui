@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +31,8 @@ const (
 )
 
 // Surface is one versioned API, runner, policy, export, or artifact in the
-// 1.0 contract. Tests named in Positive and Negative must exist.
+// 1.0 contract. Tests named in Positive and Negative must exist
+// (TestMappedTestsExist) and are selected by MappedTestPattern.
 type Surface struct {
 	Name     string `json:"name"`
 	Version  string `json:"version"`
@@ -58,6 +60,27 @@ func Surfaces() []Surface {
 		{Name: "ha-plane", Version: "", Class: ClassExcluded, Positive: "", Negative: ""},
 		{Name: "mixed-binary-commits", Version: "", Class: ClassExcluded, Positive: "", Negative: "TestRunnerHelloRejectsMismatchedCommit"},
 	}
+}
+
+// MappedTests is the sorted set of test names the surfaces map to.
+func MappedTests() []string {
+	var names []string
+	for _, s := range Surfaces() {
+		for _, n := range []string{s.Positive, s.Negative} {
+			if n != "" {
+				names = append(names, n)
+			}
+		}
+	}
+	slices.Sort(names)
+	return slices.Compact(names)
+}
+
+// MappedTestPattern is the anchored `go test -run` pattern that selects
+// exactly MappedTests. scripts/compat-conformance.sh runs it, so a mapped
+// test cannot fall out of a hand-kept list.
+func MappedTestPattern() string {
+	return "^(" + strings.Join(MappedTests(), "|") + ")$"
 }
 
 // Report is the operator-facing conformance result for one candidate
