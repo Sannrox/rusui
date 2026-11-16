@@ -117,6 +117,14 @@ func (f *fakePulls) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "body": in["body"]})
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/repos/o/r/issues/comments/"):
+		id, _ := strconv.ParseInt(strings.TrimPrefix(r.URL.Path, "/repos/o/r/issues/comments/"), 10, 64)
+		body, ok := f.comments[id]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "body": body})
 	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/repos/o/r/issues/comments/"):
 		id, _ := strconv.ParseInt(strings.TrimPrefix(r.URL.Path, "/repos/o/r/issues/comments/"), 10, 64)
 		if _, ok := f.comments[id]; !ok {
@@ -299,6 +307,44 @@ func TestPublishCommentUpdatesAndRecreatesDeleted(t *testing.T) {
 	rec, err = p2.PublishComment("o/r", 1, spec)
 	if err != nil || rec.ID == 0 {
 		t.Fatalf("recreate %+v %v", rec, err)
+	}
+}
+
+// A stored comment id is fetched directly; the item's comments are not
+// listed (#687).
+func TestPublishCommentUsesStoredIDWithoutListing(t *testing.T) {
+	f, p := newFakePublisher(t)
+	marker := ActionMarker("act-4")
+	f.comments = map[int64]string{7: "v1\n\n" + marker}
+	spec := CommentSpec{ActionID: "act-4", Body: "v1\n\n" + marker, ID: 7}
+	if rec, err := p.PublishComment("o/r", 1, spec); err != nil || rec.ID != 7 {
+		t.Fatalf("unchanged %+v %v", rec, err)
+	}
+	spec.Body = "v2\n\n" + marker
+	if rec, err := p.PublishComment("o/r", 1, spec); err != nil || rec.ID != 7 || f.comments[7] != spec.Body {
+		t.Fatalf("update %+v %v", rec, err)
+	}
+	if got := f.count("GET /repos/o/r/issues/1/comments"); got != 0 {
+		t.Fatalf("listed %d times: %v", got, f.calls)
+	}
+	if f.count("GET /repos/o/r/issues/comments/7") != 2 || f.count("PATCH /repos/o/r/issues/comments/7") != 1 {
+		t.Fatalf("calls %v", f.calls)
+	}
+}
+
+// A stored id that is gone falls back to the marker lookup, which finds
+// the comment under its current id instead of posting a duplicate.
+func TestPublishCommentFallsBackToMarkerWhenStoredIDIsGone(t *testing.T) {
+	f, p := newFakePublisher(t)
+	marker := ActionMarker("act-5")
+	f.comments = map[int64]string{8: "v1\n\n" + marker}
+	spec := CommentSpec{ActionID: "act-5", Body: "v2\n\n" + marker, ID: 3}
+	rec, err := p.PublishComment("o/r", 1, spec)
+	if err != nil || rec.ID != 8 || f.comments[8] != spec.Body {
+		t.Fatalf("fallback %+v %v %v", rec, err, f.calls)
+	}
+	if f.count("GET /repos/o/r/issues/1/comments") != 1 || f.count("POST /repos/o/r/issues/1/comments") != 0 {
+		t.Fatalf("calls %v", f.calls)
 	}
 }
 
