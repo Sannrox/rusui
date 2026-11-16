@@ -48,8 +48,10 @@ type issueComment struct {
 }
 
 // PublishComment creates or updates one comment identified by action
-// marker. A lost create response becomes an update after listing. An
-// unchanged GitHub body is left alone.
+// marker. A known spec.ID is fetched directly and is authoritative; the
+// item's comments are listed by marker only when it is unset or gone. A
+// lost create response becomes an update after listing. An unchanged
+// GitHub body is left alone.
 func (p *Publisher) PublishComment(repo string, item int, spec CommentSpec) (CommentReceipt, error) {
 	if spec.ActionID == "" || !strings.Contains(spec.Body, ActionMarker(spec.ActionID)) {
 		return CommentReceipt{}, fmt.Errorf("%w: missing action marker", ErrCommentDenied)
@@ -63,13 +65,18 @@ func (p *Publisher) PublishComment(repo string, item int, spec CommentSpec) (Com
 		return CommentReceipt{}, fmt.Errorf("%w: %w", ErrCommentDenied, err)
 	}
 	base := "/repos/" + owner + "/" + name
-	found, err := p.commentFor(tok, base, item, spec.ActionID)
-	if err != nil {
-		return CommentReceipt{}, uncertainOr(err)
+	var found CommentReceipt
+	if spec.ID > 0 {
+		found, err = p.commentByID(tok, base, spec.ID)
+		if err != nil {
+			return CommentReceipt{}, uncertainOr(err)
+		}
 	}
-	if found.ID == 0 && spec.ID > 0 {
-		found.ID = spec.ID
-		found.Body = ""
+	if found.ID == 0 {
+		found, err = p.commentFor(tok, base, item, spec.ActionID)
+		if err != nil {
+			return CommentReceipt{}, uncertainOr(err)
+		}
 	}
 	if found.ID > 0 {
 		if found.Body == spec.Body {
@@ -82,6 +89,21 @@ func (p *Publisher) PublishComment(repo string, item int, spec CommentSpec) (Com
 		return rec, err
 	}
 	return p.createComment(tok, base, item, spec)
+}
+
+// commentByID fetches the stored comment. A deleted comment is a zero
+// receipt so the caller falls back to the marker lookup.
+func (p *Publisher) commentByID(tok, repoPath string, id int64) (CommentReceipt, error) {
+	var c issueComment
+	err := p.do(tok, http.MethodGet, repoPath+"/issues/comments/"+strconv.FormatInt(id, 10), nil, &c)
+	var se *statusError
+	if errors.As(err, &se) && se.code == http.StatusNotFound {
+		return CommentReceipt{}, nil
+	}
+	if err != nil {
+		return CommentReceipt{}, err
+	}
+	return CommentReceipt{ID: id, Body: c.Body}, nil
 }
 
 func (p *Publisher) commentFor(tok, repoPath string, item int, actionID string) (CommentReceipt, error) {
