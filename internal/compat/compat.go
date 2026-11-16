@@ -47,7 +47,7 @@ func Surfaces() []Surface {
 		{Name: "sqlite-schema", Version: schema, Class: ClassSupported, Positive: "TestV1DatabaseUpgradesInPlace", Negative: "TestNewerSchemaIsRejected"},
 		{Name: "schema-upgrade", Version: "forward-only", Class: ClassSupported, Positive: "TestCompletedUpgradeClearsStaleLock", Negative: "TestInterruptedUpgradeFailsClosed"},
 		{Name: "policy", Version: "v2", Class: ClassSupported, Positive: "TestParseExampleAndFixture", Negative: "TestPolicyV1AndUnknownFieldsFailClosed"},
-		{Name: "operator-api", Version: "http+sse", Class: ClassSupported, Positive: "TestCreateAndFollowUpOmitOptionalRequestFields", Negative: ""},
+		{Name: "operator-api", Version: "http+sse", Class: ClassSupported, Positive: "TestOperatorAPIResponseShapes", Negative: "TestOperatorAPIRefusesUnsupportedRequests"},
 		{Name: "independent-client", Version: "http+sse", Class: ClassSupported, Positive: "TestIndependentClientJourney", Negative: "TestIndependentClientAuthRefused"},
 		{Name: "runner-protocol", Version: "hello/claim/heartbeat/complete/fail", Class: ClassSupported, Positive: "TestRunnerHelloAcceptsMatchingAndUnknownCommits", Negative: "TestRunnerHelloRejectsMismatchedCommit"},
 		{Name: "restore", Version: "rusui restore -db", Class: ClassSupported, Positive: "TestRestorePreservesIdentitiesRetentionAndReceipts", Negative: "TestRestoreMissingAndCorruptArtifacts"},

@@ -25,6 +25,9 @@ func TestSurfacesCoverContractAndStayOptionalWhenExcluded(t *testing.T) {
 			if s.Positive == "" {
 				t.Fatalf("%s supported without a positive check", s.Name)
 			}
+			if s.Negative == "" {
+				t.Fatalf("%s supported without an incompatible-input check", s.Name)
+			}
 		case ClassExcluded, ClassExperimental, ClassAuthorValidated:
 			if s.Class == ClassExcluded && s.Positive != "" {
 				t.Fatalf("%s excluded but has a positive check that would make it mandatory", s.Name)
