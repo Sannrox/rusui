@@ -67,6 +67,13 @@ is the catalog. Positive and incompatible-input checks live next to the
 code they cover. The independent HTTP+SSE client is
 [independent-client.md](independent-client.md).
 
+Operator HTTP+SSE response fields are pinned in
+`internal/server/testdata/operator-api.golden.json`: create, detail,
+list, read, follow events, and follow-up. A renamed, removed, or retyped
+field fails the mapped check. Regenerate the file with
+`go test ./internal/server -run TestOperatorAPIResponseShapes -update`
+only for a change this contract allows.
+
 Record the printed `commit` and `schema` with the candidate you tested.
 The C3 independent-review brief freezes one candidate in
 [independent-review.md](independent-review.md).
