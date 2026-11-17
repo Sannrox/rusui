@@ -405,6 +405,8 @@ Stop the process (SIGINT). Data that remains until you delete it:
 
 - `rusui.db` plus `-wal`/`-shm` if present
 - snapshot cache (`snapshots/` next to the database by default)
+- attachment cache (`attachments/` next to the database); prompt attachment
+  bytes are in the database, so a restored copy serves them without it
 
 Secrets live in the operator environment, not in those files. Do not
 embed token values in examples. Restore a copied database with
