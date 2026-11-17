@@ -52,3 +52,36 @@ func readHookFile(path string) (string, bool, error) {
 	}
 	return strings.ReplaceAll(string(b), "\r\n", "\n"), true, nil
 }
+
+// ReadAdmitHooks finds dir/<project-slug>/admit for every project. The
+// plane executes the file itself, so it must be executable; the map holds
+// paths, not bodies.
+func ReadAdmitHooks(dir string) (map[string]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out map[string]string
+	for _, ent := range entries {
+		if !ent.IsDir() {
+			continue
+		}
+		path := filepath.Join(dir, ent.Name(), "admit")
+		// Lstat: any entry named admit counts, so a dangling symlink makes
+		// every start refuse instead of skipping admission.
+		if _, err := os.Lstat(path); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
+		out[ent.Name()] = path
+	}
+	return out, nil
+}

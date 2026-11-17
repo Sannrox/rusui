@@ -78,66 +78,74 @@ func (e *Engine) StartChildGuest(parentID int64, prompt, project, requestedGuest
 		repo, sha = e.operatorSessionPin(p)
 	}
 	var childID int64
-	err = e.Store.Tx(func(tx *store.Tx) error {
-		archived, err := store.SessionArchivedTx(tx, parentID)
-		if err != nil {
-			return err
-		}
-		if archived {
-			return errArchived
-		}
-		for _, slug := range []string{parent.Project, project} {
-			paused, err := store.Paused(tx, slug)
+	err = e.admitStart(AdmitRequest{Project: project, Kind: "child", Repo: repo, BaseSHA: sha, Actor: admitActor(parent.Act, parent.CreatedBy, parent.TenantID), PromptSHA256: promptDigest(prompt)}, "", func(g *admitGate) error {
+		return e.Store.Tx(func(tx *store.Tx) error {
+			archived, err := store.SessionArchivedTx(tx, parentID)
 			if err != nil {
 				return err
 			}
-			if paused {
-				return errPaused
+			if archived {
+				return errArchived
 			}
-		}
-		n, err := store.CountActiveChildSessionsTx(tx, parentID)
-		if err != nil {
-			return err
-		}
-		if n >= parentPol.MaxConcurrentLeases() {
-			return fmt.Errorf("fan-out")
-		}
-		sid, item, err := store.InsertChildSessionTx(tx, project, repo, prompt, parentID)
-		if err != nil {
-			return err
-		}
-		if err := store.SetSessionTenantTx(tx, sid, store.NormalizeTenantID(parent.TenantID)); err != nil {
-			return err
-		}
-		if err := store.SetSessionExecutionTx(tx, sid, parent.ExecutionMode, parent.Act); err != nil {
-			return err
-		}
-		if err := e.applyDefaultRetentionTx(tx, sid); err != nil {
-			return err
-		}
-		if _, _, err := e.bindSessionGuestTx(tx, sid, project, requestedGuest, pol); err != nil {
-			return err
-		}
-		if err := store.SetSessionSizeTx(tx, sid, NormalizeSize(p.Size)); err != nil {
-			return err
-		}
-		if parent.Mode != "" {
-			if err := store.SetSessionModeTx(tx, sid, parent.Mode); err != nil {
+			for _, slug := range []string{parent.Project, project} {
+				paused, err := store.Paused(tx, slug)
+				if err != nil {
+					return err
+				}
+				if paused {
+					return errPaused
+				}
+			}
+			n, err := store.CountActiveChildSessionsTx(tx, parentID)
+			if err != nil {
 				return err
 			}
-		}
-		it := snapshot.Item{
-			Repo: repo, Item: item, ItemKind: "run", State: "open",
-			Title: "run", Body: prompt, DefaultBranch: "main", MainSHA: sha,
-		}
-		if err := store.SaveSnapshotTx(tx, repo, item, 1, it); err != nil {
-			return err
-		}
-		if err := insertChildSpawnTx(tx, parent, sid, project, prompt); err != nil {
-			return err
-		}
-		childID = sid
-		return nil
+			if n >= parentPol.MaxConcurrentLeases() {
+				return fmt.Errorf("fan-out")
+			}
+			if err := g.ready(); err != nil {
+				return err
+			}
+			sid, item, err := store.InsertChildSessionTx(tx, project, repo, prompt, parentID)
+			if err != nil {
+				return err
+			}
+			if err := g.recordTx(tx, sid); err != nil {
+				return err
+			}
+			if err := store.SetSessionTenantTx(tx, sid, store.NormalizeTenantID(parent.TenantID)); err != nil {
+				return err
+			}
+			if err := store.SetSessionExecutionTx(tx, sid, parent.ExecutionMode, parent.Act); err != nil {
+				return err
+			}
+			if err := e.applyDefaultRetentionTx(tx, sid); err != nil {
+				return err
+			}
+			if _, _, err := e.bindSessionGuestTx(tx, sid, project, requestedGuest, pol); err != nil {
+				return err
+			}
+			if err := store.SetSessionSizeTx(tx, sid, NormalizeSize(p.Size)); err != nil {
+				return err
+			}
+			if parent.Mode != "" {
+				if err := store.SetSessionModeTx(tx, sid, parent.Mode); err != nil {
+					return err
+				}
+			}
+			it := snapshot.Item{
+				Repo: repo, Item: item, ItemKind: "run", State: "open",
+				Title: "run", Body: prompt, DefaultBranch: "main", MainSHA: sha,
+			}
+			if err := store.SaveSnapshotTx(tx, repo, item, 1, it); err != nil {
+				return err
+			}
+			if err := insertChildSpawnTx(tx, parent, sid, project, prompt); err != nil {
+				return err
+			}
+			childID = sid
+			return nil
+		})
 	})
 	return childID, err
 }

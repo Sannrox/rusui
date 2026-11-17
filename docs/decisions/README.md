@@ -105,6 +105,7 @@ is stale.
 | [0089](0089-redundant-plane.md) | The plane survives the loss of its host | Accepted |
 | [0090](0090-receipt-evidence-and-policy-binding.md) | Review receipts count evidence by class and cite the claim-time policy | Accepted |
 | [0091](0091-egress-classes.md) | Enforce egress classes none, trusted and custom | Accepted |
+| [0092](0092-plane-admit-hook.md) | Plane-stored admit hook | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR

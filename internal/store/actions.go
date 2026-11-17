@@ -25,3 +25,10 @@ func ActionsOfType(s *Store, sessionID int64, typ string) iter.Seq2[Action, erro
 		}, yield)
 	}
 }
+
+// ActionExistsTx reports whether an action with id is recorded.
+func ActionExistsTx(tx *sql.Tx, id string) (bool, error) {
+	var n int
+	err := tx.QueryRow(`SELECT COUNT(*) FROM actions WHERE action_id=?`, id).Scan(&n)
+	return n > 0, err
+}

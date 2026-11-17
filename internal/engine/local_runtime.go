@@ -47,56 +47,64 @@ func (e *Engine) StartLocalSession(project, idem string) (LocalSessionResult, er
 	}
 	var sessionID int64
 	created := false
-	err := e.Store.Tx(func(tx *store.Tx) error {
-		sessionID, created = 0, false // Tx may rerun this callback
-		paused, err := store.Paused(tx, project)
-		if err != nil {
-			return err
-		}
-		if paused {
-			return errPaused
-		}
-		halted, err := store.Halted(tx, sessionTenant(p), project, sessionTenant(p))
-		if err != nil {
-			return err
-		}
-		if halted {
-			return errHalted
-		}
-		if idem != "" {
-			id, found, err := store.LookupIdempotencyTx(tx, idem)
+	err := e.admitStart(AdmitRequest{Project: project, Kind: store.SessionKindLocal, Actor: sessionTenant(p)}, "", func(g *admitGate) error {
+		return e.Store.Tx(func(tx *store.Tx) error {
+			sessionID, created = 0, false // Tx may rerun this callback
+			paused, err := store.Paused(tx, project)
 			if err != nil {
 				return err
 			}
-			if found {
-				kind, existingProject, err := store.SessionKindProjectTx(tx, id)
+			if paused {
+				return errPaused
+			}
+			halted, err := store.Halted(tx, sessionTenant(p), project, sessionTenant(p))
+			if err != nil {
+				return err
+			}
+			if halted {
+				return errHalted
+			}
+			if idem != "" {
+				id, found, err := store.LookupIdempotencyTx(tx, idem)
 				if err != nil {
 					return err
 				}
-				if kind != store.SessionKindLocal || existingProject != project {
-					return fmt.Errorf("idempotency key already belongs to a different session")
+				if found {
+					kind, existingProject, err := store.SessionKindProjectTx(tx, id)
+					if err != nil {
+						return err
+					}
+					if kind != store.SessionKindLocal || existingProject != project {
+						return fmt.Errorf("idempotency key already belongs to a different session")
+					}
+					sessionID = id
+					return nil
 				}
-				sessionID = id
-				return nil
 			}
-		}
-		sessionID, err = store.InsertLocalSessionTx(tx, project, e.now())
-		if err != nil {
-			return err
-		}
-		if err := store.SetSessionTenantTx(tx, sessionID, sessionTenant(p)); err != nil {
-			return err
-		}
-		if err := store.SetSessionExecutionTx(tx, sessionID, store.ExecutionSpace, ""); err != nil {
-			return err
-		}
-		if idem != "" {
-			if err := store.PutIdempotencyTx(tx, idem, sessionID); err != nil {
+			if err := g.ready(); err != nil {
 				return err
 			}
-		}
-		created = true
-		return nil
+			sessionID, err = store.InsertLocalSessionTx(tx, project, e.now())
+			if err != nil {
+				return err
+			}
+			if err := g.recordTx(tx, sessionID); err != nil {
+				return err
+			}
+			if err := store.SetSessionTenantTx(tx, sessionID, sessionTenant(p)); err != nil {
+				return err
+			}
+			if err := store.SetSessionExecutionTx(tx, sessionID, store.ExecutionSpace, ""); err != nil {
+				return err
+			}
+			if idem != "" {
+				if err := store.PutIdempotencyTx(tx, idem, sessionID); err != nil {
+					return err
+				}
+			}
+			created = true
+			return nil
+		})
 	})
 	if err != nil {
 		return LocalSessionResult{}, err
