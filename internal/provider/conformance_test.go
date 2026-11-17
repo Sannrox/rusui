@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -484,5 +485,35 @@ func TestCodexFreshHomeCanStartAfterMissingCursor(t *testing.T) {
 	result := drive(t, KindCodex, Turn{Cursor: "missing-thread", Prompt: "continue", Workspace: t.TempDir(), ModelBaseURL: "http://127.0.0.1:1234", Model: "fixture-model"}, true)
 	if result.Cursor != "codex-thread" {
 		t.Fatalf("fresh thread cursor: %s", result.Cursor)
+	}
+}
+
+// An allowed tool-server call runs with exactly the arguments the gate
+// decided: the reply's updatedInput is the decided rawInput, so a call with
+// other arguments is a new request and a new decision (#684).
+func TestClaudeAllowBindsDecidedArguments(t *testing.T) {
+	line := `{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"mcp__docs__write","input":{"path":"a","body":"x"}}}`
+	var decided struct {
+		RawInput map[string]any `json:"rawInput"`
+	}
+	var out strings.Builder
+	if _, err := answerClaudeControl(&out, []byte(line), func(_ []Option, raw json.RawMessage) (string, bool) {
+		_ = json.Unmarshal(raw, &decided)
+		return "allow", true
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var reply struct {
+		Response struct {
+			Response struct {
+				UpdatedInput map[string]any `json:"updatedInput"`
+			} `json:"response"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &reply); err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]any{"path": "a", "body": "x"}; !maps.Equal(decided.RawInput, want) || !maps.Equal(reply.Response.Response.UpdatedInput, want) {
+		t.Fatalf("decided %v, ran %v", decided.RawInput, reply.Response.Response.UpdatedInput)
 	}
 }
