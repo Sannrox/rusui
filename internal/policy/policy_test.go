@@ -468,3 +468,39 @@ projects:
 		}
 	})
 }
+
+// Each egress_allow entry is an operator grant of an outside destination; an
+// entry that could reach the host or the plane by another name, or a list
+// under a class that would ignore it, must not load (#681).
+func TestEgressAllow(t *testing.T) {
+	doc := func(project string) string {
+		return "version: 2\ndefaults:\n  never_release: true\n  never_leak_private_to_public: true\nprojects:\n  rusui:\n" + project + "    repos:\n      Sannrox/rusui:\n        visibility: private\n"
+	}
+	p, err := Parse([]byte(doc("    egress: custom\n    egress_allow: [Registry.Example.com, pypi.example.org:8443]\n")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := p.Project("rusui"); !slices.Equal(got.EgressAllow, []string{"registry.example.com:443", "pypi.example.org:8443"}) {
+		t.Fatalf("egress_allow %v", got.EgressAllow)
+	}
+	for _, bad := range []string{
+		"    egress: custom\n    egress_allow: [10.0.0.1]\n",
+		"    egress: custom\n    egress_allow: ['[::1]:443']\n",
+		"    egress: custom\n    egress_allow: ['*.example.com']\n",
+		"    egress: custom\n    egress_allow: [localhost]\n",
+		"    egress: custom\n    egress_allow: [api.localhost]\n",
+		"    egress: custom\n    egress_allow: [rusui.plane]\n",
+		"    egress: custom\n    egress_allow: [intranet]\n",
+		"    egress: custom\n    egress_allow: ['example.com:0']\n",
+		"    egress: custom\n    egress_allow: ['example.com:65536']\n",
+		"    egress: custom\n    egress_allow: [example.com, 'example.com:443']\n",
+		"    egress: custom\n",
+		"    egress: trusted\n    egress_allow: [example.com]\n",
+		"    egress: full\n",
+	} {
+		_, err := Parse([]byte(doc(bad)))
+		if err == nil || !strings.Contains(err.Error(), "rusui") {
+			t.Fatalf("accepted or unnamed project: %q: %v", bad, err)
+		}
+	}
+}

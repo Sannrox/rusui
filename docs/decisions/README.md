@@ -14,7 +14,7 @@ is stale.
 <!-- adr-index:start -->
 | ADR | Title | Status |
 | --- | --- | --- |
-| [0001](0001-environment-plane.md) | rusui becomes the environment plane for coding agents | Accepted; amended by 0089 |
+| [0001](0001-environment-plane.md) | rusui becomes the environment plane for coding agents | Accepted; amended by 0089, 0091 |
 | [0002](0002-grok-acp-agent-set.md) | P1 agent set is Grok CLI over ACP | Accepted; amended by 0025, 0060 |
 | [0003](0003-operator-surface.md) | Operator surfaces are views of one object API | Accepted |
 | [0004](0004-rusui-services-yaml.md) | services.yaml is `.rusui/services.yaml` only | Accepted |
@@ -63,7 +63,7 @@ is stale.
 | [0047](0047-guest-link.md) | Container guests reach the plane only through a stdio guest link | Accepted; amended by 0050, 0062 |
 | [0048](0048-pinless-run-session.md) | A project without a repository runs pinless sessions claimed by project key | Accepted |
 | [0049](0049-idle-environment-expiry-retained.md) | Idle environment expiry remains 72 hours | Superseded by 0063 |
-| [0050](0050-guest-toolchain-in-image.md) | Bake guest toolchain into the image; add no destinations | Accepted |
+| [0050](0050-guest-toolchain-in-image.md) | Bake guest toolchain into the image; add no destinations | Accepted; amended by 0091 |
 | [0051](0051-fail-on-full-lease-budget-retained.md) | Admission still fails when the lease budget is full | Superseded by 0064 |
 | [0052](0052-separate-attach-and-guest-shells.md) | Attach and the guest keep separate shells | Superseded by 0065 |
 | [0053](0053-wake-secret-injection-refused.md) | The guest still holds only the per-turn grant | Superseded by 0066 |
@@ -104,6 +104,7 @@ is stale.
 | [0088](0088-issuer-vouched-subjects.md) | A configured issuer vouches for several subjects | Proposed |
 | [0089](0089-redundant-plane.md) | The plane survives the loss of its host | Accepted |
 | [0090](0090-receipt-evidence-and-policy-binding.md) | Review receipts count evidence by class and cite the claim-time policy | Accepted |
+| [0091](0091-egress-classes.md) | Enforce egress classes none, trusted and custom | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR

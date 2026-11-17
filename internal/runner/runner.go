@@ -105,7 +105,10 @@ type Assignment struct {
 	// MCPGateway is set the plane sends only the gateway, which the guest
 	// reaches with the turn credential; third-party credentials stay there.
 	MCPServers []MCPServer `json:"mcp_servers,omitempty"`
-	MCPGateway string      `json:"mcp_gateway,omitempty"`
+	// EgressAllow are the custom egress class's destinations (host:port)
+	// the guest link forwards for the turn, in addition to the plane.
+	EgressAllow []string `json:"egress_allow,omitempty"`
+	MCPGateway  string   `json:"mcp_gateway,omitempty"`
 	// Attachments are prompt files stored outside the workspace (#508).
 	Attachments   []PromptAttachment `json:"attachments,omitempty"`
 	steerReceipts *steerReceiptState

@@ -669,6 +669,9 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 			}
 			if ok {
 				out["permissions"] = p.Permissions
+				if p.Egress == policy.EgressCustom {
+					out["egress_allow"] = p.EgressAllow
+				}
 				if secrets := s.Eng.AssignmentSecrets(p); len(secrets) > 0 {
 					out["secrets"] = secrets
 				}

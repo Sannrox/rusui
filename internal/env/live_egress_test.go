@@ -135,3 +135,59 @@ func TestLiveTrustedGuestReachesOnlyLinkTargets(t *testing.T) {
 		t.Skip("egress blocked, but the host gateway result is unproven on this host")
 	}
 }
+
+// A custom-class guest reaches each listed destination by its name through
+// the guest link, and still nothing it does not list (#681). The listed
+// name is re-pointed at a local server, so the proof needs no internet.
+func TestLiveCustomGuestReachesListedDestinationOnly(t *testing.T) {
+	unavailable := t.Skipf
+	if os.Getenv("CI") != "" {
+		unavailable = t.Fatalf
+	}
+	rt, err := LookRuntime()
+	if err != nil {
+		unavailable("container runtime required for live egress proof: %v", err)
+		return
+	}
+	listed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(listed.Close)
+	if err := exec.Command(rt.(DockerCLI).bin(), "pull", "-q", egressProbeImage).Run(); err != nil {
+		unavailable("cannot pull %s: %v", egressProbeImage, err)
+		return
+	}
+	d := Container{RT: rt, Image: egressProbeImage}
+	id, err := d.Create(fmt.Sprintf("egress-custom-%d", time.Now().UnixNano()%1_000_000_000))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+			unavailable("container runtime unavailable: %v", err)
+			return
+		}
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Destroy(id) })
+	targets, err := EgressLinkTargets([]string{"registry.example.test:8443"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets[0].Dial = listed.Listener.Addr().String()
+	link, err := StartLink(d, id, targets)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(link.Close)
+
+	// The probe's "plane" fetch goes to the listed name here.
+	argv := []string{"node", "-e", egressProbeJS, "http://registry.example.test:8443/",
+		"unlisted_name=example.com:443", "unlisted_port=registry.example.test:443", "public_ip=1.1.1.1:443"}
+	out, _, err := rt.(DockerCLI).ExecOutput(id, argv)
+	if err != nil {
+		t.Fatalf("probe: %v %s", err, out)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	got := strings.Join(strings.Fields(lines[len(lines)-1]), " ")
+	if want := "unlisted_name=blocked unlisted_port=blocked public_ip=blocked plane=ok"; got != want {
+		t.Fatalf("guest egress\n got %s\nwant %s", got, want)
+	}
+}
