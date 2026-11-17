@@ -5,14 +5,17 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/guest"
 	"gopkg.in/yaml.v3"
 )
@@ -75,9 +78,12 @@ type ProjectYAML struct {
 	SessionKinds []string            `yaml:"session_kinds"`
 	LocalRuntime *LocalRuntimeYAML   `yaml:"local_runtime"`
 	Egress       string              `yaml:"egress"`
-	Size         string              `yaml:"size"`
-	Budgets      map[string]int      `yaml:"budgets"`
-	Permissions  []AllowRule         `yaml:"permissions"`
+	// EgressAllow lists the destinations (host or host:port) a custom
+	// egress class forwards to the guest, in addition to trusted.
+	EgressAllow []string       `yaml:"egress_allow"`
+	Size        string         `yaml:"size"`
+	Budgets     map[string]int `yaml:"budgets"`
+	Permissions []AllowRule    `yaml:"permissions"`
 	// Secrets is the project allowlist of plane secret ids injected at wake.
 	Secrets []string `yaml:"secrets"`
 	// Ship is pull-request (default) or push-base (ADR 0068).
@@ -102,8 +108,8 @@ type LocalRuntimeYAML struct {
 }
 
 type RepoYAML struct {
-	Visibility                 *string `yaml:"visibility"`
-	Review                     *bool   `yaml:"review"`
+	Visibility                 *string  `yaml:"visibility"`
+	Review                     *bool    `yaml:"review"`
 	Comments                   *bool    `yaml:"comments"`
 	Comment                    *bool    `yaml:"comment"`
 	Close                      *bool    `yaml:"close"`
@@ -145,9 +151,11 @@ type Project struct {
 	SessionKinds []string
 	LocalRuntime *LocalRuntime
 	Egress       string
-	Size         string
-	Budgets      map[string]int
-	Permissions  []AllowRule
+	// EgressAllow is the custom class's destinations as host:port.
+	EgressAllow []string
+	Size        string
+	Budgets     map[string]int
+	Permissions []AllowRule
 	// Secrets is the project allowlist of plane secret ids injected at wake.
 	Secrets []string
 	// Ship is pull-request or push-base (ADR 0068). Parse stores the
@@ -247,6 +255,10 @@ func Parse(raw []byte) (*Effective, error) {
 		if err := validEgress(slug, egress); err != nil {
 			return nil, err
 		}
+		egressAllow, err := validEgressAllow(slug, egress, y.EgressAllow)
+		if err != nil {
+			return nil, err
+		}
 		budgets, err := validBudgets(slug, y.Budgets)
 		if err != nil {
 			return nil, err
@@ -278,6 +290,7 @@ func Parse(raw []byte) (*Effective, error) {
 			SessionKinds: kinds,
 			LocalRuntime: localRuntime,
 			Egress:       egress,
+			EgressAllow:  egressAllow,
 			Size:         size,
 			Budgets:      budgets,
 			Permissions:  y.Permissions,
@@ -457,11 +470,61 @@ func validLocalRuntime(slug string, runtime *LocalRuntimeYAML, kinds []string) (
 
 func validEgress(slug, egress string) error {
 	switch egress {
-	case EgressNone, EgressTrusted, EgressCustom, EgressFull:
+	case EgressNone, EgressTrusted, EgressCustom:
 		return nil
+	case EgressFull:
+		return fmt.Errorf("policy: %s egress full is not available yet (#751)", slug)
 	default:
 		return fmt.Errorf("policy: %s invalid egress %q", slug, egress)
 	}
+}
+
+// MaxEgressAllow bounds a custom class's destinations; each distinct host
+// takes one guest link address.
+const MaxEgressAllow = 32
+
+var egressHost = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$`)
+
+// validEgressAllow returns a custom class's destinations as host:port
+// (port 443 when omitted). Only DNS names the operator could mean as an
+// outside service pass: IP literals, wildcards, localhost names, single
+// labels, and the plane's own name are refused, so the list cannot reach
+// the host or the plane by another route.
+func validEgressAllow(slug, egress string, entries []string) ([]string, error) {
+	if egress != EgressCustom {
+		if len(entries) > 0 {
+			return nil, fmt.Errorf("policy: %s egress_allow needs egress custom", slug)
+		}
+		return nil, nil
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("policy: %s egress custom needs egress_allow", slug)
+	}
+	if len(entries) > MaxEgressAllow {
+		return nil, fmt.Errorf("policy: %s egress_allow lists more than %d destinations", slug, MaxEgressAllow)
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		host, port := strings.ToLower(e), "443"
+		if h, p, err := net.SplitHostPort(host); err == nil {
+			host, port = h, p
+		}
+		n, err := strconv.Atoi(port)
+		if err != nil || n < 1 || n > 65535 || strconv.Itoa(n) != port {
+			return nil, fmt.Errorf("policy: %s egress_allow %q port must be 1 to 65535", slug, e)
+		}
+		labels := strings.Split(host, ".")
+		if net.ParseIP(host) != nil || !egressHost.MatchString(host) || strings.Trim(labels[len(labels)-1], "0123456789") == "" ||
+			labels[len(labels)-1] == "localhost" || host == env.PlaneHost {
+			return nil, fmt.Errorf("policy: %s egress_allow %q must be an outside DNS name", slug, e)
+		}
+		d := net.JoinHostPort(host, port)
+		if slices.Contains(out, d) {
+			return nil, fmt.Errorf("policy: %s egress_allow lists %q twice", slug, e)
+		}
+		out = append(out, d)
+	}
+	return out, nil
 }
 
 // MCPGatewayName is the server name a session sees for the gateway.

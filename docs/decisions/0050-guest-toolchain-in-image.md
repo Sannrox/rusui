@@ -1,6 +1,8 @@
 # ADR 0050: Bake guest toolchain into the image; add no destinations
 
-- Status: Accepted
+- Status: Accepted; amended by 0091
+- Amended by: [ADR 0091](0091-egress-classes.md) (a project with egress
+  `custom` may list destinations).
 - Date: 2026-10-06
 - Amends: [ADR 0047](0047-guest-link.md) D3 (forward targets stay the
   plane and, in implement sessions, GitHub). Related image change is

@@ -13,7 +13,8 @@ import (
 // startTurnLink opens the guest link of a container turn (ADR 0047): the
 // guest has no network, and its plane URLs reach the plane listener the
 // runner itself uses. An implement turn that talks to GitHub itself (ADR
-// 0015) also reaches GitHub. The returned context ends when the link
+// 0015) also reaches GitHub, and a custom egress class adds its listed
+// destinations (#681). The returned context ends when the link
 // does, so a lost link fails the turn instead of waiting for its deadline.
 func startTurnLink(ctx context.Context, c *Client, a *Assignment) (context.Context, func(), error) {
 	noop := func() {}
@@ -34,7 +35,12 @@ func startTurnLink(ctx context.Context, c *Client, a *Assignment) (context.Conte
 			return ctx, noop, fmt.Errorf("guest link: model url: %w", err)
 		}
 	}
-	link, err := env.StartLink(x, a.Handle, env.PlaneLinkTargets(planeDial, guestPort, a.GitHubToken != ""))
+	egress, err := env.EgressLinkTargets(a.EgressAllow)
+	if err != nil {
+		return ctx, noop, fmt.Errorf("guest link: %w", err)
+	}
+	targets := append(env.PlaneLinkTargets(planeDial, guestPort, a.GitHubToken != ""), egress...)
+	link, err := env.StartLink(x, a.Handle, targets)
 	if err != nil {
 		return ctx, noop, err
 	}

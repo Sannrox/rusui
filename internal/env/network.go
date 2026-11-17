@@ -18,6 +18,8 @@ const (
 	GuestPlaneIP     = "127.0.0.2"
 	GuestGitHubIP    = "127.0.0.3"
 	GuestGitHubAPIIP = "127.0.0.4"
+	// GuestEgressNet prefixes the guest addresses of custom egress hosts.
+	GuestEgressNet = "127.0.1."
 )
 
 // ApplyTrustedNetwork is the trusted egress class: the guest has no

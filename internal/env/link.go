@@ -44,11 +44,16 @@ type LinkTarget struct {
 	GuestIP string
 	Port    int
 	Dial    string
+	// Host, when set, is the name the guest resolves to GuestIP. The guest
+	// side writes it to the guest's hosts file before it binds.
+	Host string
 }
 
 // linkJS is the guest side. argv[1] is a JSON list of listeners
-// {ip, port, t}; t indexes the host's target list.
+// {ip, port, t, h}; t indexes the host's target list. Listeners with a
+// host name h replace the link's earlier marked lines in /etc/hosts.
 const linkJS = `const net=require("net");const L=JSON.parse(process.argv[1]);const out=process.stdout;const socks=new Map();let next=1;
+const H=L.filter(l=>l.h);if(H.length){const fs=require("fs"),k=" #rusui-egress";try{const a=fs.readFileSync("/etc/hosts","utf8").split("\n").filter(x=>x&&!x.endsWith(k));for(const l of H){const e=l.ip+" "+l.h+k;if(!a.includes(e))a.push(e);}fs.writeFileSync("/etc/hosts",a.join("\n")+"\n");}catch(e){process.stderr.write("rusui-link: hosts: "+e.message+"\n");process.exit(1);}}
 function send(t,id,p){p=p||Buffer.alloc(0);const h=Buffer.alloc(9);h[0]=t;h.writeUInt32BE(id,1);h.writeUInt32BE(p.length,5);out.write(Buffer.concat([h,p]));}
 function attach(id,s){socks.set(id,s);s.on("data",d=>{for(let i=0;i<d.length;i+=32768)send(2,id,d.subarray(i,i+32768));});s.on("end",()=>{if(socks.get(id)===s)send(3,id);});s.on("error",()=>{});s.on("close",()=>{if(socks.get(id)===s){socks.delete(id);send(4,id);}});}
 let pending=L.length;const ready=()=>{if(--pending<=0)send(5,0);};if(pending===0)send(5,0);
@@ -101,13 +106,14 @@ func StartLink(x StdioExecutor, handle string, targets []LinkTarget) (*Link, err
 		IP   string `json:"ip"`
 		Port int    `json:"port"`
 		T    int    `json:"t"`
+		H    string `json:"h,omitempty"`
 	}
 	ls := make([]listen, 0, len(targets))
 	for i, t := range targets {
 		if net.ParseIP(t.GuestIP) == nil || t.Port < 1 || t.Port > 65535 || t.Dial == "" {
 			return nil, fmt.Errorf("env: invalid link target %d", i)
 		}
-		ls = append(ls, listen{IP: t.GuestIP, Port: t.Port, T: i})
+		ls = append(ls, listen{IP: t.GuestIP, Port: t.Port, T: i, H: t.Host})
 	}
 	arg, err := json.Marshal(ls)
 	if err != nil {
@@ -329,8 +335,8 @@ func (l *Link) serve(id uint32, s *linkStream, conn net.Conn) {
 }
 
 // PlaneLinkTargets are the outbound targets of a managed turn's link: the
-// plane listener, and for an implement session that talks to GitHub
-// itself (ADR 0015) the GitHub hosts the guest needs.
+// plane listener, and for an implement session that talks to GitHub itself
+// (ADR 0015) the GitHub hosts the guest needs.
 func PlaneLinkTargets(planeDial string, planePort int, github bool) []LinkTarget {
 	out := []LinkTarget{{GuestIP: GuestPlaneIP, Port: planePort, Dial: planeDial}}
 	if github {
@@ -340,4 +346,29 @@ func PlaneLinkTargets(planeDial string, planePort int, github bool) []LinkTarget
 		)
 	}
 	return out
+}
+
+// EgressLinkTargets are the link targets of a custom egress class: each
+// destination (host:port, validated by policy) is reached in the guest by
+// its host name. Each distinct host gets its own address in GuestEgressNet.
+func EgressLinkTargets(allow []string) ([]LinkTarget, error) {
+	var out []LinkTarget
+	ips := map[string]string{}
+	for _, d := range allow {
+		host, p, err := net.SplitHostPort(d)
+		port, perr := strconv.Atoi(p)
+		if err != nil || perr != nil || host == "" || net.ParseIP(host) != nil {
+			return nil, fmt.Errorf("env: invalid egress destination %q", d)
+		}
+		ip, ok := ips[host]
+		if !ok {
+			if len(ips) >= 250 {
+				return nil, fmt.Errorf("env: too many egress hosts")
+			}
+			ip = GuestEgressNet + strconv.Itoa(len(ips)+1)
+			ips[host] = ip
+		}
+		out = append(out, LinkTarget{GuestIP: ip, Port: port, Dial: d, Host: host})
+	}
+	return out, nil
 }

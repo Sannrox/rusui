@@ -8,7 +8,10 @@ stubbed Docker CLI. One live test,
 checks from inside it that a public address, a public name, guest
 loopback on the plane port, the host gateway, the metadata address, IPv6,
 and `github.com` all fail while the plane answers through the link. CI
-runs it on Docker and fails when no runtime is present. Podman and
+runs it on Docker and fails when no runtime is present.
+`TestLiveCustomGuestReachesListedDestinationOnly` proves a `custom` egress
+guest reaches a listed name and not an unlisted name, port, or address.
+Podman and
 cross-host combinations are not claimed.
 
 Container guests run with no network (`--network none`) and may reach
@@ -18,7 +21,9 @@ harness ([ADR 0047](decisions/0047-guest-link.md)). An implement session
 under agent publication also reaches `github.com` and `api.github.com`
 through its link. Direct addresses, IPv6, host loopback, DNS, and other
 names are unreachable, so `.agents/setup` cannot download from the
-internet; put dependencies in the image or the snapshot. The reference
+internet; put dependencies in the image or the snapshot. A project with
+`egress: custom` adds the destinations it lists in `egress_allow` to each
+turn's link ([ADR 0091](decisions/0091-egress-classes.md)). The reference
 image bakes Go, make, a C toolchain, and headless Chromium so a session
 can run the project's tests and capture a page without extra destinations
 ([ADR 0050](decisions/0050-guest-toolchain-in-image.md)). Preview reaches

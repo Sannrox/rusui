@@ -512,6 +512,24 @@ projects:
     secrets: [npm_token]
 ```
 
+Project `egress` (default `trusted`) decides what a container guest's
+link forwards each turn. `none` and `trusted` forward only the plane.
+`custom` also forwards each destination in the project's `egress_allow`:
+`host` or `host:port` (port 443 when omitted), at most 32. The guest
+reaches it by that name; the container still has no network. An IP
+literal, a wildcard, a `localhost` name, a single label, `rusui.plane`, a
+duplicate, or a port outside 1 to 65535 is a policy load error, as is
+`egress_allow` under another class and `custom` with an empty list.
+`full` is a load error until [#751](https://github.com/Sannrox/rusui/issues/751)
+([ADR 0091](decisions/0091-egress-classes.md)).
+
+```yaml
+projects:
+  rusui:
+    egress: custom
+    egress_allow: [registry.npmjs.org, proxy.golang.org]
+```
+
 Project `permissions` answer the guest's `session/request_permission`
 (the tool fence). A rule matches on `tool`, `kind`, and `command`; empty
 fields are wildcards. `action` is `allow` (the default) or `reject`. Any

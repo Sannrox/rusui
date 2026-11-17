@@ -40,3 +40,23 @@ func TestGatewayModeAssignsOnlyTheGateway(t *testing.T) {
 		}
 	}
 }
+
+// A custom egress project's destinations reach the runner on the turn
+// assignment, which is the only place the guest link learns them (#681).
+func TestCustomEgressAssignsListedDestinations(t *testing.T) {
+	t.Parallel()
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
+	p, err := policy.Parse([]byte(strings.Replace(slackPol, "  test:\n", "  test:\n    egress: custom\n    egress_allow: [registry.example.com]\n", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := engine.New(st, p, gh.NewFake(), &clock.Fake{T: time.Unix(1_700_000_000, 0).UTC()})
+	e.Env = env.Process{Root: t.TempDir()}
+	e.ReloadPolicy(p)
+	hs := httptest.NewServer((&Server{Eng: e, WorkerSec: "wsec"}).Handler())
+	t.Cleanup(hs.Close)
+
+	if a := claim(t, hs, e, false); len(a.EgressAllow) != 1 || a.EgressAllow[0] != "registry.example.com:443" {
+		t.Fatalf("egress_allow %v", a.EgressAllow)
+	}
+}
