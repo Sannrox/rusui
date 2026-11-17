@@ -152,7 +152,7 @@ func TestCountPendingApprovalsOnlyCountsAnswerableRequests(t *testing.T) {
 	if n := count(); n != 1 {
 		t.Fatalf("pending %d", n)
 	}
-	if err := PutApprovalDecision(s, "ask", "allow"); err != nil {
+	if err := PutApprovalDecision(s, "ask", "allow", Attribution{}); err != nil {
 		t.Fatal(err)
 	}
 	add("again", "permission_unmatched")
@@ -257,7 +257,7 @@ func TestFollowTokenMovesOnlyWithFollowedState(t *testing.T) {
 		t.Fatal(err)
 	}
 	moved("a turn state change")
-	if err := PutApprovalDecision(s, "a1", "allow"); err != nil {
+	if err := PutApprovalDecision(s, "a1", "allow", Attribution{}); err != nil {
 		t.Fatal(err)
 	}
 	moved("an approval decision")

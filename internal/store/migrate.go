@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 54
+const CurrentSchema = 55
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -640,8 +640,43 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 55 {
+		if err := migrateV55(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 55); err != nil {
+			return err
+		}
+	}
 	if upgrading {
 		if err := clearUpgradeLock(s.DB); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// migrateV55 attributes decision rows to an issuer-vouched subject's actor
+// and its delegating service (ADR 0088 D3, #717). The columns are nullable
+// and additive and older rows read back without an actor. As with every
+// migration, the previous release refuses schema 55: roll back by
+// restoring the pre-upgrade copy (docs/upgrade.md).
+func migrateV55(db *sql.DB) error {
+	for _, c := range []struct{ table, column string }{
+		{"approval_decisions", "decided_by"},
+		{"approval_decisions", "delegated_by"},
+		{"result_dispositions", "decided_by"},
+		{"result_dispositions", "delegated_by"},
+		{"retry_audit", "delegated_by"},
+	} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name=?`, c.table, c.column).Scan(&n); err != nil {
+			return err
+		}
+		if n > 0 {
+			continue
+		}
+		if _, err := db.Exec(`ALTER TABLE ` + c.table + ` ADD COLUMN ` + c.column + ` TEXT`); err != nil {
 			return err
 		}
 	}

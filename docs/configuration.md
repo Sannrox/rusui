@@ -115,6 +115,7 @@ reported and exits successfully.
 | `RUSUI_OIDC_AUDIENCE` | no | OIDC API audience validated on every bearer. |
 | `RUSUI_OIDC_CLIENT_ID` | no | Public OIDC client ID used by `rusui login`. |
 | `RUSUI_OIDC_SUBJECT` | no | Exact OIDC subject bound to the single rusui operator. |
+| `RUSUI_OIDC_SUBJECTS` | no | JSON object, or a path to one, mapping each further OIDC `sub` to `{"tenant": "<tenant_id>", "actor": "<actor id>"}` ([ADR 0088](decisions/0088-issuer-vouched-subjects.md)). Requires the OIDC settings above. A mapped subject is an operator for that tenant and actor only; its approval decisions, retries, and dispositions record the actor and the token's `act` service, never the `sub`. Its tokens must carry `iat` and `exp` at most one hour apart, and are refused once the issuer's keys go one hour without a successful fetch. A subject equal to `RUSUI_OIDC_SUBJECT`, two subjects on one tenant and actor, or the `default`/`default` pair fail closed at start. |
 | `RUSUI_OIDC_SCOPES` | `openid` | Space-separated scopes requested by `rusui login`. |
 | `RUSUI_SLACK_SECRET` | **Yes** unless `-allow-insecure` | Slack HMAC |
 | `RUSUI_GITHUB_API` | no | Default `https://api.github.com` |

@@ -38,9 +38,13 @@ func (s *Server) retryFailed(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
+	by := attribution(s.identify(r))
+	if by.Actor == "" {
+		by.Actor = "operator-api"
+	}
 	out := map[string]any{"repo": repo}
 	if item == 0 {
-		n, err := s.retryFailedTenant(repo, tenant)
+		n, err := s.retryFailedTenant(repo, tenant, by)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -51,7 +55,7 @@ func (s *Server) retryFailed(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		if err := s.Eng.OperatorRetry(repo, item, "operator-api"); err != nil {
+		if err := s.Eng.OperatorRetry(repo, item, by); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
@@ -61,13 +65,13 @@ func (s *Server) retryFailed(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-func (s *Server) retryFailedTenant(repo, tenant string) (int, error) {
+func (s *Server) retryFailedTenant(repo, tenant string, by store.Attribution) (int, error) {
 	items, err := store.FailedReviewItems(s.Eng.Store, repo, tenant)
 	if err != nil {
 		return 0, err
 	}
 	for i, item := range items {
-		if err := s.Eng.OperatorRetry(repo, item, "operator-api"); err != nil {
+		if err := s.Eng.OperatorRetry(repo, item, by); err != nil {
 			return i, err
 		}
 	}

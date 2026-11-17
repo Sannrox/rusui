@@ -666,7 +666,7 @@ func TestOperatorRetry(t *testing.T) {
 	if j.State != "failed" {
 		t.Fatalf("sweep changed %s", j.State)
 	}
-	if err := h.e.OperatorRetry("example/test-repo", 1, "U1"); err != nil {
+	if err := h.e.OperatorRetry("example/test-repo", 1, store.Attribution{Actor: "U1"}); err != nil {
 		t.Fatal(err)
 	}
 	j, _ = store.JobState(h.st, "example/test-repo", 1)
@@ -837,7 +837,7 @@ func TestSlackRetry(t *testing.T) {
 		h.clk.Advance(4 * time.Minute)
 	}
 	_, _ = h.e.Claim("example/test-repo")
-	if err := h.e.OperatorRetry("example/test-repo", 1, "U1"); err != nil {
+	if err := h.e.OperatorRetry("example/test-repo", 1, store.Attribution{Actor: "U1"}); err != nil {
 		t.Fatal(err)
 	}
 	j, _ := store.JobState(h.st, "example/test-repo", 1)

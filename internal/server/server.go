@@ -36,9 +36,11 @@ type Server struct {
 	TenantToks map[string]string
 	// MemberToks maps an extra member bearer to its tenant. ActorToks maps
 	// a bearer to the actor id it presents inside that tenant (#605).
-	MemberToks       map[string]string
-	ActorToks        map[string]string
-	OIDC             *oidc.Verifier
+	MemberToks map[string]string
+	ActorToks  map[string]string
+	OIDC       *oidc.Verifier
+	// OIDCSubjects maps an issuer-vouched sub to its tenant and actor (ADR 0088).
+	OIDCSubjects     map[string]VouchedSubject
 	SlackSec         string
 	SlackUsers       map[string]bool
 	PolicyPath       string
@@ -881,7 +883,7 @@ func (s *Server) runSlack(cmd slack.Command) (string, int) {
 			}
 			return fmt.Sprintf("retried %d failed job(s) in %s", n, repo), 200
 		}
-		if err := s.Eng.OperatorRetry(repo, item, cmd.UserID); err != nil {
+		if err := s.Eng.OperatorRetry(repo, item, store.Attribution{Actor: cmd.UserID}); err != nil {
 			return err.Error(), 200
 		}
 		return fmt.Sprintf("retried %s#%d", repo, item), 200

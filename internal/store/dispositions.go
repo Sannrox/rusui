@@ -26,12 +26,13 @@ var (
 // Disposition is a maintainer's judgment of one review result. It is a
 // record only: it never changes policy, jobs, or actions.
 type Disposition struct {
-	ID               int64     `json:"id"`
-	ReviewRevisionID int64     `json:"result_id"`
-	Value            string    `json:"disposition"`
-	WrongFinding     bool      `json:"wrong_finding"`
-	Note             string    `json:"note,omitempty"`
-	RecordedAt       time.Time `json:"recorded_at"`
+	ID               int64       `json:"id"`
+	ReviewRevisionID int64       `json:"result_id"`
+	Value            string      `json:"disposition"`
+	WrongFinding     bool        `json:"wrong_finding"`
+	Note             string      `json:"note,omitempty"`
+	RecordedAt       time.Time   `json:"recorded_at"`
+	By               Attribution `json:"by,omitzero"`
 }
 
 // ReviewRevisionSession returns the session that produced a review result.
@@ -64,8 +65,8 @@ func RecordDisposition(s *Store, d Disposition) (Disposition, error) {
 		return Disposition{}, err
 	}
 	d.RecordedAt = time.Now().UTC()
-	res, err := s.DB.Exec(`INSERT INTO result_dispositions (review_revision_id, disposition, wrong_finding, note, recorded_at) VALUES (?,?,?,?,?)`,
-		d.ReviewRevisionID, d.Value, d.WrongFinding, d.Note, d.RecordedAt.Format(time.RFC3339Nano))
+	res, err := s.DB.Exec(`INSERT INTO result_dispositions (review_revision_id, disposition, wrong_finding, note, recorded_at, decided_by, delegated_by) VALUES (?,?,?,?,?,?,?)`,
+		d.ReviewRevisionID, d.Value, d.WrongFinding, d.Note, d.RecordedAt.Format(time.RFC3339Nano), nullable(d.By.Actor), nullable(d.By.Delegate))
 	if err != nil {
 		return Disposition{}, err
 	}

@@ -551,3 +551,44 @@ func TestCompletedUpgradeClearsStaleLock(t *testing.T) {
 		t.Fatalf("schema %d %v", ver, err)
 	}
 }
+
+// V55 (#717) adds nullable attribution columns: a decision written by the
+// previous release reads back without an actor, and a migration interrupted
+// after some columns were added completes on the next open.
+func TestV55DecisionsGainNullableAttribution(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v54.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`
+ALTER TABLE approval_decisions DROP COLUMN decided_by;
+ALTER TABLE approval_decisions DROP COLUMN delegated_by;
+ALTER TABLE result_dispositions DROP COLUMN delegated_by;
+DELETE FROM schema_migrations WHERE version=55;
+INSERT INTO approval_decisions(action_id, decision, decided_at) VALUES ('old', 'allow', '2026-11-01T00:00:00Z');
+`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	st, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	var by, via sql.NullString
+	if err := st.DB.QueryRow(`SELECT decided_by, delegated_by FROM approval_decisions WHERE action_id='old'`).Scan(&by, &via); err != nil {
+		t.Fatal(err)
+	}
+	if by.Valid || via.Valid {
+		t.Fatalf("old row gained an actor: %v %v", by, via)
+	}
+	if err := PutApprovalDecision(st, "new", "deny", Attribution{Actor: "alice", Delegate: "svc"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DB.QueryRow(`SELECT decided_by, delegated_by FROM approval_decisions WHERE action_id='new'`).Scan(&by, &via); err != nil || by.String != "alice" || via.String != "svc" {
+		t.Fatalf("new row %v %v %v", by, via, err)
+	}
+}

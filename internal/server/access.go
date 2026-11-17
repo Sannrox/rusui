@@ -58,6 +58,19 @@ type Principal struct {
 	Class    CredentialClass
 	TenantID string
 	Actor    string
+	// Vouched marks an issuer-vouched OIDC subject (ADR 0088). Only such a
+	// caller is attributed on decision rows; Delegate is its token's act.
+	Vouched  bool
+	Delegate string
+}
+
+// attribution is what decision rows record for p (ADR 0088 D3). Other
+// credentials keep their unattributed records (ADR 0059).
+func attribution(p Principal) store.Attribution {
+	if !p.Vouched {
+		return store.Attribution{}
+	}
+	return store.Attribution{Actor: p.Actor, Delegate: p.Delegate}
 }
 
 // OperatorBrowserOK is true only for the operator class. Worker and turn
@@ -120,10 +133,22 @@ func (s *Server) lookupPrincipal(r *http.Request) Principal {
 	if tok == "" || tok == s.WorkerSec || (s.OperatorTok != "" && s.OperatorTok == s.WorkerSec) {
 		return Principal{Class: CredNone}
 	}
-	if s.OIDC != nil && s.OIDC.Valid(tok) {
+	if s.OIDC == nil {
+		return Principal{Class: CredNone}
+	}
+	id, ok := s.OIDC.Verify(tok)
+	if !ok {
+		return Principal{Class: CredNone}
+	}
+	if !id.Vouched {
 		return Principal{Class: CredOperator, TenantID: store.DefaultTenantID, Actor: store.DefaultTenantID}
 	}
-	return Principal{Class: CredNone}
+	// Tenant and actor come only from the configured map (ADR 0088 D2).
+	v, mapped := s.OIDCSubjects[id.Subject]
+	if !mapped {
+		return Principal{Class: CredNone}
+	}
+	return Principal{Class: CredOperator, TenantID: v.Tenant, Actor: v.Actor, Vouched: true, Delegate: id.Delegate}
 }
 
 func (s *Server) tenantForToken(tok string) string {
@@ -412,6 +437,93 @@ func LoadTenantTokens(raw string) (tokens, members, actors map[string]string, er
 		}
 	}
 	return tokens, members, actors, nil
+}
+
+// VouchedSubject is the tenant and actor an issuer-vouched subject acts as.
+type VouchedSubject struct {
+	Tenant string `json:"tenant"`
+	Actor  string `json:"actor"`
+}
+
+// LoadOIDCSubjects parses RUSUI_OIDC_SUBJECTS: a JSON object, or a path to
+// one, mapping each token sub to {"tenant", "actor"} (ADR 0088 D1). It
+// refuses a sub equal to the ADR 0074 operatorSubject and two subjects on
+// one tenant and actor pair, including the default operator's (D6).
+func LoadOIDCSubjects(raw, operatorSubject string) (map[string]VouchedSubject, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	if operatorSubject == "" {
+		return nil, fmt.Errorf("OIDC subjects: RUSUI_OIDC_SUBJECTS needs the OIDC issuer configuration")
+	}
+	body := []byte(raw)
+	if !strings.HasPrefix(raw, "{") {
+		b, err := os.ReadFile(raw)
+		if err != nil {
+			return nil, fmt.Errorf("OIDC subjects: %w", err)
+		}
+		body = b
+	}
+	var entries map[string]json.RawMessage
+	if err := json.Unmarshal(body, &entries); err != nil {
+		return nil, fmt.Errorf("OIDC subjects: %w", err)
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("OIDC subjects: empty map")
+	}
+	out := make(map[string]VouchedSubject, len(entries))
+	pairs := map[string]bool{store.DefaultTenantID + "/" + store.DefaultTenantID: true}
+	for sub, val := range entries {
+		// Errors name the tenant and actor, never the subject.
+		if sub == "" || sub != strings.TrimSpace(sub) {
+			return nil, fmt.Errorf("OIDC subjects: empty or padded subject")
+		}
+		if sub == operatorSubject {
+			return nil, fmt.Errorf("OIDC subjects: a subject is also RUSUI_OIDC_SUBJECT")
+		}
+		var v VouchedSubject
+		dec := json.NewDecoder(strings.NewReader(string(val)))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&v); err != nil {
+			return nil, fmt.Errorf("OIDC subjects: %w", err)
+		}
+		if v.Tenant == "" || v.Actor == "" {
+			return nil, fmt.Errorf("OIDC subjects: entry without tenant or actor")
+		}
+		if err := validTenantID(v.Tenant); err != nil {
+			return nil, err
+		}
+		if err := validTenantID(v.Actor); err != nil {
+			return nil, fmt.Errorf("OIDC subjects: invalid actor %q", v.Actor)
+		}
+		pair := v.Tenant + "/" + v.Actor
+		if pairs[pair] {
+			return nil, fmt.Errorf("OIDC subjects: %s is mapped twice or is the default operator", pair)
+		}
+		pairs[pair] = true
+		out[sub] = v
+	}
+	return out, nil
+}
+
+// CheckOIDCSubjectOverlap refuses a vouched subject on a tenant and actor a
+// RUSUI_TENANT_TOKENS bearer already presents: two credentials would act as
+// one actor and share its user-mode sessions and approvals.
+func (s *Server) CheckOIDCSubjectOverlap() error {
+	taken := map[string]bool{}
+	for tenant := range s.TenantToks {
+		taken[tenant+"/"+tenant] = true
+	}
+	for tok, tenant := range s.MemberToks {
+		taken[tenant+"/"+s.actorForToken(tok, tenant)] = true
+	}
+	for _, v := range s.OIDCSubjects {
+		if taken[v.Tenant+"/"+v.Actor] {
+			return fmt.Errorf("OIDC subjects: %s/%s is also a tenant token actor", v.Tenant, v.Actor)
+		}
+	}
+	return nil
 }
 
 func validTenantID(id string) error {

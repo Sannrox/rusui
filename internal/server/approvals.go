@@ -216,7 +216,7 @@ func (s *Server) decideApproval(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := store.PutApprovalDecision(s.Eng.Store, r.PathValue("id"), req.Decision); err != nil {
+	if err := store.PutApprovalDecision(s.Eng.Store, r.PathValue("id"), req.Decision, attribution(s.identify(r))); err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}

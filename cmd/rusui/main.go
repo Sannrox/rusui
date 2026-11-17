@@ -330,11 +330,21 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	srv.OIDCSubjects, err = server.LoadOIDCSubjects(os.Getenv("RUSUI_OIDC_SUBJECTS"), oidcConfig.Subject)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := srv.CheckOIDCSubjectOverlap(); err != nil {
+		log.Fatal(err)
+	}
 	if oidcConfig.Issuer != "" {
 		srv.OIDC, err = oidc.NewVerifier(context.Background(), oidcConfig)
 		if err != nil {
 			log.Fatal(err)
 		}
+	}
+	for _, v := range srv.OIDCSubjects {
+		log.Printf("OIDC: issuer vouches for actor %s/%s", v.Tenant, v.Actor)
 	}
 	if repoTokens != nil {
 		srv.RepoTokens = repoTokens
