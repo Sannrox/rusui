@@ -584,7 +584,7 @@ Slash command `/rusui` → `POST /hooks/slack`.
 | `reload` | Re-read the policy file |
 | `implement` | Rejected |
 
-If the Slack bot token is unset, exceptions stay in the process log.
+If the Slack bot token is unset, exceptions stay in the process log. An identical exception message posts to Slack at most once an hour; the process log keeps every occurrence, and a different message posts at once.
 
 Operator API credentials may be the static token or a configured OIDC access
 token ([OIDC CLI guide](oidc-cli.md)). Browser console, worker-only, and
