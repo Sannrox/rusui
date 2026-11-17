@@ -189,11 +189,10 @@ func TestGitProxyRejectsUnapprovedHostExpiredCrossSessionAndPreparePush(t *testi
 	}
 
 	now := clk.T.UTC().Format(time.RFC3339Nano)
-	res, err := e.Store.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'review','other/repo',1,'issue','open',?)`, now)
-	if err != nil {
+	var sidB int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'review','other/repo',1,'issue','open',?) RETURNING id`, now).Scan(&sidB); err != nil {
 		t.Fatal(err)
 	}
-	sidB, _ := res.LastInsertId()
 	if _, err := e.Store.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'leased')`, sidB); err != nil {
 		t.Fatal(err)
 	}

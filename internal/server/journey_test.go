@@ -14,6 +14,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/store"
+	"github.com/sannrox/rusui/internal/store/storetest"
 )
 
 func TestU8OperatorJourney(t *testing.T) {
@@ -179,6 +180,10 @@ func TestU8OperatorJourney(t *testing.T) {
 		t.Fatalf("J12 drain %d %s", res.StatusCode, dbod)
 	}
 
+	// J13 restores a copy of the SQLite file; PostgreSQL has no file to copy.
+	if storetest.OnPostgres() {
+		return
+	}
 	dst := filepath.Join(t.TempDir(), "restore.db")
 	q := fmt.Sprintf("VACUUM INTO '%s'", strings.ReplaceAll(dst, "'", "''"))
 	if _, err := e.Store.DB.Exec(q); err != nil {

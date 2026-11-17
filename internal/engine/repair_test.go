@@ -314,9 +314,6 @@ func TestRepairDecisionsPersist(t *testing.T) {
 	if err := h.st.DB.QueryRow(`SELECT COUNT(*) FROM repair_decisions`).Scan(&n); err != nil || n != 1 {
 		t.Fatalf("count %d %v", n, err)
 	}
-	if err := h.st.DB.QueryRow(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='repair_decisions'`).Scan(&n); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		t.Fatal(err)
-	}
 }
 
 func TestRepairCooldownClock(t *testing.T) {

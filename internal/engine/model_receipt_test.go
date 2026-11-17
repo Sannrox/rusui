@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -37,23 +36,16 @@ func TestModelSummaryBoundsDetailAndRetainsStatusCounts(t *testing.T) {
 }
 
 func TestModelSummarySurvivesRollbackAndReclaimsFinishedCapacity(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "proof.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = st.Close() }()
+	st := OpenTestStore(t)
 	e := New(st, nil, nil, clock.Real{})
 	e.Log = log.New(io.Discard, "", 0)
-	res, err := st.DB.Exec(`INSERT INTO sessions (environment_id,kind,repo,item,item_kind,state,created_at) VALUES (1,'review','example/repo',1,'issue','open','2026-10-08T00:00:00Z')`)
-	if err != nil {
+	var sid, tid int64
+	if err := st.DB.QueryRow(`INSERT INTO sessions (environment_id,kind,repo,item,item_kind,state,created_at) VALUES (1,'review','example/repo',1,'issue','open','2026-10-08T00:00:00Z') RETURNING id`).Scan(&sid); err != nil {
 		t.Fatal(err)
 	}
-	sid, _ := res.LastInsertId()
-	res, err = st.DB.Exec(`INSERT INTO turns(session_id,lane,state) VALUES (?,'review','leased')`, sid)
-	if err != nil {
+	if err := st.DB.QueryRow(`INSERT INTO turns(session_id,lane,state) VALUES (?,'review','leased') RETURNING id`, sid).Scan(&tid); err != nil {
 		t.Fatal(err)
 	}
-	tid, _ := res.LastInsertId()
 	for i := range 256 {
 		e.ModelResponseRecorder(store.Grant{TurnID: tid + int64(i), LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")(200)
 	}
@@ -62,7 +54,7 @@ func TestModelSummarySurvivesRollbackAndReclaimsFinishedCapacity(t *testing.T) {
 		t.Fatal("active turn capacity is not bounded")
 	}
 	aborted := errors.New("abort terminal transaction")
-	err = st.Tx(func(tx *sql.Tx) error {
+	err := st.Tx(func(tx *sql.Tx) error {
 		if err := e.finishMeasurementTx(tx, tid, "failed", Artifact{}, e.now()); err != nil {
 			return err
 		}
@@ -156,23 +148,16 @@ func TestModelRecorderCarriesUnfinishedAttemptCounts(t *testing.T) {
 // A turn finishing under two lease generations records one summary row per
 // generation, and a follower already past the first row sees the second.
 func TestModelSummaryAppendsOneRowPerGeneration(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "gen.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = st.Close() }()
+	st := OpenTestStore(t)
 	e := New(st, nil, nil, clock.Real{})
 	e.Log = log.New(io.Discard, "", 0)
-	res, err := st.DB.Exec(`INSERT INTO sessions (environment_id,kind,repo,item,item_kind,state,created_at) VALUES (1,'review','example/repo',1,'issue','open','2026-10-08T00:00:00Z')`)
-	if err != nil {
+	var sid, tid int64
+	if err := st.DB.QueryRow(`INSERT INTO sessions (environment_id,kind,repo,item,item_kind,state,created_at) VALUES (1,'review','example/repo',1,'issue','open','2026-10-08T00:00:00Z') RETURNING id`).Scan(&sid); err != nil {
 		t.Fatal(err)
 	}
-	sid, _ := res.LastInsertId()
-	res, err = st.DB.Exec(`INSERT INTO turns(session_id,lane,state) VALUES (?,'review','leased')`, sid)
-	if err != nil {
+	if err := st.DB.QueryRow(`INSERT INTO turns(session_id,lane,state) VALUES (?,'review','leased') RETURNING id`, sid).Scan(&tid); err != nil {
 		t.Fatal(err)
 	}
-	tid, _ := res.LastInsertId()
 	finish := func(gen, status int) {
 		t.Helper()
 		e.ModelResponseRecorder(store.Grant{TurnID: tid, LeaseGeneration: gen, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")(status)

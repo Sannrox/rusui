@@ -13,23 +13,19 @@ import (
 // item hashes, and returns the session id and the last result id.
 func inboxResult(t *testing.T, e *engine.Engine, kind string, item int, hashes ...string) (int64, int64) {
 	t.Helper()
-	res, err := e.Store.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, ?, 'example/test-repo', ?, 'issue', 'open', '2026-01-01T00:00:00Z')`, kind, item)
-	if err != nil {
+	var sid int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, ?, 'example/test-repo', ?, 'issue', 'open', '2026-01-01T00:00:00Z') RETURNING id`, kind, item).Scan(&sid); err != nil {
 		t.Fatal(err)
 	}
-	sid, _ := res.LastInsertId()
-	res, err = e.Store.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'completed')`, sid)
-	if err != nil {
+	var tid int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'completed') RETURNING id`, sid).Scan(&tid); err != nil {
 		t.Fatal(err)
 	}
-	tid, _ := res.LastInsertId()
 	var rid int64
 	for _, h := range hashes {
-		res, err = e.Store.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, ?, 'm', '{"verdict":"ok","proposed_actions":[{},{}]}')`, tid, h)
-		if err != nil {
+		if err := e.Store.DB.QueryRow(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, ?, 'm', '{"verdict":"ok","proposed_actions":[{},{}]}') RETURNING id`, tid, h).Scan(&rid); err != nil {
 			t.Fatal(err)
 		}
-		rid, _ = res.LastInsertId()
 	}
 	return sid, rid
 }

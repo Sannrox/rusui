@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"log"
-	"path/filepath"
 	"slices"
 	"testing"
 
@@ -14,11 +13,7 @@ import (
 
 func txTestEngine(t *testing.T) (*Engine, *[]string) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "tx.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := OpenTestStore(t)
 	var sent []string
 	e := &Engine{Store: st, Log: log.New(io.Discard, "", 0)}
 	e.Notify = func(msg string) { sent = append(sent, msg) }

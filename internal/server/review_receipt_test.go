@@ -91,22 +91,19 @@ func TestSessionReceiptAuthAndMissingReview(t *testing.T) {
 func seedSessionReview(t *testing.T, s *store.Store, repo string, item int, verdict, actionType string) int64 {
 	t.Helper()
 	now := "2026-10-30T00:00:00Z"
-	res, err := s.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, created_at) VALUES (1,'review',?,?, 'pull','completed','test',?)`, repo, item, now)
-	if err != nil {
+	var sid int64
+	if err := s.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, created_at) VALUES (1,'review',?,?, 'pull','completed','test',?) RETURNING id`, repo, item, now).Scan(&sid); err != nil {
 		t.Fatal(err)
 	}
-	sid, _ := res.LastInsertId()
-	turn, err := s.DB.Exec(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, state) VALUES (?, 'review', 1, 1, 1, 'completed')`, sid)
-	if err != nil {
+	var tid int64
+	if err := s.DB.QueryRow(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, state) VALUES (?, 'review', 1, 1, 1, 'completed') RETURNING id`, sid).Scan(&tid); err != nil {
 		t.Fatal(err)
 	}
-	tid, _ := turn.LastInsertId()
 	payload := `{"schema_version":1,"repo":"` + repo + `","item":` + strconv.Itoa(item) + `,"item_kind":"pull","claimed_revision":1,"verdict":"` + verdict + `"}`
-	rev, err := s.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', ?)`, tid, payload)
-	if err != nil {
+	var revID int64
+	if err := s.DB.QueryRow(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', ?) RETURNING id`, tid, payload).Scan(&revID); err != nil {
 		t.Fatal(err)
 	}
-	revID, _ := rev.LastInsertId()
 	if actionType != "" {
 		if err := store.InsertAction(s, store.Action{
 			ID: "act-receipt", SessionID: &sid, TurnID: &tid, ReviewRevisionID: &revID,

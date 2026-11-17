@@ -17,6 +17,7 @@ import (
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/store"
+	"github.com/sannrox/rusui/internal/store/storetest"
 )
 
 func TestD6SessionWorkflowMatrix(t *testing.T) {
@@ -106,6 +107,7 @@ func TestD6SessionWorkflowMatrix(t *testing.T) {
 		}
 	})
 	t.Run("R15_plane_restart", func(t *testing.T) {
+		storetest.SQLiteOnly(t, "VACUUM INTO and store.Restore copy a SQLite file")
 		h := setup(t)
 		sid, err := h.e.StartRun("test", "restart", "")
 		if err != nil {

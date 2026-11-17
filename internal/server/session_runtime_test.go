@@ -17,13 +17,9 @@ func TestSessionDetailReturnsSeparateProcessAndAttachIdentities(t *testing.T) {
 	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	now := time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC)
-	res, err := e.Store.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
-		VALUES (?, ?, '', -1, 'local', 'open', ?)`, store.DefaultEnvironmentID, store.SessionKindLocal, now.Format(time.RFC3339Nano))
-	if err != nil {
-		t.Fatal(err)
-	}
-	sessionID, err := res.LastInsertId()
-	if err != nil {
+	var sessionID int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
+		VALUES (?, ?, '', -1, 'local', 'open', ?) RETURNING id`, store.DefaultEnvironmentID, store.SessionKindLocal, now.Format(time.RFC3339Nano)).Scan(&sessionID); err != nil {
 		t.Fatal(err)
 	}
 	process, err := store.StartSumikaProcess(e.Store, sessionID, "test-process-identity", now)
