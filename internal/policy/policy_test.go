@@ -188,6 +188,7 @@ projects:
 		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{action: reject}]\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{command: npm, verdict: reject}]\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    tenant: Acme\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    task_base: branch\n", 1),
 	}
 	for i, c := range cases {
 		if _, err := Parse([]byte(c)); err == nil {

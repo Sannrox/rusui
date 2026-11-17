@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/store"
 )
 
@@ -160,4 +161,39 @@ func TestCreatePinnedTaskHTTP(t *testing.T) {
 		t.Fatalf("code %d", res.StatusCode)
 	}
 	_ = res.Body.Close()
+}
+
+// Under task_base ancestor a historical task is admitted at its own base,
+// and only there: a base the forge cannot place under the tip, or one
+// that names a moving ref, still refuses (#737).
+func TestStartTaskAdmitsAnAncestorBaseOnlyWhenTheProjectOptsIn(t *testing.T) {
+	const tip, old, other = "1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222", "3333333333333333333333333333333333333333"
+	h := setup(t)
+	it := issue(1)
+	it.MainSHA, it.MergeCommitSHA, it.MergedIntoDefault = tip, old, true // the forge places old under tip
+	h.f.Put(it)
+	spec := pin()
+	spec.BaseSHA = old
+	if _, err := h.e.StartTask("test", spec); !errors.Is(err, engine.ErrStaleSource) {
+		t.Fatalf("tip mode admitted an ancestor: %v", err)
+	}
+	pol, err := policy.Parse([]byte(strings.Replace(fixture, "  test:\n", "  test:\n    task_base: ancestor\n", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.e.ReloadPolicy(pol)
+	task, err := h.e.StartTask("test", spec)
+	if err != nil {
+		t.Fatalf("ancestor refused: %v", err)
+	}
+	if got, err := store.GetTask(h.st, task.ID); err != nil || got.BaseSHA != old {
+		t.Fatalf("task %+v %v", got, err)
+	}
+	for _, base := range []string{other, "main"} {
+		bad := pin()
+		bad.EffortKey, bad.BaseSHA = "effort-"+base, base
+		if _, err := h.e.StartTask("test", bad); !errors.Is(err, engine.ErrStaleSource) {
+			t.Fatalf("base %s admitted: %v", base, err)
+		}
+	}
 }
