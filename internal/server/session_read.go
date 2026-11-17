@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,7 +45,7 @@ func (s *Server) readSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view, err := s.sessionRead(r, id)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

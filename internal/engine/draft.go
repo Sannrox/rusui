@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -83,7 +82,7 @@ func (e *Engine) draftResult(jobID int64, gen, claimed int, art *Artifact) {
 		return
 	}
 	var sessionID int64
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		j, err := store.GetJobByIDTx(tx, jobID)
 		if err != nil {
 			return err
@@ -190,7 +189,7 @@ func (e *Engine) ApplySessionDraft(sessionID int64) (DraftApplyReceipt, error) {
 		return DraftApplyReceipt{}, err
 	}
 	proposal, err := store.LatestAction(e.Store, sessionID, ActionCoreDraft)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		return DraftApplyReceipt{}, ErrDraftNoProposal
 	}
 	if err != nil {
@@ -319,7 +318,7 @@ func (e *Engine) pinDraftExpectedHead(sessionID int64, proposal store.Action, as
 		if json.Unmarshal([]byte(existing.Body), &rec) == nil && rec.ExpectedHeadDigest != "" {
 			return rec.ExpectedHeadDigest, nil
 		}
-	} else if !errors.Is(err, sql.ErrNoRows) {
+	} else if !errors.Is(err, store.ErrNoRows) {
 		return "", err
 	}
 	rec := DraftApplyReceipt{
@@ -386,22 +385,16 @@ func (e *Engine) resolveDraftBranch(ask DraftRequest, proposalID string) (core.D
 
 // SessionDraft is the latest completed draft apply receipt, including a refusal.
 func SessionDraft(s *store.Store, sessionID int64) (DraftApplyReceipt, bool, error) {
-	rows, err := s.DB.Query(`SELECT action_id, body FROM actions WHERE session_id=? AND action_type=? ORDER BY rowid DESC`, sessionID, ActionCoreDraftApply)
-	if err != nil {
-		return DraftApplyReceipt{}, false, err
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var id, body string
-		if err := rows.Scan(&id, &body); err != nil {
+	for a, err := range store.ActionsOfType(s, sessionID, ActionCoreDraftApply) {
+		if err != nil {
 			return DraftApplyReceipt{}, false, err
 		}
 		var rec DraftApplyReceipt
-		if json.Unmarshal([]byte(body), &rec) != nil || !draftApplyDone(rec) {
+		if json.Unmarshal([]byte(a.Body), &rec) != nil || !draftApplyDone(rec) {
 			continue
 		}
-		rec.ActionID = id
+		rec.ActionID = a.ID
 		return rec, true, nil
 	}
-	return DraftApplyReceipt{}, false, rows.Err()
+	return DraftApplyReceipt{}, false, nil
 }

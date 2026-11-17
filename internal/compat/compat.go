@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/sannrox/rusui/internal/ops"
 	"github.com/sannrox/rusui/internal/policy"
@@ -159,8 +158,7 @@ func SelfCheck(dir string) (Report, error) {
 		if err != nil {
 			return err
 		}
-		if _, err := st.DB.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`,
-			store.CurrentSchema+1, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		if err := store.StampSchemaVersion(st, store.CurrentSchema+1); err != nil {
 			_ = st.Close()
 			return err
 		}

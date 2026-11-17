@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -115,7 +114,7 @@ func (e *Engine) ModelResponseRecorder(g store.Grant, origin, path string) func(
 	}
 }
 
-func (e *Engine) recordModelSummaryTx(tx *sql.Tx, turnID int64) error {
+func (e *Engine) recordModelSummaryTx(tx *store.Tx, turnID int64) error {
 	e.modelMu.Lock()
 	summary := e.modelSummaries[turnID]
 	if summary == nil {
@@ -135,10 +134,9 @@ func (e *Engine) recordModelSummaryTx(tx *sql.Tx, turnID int64) error {
 	summary.finished = true
 	e.modelMu.Unlock()
 	id := fmt.Sprintf("model-proxy-summary-%d", turnID)
-	var existingBody string
-	err := tx.QueryRow(`SELECT body FROM actions WHERE action_id=?`, id).Scan(&existingBody)
+	existingBody, err := store.ActionBodyTx(tx, id)
 	existing := err == nil
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err != nil && !errors.Is(err, store.ErrNoRows) {
 		return err
 	}
 	var aggregate modelProxySummary
@@ -166,16 +164,14 @@ func (e *Engine) recordModelSummaryTx(tx *sql.Tx, turnID int64) error {
 		return err
 	}
 	if existing {
-		_, err := tx.Exec(`UPDATE actions SET body=? WHERE action_id=?`, string(payload), id)
-		return err
+		return store.UpdateActionBodyTx(tx, id, string(payload))
 	}
 	turn, err := store.GetTurnTx(tx, turnID)
 	if err != nil {
 		return err
 	}
-	var repo string
-	var item int
-	if err := tx.QueryRow(`SELECT repo,item FROM sessions WHERE id=?`, turn.SessionID).Scan(&repo, &item); err != nil {
+	repo, item, err := store.SessionSourceTx(tx, turn.SessionID)
+	if err != nil {
 		return err
 	}
 	return store.InsertActionTx(tx, store.Action{

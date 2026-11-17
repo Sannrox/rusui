@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 
@@ -56,7 +55,7 @@ func (e *Engine) RequestReview(repo string, item int) (ReviewRequest, error) {
 	if !decision.Allowed {
 		return ReviewRequest{}, ErrReviewRequestInvalid
 	}
-	if err := e.Store.Tx(func(tx *sql.Tx) error {
+	if err := e.Store.Tx(func(tx *store.Tx) error {
 		paused, err := store.Paused(tx, repoPolicy.Project)
 		if err != nil {
 			return err
@@ -73,12 +72,11 @@ func (e *Engine) RequestReview(repo string, item int) (ReviewRequest, error) {
 	if err != nil {
 		return ReviewRequest{}, err
 	}
-	var refreshState string
-	var owner, retryCount int
-	err = e.Store.DB.QueryRow(`SELECT state, owner, retry_count FROM refresh_requests WHERE repo=? AND item=?`, repo, item).Scan(&refreshState, &owner, &retryCount)
+	refresh, err := store.RefreshStatusOf(e.Store, repo, item)
 	if err != nil {
 		return ReviewRequest{}, err
 	}
+	refreshState, owner, retryCount := refresh.State, refresh.Owner, refresh.RetryCount
 	if refreshState != "idle" || owner != 0 {
 		if !did && owner != 0 {
 			return ReviewRequest{}, ErrReviewRefreshBusy
@@ -90,8 +88,8 @@ func (e *Engine) RequestReview(repo string, item int) (ReviewRequest, error) {
 	}
 
 	var result ReviewRequest
-	err = e.Store.DB.QueryRow(`SELECT id FROM sessions WHERE kind=? AND repo=? AND item=?`, store.SessionKindReview, repo, item).Scan(&result.SessionID)
-	if errors.Is(err, sql.ErrNoRows) {
+	result.SessionID, err = store.ReviewSessionID(e.Store, repo, item)
+	if errors.Is(err, store.ErrNoRows) {
 		return ReviewRequest{}, ErrReviewRefreshFailed
 	}
 	if err != nil {

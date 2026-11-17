@@ -213,12 +213,12 @@ func TestPolicyRuntimeDatabaseIsReadOnly(t *testing.T) {
 	if err := stateStore.Close(); err != nil {
 		t.Fatal(err)
 	}
-	readOnly, err := openPolicyStateDBReadOnly(dbPath)
+	readOnly, err := store.OpenReadOnly(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = readOnly.Close() }()
-	if _, err := readOnly.Exec(`UPDATE overlay SET value='1' WHERE key='pause:test'`); err == nil {
+	if _, err := readOnly.DB.Exec(`UPDATE overlay SET value='1' WHERE key='pause:test'`); err == nil {
 		t.Fatal("read-only policy database accepted a write")
 	}
 }

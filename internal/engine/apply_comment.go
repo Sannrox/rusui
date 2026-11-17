@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"regexp"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/snapshot"
+	"github.com/sannrox/rusui/internal/store"
 )
 
 var secretToken = regexp.MustCompile(`(?i)\b(ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]+\b`)
@@ -58,28 +58,11 @@ func (e *Engine) publishPendingComments(repo string, item int) error {
 	if e.Comments == nil {
 		return nil
 	}
-	type pending struct {
-		actionID  string
-		body      string
-		commentID int64
-	}
-	var list []pending
-	err := e.Store.Tx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT aa.action_id, aa.github_comment_id, a.body
-FROM apply_attempts aa JOIN actions a ON a.action_id=aa.action_id
-WHERE aa.repo=? AND aa.item=? AND aa.state IN ('in_flight','uncertain') AND a.action_type='comment'`, repo, item)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = rows.Close() }()
-		for rows.Next() {
-			var p pending
-			if err := rows.Scan(&p.actionID, &p.commentID, &p.body); err != nil {
-				return err
-			}
-			list = append(list, p)
-		}
-		return rows.Err()
+	var list []store.PendingComment
+	err := e.Store.Tx(func(tx *store.Tx) error {
+		var err error
+		list, err = store.ListPendingCommentsTx(tx, repo, item)
+		return err
 	})
 	if err != nil {
 		return err
@@ -87,9 +70,9 @@ WHERE aa.repo=? AND aa.item=? AND aa.state IN ('in_flight','uncertain') AND a.ac
 	var first error
 	for _, p := range list {
 		rec, pubErr := e.Comments.PublishComment(repo, item, gh.CommentSpec{
-			ActionID: p.actionID, Body: p.body, ID: p.commentID,
+			ActionID: p.ActionID, Body: p.Body, ID: p.CommentID,
 		})
-		err := e.Store.Tx(func(tx *sql.Tx) error {
+		err := e.Store.Tx(func(tx *store.Tx) error {
 			if pubErr != nil {
 				state := "failed"
 				if errors.Is(pubErr, gh.ErrCommentUncertain) {
@@ -97,11 +80,9 @@ WHERE aa.repo=? AND aa.item=? AND aa.state IN ('in_flight','uncertain') AND a.ac
 				} else if errors.Is(pubErr, gh.ErrCommentDenied) {
 					state = "cancelled"
 				}
-				_, err := tx.Exec(`UPDATE apply_attempts SET state=? WHERE action_id=? AND state IN ('in_flight','uncertain')`, state, p.actionID)
-				return err
+				return store.SettlePendingCommentTx(tx, p.ActionID, state)
 			}
-			_, err := tx.Exec(`UPDATE apply_attempts SET state='succeeded', github_comment_id=? WHERE action_id=? AND state IN ('in_flight','uncertain')`, rec.ID, p.actionID)
-			return err
+			return store.CompletePendingCommentTx(tx, p.ActionID, rec.ID)
 		})
 		if err != nil && first == nil {
 			first = err

@@ -3,7 +3,6 @@ package server
 import (
 	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -350,7 +349,7 @@ func (s *Server) sessionEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := store.GetSession(s.Eng.Store, sid); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, store.ErrNoRows) {
 			http.Error(w, "session", http.StatusNotFound)
 			return
 		}
@@ -385,7 +384,7 @@ func (s *Server) turnActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := store.GetTurn(s.Eng.Store, tid); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, store.ErrNoRows) {
 			http.Error(w, "turn", http.StatusNotFound)
 			return
 		}

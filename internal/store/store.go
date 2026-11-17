@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,14 @@ import (
 
 	"github.com/sannrox/rusui/internal/snapshot"
 )
+
+// Tx is the transaction handle Store.Tx passes to its callback. Packages
+// outside store name it through this alias so database/sql stays inside the
+// SQL boundary (ADR 0089 D2).
+type Tx = sql.Tx
+
+// ErrNoRows reports that a single-row read found nothing.
+var ErrNoRows = sql.ErrNoRows
 
 type Store struct {
 	DB  *sql.DB
@@ -38,6 +47,9 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.DB.Close() }
+
+// Ping reports whether the database answers; /readyz uses it.
+func (s *Store) Ping(ctx context.Context) error { return s.DB.PingContext(ctx) }
 
 func (s *Store) Tx(fn func(*sql.Tx) error) error {
 	tx, err := s.DB.Begin()

@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -79,9 +78,9 @@ func (e *Engine) StartChildGuest(parentID int64, prompt, project, requestedGuest
 		repo, sha = e.operatorSessionPin(p)
 	}
 	var childID int64
-	err = e.Store.Tx(func(tx *sql.Tx) error {
-		var archived bool
-		if err := tx.QueryRow(`SELECT archived FROM sessions WHERE id=?`, parentID).Scan(&archived); err != nil {
+	err = e.Store.Tx(func(tx *store.Tx) error {
+		archived, err := store.SessionArchivedTx(tx, parentID)
+		if err != nil {
 			return err
 		}
 		if archived {
@@ -143,7 +142,7 @@ func (e *Engine) StartChildGuest(parentID int64, prompt, project, requestedGuest
 	return childID, err
 }
 
-func insertChildSpawnTx(tx *sql.Tx, parent *store.Session, childID int64, project, prompt string) error {
+func insertChildSpawnTx(tx *store.Tx, parent *store.Session, childID int64, project, prompt string) error {
 	body, err := json.Marshal(map[string]any{
 		"child_session_id": childID, "project": project, "prompt": prompt,
 	})
@@ -160,7 +159,7 @@ func insertChildSpawnTx(tx *sql.Tx, parent *store.Session, childID int64, projec
 	})
 }
 
-func (e *Engine) recordChildOutcomeTx(tx *sql.Tx, turnID int64, outcome string) error {
+func (e *Engine) recordChildOutcomeTx(tx *store.Tx, turnID int64, outcome string) error {
 	turn, err := store.GetTurnTx(tx, turnID)
 	if err != nil {
 		return err
@@ -169,15 +168,15 @@ func (e *Engine) recordChildOutcomeTx(tx *sql.Tx, turnID int64, outcome string) 
 	if err != nil || parentID == 0 {
 		return err
 	}
-	var archived bool
-	if err := tx.QueryRow(`SELECT archived FROM sessions WHERE id=?`, parentID).Scan(&archived); err != nil {
+	archived, err := store.SessionArchivedTx(tx, parentID)
+	if err != nil {
 		return err
 	}
 	if archived {
 		return nil
 	}
-	var childProject string
-	if err := tx.QueryRow(`SELECT project FROM sessions WHERE id=?`, turn.SessionID).Scan(&childProject); err != nil {
+	childProject, err := store.SessionProjectTx(tx, turn.SessionID)
+	if err != nil {
 		return err
 	}
 	body, err := json.Marshal(map[string]any{
@@ -196,11 +195,9 @@ func (e *Engine) recordChildOutcomeTx(tx *sql.Tx, turnID int64, outcome string) 
 }
 
 // A terminal child must reserve fan-out again before a prompt restarts it.
-func (e *Engine) checkChildReactivationTx(tx *sql.Tx, sessionID int64) error {
-	var parentID int64
-	var project string
-	if err := tx.QueryRow(`SELECT COALESCE(c.parent_session_id, 0), COALESCE(p.project, '')
-FROM sessions c LEFT JOIN sessions p ON p.id=c.parent_session_id WHERE c.id=?`, sessionID).Scan(&parentID, &project); err != nil {
+func (e *Engine) checkChildReactivationTx(tx *store.Tx, sessionID int64) error {
+	parentID, project, err := store.ParentFanOutTx(tx, sessionID)
+	if err != nil {
 		return err
 	}
 	if parentID == 0 {

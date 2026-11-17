@@ -25,7 +25,7 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 		LookRuntime: look,
 		Env:         getenv,
 		HTTP:        s.DiagnoseHTTP,
-		Store:       s.Eng.Store.DB.PingContext,
+		Store:       s.Eng.Store.Ping,
 	})
 	w.Header().Set("Content-Type", "application/json")
 	if !rep.Ready {

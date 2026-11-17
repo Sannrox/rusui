@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -19,7 +18,7 @@ func (s *Server) sessionTerminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess, err := store.GetSession(s.Eng.Store, id)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}

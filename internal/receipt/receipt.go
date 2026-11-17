@@ -4,7 +4,6 @@
 package receipt
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -110,7 +109,7 @@ type evidence struct {
 func FromStore(s *store.Store, sessionID int64, secrets []string) (Export, error) {
 	sess, err := store.GetSession(s, sessionID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, store.ErrNoRows) {
 			return Export{}, ErrNoReview
 		}
 		return Export{}, err

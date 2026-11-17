@@ -532,13 +532,8 @@ func (s *Server) sessionPage(r *http.Request, id int64) (consolePage, error) {
 			}
 		}
 	}
-	var n int
-	_ = s.Eng.Store.DB.QueryRow(`SELECT COUNT(*) FROM review_revisions WHERE job_id IN (SELECT id FROM turns WHERE session_id=?)`, id).Scan(&n)
-	if n > 0 {
-		var hash string
-		if err := s.Eng.Store.DB.QueryRow(`SELECT item_hash FROM review_revisions WHERE job_id IN (SELECT id FROM turns WHERE session_id=?) ORDER BY id DESC LIMIT 1`, id).Scan(&hash); err == nil {
-			page.Artifact = hash
-		}
+	if hash, ok := store.LatestSessionItemHash(s.Eng.Store, id); ok {
+		page.Artifact = hash
 	}
 	envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID)
 	if err != nil || envRow.Handle == "" || envRow.State == store.EnvExpired {

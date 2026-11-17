@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -97,7 +96,7 @@ func (e *Engine) publishResult(jobID int64, gen, claimed int, art *Artifact) {
 	}
 	req := r.Publish
 	var sessionID int64
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		j, err := store.GetJobByIDTx(tx, jobID)
 		if err != nil {
 			return err

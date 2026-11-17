@@ -3,7 +3,6 @@ package engine
 import (
 	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -133,9 +132,8 @@ func (e *Engine) ReloadPolicy(p *policy.Effective) {
 	e.policyMu.Lock()
 	e.policy = p
 	e.policyMu.Unlock()
-	_ = e.Store.Tx(func(tx *sql.Tx) error {
-		_, err := tx.Exec(`INSERT INTO policy_revisions(hash,payload) VALUES(?,?)`, p.Hash, string(p.Raw))
-		return err
+	_ = e.Store.Tx(func(tx *store.Tx) error {
+		return store.RecordPolicyRevisionTx(tx, p.Hash, string(p.Raw))
 	})
 }
 
@@ -147,7 +145,7 @@ func (e *Engine) PolicySnapshot() *policy.Effective {
 }
 
 func (e *Engine) IngestWebhook(deliveryID, repo string, item int, kind string) error {
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	return e.Store.Tx(func(tx *store.Tx) error {
 		ins, err := store.InsertDeliveryTx(tx, deliveryID, repo, item, kind, e.now())
 		if err != nil {
 			return err
@@ -170,7 +168,7 @@ func (e *Engine) IngestEvent(deliveryID, source, repo string, item int, kind str
 	if at.IsZero() {
 		at = e.now()
 	}
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	return e.Store.Tx(func(tx *store.Tx) error {
 		ins, err := store.InsertEventTx(tx, deliveryID, source, repo, item, kind, at)
 		if err != nil {
 			return err
@@ -252,7 +250,7 @@ func (e *Engine) IngestTurnAction(turnID int64, typ, reason string, body any) (s
 	// completion commits, or refused. A followed read reads the state
 	// before the entries, so it never ends ahead of a recorded action
 	// (#437).
-	if err := e.Store.Tx(func(tx *sql.Tx) error {
+	if err := e.Store.Tx(func(tx *store.Tx) error {
 		cur, err := store.GetTurnTx(tx, turnID)
 		if err != nil {
 			return err
@@ -316,7 +314,7 @@ func (e *Engine) IngestGuestEvent(sessionID int64, deliveryID, kind string) erro
 	if err != nil {
 		return err
 	}
-	if err := e.Store.Tx(func(tx *sql.Tx) error {
+	if err := e.Store.Tx(func(tx *store.Tx) error {
 		_, err := store.InsertEventTx(tx, deliveryID, "guest", sess.Repo, sess.Item, sess.ItemKind, e.now())
 		return err
 	}); err != nil {
@@ -371,7 +369,7 @@ func (e *Engine) CatchUpItem(repo string, item int, kind string) error {
 	if !githubIntakeItem(kind, item) {
 		return nil
 	}
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	return e.Store.Tx(func(tx *store.Tx) error {
 		return store.EnsureRefreshQueuedTx(tx, repo, item, kind, false)
 	})
 }
@@ -409,47 +407,27 @@ func (e *Engine) CatchUpOpenAndLocal(open []snapshot.Item) error {
 
 func (e *Engine) ExpireRefreshOwners() error {
 	now := e.now()
-	return e.Store.Tx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT repo, item, retry_count, owner_expires_at FROM refresh_requests WHERE owner=1`)
+	return e.Store.Tx(func(tx *store.Tx) error {
+		list, err := store.ListRefreshOwnersTx(tx)
 		if err != nil {
 			return err
 		}
-		type rec struct {
-			repo, exp string
-			item, n   int
-		}
-		var list []rec
-		for rows.Next() {
-			var r rec
-			var exp sql.NullString
-			if err := rows.Scan(&r.repo, &r.item, &r.n, &exp); err != nil {
-				rows.Close()
-				return err
-			}
-			if exp.Valid {
-				r.exp = exp.String
-			}
-			list = append(list, r)
-		}
-		rows.Close()
 		for _, r := range list {
 			dead := true
-			if r.exp != "" {
-				t, _ := time.Parse(time.RFC3339Nano, r.exp)
+			if r.OwnerExpiresAt != "" {
+				t, _ := time.Parse(time.RFC3339Nano, r.OwnerExpiresAt)
 				dead = !now.Before(t)
 			}
 			if !dead {
 				continue
 			}
-			n := r.n + 1
+			n := r.RetryCount + 1
 			st := "queued"
 			if n >= RefreshRetryLimit {
 				st = "failed"
 			}
 			backoff := min(time.Duration(1<<min(n-1, 6))*time.Second, time.Minute)
-			nb := now.Add(backoff).Format(time.RFC3339Nano)
-			if _, err = tx.Exec(`UPDATE refresh_requests SET owner=0, retry_count=?, state=?, not_before=?, generation=generation+1 WHERE repo=? AND item=?`,
-				n, st, nb, r.repo, r.item); err != nil {
+			if err = store.ReleaseExpiredRefreshOwnerTx(tx, r.Repo, r.Item, n, st, now.Add(backoff)); err != nil {
 				return err
 			}
 		}
@@ -458,9 +436,8 @@ func (e *Engine) ExpireRefreshOwners() error {
 }
 
 func (e *Engine) StartupExpireOwners() error {
-	return e.Store.Tx(func(tx *sql.Tx) error {
-		_, err := tx.Exec(`UPDATE refresh_requests SET owner=0, state='queued', generation=generation+1 WHERE owner=1`)
-		return err
+	return e.Store.Tx(func(tx *store.Tx) error {
+		return store.RequeueAllRefreshOwnersTx(tx)
 	})
 }
 
@@ -475,32 +452,17 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 	var item, gen int
 	var force bool
 	now := e.now()
-	err := e.Store.Tx(func(tx *sql.Tx) error {
-		query := `SELECT repo, item, item_kind, generation, force FROM refresh_requests WHERE state='queued' AND owner=0 AND (not_before IS NULL OR not_before<=?)`
-		args := []any{now.Format(time.RFC3339Nano)}
-		if filterRepo != "" {
-			query += ` AND repo=?`
-			args = append(args, filterRepo)
-		}
-		if filterItem > 0 {
-			query += ` AND item=?`
-			args = append(args, filterItem)
-		}
-		query += ` LIMIT 1`
-		row := tx.QueryRow(query, args...)
-		var f int
-		if err := row.Scan(&repo, &item, &kind, &gen, &f); err != nil {
-			if err == sql.ErrNoRows {
+	err := e.Store.Tx(func(tx *store.Tx) error {
+		next, err := store.NextQueuedRefreshTx(tx, now, filterRepo, filterItem)
+		if err != nil {
+			if errors.Is(err, store.ErrNoRows) {
 				return errNoWork
 			}
 			return err
 		}
-		force = f == 1
+		repo, item, kind, gen, force = next.Repo, next.Item, next.ItemKind, next.Generation, next.Force
 		newGen := gen + 1
-		exp := now.Add(e.OwnerTTL).Format(time.RFC3339Nano)
-		_, err := tx.Exec(`UPDATE refresh_requests SET owner=1, generation=?, owner_expires_at=?, state='running' WHERE repo=? AND item=? AND owner=0`,
-			newGen, exp, repo, item)
-		if err != nil {
+		if err := store.TakeRefreshOwnershipTx(tx, repo, item, newGen, now.Add(e.OwnerTTL)); err != nil {
 			return err
 		}
 		gen = newGen
@@ -518,31 +480,29 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 	}
 	budgetDenied := false
 	ineligible := false
-	err = e.Store.Tx(func(tx *sql.Tx) error {
-		var curGen, owner, needs, f int
-		if err := tx.QueryRow(`SELECT generation, owner, needs_another, force FROM refresh_requests WHERE repo=? AND item=?`, repo, item).Scan(&curGen, &owner, &needs, &f); err != nil {
+	err = e.Store.Tx(func(tx *store.Tx) error {
+		own, err := store.RefreshOwnershipTx(tx, repo, item)
+		if err != nil {
 			return err
 		}
-		if curGen != gen || owner == 0 {
+		needs, f := own.NeedsAnother, own.Force
+		if own.Generation != gen || own.Owner == 0 {
 			return nil
 		}
 		if ferr != nil {
-			n := 0
-			_ = tx.QueryRow(`SELECT retry_count FROM refresh_requests WHERE repo=? AND item=?`, repo, item).Scan(&n)
+			n, _ := store.RefreshRetryCountTx(tx, repo, item)
 			n++
 			st := "queued"
 			if n >= RefreshRetryLimit {
 				st = "failed"
 				e.exception(fmt.Sprintf("refresh retries exhausted %s#%d", repo, item))
 			}
-			_, err := tx.Exec(`UPDATE refresh_requests SET owner=0, retry_count=?, state=? WHERE repo=? AND item=?`, n, st, repo, item)
-			return err
+			return store.FailRefreshAttemptTx(tx, repo, item, n, st)
 		}
 		if err := e.admitTx(tx, it, force || f == 1, gen, enforceReviewBudget); err != nil {
 			if errors.Is(err, ErrReviewIneligible) {
 				ineligible = true
-				_, err := tx.Exec(`UPDATE refresh_requests SET owner=0, needs_another=0, force=0, state='idle' WHERE repo=? AND item=?`, repo, item)
-				return err
+				return store.IdleRefreshTx(tx, repo, item)
 			}
 			if !errors.Is(err, ErrReviewBudget) {
 				return err
@@ -550,22 +510,15 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 			budgetDenied = true
 			state := "idle"
 			forcePending := force || f == 1
-			forceValue := 0
 			if needs == 1 || forcePending {
 				state = "queued"
 			}
-			if forcePending {
-				forceValue = 1
-			}
-			_, err := tx.Exec(`UPDATE refresh_requests SET owner=0, needs_another=0, force=?, state=? WHERE repo=? AND item=?`, forceValue, state, repo, item)
-			return err
+			return store.DeferRefreshTx(tx, repo, item, forcePending, state)
 		}
 		if needs == 1 {
-			_, err := tx.Exec(`UPDATE refresh_requests SET owner=0, needs_another=0, force=0, state='queued' WHERE repo=? AND item=?`, repo, item)
-			return err
+			return store.RequeueRefreshTx(tx, repo, item)
 		}
-		_, err := tx.Exec(`UPDATE refresh_requests SET owner=0, force=0, state='idle' WHERE repo=? AND item=?`, repo, item)
-		return err
+		return store.FinishRefreshTx(tx, repo, item)
 	})
 	if err != nil {
 		return true, err
@@ -584,10 +537,9 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 
 var errNoWork = fmt.Errorf("no work")
 
-func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int, enforceReviewBudget bool) error {
-	var curGen int
-	err := tx.QueryRow(`SELECT generation FROM refresh_requests WHERE repo=? AND item=?`, it.Repo, it.Item).Scan(&curGen)
-	if err != nil && err != sql.ErrNoRows {
+func (e *Engine) admitTx(tx *store.Tx, it snapshot.Item, force bool, gen int, enforceReviewBudget bool) error {
+	curGen, err := store.RefreshGenerationTx(tx, it.Repo, it.Item)
+	if err != nil && !errors.Is(err, store.ErrNoRows) {
 		return err
 	}
 	if err == nil && curGen != gen {
@@ -600,8 +552,7 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int, enfo
 	}
 	consumeInvalidations := false
 	if force {
-		var n int
-		err := tx.QueryRow(`SELECT COUNT(*) FROM evidence_invalidations ei JOIN review_revisions r ON r.id=ei.review_revision_id JOIN jobs j ON j.id=r.job_id WHERE j.repo=? AND j.item=? AND ei.consumed=0`, it.Repo, it.Item).Scan(&n)
+		n, err := store.CountPendingInvalidationsTx(tx, it.Repo, it.Item)
 		if err != nil {
 			return err
 		}
@@ -664,8 +615,7 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int, enfo
 		}
 	}
 	if consumeInvalidations {
-		_, err = tx.Exec(`UPDATE evidence_invalidations SET consumed=1 WHERE consumed=0 AND review_revision_id IN (SELECT r.id FROM review_revisions r JOIN jobs j ON j.id=r.job_id WHERE j.repo=? AND j.item=?)`, it.Repo, it.Item)
-		if err != nil {
+		if err := store.ConsumeInvalidationsTx(tx, it.Repo, it.Item); err != nil {
 			return err
 		}
 	}
@@ -691,7 +641,7 @@ func (e *Engine) admitTx(tx *sql.Tx, it snapshot.Item, force bool, gen int, enfo
 	return store.UpdateJobTx(tx, j)
 }
 
-func (e *Engine) expireLeaseTx(tx *sql.Tx, j *store.Job) error {
+func (e *Engine) expireLeaseTx(tx *store.Tx, j *store.Job) error {
 	now := e.now()
 	if j.State != "leased" {
 		return nil
@@ -757,16 +707,16 @@ func (e *Engine) expireLeaseTx(tx *sql.Tx, j *store.Job) error {
 // and the scheduler run it so a deadline-exhausted turn does not wait for
 // the next claim.
 func (e *Engine) ExpireOverdueLeases() error {
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	return e.Store.Tx(func(tx *store.Tx) error {
 		return e.expireDueLeasesTx(tx, "", "")
 	})
 }
 
-func (e *Engine) expireDeadLeasesTx(tx *sql.Tx, repo, lane string) error {
+func (e *Engine) expireDeadLeasesTx(tx *store.Tx, repo, lane string) error {
 	return e.expireDueLeasesTx(tx, repo, lane)
 }
 
-func (e *Engine) expireDueLeasesTx(tx *sql.Tx, repo, lane string) error {
+func (e *Engine) expireDueLeasesTx(tx *store.Tx, repo, lane string) error {
 	jobs, err := store.ListDueLeasedJobsTx(tx, e.now(), repo, lane)
 	if err != nil {
 		return err
@@ -777,18 +727,6 @@ func (e *Engine) expireDueLeasesTx(tx *sql.Tx, repo, lane string) error {
 		}
 	}
 	return nil
-}
-
-func placeholders(n int) string {
-	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
-}
-
-func anySlice(xs []string) []any {
-	out := make([]any, len(xs))
-	for i, x := range xs {
-		out[i] = x
-	}
-	return out
 }
 
 func (e *Engine) Claim(repo string) (*Claim, error) {
@@ -804,7 +742,7 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 	replayed := false
 	reviewCountDay := ""
 	activePolicy := e.PolicySnapshot()
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		if replay, err := e.replayClaimTx(tx, tokenHash); err != nil || replay != nil {
 			c, replayed = replay, replay != nil
 			return err
@@ -863,49 +801,28 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 		// Turns in the same class stay in id order, so catch-up reviews
 		// are still claimed once no run is waiting. A bound repository
 		// also sees leftover pinless sessions of the same project (#557).
-		rows, err := tx.Query(`SELECT t.id, t.session_id, s.environment_id, COALESCE(s.tenant_id,'default'), COALESCE(s.project,''), COALESCE(s.act,'') FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.repo IN (`+placeholders(len(keys))+`) AND COALESCE(s.archived, 0)=0 AND t.state='queued' AND t.lane IN (`+placeholders(len(lanes))+`) AND COALESCE(s.tenant_id,'default')=? ORDER BY CASE WHEN t.lane='run' THEN 0 ELSE 1 END, t.id`,
-			append(append(anySlice(keys), anySlice(lanes)...), sessionTenant(proj))...)
+		queued, err := store.ListQueuedTurnsTx(tx, keys, lanes, sessionTenant(proj))
 		if err != nil {
-			return err
-		}
-		type candidate struct {
-			id, sessionID, envID int64
-			tenant, project, act string
-		}
-		var queued []candidate
-		for rows.Next() {
-			var c candidate
-			if err := rows.Scan(&c.id, &c.sessionID, &c.envID, &c.tenant, &c.project, &c.act); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			queued = append(queued, c)
-		}
-		if err := rows.Err(); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		if err := rows.Close(); err != nil {
 			return err
 		}
 		var id int64
 		eligible := false
 		for _, c := range queued {
-			if e.environmentOperationInProgress(c.envID) {
+			if e.environmentOperationInProgress(c.EnvironmentID) {
 				continue
 			}
-			project := c.project
+			project := c.Project
 			if project == "" {
 				project = proj.Slug
 			}
-			halted, err := store.Halted(tx, c.tenant, project, c.act)
+			halted, err := store.Halted(tx, c.Tenant, project, c.Act)
 			if err != nil {
 				return err
 			}
 			if halted {
 				continue
 			}
-			name, _, _, err := store.SessionGuestTx(tx, c.sessionID)
+			name, _, _, err := store.SessionGuestTx(tx, c.SessionID)
 			if err != nil {
 				return err
 			}
@@ -915,7 +832,7 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 				}
 				return err
 			}
-			treeLeased, rootProject, err := store.CountTreeLeasedTurnsTx(tx, c.sessionID)
+			treeLeased, rootProject, err := store.CountTreeLeasedTurnsTx(tx, c.SessionID)
 			if err != nil {
 				return err
 			}
@@ -926,7 +843,7 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 					continue
 				}
 			}
-			id, eligible = c.id, true
+			id, eligible = c.ID, true
 			break
 		}
 		if !eligible {
@@ -1020,7 +937,7 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 // replayClaimTx returns the live lease already granted to tokenHash, or
 // nil when there is none. An expired lease or a passed execution deadline
 // is not replayed; the ordinary claim path expires it.
-func (e *Engine) replayClaimTx(tx *sql.Tx, tokenHash string) (*Claim, error) {
+func (e *Engine) replayClaimTx(tx *store.Tx, tokenHash string) (*Claim, error) {
 	id, err := store.LeasedTurnByClaimTokenTx(tx, tokenHash)
 	if err != nil || id == 0 {
 		return nil, err
@@ -1042,7 +959,7 @@ func (e *Engine) replayClaimTx(tx *sql.Tx, tokenHash string) (*Claim, error) {
 }
 
 func (e *Engine) requeueBusyEnvironmentClaim(c *Claim) error {
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	return e.Store.Tx(func(tx *store.Tx) error {
 		j, err := store.GetJobByIDTx(tx, c.Job.ID)
 		if err != nil {
 			return err
@@ -1094,7 +1011,7 @@ func (e *Engine) HeartbeatSteer(jobID int64, gen, claimed int) (*Steer, error) {
 
 func (e *Engine) HeartbeatSteerReceived(jobID int64, gen, claimed int, receivedSteerIDs []int64) (*Steer, error) {
 	var next *Steer
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		j, err := store.GetJobByIDTx(tx, jobID)
 		if err != nil {
 			return err
@@ -1195,7 +1112,7 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 	e.observeResult(&art)
 	e.observeFollowUpPublication(jobID, &art)
 	var out map[string]any
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		kind, payload, ok, err := store.GetReceiptTx(tx, jobID, gen, claimed)
 		if err != nil {
 			return err
@@ -1244,12 +1161,10 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 		art.MainSHA = snap.MainSHA
 		art.SnapshotHash = wantHash
 		b, _ := json.Marshal(art)
-		res, err := tx.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?,?,?,?,?)`,
-			j.ID, j.ClaimedRevision, wantHash, snap.MainSHA, string(b))
+		revID, err := store.InsertReviewRevisionTx(tx, j.ID, j.ClaimedRevision, wantHash, snap.MainSHA, string(b))
 		if err != nil {
 			return err
 		}
-		revID, _ := res.LastInsertId()
 		receipt := map[string]any{"kind": "complete", "review_revision_id": revID}
 		if art.Result != nil && art.Result.Outcome == OutcomeProposed && art.Result.Publish != nil {
 			pid, err := newActionID()
@@ -1349,7 +1264,7 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 
 func (e *Engine) Fail(jobID int64, gen, claimed int) (map[string]any, error) {
 	var out map[string]any
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		_, payload, ok, err := store.GetReceiptTx(tx, jobID, gen, claimed)
 		if err != nil {
 			return err
@@ -1427,7 +1342,7 @@ func (e *Engine) acceptLeaseIdentity(j *store.Job, gen, claimed int) error {
 	return nil
 }
 
-func (e *Engine) acceptLease(tx *sql.Tx, j *store.Job, gen, claimed int) error {
+func (e *Engine) acceptLease(tx *store.Tx, j *store.Job, gen, claimed int) error {
 	if err := e.acceptLeaseIdentity(j, gen, claimed); err != nil {
 		return err
 	}
@@ -1445,7 +1360,7 @@ func (e *Engine) acceptLease(tx *sql.Tx, j *store.Job, gen, claimed int) error {
 // exhausted revision is not retried. A pending follow-up or promoted
 // steer is queued as the next revision. bumpGeneration matches
 // expireLeaseTx so a later Claim cannot steal the same generation.
-func (e *Engine) failClosedTx(tx *sql.Tx, j *store.Job, gen, claimed int, bumpGeneration bool) error {
+func (e *Engine) failClosedTx(tx *store.Tx, j *store.Job, gen, claimed int, bumpGeneration bool) error {
 	kind, _, ok, err := store.GetReceiptTx(tx, j.ID, gen, claimed)
 	if err != nil {
 		return err
@@ -1495,7 +1410,7 @@ func (e *Engine) failClosedTx(tx *sql.Tx, j *store.Job, gen, claimed int, bumpGe
 	return e.finishMeasurementTx(tx, j.ID, j.State, Artifact{}, now)
 }
 
-func (e *Engine) finalizeFailureTx(tx *sql.Tx, j *store.Job, gen, claimed int) error {
+func (e *Engine) finalizeFailureTx(tx *store.Tx, j *store.Job, gen, claimed int) error {
 	turn, err := store.GetTurnTx(tx, j.ID)
 	if err != nil {
 		return err
@@ -1544,7 +1459,7 @@ func (e *Engine) finalizeFailureTx(tx *sql.Tx, j *store.Job, gen, claimed int) e
 	return nil
 }
 
-func (e *Engine) maybeEnqueueApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Item, revID int64, art Artifact) error {
+func (e *Engine) maybeEnqueueApplyTx(tx *store.Tx, j *store.Job, snap snapshot.Item, revID int64, art Artifact) error {
 	paused, err := e.repoPaused(tx, j.Repo)
 	if err != nil || paused {
 		return err
@@ -1563,8 +1478,7 @@ func (e *Engine) maybeEnqueueApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Ite
 		}
 		target := a.ReasonCode
 		actionID := actionHash(j.Repo, j.Item, a.Type, revID, target)
-		_, err = tx.Exec(`INSERT OR IGNORE INTO apply_attempts (action_id, review_revision_id, repo, item, state) VALUES (?,?,?,?, 'planned')`,
-			actionID, revID, j.Repo, j.Item)
+		err = store.PlanApplyAttemptTx(tx, actionID, revID, j.Repo, j.Item)
 		if err != nil {
 			return err
 		}
@@ -1639,14 +1553,14 @@ func (e *Engine) verifyEvidence(repo string, snap snapshot.Item, a ProposedActio
 	}
 }
 
-func (e *Engine) runApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Item, revID int64, art Artifact, a ProposedAction, actionID, class, sentence string) error {
-	var state string
-	switch err := tx.QueryRow(`SELECT state FROM apply_attempts WHERE action_id=?`, actionID).Scan(&state); err {
-	case nil:
+func (e *Engine) runApplyTx(tx *store.Tx, j *store.Job, snap snapshot.Item, revID int64, art Artifact, a ProposedAction, actionID, class, sentence string) error {
+	state, err := store.ApplyAttemptStateTx(tx, actionID)
+	switch {
+	case err == nil:
 		if state == "succeeded" || state == "cancelled" || state == "failed" {
 			return nil
 		}
-	case sql.ErrNoRows:
+	case errors.Is(err, store.ErrNoRows):
 	default:
 		return err
 	}
@@ -1655,63 +1569,49 @@ func (e *Engine) runApplyTx(tx *sql.Tx, j *store.Job, snap snapshot.Item, revID 
 		return err
 	}
 	if paused {
-		_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
-		return err
+		return store.CancelApplyAttemptTx(tx, actionID)
 	}
-	_, err = tx.Exec(`UPDATE apply_attempts SET state='in_flight' WHERE action_id=?`, actionID)
+	err = store.StartApplyAttemptTx(tx, actionID)
 	if err != nil {
 		return err
 	}
 	pol, ok := e.PolicySnapshot().Repo(j.Repo)
 	if !ok || (a.Type == "close" && !pol.Close) || (a.Type == "comment" && !pol.Comments && !pol.Comment) {
-		_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
-		return err
+		return store.CancelApplyAttemptTx(tx, actionID)
 	}
 	if j.ClaimedRevision != j.PendingRevision {
-		_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
-		return err
+		return store.CancelApplyAttemptTx(tx, actionID)
 	}
 	pend, err := store.LoadSnapshotTx(tx, j.Repo, j.Item, j.PendingRevision)
 	if err != nil {
 		return err
 	}
 	if snapshot.ItemHash(pend) != snapshot.ItemHash(snap) {
-		_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
-		return err
+		return store.CancelApplyAttemptTx(tx, actionID)
 	}
 	live := a.Type == "comment" && pol.Comment
 	if live && (e.Comments == nil || liveCommentBlocked(snap)) {
-		_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
-		return err
+		return store.CancelApplyAttemptTx(tx, actionID)
 	}
 	body := fmt.Sprintf("dry-run %s %s evidence_class=%s. %s", a.Type, a.ReasonCode, class, sentence)
 	if live {
 		pub, deny := publicCommentBody(a, actionID, class, sentence, art.Publishable)
 		if deny != "" {
-			_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
-			return err
+			return store.CancelApplyAttemptTx(tx, actionID)
 		}
 		body = pub
 	}
-	var sid sql.NullInt64
-	_ = tx.QueryRow(`SELECT id FROM sessions WHERE kind=? AND repo=? AND item=?`, store.SessionKindReview, j.Repo, j.Item).Scan(&sid)
-	_, err = tx.Exec(`INSERT OR IGNORE INTO actions (action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		actionID, nullableInt(sid), j.ID, revID, j.Repo, j.Item, a.Type, a.ReasonCode, class, sentence, body)
+	err = store.InsertApplyActionTx(tx, store.ApplyAction{
+		ActionID: actionID, TurnID: j.ID, ReviewRevisionID: revID, Repo: j.Repo, Item: j.Item,
+		Type: a.Type, ReasonCode: a.ReasonCode, EvidenceClass: class, LimitSentence: sentence, Body: body,
+	})
 	if err != nil {
 		return err
 	}
 	if live {
 		return nil
 	}
-	_, err = tx.Exec(`UPDATE apply_attempts SET state='succeeded' WHERE action_id=?`, actionID)
-	return err
-}
-
-func nullableInt(n sql.NullInt64) any {
-	if !n.Valid {
-		return nil
-	}
-	return n.Int64
+	return store.SucceedApplyAttemptTx(tx, actionID)
 }
 
 func actionHash(repo string, item int, typ string, revID int64, target string) string {
@@ -1724,13 +1624,13 @@ func (e *Engine) ApplyAttempt(repo string, item int) error {
 	var j *store.Job
 	var revID int64
 	var payload string
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		var err error
 		j, err = store.GetJobTx(tx, repo, item, "review")
 		if err != nil || j == nil {
 			return err
 		}
-		err = tx.QueryRow(`SELECT id, payload FROM review_revisions WHERE job_id=? ORDER BY id DESC LIMIT 1`, j.ID).Scan(&revID, &payload)
+		revID, payload, err = store.LatestReviewRevisionTx(tx, j.ID)
 		return err
 	})
 	if err != nil {
@@ -1744,7 +1644,7 @@ func (e *Engine) ApplyAttempt(repo string, item int) error {
 	if err != nil {
 		return err
 	}
-	err = e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *store.Tx) error {
 		j, err := store.GetJobTx(tx, repo, item, "review")
 		if err != nil {
 			return err
@@ -1761,7 +1661,7 @@ func (e *Engine) ApplyAttempt(repo string, item int) error {
 			return err
 		}
 		if snapshot.ItemHash(live) != snapshot.ItemHash(snap) {
-			_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE review_revision_id=?`, revID)
+			err = store.CancelRevisionApplyAttemptsTx(tx, revID)
 			if err != nil {
 				return err
 			}
@@ -1777,11 +1677,11 @@ func (e *Engine) ApplyAttempt(repo string, item int) error {
 			}
 			if !ok {
 				actionID := actionHash(repo, item, a.Type, revID, a.ReasonCode)
-				_, err = tx.Exec(`UPDATE apply_attempts SET state='cancelled' WHERE action_id=?`, actionID)
+				err = store.CancelApplyAttemptTx(tx, actionID)
 				if err != nil {
 					return err
 				}
-				_, err = tx.Exec(`INSERT OR IGNORE INTO evidence_invalidations (review_revision_id, action_id, consumed) VALUES (?,?,0)`, revID, actionID)
+				err = store.InvalidateEvidenceTx(tx, revID, actionID)
 				if err != nil {
 					return err
 				}
@@ -1796,7 +1696,7 @@ func (e *Engine) ApplyAttempt(repo string, item int) error {
 	return e.publishPendingComments(repo, item)
 }
 
-func (e *Engine) repoPaused(tx *sql.Tx, repo string) (bool, error) {
+func (e *Engine) repoPaused(tx *store.Tx, repo string) (bool, error) {
 	slug := ""
 	if s, ok := policy.ParseProjectKey(repo); ok {
 		slug = s
@@ -1825,7 +1725,7 @@ func claimSelectRepos(repo string, proj policy.Project) []string {
 // while leftover pinless sessions still exist after the project later
 // binds a repository (#557). New project-key claims stay refused when
 // no such session remains.
-func (e *Engine) claimScope(tx *sql.Tx, repo string, paused bool) (policy.Project, *policy.Repo, error) {
+func (e *Engine) claimScope(tx *store.Tx, repo string, paused bool) (policy.Project, *policy.Repo, error) {
 	active := e.PolicySnapshot()
 	if slug, ok := policy.ParseProjectKey(repo); ok {
 		if paused {
@@ -1872,7 +1772,7 @@ func (e *Engine) SetPause(project string, on bool) error {
 		}
 		key = "pause:" + project
 	}
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	return e.Store.Tx(func(tx *store.Tx) error {
 		v := "0"
 		if on {
 			v = "1"
@@ -1885,7 +1785,7 @@ func (e *Engine) SetPause(project string, on bool) error {
 // naming who asked: by.Actor is required, by.Delegate is recorded when an
 // issuer-vouched subject retried through a delegating service.
 func (e *Engine) OperatorRetry(repo string, item int, by store.Attribution) error {
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	return e.Store.Tx(func(tx *store.Tx) error {
 		j, err := store.GetJobTx(tx, repo, item, "review")
 		if err != nil {
 			return err
@@ -1896,8 +1796,7 @@ func (e *Engine) OperatorRetry(repo string, item int, by store.Attribution) erro
 		if j.State != "failed" {
 			return fmt.Errorf("not failed")
 		}
-		_, err = tx.Exec(`INSERT INTO retry_audit (job_id, actor, ts, pending_revision, previous_retry_count, delegated_by) VALUES (?,?,?,?,?,?)`,
-			j.ID, by.Actor, e.now().Format(time.RFC3339Nano), j.PendingRevision, j.RetryCount, sql.NullString{String: by.Delegate, Valid: by.Delegate != ""})
+		err = store.InsertRetryAuditTx(tx, j, by, e.now())
 		if err != nil {
 			return err
 		}
@@ -1916,25 +1815,12 @@ func (e *Engine) Sweep(repo string) error {
 		}
 		return nil
 	}
-	rows, err := e.Store.DB.Query(`SELECT item, item_kind FROM jobs WHERE repo=?`, repo)
+	list, err := store.ListRepoJobItems(e.Store, repo)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	type it struct {
-		item int
-		kind string
-	}
-	var list []it
-	for rows.Next() {
-		var x it
-		if err := rows.Scan(&x.item, &x.kind); err != nil {
-			return err
-		}
-		list = append(list, x)
-	}
 	for _, x := range list {
-		if err := e.CatchUpItem(repo, x.item, x.kind); err != nil {
+		if err := e.CatchUpItem(repo, x.Item, x.ItemKind); err != nil {
 			return err
 		}
 	}
@@ -1942,18 +1828,9 @@ func (e *Engine) Sweep(repo string) error {
 }
 
 func (e *Engine) RetryAll(repo, actor string) (int, error) {
-	rows, err := e.Store.DB.Query(`SELECT item FROM jobs WHERE repo=? AND lane='review' AND state='failed'`, repo)
+	items, err := store.ListFailedReviewItems(e.Store, repo)
 	if err != nil {
 		return 0, err
-	}
-	defer rows.Close()
-	var items []int
-	for rows.Next() {
-		var n int
-		if err := rows.Scan(&n); err != nil {
-			return 0, err
-		}
-		items = append(items, n)
 	}
 	for _, n := range items {
 		if err := e.OperatorRetry(repo, n, store.Attribution{Actor: actor}); err != nil {
@@ -1967,7 +1844,7 @@ func (e *Engine) Status(repo string) (string, error) {
 	var b strings.Builder
 	pausedG := false
 	pausedR := false
-	_ = e.Store.Tx(func(tx *sql.Tx) error {
+	_ = e.Store.Tx(func(tx *store.Tx) error {
 		var err error
 		pausedG, err = store.Paused(tx, "")
 		if err != nil {
@@ -1983,29 +1860,14 @@ func (e *Engine) Status(repo string) (string, error) {
 		fmt.Fprintf(&b, " project=%v", pausedR)
 	}
 	b.WriteByte('\n')
-	q := `SELECT repo, item, state, pending_revision, retry_count FROM jobs WHERE lane='review'`
-	args := []any{}
-	if repo != "" {
-		q += ` AND repo=?`
-		args = append(args, repo)
-	}
-	q += ` ORDER BY repo, item`
-	rows, err := e.Store.DB.Query(q, args...)
+	jobs, err := store.ListReviewJobs(e.Store, repo)
 	if err != nil {
 		return "", err
 	}
-	defer rows.Close()
-	n := 0
-	for rows.Next() {
-		var r, st string
-		var item, pending, retry int
-		if err := rows.Scan(&r, &item, &st, &pending, &retry); err != nil {
-			return "", err
-		}
-		fmt.Fprintf(&b, "%s#%d %s pending=%d retry=%d\n", r, item, st, pending, retry)
-		n++
+	for _, j := range jobs {
+		fmt.Fprintf(&b, "%s#%d %s pending=%d retry=%d\n", j.Repo, j.Item, j.State, j.PendingRevision, j.RetryCount)
 	}
-	if n == 0 {
+	if len(jobs) == 0 {
 		b.WriteString("no jobs\n")
 	}
 	return b.String(), nil
@@ -2060,28 +1922,25 @@ func (e *Engine) ReconcileDeliveries(repo string) error {
 	if err != nil {
 		return err
 	}
-	var lastAt, lastID string
-	_ = e.Store.Tx(func(tx *sql.Tx) error {
-		_ = tx.QueryRow(`SELECT last_delivered_at, last_delivery_id FROM reconcile_checkpoints WHERE repo=?`, repo).Scan(&lastAt, &lastID)
+	var lastID string
+	_ = e.Store.Tx(func(tx *store.Tx) error {
+		_, lastID, _ = store.ReconcileCheckpointTx(tx, repo)
 		return nil
 	})
 	for _, d := range slices.Backward(list) {
 		if lastID != "" && d.ID == lastID {
 			continue
 		}
-		var fails int
-		_ = e.Store.DB.QueryRow(`SELECT retries FROM failed_deliveries WHERE delivery_id=?`, d.ID).Scan(&fails)
+		fails, _ := store.DeliveryFailures(e.Store, d.ID)
 		detail, err := e.GitHub.GetDelivery(repo, d.ID)
 		if err != nil {
 			fails++
-			_ = e.Store.Tx(func(tx *sql.Tx) error {
-				_, err := tx.Exec(`INSERT INTO failed_deliveries(delivery_id,repo,retries) VALUES(?,?,?) ON CONFLICT(delivery_id) DO UPDATE SET retries=?`, d.ID, repo, fails, fails)
-				return err
+			_ = e.Store.Tx(func(tx *store.Tx) error {
+				return store.RecordDeliveryFailuresTx(tx, d.ID, repo, fails)
 			})
 			if fails >= RefreshRetryLimit {
-				_ = e.Store.Tx(func(tx *sql.Tx) error {
-					_, err := tx.Exec(`INSERT INTO reconcile_checkpoints(repo,last_delivered_at,last_delivery_id) VALUES(?,?,?) ON CONFLICT(repo) DO UPDATE SET last_delivered_at=excluded.last_delivered_at, last_delivery_id=excluded.last_delivery_id`, repo, d.DeliveredAt, d.ID)
-					return err
+				_ = e.Store.Tx(func(tx *store.Tx) error {
+					return store.AdvanceReconcileCheckpointTx(tx, repo, d.DeliveredAt, d.ID)
 				})
 				continue
 			}
@@ -2097,9 +1956,8 @@ func (e *Engine) ReconcileDeliveries(repo string) error {
 		if err := e.IngestWebhook(detail.ID, r, item, kind); err != nil {
 			return err
 		}
-		_ = e.Store.Tx(func(tx *sql.Tx) error {
-			_, err := tx.Exec(`INSERT INTO reconcile_checkpoints(repo,last_delivered_at,last_delivery_id) VALUES(?,?,?) ON CONFLICT(repo) DO UPDATE SET last_delivered_at=excluded.last_delivered_at, last_delivery_id=excluded.last_delivery_id`, repo, detail.DeliveredAt, detail.ID)
-			return err
+		_ = e.Store.Tx(func(tx *store.Tx) error {
+			return store.AdvanceReconcileCheckpointTx(tx, repo, detail.DeliveredAt, detail.ID)
 		})
 	}
 	return nil

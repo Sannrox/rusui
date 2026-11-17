@@ -3,7 +3,6 @@ package engine
 import (
 	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"fmt"
 
@@ -80,7 +79,7 @@ func (e *Engine) DeliverSessionWebhook(sessionID int64, sig string, body []byte,
 		return err
 	}
 	if !ok {
-		return sql.ErrNoRows
+		return store.ErrNoRows
 	}
 	if sess.Archived {
 		if _, err := store.InsertWebhookDelivery(e.Store, sessionID, deliveryID, false, "archived", e.now()); err != nil {

@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -62,7 +61,7 @@ func (e *Engine) cancelOneSession(sessionID int64) error {
 			e.exception(fmt.Sprintf("cancel session=%d: environment %d stayed busy for %s; cancelling without stopping the guest", sessionID, envRow.ID, e.cancelEnvWait()))
 		}
 	}
-	err = e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *store.Tx) error {
 		// Cancel drops the queued prompts; follow-ups and steers stay (#492).
 		if _, err := store.DropQueuedPromptsTx(tx, sessionID); err != nil {
 			return err
@@ -129,7 +128,7 @@ func (e *Engine) waitEnvironmentOperation(id int64, limit time.Duration) (func()
 	}
 }
 
-func (e *Engine) cancelTurnTx(tx *sql.Tx, turnID int64) error {
+func (e *Engine) cancelTurnTx(tx *store.Tx, turnID int64) error {
 	j, err := store.GetJobByIDTx(tx, turnID)
 	if err != nil {
 		return err

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -271,7 +270,7 @@ func (s *Server) getSessionReviewStatus(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	turn, err := store.GetTurn(s.Eng.Store, turnID)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && turn.SessionID != sessionID) {
+	if errors.Is(err, store.ErrNoRows) || (err == nil && turn.SessionID != sessionID) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -449,7 +448,7 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 		}
 		if guestEntry.Protocol == guest.ProtocolACP {
 			body, lookupErr := store.LatestActionBody(s.Eng.Store, id, acp.ActionInitialize)
-			if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+			if lookupErr != nil && !errors.Is(lookupErr, store.ErrNoRows) {
 				http.Error(w, lookupErr.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -518,7 +517,7 @@ func (s *Server) dropQueuedPrompts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	if _, err := s.visibleOwnedSession(r, id); errors.Is(err, sql.ErrNoRows) {
+	if _, err := s.visibleOwnedSession(r, id); errors.Is(err, store.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	} else if err != nil {
@@ -545,7 +544,7 @@ func (s *Server) cancelSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess, err := s.visibleOwnedSession(r, id)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -603,7 +602,7 @@ func (s *Server) setSessionArchive(w http.ResponseWriter, r *http.Request, archi
 	if archive {
 		lookup = s.visibleOwnedSession
 	}
-	if _, err := lookup(r, id); errors.Is(err, sql.ErrNoRows) {
+	if _, err := lookup(r, id); errors.Is(err, store.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	} else if err != nil {

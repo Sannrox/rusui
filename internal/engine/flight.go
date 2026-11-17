@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -32,7 +31,7 @@ func (e *Engine) takeReads(turnID int64) []flight.Object {
 	return objs
 }
 
-func (e *Engine) recordFlightTx(tx *sql.Tx, turnID int64, receiptID string) error {
+func (e *Engine) recordFlightTx(tx *store.Tx, turnID int64, receiptID string) error {
 	turn, err := store.GetTurnTx(tx, turnID)
 	if err != nil {
 		return err

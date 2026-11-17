@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 
@@ -51,7 +50,7 @@ func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode
 	}
 	repo, sha := e.operatorSessionPin(p)
 	var sessionID int64
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		paused, err := store.Paused(tx, project)
 		if err != nil {
 			return err

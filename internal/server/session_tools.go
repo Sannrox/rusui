@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -91,7 +90,7 @@ func (s *Server) grantSessionTool(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := s.operatorActor(s.identify(r))
 	var g store.SessionToolGrant
-	err = s.Eng.Store.Tx(func(tx *sql.Tx) error {
+	err = s.Eng.Store.Tx(func(tx *store.Tx) error {
 		var inner error
 		g, inner = store.GrantSessionToolTx(tx, id, req.Tool, actor)
 		if inner != nil {
@@ -142,7 +141,7 @@ func (s *Server) revokeSessionTool(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tool := store.NormalizeTool(r.PathValue("tool"))
-	err = s.Eng.Store.Tx(func(tx *sql.Tx) error {
+	err = s.Eng.Store.Tx(func(tx *store.Tx) error {
 		g, inner := store.RevokeSessionToolTx(tx, id, tool)
 		if inner != nil {
 			return inner

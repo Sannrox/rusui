@@ -1769,6 +1769,12 @@ func SchemaVersion(s *Store) (int, error) {
 	return currentVersion(s.DB)
 }
 
+// StampSchemaVersion records version as applied without running it. The
+// compat suite uses it to fake a database written by a newer binary.
+func StampSchemaVersion(s *Store, version int) error {
+	return stamp(s.DB, version)
+}
+
 func stamp(db *sql.DB, version int) error {
 	_, err := db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)`,
 		version, time.Now().UTC().Format(time.RFC3339Nano))

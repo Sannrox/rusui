@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,7 +56,7 @@ func (e *Engine) chooseGuest(project, requested string, pol *policy.Effective) (
 	return name, entry, nil
 }
 
-func (e *Engine) bindSessionGuestTx(tx *sql.Tx, sessionID int64, project, requested string, pol *policy.Effective) (string, guest.Entry, error) {
+func (e *Engine) bindSessionGuestTx(tx *store.Tx, sessionID int64, project, requested string, pol *policy.Effective) (string, guest.Entry, error) {
 	name, pin, raw, err := store.SessionGuestTx(tx, sessionID)
 	if err != nil {
 		return "", guest.Entry{}, err
@@ -117,7 +116,7 @@ func (e *Engine) SessionGuest(sessionID int64) (string, guest.Entry, error) {
 	}
 	var name string
 	var entry guest.Entry
-	err = e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *store.Tx) error {
 		var err error
 		name, entry, err = e.bindSessionGuestTx(tx, sessionID, project, "", pol)
 		return err

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -110,7 +109,7 @@ func (s *Server) followSessionRead(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sess, err := s.visibleSession(r, id)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -305,7 +304,7 @@ func (s *Server) followTurnRecord(sessionID int64, status followStatus) (followT
 	case followCompleted:
 		out := followTurn{SessionID: sessionID, TurnID: status.TurnID, State: turnReady, Revision: status.Revision}
 		payload, err := store.LatestReviewJSON(s.Eng.Store, status.TurnID)
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, store.ErrNoRows) {
 			return out, true, nil
 		}
 		if err != nil {
