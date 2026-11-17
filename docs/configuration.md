@@ -265,7 +265,7 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | Method | Path | Auth |
 | --- | --- | --- |
 | `GET` | `/healthz` | none; body `ok` |
-| `GET` | `/readyz` | none; JSON topology report; 200 ready / 503 not ready |
+| `GET` | `/readyz` | none; JSON topology report, including a `store` check that fails when the store does not answer within 2s; 200 ready / 503 not ready |
 | `GET` | `/auth/oidc` | public OIDC client metadata; 404 when disabled |
 | `GET` | `/auth/oidc/session` | validate operator bearer; 204 when accepted, 401 when refused |
 | `POST` | `/projects/{slug}/sessions` | operator or worker token; JSON `kind` `run` (prompt) or `local`; optional `Idempotency-Key`; 201 `{session_id, kind}`; unknown `kind` is 400 |

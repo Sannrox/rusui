@@ -424,7 +424,7 @@ unset the env vars listed in [configuration.md](configuration.md).
 | --- | --- |
 | Server exits immediately | Missing GitHub token or webhook/worker/Slack secret; or use `-allow-insecure` locally |
 | `GET /healthz` fails | Process not listening; wrong `-addr` |
-| `GET /readyz` 503 / `diagnose` exit 1 | Read the JSON checks: missing runtime is `unavailable`; bad policy/TLS/CA is `misconfigured` |
+| `GET /readyz` 503 / `diagnose` exit 1 | Read the JSON checks: missing runtime or a store that does not answer is `unavailable`; bad policy/TLS/CA is `misconfigured` |
 | GitHub webhook 401 | Secret mismatch, or tunnel not hitting `/hooks/github` |
 | Runner `auth` / 401 | Secret mismatch between processes |
 | Slack 403 `user` | `RUSUI_SLACK_USERS` missing that user id, or empty |
