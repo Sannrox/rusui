@@ -14,10 +14,6 @@ const SchedulerLease = "scheduler"
 // was renewed by nobody, expired, or taken over.
 var ErrPlaneLeaseLost = errors.New("plane job lease lost")
 
-// storeNow is the store's clock in unix seconds. Lease expiry compares
-// against it in the same statement, never an instance clock (ADR 0089 D4).
-const storeNow = `CAST(strftime('%s','now') AS INTEGER)`
-
 // PlaneLease is one holder's claim on a plane-wide lease row, as returned by
 // ClaimPlaneLease. Fence writes with Check.
 type PlaneLease struct {
@@ -25,6 +21,10 @@ type PlaneLease struct {
 	Holder     string
 	Generation int64
 }
+
+// Lease expiry compares against unixepoch(), the store's clock in unix
+// seconds, in the same statement, never an instance clock (ADR 0089 D4).
+// SQLite has unixepoch() natively; the PostgreSQL baseline defines it.
 
 // ClaimPlaneLease claims or renews the named lease for holder for ttl. A
 // renewal by the live holder keeps the generation; a claim of an expired
@@ -34,14 +34,15 @@ func ClaimPlaneLease(s *Store, name, holder string, ttl time.Duration) (PlaneLea
 	l := PlaneLease{Name: name, Holder: holder}
 	ok := false
 	err := s.Tx(func(tx *sql.Tx) error {
+		ok = false // Tx may rerun this callback on PostgreSQL
 		if _, err := tx.Exec(`INSERT INTO plane_job_leases(name, holder, generation, expires_at) VALUES (?, '', 0, 0) ON CONFLICT DO NOTHING`, name); err != nil {
 			return err
 		}
 		res, err := tx.Exec(`UPDATE plane_job_leases SET
-  generation = CASE WHEN holder = ? AND expires_at > `+storeNow+` THEN generation ELSE generation + 1 END,
+  generation = CASE WHEN holder = ? AND expires_at > unixepoch() THEN generation ELSE generation + 1 END,
   holder = ?,
-  expires_at = `+storeNow+` + ?
-WHERE name = ? AND (holder = ? OR expires_at <= `+storeNow+`)`,
+  expires_at = unixepoch() + ?
+WHERE name = ? AND (holder = ? OR expires_at <= unixepoch())`,
 			holder, holder, int64(ttl/time.Second), name, holder)
 		if err != nil {
 			return err
@@ -64,7 +65,7 @@ WHERE name = ? AND (holder = ? OR expires_at <= `+storeNow+`)`,
 func (l PlaneLease) Check(tx *sql.Tx) error {
 	var one int
 	err := tx.QueryRow(`SELECT 1 FROM plane_job_leases
-WHERE name = ? AND holder = ? AND generation = ? AND expires_at > `+storeNow,
+WHERE name = ? AND holder = ? AND generation = ? AND expires_at > unixepoch()`,
 		l.Name, l.Holder, l.Generation).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrPlaneLeaseLost

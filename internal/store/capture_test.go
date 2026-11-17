@@ -2,18 +2,13 @@ package store
 
 import (
 	"bytes"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func captureFixture(t *testing.T) (*Store, int64, int64) {
 	t.Helper()
-	s, err := Open(filepath.Join(t.TempDir(), "captures.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
 	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
 	envID, err := InsertEnvironment(s, Environment{
 		Name: "cap-env", Driver: "container", State: EnvReady,
@@ -22,25 +17,28 @@ func captureFixture(t *testing.T) (*Store, int64, int64) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := s.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
-VALUES (?, 'run', 'example/test-repo', 1, 'issue', 'open', ?)`, envID, now.Format(time.RFC3339Nano))
-	if err != nil {
-		t.Fatal(err)
-	}
-	sessionID, err := res.LastInsertId()
+	sessionID, err := insertID(s.DB, `INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
+VALUES (?, 'run', 'example/test-repo', 1, 'issue', 'open', ?) RETURNING id`, envID, now.Format(time.RFC3339Nano))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s, envID, sessionID
 }
 
-func totalChanges(t *testing.T, s *Store) int {
+// captureWrites fingerprints writes to environment_captures: SQLite's
+// change counter, or each PostgreSQL row version (xmin). It moves when any
+// capture row is rewritten.
+func captureWrites(t *testing.T, s *Store) string {
 	t.Helper()
-	var n int
-	if err := s.DB.QueryRow(`SELECT total_changes()`).Scan(&n); err != nil {
+	q := `SELECT CAST(total_changes() AS TEXT)`
+	if s.pg {
+		q = `SELECT string_agg(xmin::text, ',' ORDER BY kind, name) FROM environment_captures`
+	}
+	var v string
+	if err := s.DB.QueryRow(q).Scan(&v); err != nil {
 		t.Fatal(err)
 	}
-	return n
+	return v
 }
 
 func TestReplaceEnvironmentCapturesSkipsUnchangedBlobs(t *testing.T) {
@@ -51,13 +49,13 @@ func TestReplaceEnvironmentCapturesSkipsUnchangedBlobs(t *testing.T) {
 	if err := ReplaceEnvironmentCaptures(s, envID, "service", []CaptureRow{row, {Name: "api", Output: []byte("api ok\n")}}, now); err != nil {
 		t.Fatal(err)
 	}
-	before := totalChanges(t, s)
+	before := captureWrites(t, s)
 	later := now.Add(time.Minute)
 	if err := ReplaceEnvironmentCaptures(s, envID, "service", []CaptureRow{row, {Name: "api", Output: []byte("api ok\n")}}, later); err != nil {
 		t.Fatal(err)
 	}
-	if after := totalChanges(t, s); after != before {
-		t.Fatalf("rewrote unchanged captures: total_changes %d -> %d", before, after)
+	if after := captureWrites(t, s); after != before {
+		t.Fatalf("rewrote unchanged captures: %s -> %s", before, after)
 	}
 	caps, err := ListSessionCaptures(s, sessionID, CaptureListFilter{Kind: "service", Name: "web"})
 	if err != nil {
@@ -152,11 +150,11 @@ func TestListSessionCapturesFiltersAndOmitsBodies(t *testing.T) {
 			t.Fatalf("omit-body dropped metadata %+v", c)
 		}
 	}
-	var stored string
-	if err := s.DB.QueryRow(`SELECT CAST(output AS TEXT) FROM environment_captures WHERE environment_id=? AND kind='service' AND name='web'`, envID).Scan(&stored); err != nil {
+	var stored []byte
+	if err := s.DB.QueryRow(`SELECT output FROM environment_captures WHERE environment_id=? AND kind='service' AND name='web'`, envID).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
-	if stored != "web body\n" {
+	if string(stored) != "web body\n" {
 		t.Fatalf("stored body %q", stored)
 	}
 }

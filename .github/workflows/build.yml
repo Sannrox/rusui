@@ -32,6 +32,33 @@ jobs:
       - name: Validate
         run: make validate
 
+  # The store suite again on PostgreSQL, the redundant-topology backend
+  # (ADR 0089 D2). Each test creates and drops its own database.
+  store-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: rusui
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      RUSUI_TEST_STORE_URL: postgres://postgres:rusui@127.0.0.1:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: .go-version
+          cache: true
+      - name: Store tests on PostgreSQL
+        run: go test -count=1 ./internal/store/...
+
   images:
     runs-on: ubuntu-latest
     steps:

@@ -9,6 +9,7 @@ import (
 )
 
 func TestRestoreMissingAndCorruptArtifacts(t *testing.T) {
+	sqliteOnly(t, "restore reads a SQLite file artifact")
 	dir := t.TempDir()
 	if _, _, err := Restore(filepath.Join(dir, "missing.db")); err == nil {
 		t.Fatal("missing artifact succeeded")
@@ -23,6 +24,7 @@ func TestRestoreMissingAndCorruptArtifacts(t *testing.T) {
 }
 
 func TestRestoreClearsStaleAuthority(t *testing.T) {
+	sqliteOnly(t, "restore reads a SQLite file artifact")
 	dir := t.TempDir()
 	src := filepath.Join(dir, "rusui.db")
 	st, err := Open(src)
@@ -113,6 +115,7 @@ func TestRestoreClearsStaleAuthority(t *testing.T) {
 // A restored copy may run beside its source on one container host. It must
 // not adopt the source's guests or reuse its plane identity in guest names.
 func TestRestoreReleasesGuestHandlesAndPlaneIdentity(t *testing.T) {
+	sqliteOnly(t, "restore reads a SQLite file artifact")
 	dir := t.TempDir()
 	src := filepath.Join(dir, "rusui.db")
 	st, err := Open(src)
@@ -173,6 +176,7 @@ func TestRestoreReleasesGuestHandlesAndPlaneIdentity(t *testing.T) {
 }
 
 func TestRestorePreservesIdentitiesRetentionAndReceipts(t *testing.T) {
+	sqliteOnly(t, "restore reads a SQLite file artifact")
 	dir := t.TempDir()
 	src := filepath.Join(dir, "rusui.db")
 	st, err := Open(src)

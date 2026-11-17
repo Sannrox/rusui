@@ -92,6 +92,9 @@ type Engine struct {
 	writing              map[int64]*completeLock
 	flightMu             sync.Mutex
 	flightReads          map[int64][]flight.Object
+	// afterCommit maps a live transaction from e.tx to the work it runs
+	// once that transaction commits.
+	afterCommit sync.Map
 
 	// Secrets are plane-held values keyed by policy secret id (ADR 0066).
 	// Production loads them from RUSUI_SECRET_<ID> via SecretsFromEnv.
@@ -117,6 +120,43 @@ func (e *Engine) exception(msg string) {
 	if e.Notify != nil {
 		e.Notify(msg)
 	}
+}
+
+// tx runs fn through Store.Tx and then, only if the transaction committed,
+// the work fn queued with onCommit. Store.Tx may rerun fn on PostgreSQL;
+// each attempt starts with an empty queue, so a rolled-back or retried
+// attempt sends nothing.
+func (e *Engine) tx(fn func(*store.Tx) error) error {
+	var pending []func()
+	err := e.Store.Tx(func(tx *store.Tx) error {
+		pending = nil
+		e.afterCommit.Store(tx, &pending)
+		defer e.afterCommit.Delete(tx)
+		return fn(tx)
+	})
+	if err != nil {
+		return err
+	}
+	for _, f := range pending {
+		f()
+	}
+	return nil
+}
+
+// onCommit queues f to run after tx commits. A tx not opened by e.tx runs
+// f at once.
+func (e *Engine) onCommit(tx *store.Tx, f func()) {
+	if v, ok := e.afterCommit.Load(tx); ok {
+		q := v.(*[]func())
+		*q = append(*q, f)
+		return
+	}
+	f()
+}
+
+// exceptionTx reports msg once tx commits, never for a rolled-back attempt.
+func (e *Engine) exceptionTx(tx *store.Tx, msg string) {
+	e.onCommit(tx, func() { e.exception(msg) })
 }
 
 func (e *Engine) now() time.Time { return e.Clock.Now().UTC() }
@@ -480,7 +520,8 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 	}
 	budgetDenied := false
 	ineligible := false
-	err = e.Store.Tx(func(tx *store.Tx) error {
+	err = e.tx(func(tx *store.Tx) error {
+		budgetDenied, ineligible = false, false // Tx may rerun this callback
 		own, err := store.RefreshOwnershipTx(tx, repo, item)
 		if err != nil {
 			return err
@@ -495,7 +536,7 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 			st := "queued"
 			if n >= RefreshRetryLimit {
 				st = "failed"
-				e.exception(fmt.Sprintf("refresh retries exhausted %s#%d", repo, item))
+				e.exceptionTx(tx, fmt.Sprintf("refresh retries exhausted %s#%d", repo, item))
 			}
 			return store.FailRefreshAttemptTx(tx, repo, item, n, st)
 		}
@@ -682,7 +723,7 @@ func (e *Engine) expireLeaseTx(tx *store.Tx, j *store.Job) error {
 			j.State = "queued"
 		} else {
 			j.State = "failed"
-			e.exception(fmt.Sprintf("review retry_limit exhausted %s#%d until operator retry", j.Repo, j.Item))
+			e.exceptionTx(tx, fmt.Sprintf("review retry_limit exhausted %s#%d until operator retry", j.Repo, j.Item))
 		}
 	} else {
 		j.State = "queued"
@@ -707,7 +748,7 @@ func (e *Engine) expireLeaseTx(tx *store.Tx, j *store.Job) error {
 // and the scheduler run it so a deadline-exhausted turn does not wait for
 // the next claim.
 func (e *Engine) ExpireOverdueLeases() error {
-	return e.Store.Tx(func(tx *store.Tx) error {
+	return e.tx(func(tx *store.Tx) error {
 		return e.expireDueLeasesTx(tx, "", "")
 	})
 }
@@ -742,7 +783,8 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 	replayed := false
 	reviewCountDay := ""
 	activePolicy := e.PolicySnapshot()
-	err := e.Store.Tx(func(tx *store.Tx) error {
+	err := e.tx(func(tx *store.Tx) error {
+		c, replayed, reviewCountDay = nil, false, "" // Tx may rerun this callback
 		if replay, err := e.replayClaimTx(tx, tokenHash); err != nil || replay != nil {
 			c, replayed = replay, replay != nil
 			return err
@@ -769,7 +811,7 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 			if !decision.Allowed && decision.Reason == policy.ReviewReasonDailyBudget {
 				// Reviews stop; run and scheduled work may still be claimed.
 				budgetOut = true
-				e.exception(fmt.Sprintf("daily review budget exhausted for %s", repo))
+				e.exceptionTx(tx, fmt.Sprintf("daily review budget exhausted for %s", repo))
 			} else if decision.Allowed {
 				lanes = append(lanes, "review")
 			}
@@ -1015,6 +1057,7 @@ func (e *Engine) HeartbeatSteer(jobID int64, gen, claimed int) (*Steer, error) {
 func (e *Engine) HeartbeatSteerReceived(jobID int64, gen, claimed int, receivedSteerIDs []int64) (*Steer, error) {
 	var next *Steer
 	err := e.Store.Tx(func(tx *store.Tx) error {
+		next = nil // Tx may rerun this callback
 		j, err := store.GetJobByIDTx(tx, jobID)
 		if err != nil {
 			return err
@@ -1115,7 +1158,8 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 	e.observeResult(&art)
 	e.observeFollowUpPublication(jobID, &art)
 	var out map[string]any
-	err := e.Store.Tx(func(tx *store.Tx) error {
+	err := e.tx(func(tx *store.Tx) error {
+		out = nil // Tx may rerun this callback
 		kind, payload, ok, err := store.GetReceiptTx(tx, jobID, gen, claimed)
 		if err != nil {
 			return err
@@ -1267,7 +1311,8 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 
 func (e *Engine) Fail(jobID int64, gen, claimed int) (map[string]any, error) {
 	var out map[string]any
-	err := e.Store.Tx(func(tx *store.Tx) error {
+	err := e.tx(func(tx *store.Tx) error {
+		out = nil // Tx may rerun this callback
 		_, payload, ok, err := store.GetReceiptTx(tx, jobID, gen, claimed)
 		if err != nil {
 			return err
@@ -1409,7 +1454,7 @@ func (e *Engine) failClosedTx(tx *store.Tx, j *store.Job, gen, claimed int, bump
 	if err := store.UpdateJobTx(tx, j); err != nil {
 		return err
 	}
-	e.exception(fmt.Sprintf("execution deadline exhausted %s#%d", j.Repo, j.Item))
+	e.exceptionTx(tx, fmt.Sprintf("execution deadline exhausted %s#%d", j.Repo, j.Item))
 	return e.finishMeasurementTx(tx, j.ID, j.State, Artifact{}, now)
 }
 
@@ -1448,7 +1493,7 @@ func (e *Engine) finalizeFailureTx(tx *store.Tx, j *store.Job, gen, claimed int)
 			j.State = "queued"
 		} else {
 			j.State = "failed"
-			e.exception(fmt.Sprintf("review retry_limit exhausted %s#%d until operator retry", j.Repo, j.Item))
+			e.exceptionTx(tx, fmt.Sprintf("review retry_limit exhausted %s#%d until operator retry", j.Repo, j.Item))
 		}
 	} else {
 		j.State = "queued"

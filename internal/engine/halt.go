@@ -76,6 +76,7 @@ func (e *Engine) applyHalt(scope, target string, rec store.HaltRecord) (HaltRepo
 	// successful halt cannot be followed by a pending process launch.
 	e.sumikaMu.Lock()
 	err := e.Store.Tx(func(tx *store.Tx) error {
+		stopped, killIDs = nil, nil // Tx may rerun this callback
 		if err := store.SetHaltTx(tx, scope, target, rec); err != nil {
 			return err
 		}

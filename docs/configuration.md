@@ -8,7 +8,7 @@ and `internal/server`. Intent: [ARCHITECTURE.md](../ARCHITECTURE.md).
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `-addr` | `127.0.0.1:8080` | Listen address. Not restricted to loopback. |
-| `-db` | `rusui.db` | SQLite path. |
+| `-db` | `rusui.db` | SQLite path. `RUSUI_STORE_URL` overrides it. |
 | `-policy` | `policy.yaml` | Policy file. Reloaded by Slack `reload` or process restart. |
 | `-env-idle-sleep` | `5m` | Sleep managed container environments after this idle period; `0` disables automatic sleep. A live terminal write lease, preview grant, or queued turn keeps the environment awake. Opening the terminal, minting or using a preview, or sending a prompt wakes the same environment. |
 | `-allow-insecure` | false | Start without webhook, worker, and Slack secrets (warns). |
@@ -118,6 +118,7 @@ reported and exits successfully.
 | `RUSUI_OIDC_SUBJECTS` | no | JSON object, or a path to one, mapping each further OIDC `sub` to `{"tenant": "<tenant_id>", "actor": "<actor id>"}` ([ADR 0088](decisions/0088-issuer-vouched-subjects.md)). Requires the OIDC settings above. A mapped subject is an operator for that tenant and actor only; its approval decisions, retries, and dispositions record the actor and the token's `act` service, never the `sub`. Its tokens must carry `iat` and `exp` at most one hour apart, and are refused once the issuer's keys go one hour without a successful fetch. A subject equal to `RUSUI_OIDC_SUBJECT`, two subjects on one tenant and actor, or the `default`/`default` pair fail closed at start. |
 | `RUSUI_OIDC_SCOPES` | `openid` | Space-separated scopes requested by `rusui login`. |
 | `RUSUI_SLACK_SECRET` | **Yes** unless `-allow-insecure` | Slack HMAC |
+| `RUSUI_STORE_URL` | no | A `postgres://` or `postgresql://` URL. Overrides `-db` and opens PostgreSQL for the redundant topology ([upgrade.md](upgrade.md#postgresql-store)). Unset keeps SQLite at `-db`. |
 | `RUSUI_GITHUB_API` | no | Default `https://api.github.com` |
 | `RUSUI_GITHUB_HOOK_IDS` | for reconcile | `owner/repo=hookid`, comma-separated |
 | `RUSUI_SLACK_USERS` | for inbound Slack | Empty allowlist → 403 |

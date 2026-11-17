@@ -2,17 +2,12 @@ package store
 
 import (
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestSleepReservationProtectsTurnsAndLiveGrants(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "environment.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
 
 	now := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
 	expires := now.Add(EnvTTL)
@@ -23,20 +18,12 @@ func TestSleepReservationProtectsTurnsAndLiveGrants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := s.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
-VALUES (?, 'run', 'example/test-repo', 1, 'issue', 'open', ?)`, envID, now.Format(time.RFC3339Nano))
+	sessionID, err := insertID(s.DB, `INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
+VALUES (?, 'run', 'example/test-repo', 1, 'issue', 'open', ?) RETURNING id`, envID, now.Format(time.RFC3339Nano))
 	if err != nil {
 		t.Fatal(err)
 	}
-	sessionID, err := res.LastInsertId()
-	if err != nil {
-		t.Fatal(err)
-	}
-	turnRes, err := s.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'leased')`, sessionID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	turnID, err := turnRes.LastInsertId()
+	turnID, err := insertID(s.DB, `INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'leased') RETURNING id`, sessionID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,11 +80,7 @@ VALUES (?, 'run', 'example/test-repo', 1, 'issue', 'open', ?)`, envID, now.Forma
 }
 
 func TestIdleSleepReservationRechecksRecentActivity(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "idle.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
 
 	now := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
 	ttl, idle := 72*time.Hour, 5*time.Minute
@@ -127,11 +110,7 @@ func TestIdleSleepReservationRechecksRecentActivity(t *testing.T) {
 }
 
 func TestIdleSleepListsPastTTL(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "idle-ttl.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
 
 	now := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
 	ttl, idle := 72*time.Hour, 5*time.Minute
@@ -153,18 +132,10 @@ func TestIdleSleepListsPastTTL(t *testing.T) {
 }
 
 func TestSessionArchiveRoundTrip(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "archive.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
 	now := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
-	res, err := s.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
-VALUES (1, 'run', 'example/test-repo', 1, 'issue', 'open', ?)`, now.Format(time.RFC3339Nano))
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, err := res.LastInsertId()
+	id, err := insertID(s.DB, `INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
+VALUES (1, 'run', 'example/test-repo', 1, 'issue', 'open', ?) RETURNING id`, now.Format(time.RFC3339Nano))
 	if err != nil {
 		t.Fatal(err)
 	}

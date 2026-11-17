@@ -29,7 +29,7 @@ func PutPreviewGrant(s *Store, g PreviewGrant) error {
 		rev = 1
 	}
 	res, err := s.DB.Exec(`INSERT INTO preview_grants (token_hash, session_id, environment_id, handle, port, expires_at, revoked)
-SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM environments WHERE id=? AND state=?)`,
+SELECT ?, CAST(? AS BIGINT), CAST(? AS BIGINT), ?, CAST(? AS BIGINT), ?, CAST(? AS BIGINT) WHERE EXISTS (SELECT 1 FROM environments WHERE id=? AND state=?)`,
 		g.TokenHash, g.SessionID, g.EnvironmentID, g.Handle, g.Port, g.ExpiresAt.UTC().Format(time.RFC3339Nano), rev, g.EnvironmentID, EnvReady)
 	if err != nil {
 		return err

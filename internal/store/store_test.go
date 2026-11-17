@@ -15,6 +15,7 @@ import (
 // A read-then-write transaction must wait for a concurrent writer instead of
 // failing with SQLITE_BUSY on lock upgrade.
 func TestTxWaitsForConcurrentWriterAcrossHandles(t *testing.T) {
+	sqliteOnly(t, "SQLite file lock between two handles")
 	path := filepath.Join(t.TempDir(), "locks.db")
 	a, err := Open(path)
 	if err != nil {
@@ -69,11 +70,8 @@ func TestTxWaitsForConcurrentWriterAcrossHandles(t *testing.T) {
 }
 
 func TestListTranscriptAfterPagesInAppendOrder(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
+	var err error
 	var sid, other int64
 	if err := s.Tx(func(tx *sql.Tx) error {
 		if sid, err = InsertLocalSessionTx(tx, "test", time.Now().UTC()); err != nil {
@@ -103,6 +101,9 @@ func TestListTranscriptAfterPagesInAppendOrder(t *testing.T) {
 	if err != nil || len(rest) != 1 || rest[0].ID != "kk" || rest[0].Seq <= first[1].Seq {
 		t.Fatalf("next page %+v %v", rest, err)
 	}
+	if s.pg {
+		return // the index assertion reads SQLite's query plan format
+	}
 	var plan string
 	if err := s.DB.QueryRow(`EXPLAIN QUERY PLAN SELECT rowid FROM actions WHERE session_id=? AND rowid>? ORDER BY rowid LIMIT 1`, sid, 0).Scan(new(int), new(int), new(int), &plan); err != nil || !strings.Contains(plan, "actions_session ") {
 		t.Fatalf("plan %q %v", plan, err)
@@ -110,25 +111,14 @@ func TestListTranscriptAfterPagesInAppendOrder(t *testing.T) {
 }
 
 func TestCountPendingApprovalsOnlyCountsAnswerableRequests(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
 	var sid, tid int64
 	if err := s.Tx(func(tx *sql.Tx) error {
-		res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, 'run', 'o/r', 1, 'issue', 'open', ?)`, time.Now().UTC().Format(time.RFC3339Nano))
-		if err != nil {
+		var err error
+		if sid, err = insertID(tx, `INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, 'run', 'o/r', 1, 'issue', 'open', ?) RETURNING id`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 			return err
 		}
-		if sid, err = res.LastInsertId(); err != nil {
-			return err
-		}
-		res, err = tx.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'leased')`, sid)
-		if err != nil {
-			return err
-		}
-		tid, err = res.LastInsertId()
+		tid, err = insertID(tx, `INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'leased') RETURNING id`, sid)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -172,11 +162,8 @@ func TestCountPendingApprovalsOnlyCountsAnswerableRequests(t *testing.T) {
 // minted the same negative item number: each kind used to count down from -1
 // independently, so their snapshots collided on (repo, item, revision).
 func TestOperatorItemNumbersAreUniquePerRepoAcrossSessionKinds(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
+	var err error
 
 	var runItem, scheduledItem int
 	if err := s.Tx(func(tx *sql.Tx) error {
@@ -206,25 +193,14 @@ func TestOperatorItemNumbersAreUniquePerRepoAcrossSessionKinds(t *testing.T) {
 }
 
 func TestFollowTokenMovesOnlyWithFollowedState(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
 	var sid, tid int64
 	if err := s.Tx(func(tx *sql.Tx) error {
-		res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, 'run', 'o/r', 1, 'issue', 'open', ?)`, time.Now().UTC().Format(time.RFC3339Nano))
-		if err != nil {
+		var err error
+		if sid, err = insertID(tx, `INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, 'run', 'o/r', 1, 'issue', 'open', ?) RETURNING id`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 			return err
 		}
-		if sid, err = res.LastInsertId(); err != nil {
-			return err
-		}
-		res, err = tx.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'queued')`, sid)
-		if err != nil {
-			return err
-		}
-		tid, err = res.LastInsertId()
+		tid, err = insertID(tx, `INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'queued') RETURNING id`, sid)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -268,11 +244,8 @@ func TestFollowTokenMovesOnlyWithFollowedState(t *testing.T) {
 }
 
 func TestRepositoryFreeOperatorEnvironmentName(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
+	var err error
 	var sid int64
 	if err := s.Tx(func(tx *sql.Tx) error {
 		sid, _, err = InsertRunSessionTx(tx, "default", "project:default", "hello")
@@ -298,25 +271,14 @@ func TestRepositoryFreeOperatorEnvironmentName(t *testing.T) {
 }
 
 func TestTurnActionUsageCountsBodyBytes(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
 	var sid, tid int64
 	if err := s.Tx(func(tx *sql.Tx) error {
-		res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, 'run', 'o/r', 1, 'issue', 'open', ?)`, time.Now().UTC().Format(time.RFC3339Nano))
-		if err != nil {
+		var err error
+		if sid, err = insertID(tx, `INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, 'run', 'o/r', 1, 'issue', 'open', ?) RETURNING id`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 			return err
 		}
-		if sid, err = res.LastInsertId(); err != nil {
-			return err
-		}
-		res, err = tx.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'leased')`, sid)
-		if err != nil {
-			return err
-		}
-		tid, err = res.LastInsertId()
+		tid, err = insertID(tx, `INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'leased') RETURNING id`, sid)
 		return err
 	}); err != nil {
 		t.Fatal(err)

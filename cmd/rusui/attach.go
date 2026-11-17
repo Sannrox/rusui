@@ -60,7 +60,7 @@ func attachCLI(args []string) {
 	fs := flag.NewFlagSet("attach", flag.ExitOnError)
 	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
 	token := fs.String("token", os.Getenv("RUSUI_OPERATOR_TOKEN"), "operator token")
-	db := fs.String("db", "rusui.db", "Rusui SQLite database (must match the server for local sessions)")
+	db := fs.String("db", "rusui.db", "Rusui SQLite database (must match the server for local sessions); RUSUI_STORE_URL overrides it")
 	_ = fs.Parse(args)
 	if fs.NArg() != 1 {
 		_, _ = fmt.Fprintln(os.Stderr, "usage: rusui attach [-url URL] [-token TOKEN] [-db PATH] SESSION_ID")
@@ -318,7 +318,7 @@ func doAuthorized(client *http.Client, method, baseURL, path, token string, body
 }
 
 func attachLocal(dbPath string, sessionID int64, detail attachDetail, stdin io.Reader, stdout, stderr io.Writer) error {
-	st, err := store.Open(dbPath)
+	st, err := openPlaneStore(dbPath, os.Getenv("RUSUI_STORE_URL"))
 	if err != nil {
 		return fmt.Errorf("open local Rusui database: %w", err)
 	}

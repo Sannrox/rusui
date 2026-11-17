@@ -85,10 +85,10 @@ func AckSteerTx(tx *sql.Tx, turnID int64, generation int, steerID int64) error {
 }
 
 func HasEarlierUnacknowledgedSteerTx(tx *sql.Tx, sessionID int64, followupSeq int) (bool, error) {
-	var exists int
+	var exists bool
 	err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM turn_steers
 WHERE session_id=? AND followup_seq<? AND acknowledged=0 AND promoted=0)`, sessionID, followupSeq).Scan(&exists)
-	return exists != 0, err
+	return exists, err
 }
 
 // PromoteSteersTx keeps an operator prompt durable if the lease that owned it

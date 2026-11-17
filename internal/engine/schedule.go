@@ -81,6 +81,7 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string, fence store.Plan
 	var sessionID int64
 	already := false
 	err := e.Store.Tx(func(tx *store.Tx) error {
+		sessionID, already = 0, false // Tx may rerun this callback
 		// A stale scheduler (paused past its lease) must not start a session.
 		if err := fence.Check(tx); err != nil {
 			return err

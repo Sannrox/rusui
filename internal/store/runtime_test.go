@@ -4,17 +4,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestSumikaProcessAndAttachGenerations(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "runtime.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 
 	sessionID := insertLocalSession(t, st)
 	now := time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC)
@@ -99,11 +94,7 @@ func TestSumikaProcessAndAttachGenerations(t *testing.T) {
 }
 
 func TestDeadProcessObservationRollsBackWhenAttachClosureFails(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "runtime-attach-failure.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 
 	sessionID := insertLocalSession(t, st)
 	now := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
@@ -123,8 +114,15 @@ func TestDeadProcessObservationRollsBackWhenAttachClosureFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.DB.Exec(`CREATE TRIGGER reject_process_exit_attach BEFORE UPDATE ON process_attaches
-		WHEN NEW.state='process_exited' BEGIN SELECT RAISE(ABORT, 'attach update rejected'); END`); err != nil {
+	trigger := `CREATE TRIGGER reject_process_exit_attach BEFORE UPDATE ON process_attaches
+		WHEN NEW.state='process_exited' BEGIN SELECT RAISE(ABORT, 'attach update rejected'); END`
+	if st.pg {
+		trigger = `CREATE FUNCTION reject_process_exit_attach() RETURNS trigger LANGUAGE plpgsql AS
+		'BEGIN IF NEW.state = ''process_exited'' THEN RAISE EXCEPTION ''attach update rejected''; END IF; RETURN NEW; END';
+		CREATE TRIGGER reject_process_exit_attach BEFORE UPDATE ON process_attaches
+		FOR EACH ROW EXECUTE FUNCTION reject_process_exit_attach()`
+	}
+	if _, err := st.DB.Exec(trigger); err != nil {
 		t.Fatal(err)
 	}
 
@@ -146,11 +144,7 @@ func TestDeadProcessObservationRollsBackWhenAttachClosureFails(t *testing.T) {
 }
 
 func TestLocalSessionCancellationFencesProcessGeneration(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "runtime-cancel-fence.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 
 	now := time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)
 	noProcessSession := insertLocalSession(t, st)
@@ -222,11 +216,7 @@ func TestLocalSessionCancellationFencesProcessGeneration(t *testing.T) {
 }
 
 func TestUnknownRuntimeObservationsRemainActiveUntilReconciled(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "runtime-restart.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 
 	sessionID := insertLocalSession(t, st)
 	now := time.Date(2026, 9, 23, 19, 0, 0, 0, time.UTC)
@@ -285,12 +275,8 @@ func TestUnknownRuntimeObservationsRemainActiveUntilReconciled(t *testing.T) {
 
 func insertLocalSession(t *testing.T, st *Store) int64 {
 	t.Helper()
-	res, err := st.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
-		VALUES (?, ?, '', ?, 'local', 'open', ?)`, DefaultEnvironmentID, SessionKindLocal, -1, time.Now().UTC().Format(time.RFC3339Nano))
-	if err != nil {
-		t.Fatal(err)
-	}
-	id, err := res.LastInsertId()
+	id, err := insertID(st.DB, `INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
+		VALUES (?, ?, '', ?, 'local', 'open', ?) RETURNING id`, DefaultEnvironmentID, SessionKindLocal, -1, time.Now().UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,11 +286,7 @@ func insertLocalSession(t *testing.T, st *Store) int64 {
 // Every local lifecycle transition leaves an append-only receipt, so an
 // operator can audit starts, steals, deaths, restarts, and cancels later.
 func TestLocalLifecycleWritesReceipts(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "receipts.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 	sid := insertLocalSession(t, st)
 	now := time.Date(2026, 9, 30, 9, 0, 0, 0, time.UTC)
 	tick := func() time.Time { now = now.Add(time.Second); return now }

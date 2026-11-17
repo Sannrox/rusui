@@ -2,7 +2,6 @@ package store
 
 import (
 	"database/sql"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -11,15 +10,11 @@ import (
 // retention prompt scrub (ADR 0081), which may only blank a steer prompt or a
 // message chunk's text.
 func TestActionRowsRefuseRewriteExceptRetentionScrub(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
+	st := openTestStore(t)
+	var sid int64
+	if err := st.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'run','o/r',1,'issue','open','2026-11-17T00:00:00Z') RETURNING id`).Scan(&sid); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = st.Close() })
-	if _, err := st.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'run','o/r',1,'issue','open','2026-11-17T00:00:00Z')`); err != nil {
-		t.Fatal(err)
-	}
-	sid := int64(1)
 	for _, a := range []Action{
 		{ID: "summary", Type: "model.proxy", Body: `{"count":1}`},
 		{ID: "steer", Type: "operator.steer", Body: `{"prompt":"secret-prompt","at":"t"}`},

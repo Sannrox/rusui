@@ -3,17 +3,12 @@ package store
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestLookupGrantExpiryLeaseAndPrepare(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "g.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 	now := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
 	prepHash := hashLit("prep")
 	if err := PutGrant(st, Grant{TokenHash: prepHash, Kind: GrantPrepare, Repo: "example/test-repo", ExpiresAt: now.Add(time.Minute)}); err != nil {

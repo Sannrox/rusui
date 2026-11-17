@@ -344,7 +344,7 @@ func (e *Engine) pinDraftExpectedHead(sessionID int64, proposal store.Action, as
 		a.ReviewRevisionID = proposal.ReviewRevisionID
 	}
 	if err := store.InsertAction(e.Store, a); err != nil {
-		if !strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if !store.IsUniqueViolation(err) {
 			return "", err
 		}
 		existing, getErr := store.GetAction(e.Store, id)

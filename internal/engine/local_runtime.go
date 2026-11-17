@@ -48,6 +48,7 @@ func (e *Engine) StartLocalSession(project, idem string) (LocalSessionResult, er
 	var sessionID int64
 	created := false
 	err := e.Store.Tx(func(tx *store.Tx) error {
+		sessionID, created = 0, false // Tx may rerun this callback
 		paused, err := store.Paused(tx, project)
 		if err != nil {
 			return err
