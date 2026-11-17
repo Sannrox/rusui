@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"testing"
 	"time"
+
+	"github.com/sannrox/rusui/internal/store/storetest"
 )
 
 // A transcript reader that resumes after the highest Seq it has seen never
@@ -12,7 +14,7 @@ import (
 // (#744). PostgreSQL only: SQLite has one writer, and its single test
 // connection cannot read while another transaction is open.
 func TestTranscriptResumeSeesEntriesCommittedOutOfInsertOrder(t *testing.T) {
-	postgresOnly(t)
+	storetest.PostgresOnly(t)
 	st := openTestStore(t)
 	var sid int64
 	if err := st.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'run','o/r',1,'issue','open','2026-11-17T00:00:00Z') RETURNING id`).Scan(&sid); err != nil {

@@ -17,16 +17,14 @@ func TestDispositionIsOperatorOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	turn, err := e.Store.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'completed')`, sid)
-	if err != nil {
+	var tid int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'completed') RETURNING id`, sid).Scan(&tid); err != nil {
 		t.Fatal(err)
 	}
-	tid, _ := turn.LastInsertId()
-	res, err := e.Store.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', '{}')`, tid)
-	if err != nil {
+	var id int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', '{}') RETURNING id`, tid).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	id, _ := res.LastInsertId()
 	do := func(method, path, tok, body string) *http.Response {
 		t.Helper()
 		req, _ := http.NewRequest(method, hs.URL+path, strings.NewReader(body))

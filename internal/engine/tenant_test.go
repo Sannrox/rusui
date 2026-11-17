@@ -1,7 +1,6 @@
 package engine_test
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -14,8 +13,7 @@ import (
 )
 
 func TestStartRunStampsProjectTenant(t *testing.T) {
-	st := openMigrated(t, filepath.Join(t.TempDir(), "t.db"))
-	t.Cleanup(func() { _ = st.Close() })
+	st := engine.OpenTestStore(t)
 	pol, err := policy.Parse([]byte(`
 version: 2
 defaults:

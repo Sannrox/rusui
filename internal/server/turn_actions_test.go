@@ -135,12 +135,7 @@ func TestGuestGrantCannotCompleteTurn(t *testing.T) {
 func leasedActionTurn(t *testing.T, e *engine.Engine, clk *clock.Fake, item int) (sessionID, turnID int64) {
 	t.Helper()
 	now := clk.T.UTC().Format(time.RFC3339Nano)
-	res, err := e.Store.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'review','example/test-repo',?,'issue','open',?)`, item, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sessionID, err = res.LastInsertId()
-	if err != nil {
+	if err := e.Store.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'review','example/test-repo',?,'issue','open',?) RETURNING id`, item, now).Scan(&sessionID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.Store.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'leased')`, sessionID); err != nil {

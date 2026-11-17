@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/sannrox/rusui/internal/store/storetest"
 )
 
 // tableNames lists tables and views on either backend.
@@ -51,7 +53,7 @@ func sortedKeys(m map[string]bool) []string {
 // schema_postgres.sql the same way. The added rowid columns are the only
 // difference.
 func TestPostgresBaselineColumnsMatchSQLiteMigrations(t *testing.T) {
-	postgresOnly(t)
+	storetest.PostgresOnly(t)
 	lite, err := Open(filepath.Join(t.TempDir(), "drift.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -74,8 +76,8 @@ func TestPostgresBaselineColumnsMatchSQLiteMigrations(t *testing.T) {
 }
 
 func TestPostgresOlderSchemaIsRefused(t *testing.T) {
-	postgresOnly(t)
-	dsn := newTestDSN(t)
+	storetest.PostgresOnly(t)
+	dsn := storetest.DSN(t)
 	st := openTestStoreAt(t, dsn)
 	if _, err := st.DB.Exec(`DELETE FROM schema_migrations WHERE version=?`, CurrentSchema); err != nil {
 		t.Fatal(err)
@@ -89,8 +91,8 @@ func TestPostgresOlderSchemaIsRefused(t *testing.T) {
 }
 
 func TestPostgresUnversionedTablesAreRefused(t *testing.T) {
-	postgresOnly(t)
-	dsn := newTestDSN(t)
+	storetest.PostgresOnly(t)
+	dsn := storetest.DSN(t)
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Fatal(err)
@@ -107,8 +109,8 @@ func TestPostgresUnversionedTablesAreRefused(t *testing.T) {
 // Plane instances starting together on an empty database apply the
 // baseline once.
 func TestPostgresConcurrentOpenAppliesBaselineOnce(t *testing.T) {
-	postgresOnly(t)
-	dsn := newTestDSN(t)
+	storetest.PostgresOnly(t)
+	dsn := storetest.DSN(t)
 	const instances = 4
 	stores := make([]*Store, instances)
 	errs := make([]error, instances)
@@ -135,7 +137,7 @@ func TestPostgresConcurrentOpenAppliesBaselineOnce(t *testing.T) {
 // Two serializable transactions that each read what the other writes
 // conflict; Tx reruns the aborted one and both commit.
 func TestPostgresTxRetriesSerializationFailure(t *testing.T) {
-	postgresOnly(t)
+	storetest.PostgresOnly(t)
 	st := openTestStore(t)
 	var attempts atomic.Int32
 	var bothRead sync.WaitGroup

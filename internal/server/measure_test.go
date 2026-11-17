@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -276,14 +277,14 @@ func readAggregates(t *testing.T, base, token string) store.Aggregates {
 
 func measurementBlob(t *testing.T, st *store.Store) string {
 	t.Helper()
-	rows, err := st.DB.Query(`SELECT turn_id, session_id, project, provider, provider_version, terminal_state, ifnull(duration_ms,''), ifnull(first_event_ms,''), ifnull(wake_ms,''), resume, permission_decision, ifnull(tokens_in,''), ifnull(tokens_out,''), publication FROM turn_measurements`)
+	rows, err := st.DB.Query(`SELECT turn_id, session_id, project, provider, provider_version, terminal_state, duration_ms, first_event_ms, wake_ms, resume, permission_decision, tokens_in, tokens_out, publication FROM turn_measurements`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = rows.Close() }()
 	var b strings.Builder
 	for rows.Next() {
-		cols := make([]string, 14)
+		cols := make([]sql.NullString, 14)
 		ptrs := make([]any, len(cols))
 		for i := range cols {
 			ptrs[i] = &cols[i]
@@ -291,7 +292,9 @@ func measurementBlob(t *testing.T, st *store.Store) string {
 		if err := rows.Scan(ptrs...); err != nil {
 			t.Fatal(err)
 		}
-		b.WriteString(strings.Join(cols, " "))
+		for _, c := range cols {
+			b.WriteString(c.String + " ")
+		}
 	}
 	return b.String()
 }

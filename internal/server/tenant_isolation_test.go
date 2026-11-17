@@ -312,11 +312,10 @@ projects:
 		t.Fatalf("worker review globex blocked: %d", code)
 	}
 
-	legacyIns, err := e.Store.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, ?, 'acme/repo', 9, 'pull', 'open', '2026-01-01T00:00:00Z')`, store.SessionKindReview)
-	if err != nil {
+	var legacy int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, ?, 'acme/repo', 9, 'pull', 'open', '2026-01-01T00:00:00Z') RETURNING id`, store.SessionKindReview).Scan(&legacy); err != nil {
 		t.Fatal(err)
 	}
-	legacy, _ := legacyIns.LastInsertId()
 	if err := store.SetSessionTenant(e.Store, legacy, "globex"); err != nil {
 		t.Fatal(err)
 	}
@@ -335,26 +334,22 @@ projects:
 	if err != nil {
 		t.Fatal(err)
 	}
-	turnA, err := e.Store.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'completed')`, sidA)
-	if err != nil {
+	var tidA int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'completed') RETURNING id`, sidA).Scan(&tidA); err != nil {
 		t.Fatal(err)
 	}
-	tidA, _ := turnA.LastInsertId()
-	revA, err := e.Store.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', '{}')`, tidA)
-	if err != nil {
+	var idA int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', '{}') RETURNING id`, tidA).Scan(&idA); err != nil {
 		t.Fatal(err)
 	}
-	idA, _ := revA.LastInsertId()
-	turnB, err := e.Store.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'completed')`, sidB)
-	if err != nil {
+	var tidB int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'completed') RETURNING id`, sidB).Scan(&tidB); err != nil {
 		t.Fatal(err)
 	}
-	tidB, _ := turnB.LastInsertId()
-	revB, err := e.Store.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', '{}')`, tidB)
-	if err != nil {
+	var idB int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', '{}') RETURNING id`, tidB).Scan(&idB); err != nil {
 		t.Fatal(err)
 	}
-	idB, _ := revB.LastInsertId()
 	useful := `{"disposition":"useful"}`
 	if code := postJSONStatus(t, hs.URL+"/results/"+strconv.FormatInt(idB, 10)+"/dispositions", "tok-acme-secret", useful); code != http.StatusNotFound {
 		t.Fatalf("acme disposed globex: %d", code)
@@ -401,24 +396,21 @@ projects:
 
 func TestConsoleTablesHideForeignTenant(t *testing.T) {
 	_, hs, e := consoleEnv(t)
-	env, err := e.Store.DB.Exec(`INSERT INTO environments (name, driver, state, created_at) VALUES ('globex-hidden-env', 'process', 'ready', '2026-01-01T00:00:00Z')`)
-	if err != nil {
+	var envID int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO environments (name, driver, state, created_at) VALUES ('globex-hidden-env', 'process', 'ready', '2026-01-01T00:00:00Z') RETURNING id`).Scan(&envID); err != nil {
 		t.Fatal(err)
 	}
-	envID, _ := env.LastInsertId()
-	sess, err := e.Store.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, created_at) VALUES (?, 'run', 'globex/repo', 1, 'issue', 'open', 'globex', '2026-01-01T00:00:00Z')`, envID)
-	if err != nil {
+	var sid int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, created_at) VALUES (?, 'run', 'globex/repo', 1, 'issue', 'open', 'globex', '2026-01-01T00:00:00Z') RETURNING id`, envID).Scan(&sid); err != nil {
 		t.Fatal(err)
 	}
-	sid, _ := sess.LastInsertId()
 	if err := store.SetSessionTenant(e.Store, sid, "globex"); err != nil {
 		t.Fatal(err)
 	}
-	turn, err := e.Store.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'completed')`, sid)
-	if err != nil {
+	var tid int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'run', 'completed') RETURNING id`, sid).Scan(&tid); err != nil {
 		t.Fatal(err)
 	}
-	tid, _ := turn.LastInsertId()
 	if _, err := e.Store.DB.Exec(`INSERT INTO receipts (job_id, lease_generation, claimed_revision, kind, payload) VALUES (?, 1, 1, 'globex-hidden-receipt', '{}')`, tid); err != nil {
 		t.Fatal(err)
 	}

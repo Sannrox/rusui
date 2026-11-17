@@ -9,13 +9,15 @@ import (
 	"time"
 
 	"github.com/sannrox/rusui/internal/snapshot"
+
+	"github.com/sannrox/rusui/internal/store/storetest"
 )
 
 // Two handles on one file, as when local attach writes beside the server.
 // A read-then-write transaction must wait for a concurrent writer instead of
 // failing with SQLITE_BUSY on lock upgrade.
 func TestTxWaitsForConcurrentWriterAcrossHandles(t *testing.T) {
-	sqliteOnly(t, "SQLite file lock between two handles")
+	storetest.SQLiteOnly(t, "SQLite file lock between two handles")
 	path := filepath.Join(t.TempDir(), "locks.db")
 	a, err := Open(path)
 	if err != nil {

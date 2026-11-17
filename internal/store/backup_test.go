@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/sannrox/rusui/internal/store/storetest"
 )
 
 func TestCopiedDatabaseRestoresSession(t *testing.T) {
-	sqliteOnly(t, "backup is a SQLite file copy")
+	storetest.SQLiteOnly(t, "backup is a SQLite file copy")
 	dir := t.TempDir()
 	src := filepath.Join(dir, "rusui.db")
 	st, err := Open(src)

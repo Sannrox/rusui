@@ -14,12 +14,8 @@ func TestGuestSessionEventIngest(t *testing.T) {
 	t.Parallel()
 	e, clk, hs := eventEnv(t)
 	now := clk.T.UTC().Format(time.RFC3339Nano)
-	res, err := e.Store.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'review','example/test-repo',3,'issue','open',?)`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sid, err := res.LastInsertId()
-	if err != nil {
+	var sid int64
+	if err := e.Store.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'review','example/test-repo',3,'issue','open',?) RETURNING id`, now).Scan(&sid); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.Store.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'leased')`, sid); err != nil {

@@ -99,7 +99,7 @@ func TestVouchedSubjectIsScopedAndAttributed(t *testing.T) {
 		t.Fatalf("user decision attributed to %v", by)
 	}
 	var leaked int
-	if err := e.Store.DB.QueryRow(`SELECT COUNT(*) FROM approval_decisions WHERE instr(COALESCE(decided_by,'') || COALESCE(delegated_by,''), 'u-') > 0`).Scan(&leaked); err != nil || leaked != 0 {
+	if err := e.Store.DB.QueryRow(`SELECT COUNT(*) FROM approval_decisions WHERE (COALESCE(decided_by,'') || COALESCE(delegated_by,'')) LIKE '%u-%'`).Scan(&leaked); err != nil || leaked != 0 {
 		t.Fatalf("decision rows store a raw subject: %d %v", leaked, err)
 	}
 

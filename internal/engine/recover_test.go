@@ -56,13 +56,9 @@ func TestRecoverInvalidatesRuntimeObservationsWithoutReleasingTurn(t *testing.T)
 	if _, err := h.st.DB.Exec(`UPDATE turns SET state='leased', lease_generation=7 WHERE id=?`, turnID); err != nil {
 		t.Fatal(err)
 	}
-	res, err := h.st.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
-		VALUES (?, ?, '', -1, 'local', 'open', ?)`, store.DefaultEnvironmentID, store.SessionKindLocal, h.clk.T.Format(time.RFC3339Nano))
-	if err != nil {
-		t.Fatal(err)
-	}
-	localSessionID, err := res.LastInsertId()
-	if err != nil {
+	var localSessionID int64
+	if err := h.st.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
+		VALUES (?, ?, '', -1, 'local', 'open', ?) RETURNING id`, store.DefaultEnvironmentID, store.SessionKindLocal, h.clk.T.Format(time.RFC3339Nano)).Scan(&localSessionID); err != nil {
 		t.Fatal(err)
 	}
 	process, err := store.StartSumikaProcess(h.st, localSessionID, "test-process-identity", h.clk.T)

@@ -32,8 +32,10 @@ jobs:
       - name: Validate
         run: make validate
 
-  # The store suite again on PostgreSQL, the redundant-topology backend
-  # (ADR 0089 D2). Each test creates and drops its own database.
+  # The store, engine and server suites again on PostgreSQL, the
+  # redundant-topology backend (ADR 0089 D2), so values the engine and server
+  # bind reach the PostgreSQL driver. Each test creates and drops its own
+  # database.
   store-postgres:
     runs-on: ubuntu-latest
     services:
@@ -56,8 +58,8 @@ jobs:
         with:
           go-version-file: .go-version
           cache: true
-      - name: Store tests on PostgreSQL
-        run: go test -count=1 ./internal/store/...
+      - name: Store, engine and server tests on PostgreSQL
+        run: go test -count=1 ./internal/store/... ./internal/engine ./internal/server
 
   images:
     runs-on: ubuntu-latest

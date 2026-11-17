@@ -1,93 +1,19 @@
 package store
 
 import (
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
-	"fmt"
-	"net/url"
-	"os"
-	"path/filepath"
-	"sync"
 	"testing"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/sannrox/rusui/internal/store/storetest"
 )
-
-// testStoreURLEnv names a PostgreSQL admin database URL. When set, the store
-// tests run against PostgreSQL, one fresh database per test.
-const testStoreURLEnv = "RUSUI_TEST_STORE_URL"
-
-func testOnPostgres() bool { return os.Getenv(testStoreURLEnv) != "" }
-
-// sqliteOnly skips t on PostgreSQL. reason says why the test is SQLite by
-// nature (file copies, SQLite migrations, file locks).
-func sqliteOnly(t testing.TB, reason string) {
-	t.Helper()
-	if testOnPostgres() {
-		t.Skip("SQLite only: " + reason)
-	}
-}
-
-// postgresOnly skips t unless the store tests run on PostgreSQL.
-func postgresOnly(t testing.TB) {
-	t.Helper()
-	if !testOnPostgres() {
-		t.Skip("PostgreSQL only: set " + testStoreURLEnv)
-	}
-}
-
-var (
-	adminOnce sync.Once
-	adminDB   *sql.DB
-	adminErr  error
-	// testDirs maps a PostgreSQL test DSN to the directory that holds its
-	// attachment files, so a reopened store finds them.
-	testDirs sync.Map
-)
-
-// newTestDSN returns a DSN for a fresh, empty store owned by t: a SQLite
-// path in t.TempDir(), or a new PostgreSQL database dropped at cleanup.
-func newTestDSN(t testing.TB) string {
-	t.Helper()
-	admin := os.Getenv(testStoreURLEnv)
-	if admin == "" {
-		return filepath.Join(t.TempDir(), "rusui.db")
-	}
-	adminOnce.Do(func() { adminDB, adminErr = sql.Open("pgx", admin) })
-	if adminErr != nil {
-		t.Fatal(adminErr)
-	}
-	raw := make([]byte, 6)
-	if _, err := rand.Read(raw); err != nil {
-		t.Fatal(err)
-	}
-	name := fmt.Sprintf("rusui_t_%d_%s", os.Getpid(), hex.EncodeToString(raw))
-	if _, err := adminDB.Exec(`CREATE DATABASE ` + name); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if _, err := adminDB.Exec(`DROP DATABASE IF EXISTS ` + name + ` WITH (FORCE)`); err != nil {
-			t.Errorf("drop %s: %v", name, err)
-		}
-	})
-	u, err := url.Parse(admin)
-	if err != nil {
-		t.Fatal(err)
-	}
-	u.Path = "/" + name
-	dsn := u.String()
-	testDirs.Store(dsn, t.TempDir())
-	return dsn
-}
 
 // openTestStore opens a fresh store for t and closes it at cleanup.
 func openTestStore(t testing.TB) *Store {
 	t.Helper()
-	return openTestStoreAt(t, newTestDSN(t))
+	return openTestStoreAt(t, storetest.DSN(t))
 }
 
-// openTestStoreAt opens the store at a DSN from newTestDSN, failing t on
+// openTestStoreAt opens the store at a DSN from storetest.DSN, failing t on
 // error, and closes it at cleanup.
 func openTestStoreAt(t testing.TB, dsn string) *Store {
 	t.Helper()
@@ -99,15 +25,15 @@ func openTestStoreAt(t testing.TB, dsn string) *Store {
 	return s
 }
 
-// openTestDSN opens the store at a DSN from newTestDSN and returns the
+// openTestDSN opens the store at a DSN from storetest.DSN and returns the
 // error, for tests that expect Open to refuse.
 func openTestDSN(dsn string) (*Store, error) {
 	s, err := Open(dsn)
 	if err != nil {
 		return nil, err
 	}
-	if dir, ok := testDirs.Load(dsn); ok {
-		s.Dir = dir.(string)
+	if dir, ok := storetest.Dir(dsn); ok {
+		s.Dir = dir
 	}
 	return s, nil
 }

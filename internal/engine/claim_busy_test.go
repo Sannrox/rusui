@@ -2,18 +2,13 @@ package engine
 
 import (
 	"database/sql"
-	"path/filepath"
 	"testing"
 
 	"github.com/sannrox/rusui/internal/store"
 )
 
 func TestRequeueBusyReviewClaimRestoresDailyBudget(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := OpenTestStore(t)
 
 	job := &store.Job{
 		Repo: "example/test-repo", Item: 1, ItemKind: "issue", Lane: "review",

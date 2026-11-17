@@ -12,10 +12,12 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/sannrox/rusui/internal/store/storetest"
 )
 
 func TestV1DatabaseUpgradesInPlace(t *testing.T) {
-	sqliteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
+	storetest.SQLiteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
 	dir := t.TempDir()
 	path := filepath.Join(dir, "v1.db")
 	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)")
@@ -214,7 +216,7 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 }
 
 func TestV22SteersReceiveFollowUpOrder(t *testing.T) {
-	sqliteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
+	storetest.SQLiteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
 	path := filepath.Join(t.TempDir(), "v22.db")
 	st, err := Open(path)
 	if err != nil {
@@ -258,7 +260,7 @@ DELETE FROM schema_migrations WHERE version>=23;`); err != nil {
 }
 
 func TestLocalRuntimeMigrationsPreserveManagedState(t *testing.T) {
-	sqliteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
+	storetest.SQLiteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
 	path := filepath.Join(t.TempDir(), "v16.db")
 	st, err := Open(path)
 	if err != nil {
@@ -359,12 +361,12 @@ func TestPlaneIDStablePerDatabase(t *testing.T) {
 		}
 		return id
 	}
-	dsnA := newTestDSN(t)
+	dsnA := storetest.DSN(t)
 	a := open(dsnA)
 	if again := open(dsnA); again != a {
 		t.Fatalf("reopen changed plane id %s -> %s", a, again)
 	}
-	if b := open(newTestDSN(t)); b == a {
+	if b := open(storetest.DSN(t)); b == a {
 		t.Fatalf("two databases share plane id %s", a)
 	}
 }
@@ -372,7 +374,7 @@ func TestPlaneIDStablePerDatabase(t *testing.T) {
 // A v32 follow-up queue gains the queued and dropped flags (#492); rows
 // already queued stay ordinary follow-ups.
 func TestV33FollowUpsGainQueuedFlag(t *testing.T) {
-	sqliteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
+	storetest.SQLiteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
 	path := filepath.Join(t.TempDir(), "v32.db")
 	st, err := Open(path)
 	if err != nil {
@@ -423,7 +425,7 @@ DELETE FROM schema_migrations WHERE version>=33;`); err != nil {
 }
 
 func TestMigrateV43MovesBodyToDisk(t *testing.T) {
-	sqliteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
+	storetest.SQLiteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
 	dir := t.TempDir()
 	s, err := Open(filepath.Join(dir, "t.db"))
 	if err != nil {
@@ -455,7 +457,7 @@ func TestMigrateV43MovesBodyToDisk(t *testing.T) {
 }
 
 func TestMigrateV49BackfillsImplementWriteGrant(t *testing.T) {
-	sqliteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
+	storetest.SQLiteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
 	path := filepath.Join(t.TempDir(), "v49.db")
 	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)")
 	if err != nil {
@@ -492,7 +494,7 @@ INSERT INTO tasks (session_id, state) VALUES (1, 'open'), (2, 'abandoned'), (3, 
 }
 
 func TestNewerSchemaIsRejected(t *testing.T) {
-	dsn := newTestDSN(t)
+	dsn := storetest.DSN(t)
 	st := openTestStoreAt(t, dsn)
 	if _, err := st.DB.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`,
 		CurrentSchema+1, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
@@ -508,7 +510,7 @@ func TestNewerSchemaIsRejected(t *testing.T) {
 }
 
 func TestInterruptedUpgradeFailsClosed(t *testing.T) {
-	sqliteOnly(t, "SQLite upgrade lock; the PostgreSQL baseline applies in one transaction")
+	storetest.SQLiteOnly(t, "SQLite upgrade lock; the PostgreSQL baseline applies in one transaction")
 	path := filepath.Join(t.TempDir(), "mid.db")
 	st, err := Open(path)
 	if err != nil {
@@ -530,7 +532,7 @@ func TestInterruptedUpgradeFailsClosed(t *testing.T) {
 }
 
 func TestCompletedUpgradeClearsStaleLock(t *testing.T) {
-	sqliteOnly(t, "SQLite upgrade lock; the PostgreSQL baseline applies in one transaction")
+	storetest.SQLiteOnly(t, "SQLite upgrade lock; the PostgreSQL baseline applies in one transaction")
 	path := filepath.Join(t.TempDir(), "done.db")
 	st, err := Open(path)
 	if err != nil {
@@ -561,7 +563,7 @@ func TestCompletedUpgradeClearsStaleLock(t *testing.T) {
 // previous release reads back without an actor, and a migration interrupted
 // after some columns were added completes on the next open.
 func TestV55DecisionsGainNullableAttribution(t *testing.T) {
-	sqliteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
+	storetest.SQLiteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
 	path := filepath.Join(t.TempDir(), "v54.db")
 	st, err := Open(path)
 	if err != nil {
@@ -602,7 +604,7 @@ INSERT INTO approval_decisions(action_id, decision, decided_at) VALUES ('old', '
 // A schema 56 store gains the nullable policy binding on upgrade; older
 // reviews read back with no revision (#661).
 func TestV57ReviewsGainNullablePolicyBinding(t *testing.T) {
-	sqliteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
+	storetest.SQLiteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
 	path := filepath.Join(t.TempDir(), "v56.db")
 	st, err := Open(path)
 	if err != nil {
