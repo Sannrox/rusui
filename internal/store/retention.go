@@ -218,7 +218,13 @@ func scrubPromptBearingActionsTx(tx *sql.Tx, sessionID int64) error {
 		if b == r.body {
 			continue
 		}
-		if _, err := tx.Exec(`UPDATE actions SET body=? WHERE action_id=?`, b, r.id); err != nil {
+		// Write the scrub with json_set so it is exactly the rewrite the
+		// actions_append_only trigger accepts (#682).
+		q := `UPDATE actions SET body=json_set(body, '$.update.content.text', '') WHERE action_id=?`
+		if r.typ == "operator.steer" {
+			q = `UPDATE actions SET body=CASE WHEN json_valid(body) THEN json_set(body, '$.prompt', '') ELSE '{"prompt":""}' END WHERE action_id=?`
+		}
+		if _, err := tx.Exec(q, r.id); err != nil {
 			return err
 		}
 	}

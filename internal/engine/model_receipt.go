@@ -133,38 +133,18 @@ func (e *Engine) recordModelSummaryTx(tx *store.Tx, turnID int64) error {
 	// evicted when a new turn needs capacity; these are best-effort diagnostics.
 	summary.finished = true
 	e.modelMu.Unlock()
-	id := fmt.Sprintf("model-proxy-summary-%d", turnID)
-	existingBody, err := store.ActionBodyTx(tx, id)
-	existing := err == nil
-	if err != nil && !errors.Is(err, store.ErrNoRows) {
+	// One row per lease generation: action rows are append-only (#682), so a
+	// later generation records its own summary instead of rewriting an
+	// earlier one. Readers that want a turn total sum the rows.
+	id := fmt.Sprintf("model-proxy-summary-%d-%d", turnID, snapshot.Generation)
+	if _, err := store.ActionBodyTx(tx, id); err == nil {
+		return nil // already recorded, e.g. on a transaction retry
+	} else if !errors.Is(err, store.ErrNoRows) {
 		return err
 	}
-	var aggregate modelProxySummary
-	if existing {
-		if err := json.Unmarshal([]byte(existingBody), &aggregate); err != nil {
-			return err
-		}
-		if aggregate.Generation >= snapshot.Generation {
-			return nil
-		}
-		aggregate.Generation = snapshot.Generation
-		aggregate.Count += snapshot.Count
-		aggregate.OtherCalls += snapshot.OtherCalls
-		for status, count := range snapshot.StatusCounts {
-			aggregate.StatusCounts[status] += count
-		}
-		for _, call := range snapshot.Calls {
-			aggregate.addCall(call)
-		}
-	} else {
-		aggregate = snapshot
-	}
-	payload, err := json.Marshal(aggregate)
+	payload, err := json.Marshal(snapshot)
 	if err != nil {
 		return err
-	}
-	if existing {
-		return store.UpdateActionBodyTx(tx, id, string(payload))
 	}
 	turn, err := store.GetTurnTx(tx, turnID)
 	if err != nil {

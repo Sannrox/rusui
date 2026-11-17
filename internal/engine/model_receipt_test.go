@@ -152,3 +152,46 @@ func TestModelRecorderCarriesUnfinishedAttemptCounts(t *testing.T) {
 		t.Fatalf("requeued attempt lost counts or accepted stale response: %+v", summary)
 	}
 }
+
+// A turn finishing under two lease generations records one summary row per
+// generation, and a follower already past the first row sees the second.
+func TestModelSummaryAppendsOneRowPerGeneration(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "gen.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	e := New(st, nil, nil, clock.Real{})
+	e.Log = log.New(io.Discard, "", 0)
+	res, err := st.DB.Exec(`INSERT INTO sessions (environment_id,kind,repo,item,item_kind,state,created_at) VALUES (1,'review','example/repo',1,'issue','open','2026-10-08T00:00:00Z')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sid, _ := res.LastInsertId()
+	res, err = st.DB.Exec(`INSERT INTO turns(session_id,lane,state) VALUES (?,'review','leased')`, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tid, _ := res.LastInsertId()
+	finish := func(gen, status int) {
+		t.Helper()
+		e.ModelResponseRecorder(store.Grant{TurnID: tid, LeaseGeneration: gen, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")(status)
+		if err := st.Tx(func(tx *sql.Tx) error { return e.recordModelSummaryTx(tx, tid) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	finish(1, 200)
+	seen, err := store.ListTranscriptAfter(st, sid, 0, 100)
+	if err != nil || len(seen) != 1 {
+		t.Fatalf("first generation rows %+v %v", seen, err)
+	}
+	finish(2, 429)
+	next, err := store.ListTranscriptAfter(st, sid, seen[0].Seq, 100)
+	if err != nil || len(next) != 1 {
+		t.Fatalf("follower after first row saw %+v %v", next, err)
+	}
+	var second modelProxySummary
+	if err := json.Unmarshal([]byte(next[0].Body), &second); err != nil || second.Generation != 2 || second.Count != 1 || second.StatusCounts[429] != 1 {
+		t.Fatalf("second generation summary %+v %v", second, err)
+	}
+}

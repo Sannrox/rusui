@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 57
+const CurrentSchema = 58
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -664,6 +664,14 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 58 {
+		if err := migrateV58(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 58); err != nil {
+			return err
+		}
+	}
 	if upgrading {
 		if err := clearUpgradeLock(s.DB); err != nil {
 			return err
@@ -677,6 +685,43 @@ func (s *Store) migrate() error {
 // review_revisions.policy_revision_id copies it when the review is stored.
 // Both are nullable: rows from before the migration have no known revision
 // and their receipts omit it.
+// migrateV58 makes action rows append-only (#682). The store refuses every
+// UPDATE of an action row except retention's prompt scrub (ADR 0081): an
+// operator.steer row may only have its prompt blanked, and an
+// acp.session.update row only its message text. The trigger accepts exactly
+// the json_set result scrubPromptBearingActionsTx writes, nothing else.
+func migrateV58(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TRIGGER IF NOT EXISTS actions_append_only BEFORE UPDATE ON actions
+WHEN NOT (
+  NEW.action_id IS OLD.action_id
+  AND NEW.session_id IS OLD.session_id
+  AND NEW.turn_id IS OLD.turn_id
+  AND NEW.review_revision_id IS OLD.review_revision_id
+  AND NEW.repo IS OLD.repo
+  AND NEW.item IS OLD.item
+  AND NEW.action_type IS OLD.action_type
+  AND NEW.reason_code IS OLD.reason_code
+  AND NEW.evidence_class IS OLD.evidence_class
+  AND NEW.limit_sentence IS OLD.limit_sentence
+  AND CASE OLD.action_type
+    WHEN 'operator.steer' THEN
+      CASE WHEN json_valid(OLD.body)
+        THEN NEW.body IS json_set(OLD.body, '$.prompt', '')
+        ELSE NEW.body IS '{"prompt":""}' END
+    WHEN 'acp.session.update' THEN
+      CASE WHEN json_valid(OLD.body) AND json_type(OLD.body, '$.update.content') = 'object'
+        THEN NEW.body IS json_set(OLD.body, '$.update.content.text', '')
+        ELSE 0 END
+    ELSE 0 END
+)
+BEGIN
+  SELECT RAISE(ABORT, 'actions are append-only');
+END;
+`)
+	return err
+}
+
 func migrateV57(db *sql.DB) error {
 	for _, table := range []string{"turns", "review_revisions"} {
 		var n int

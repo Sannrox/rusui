@@ -12,12 +12,6 @@ func ActionBodyTx(tx *sql.Tx, id string) (string, error) {
 	return body, err
 }
 
-// UpdateActionBodyTx replaces the body of action id.
-func UpdateActionBodyTx(tx *sql.Tx, id, body string) error {
-	_, err := tx.Exec(`UPDATE actions SET body=? WHERE action_id=?`, body, id)
-	return err
-}
-
 // ActionsOfType yields the id and body of every typ action on sessionID,
 // newest first. Only ID and Body are set. Breaking out of the loop stops
 // the read.
