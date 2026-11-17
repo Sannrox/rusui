@@ -13,6 +13,34 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 )
 
+// Inbound hook body caps. The hooks are reachable before any credential is
+// checked, and checking a signature means reading the body, so the cap is
+// what bounds the memory an unauthenticated caller can make the plane use.
+const (
+	// githubHookBodyCap is GitHub's documented webhook payload cap. A lower
+	// cap would refuse real deliveries for large pushes and pull requests.
+	githubHookBodyCap = 25 << 20
+	// hookBodyCap covers /hooks/events, session webhooks, and Slack. Their
+	// payloads are ids, small sender events, and slash-command forms.
+	hookBodyCap = 1 << 20
+)
+
+// readHookBody reads at most limit bytes of the request body for a hook.
+// A larger body writes 413 and any other read failure writes 400; both
+// return ok=false before the caller verifies or parses anything.
+func readHookBody(w http.ResponseWriter, r *http.Request, limit int64) (body []byte, ok bool) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
+	if err != nil {
+		if _, tooLarge := errors.AsType[*http.MaxBytesError](err); tooLarge {
+			http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+			return nil, false
+		}
+		http.Error(w, "bad body", http.StatusBadRequest)
+		return nil, false
+	}
+	return body, true
+}
+
 func (s *Server) sessionWebhook(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)
@@ -45,9 +73,8 @@ func (s *Server) sessionWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) sessionWebhookHook(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	body, ok := readHookBody(w, r, hookBodyCap)
+	if !ok {
 		return
 	}
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)

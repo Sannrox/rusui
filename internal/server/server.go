@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -224,9 +223,8 @@ func runnerCommitMatch(plane, runner string) error {
 }
 
 func (s *Server) githubHook(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), 400)
+	body, ok := readHookBody(w, r, githubHookBodyCap)
+	if !ok {
 		return
 	}
 	if s.WebhookSec == "" || !gh.Verify(s.WebhookSec, r.Header.Get("X-Hub-Signature-256"), body) {
@@ -255,9 +253,8 @@ func (s *Server) githubHook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) eventsHook(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	body, ok := readHookBody(w, r, hookBodyCap)
+	if !ok {
 		return
 	}
 	sig := r.Header.Get("X-Rusui-Signature-256")
@@ -282,6 +279,7 @@ func (s *Server) eventsHook(w http.ResponseWriter, r *http.Request) {
 	}
 	var occurred time.Time
 	if ev.OccurredAt != "" {
+		var err error
 		occurred, err = time.Parse(time.RFC3339, ev.OccurredAt)
 		if err != nil {
 			occurred, err = time.Parse(time.RFC3339Nano, ev.OccurredAt)
@@ -818,9 +816,8 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) slackHook(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), 400)
+	body, ok := readHookBody(w, r, hookBodyCap)
+	if !ok {
 		return
 	}
 	if ch, ok := slack.Challenge(body); ok {

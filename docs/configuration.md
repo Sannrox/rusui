@@ -287,11 +287,11 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/inbox` | operator token; latest result of each review session for the caller's tenant with state, latest disposition, and per-repository review budget (`rusui inbox`); only results needing a disposition unless `all=1`; 400 for another `all` value |
 | `POST` | `/retry` | operator token; JSON `target` `OWNER/REPO` (every failed review job) or `OWNER/REPO#ITEM` (one); same as Slack `retry` (`rusui retry`); 409 when the item has no failed review job; tenant operators only for repositories of their tenant |
 | `POST` | `/drain` | worker secret; pause claims and list live turns |
-| `POST` | `/hooks/github` | `X-Hub-Signature-256` |
-| `POST` | `/hooks/events` | `X-Rusui-Signature-256` (same webhook secret); 202 |
+| `POST` | `/hooks/github` | `X-Hub-Signature-256`; 25 MiB body cap (GitHub's payload cap), 413 above it |
+| `POST` | `/hooks/events` | `X-Rusui-Signature-256` (same webhook secret); 202; 1 MiB body cap, 413 above it |
 | `GET`/`POST` | `/sessions/{id}/webhook` | operator or worker token; mint or return the session webhook path and signing secret |
-| `POST` | `/hooks/sessions/{id}` | per-session `X-Rusui-Signature-256`; 202 valid, 401 bad signature (stored refusal), 404 missing or archived |
-| `POST` | `/hooks/slack` | Slack HMAC + user allowlist |
+| `POST` | `/hooks/sessions/{id}` | per-session `X-Rusui-Signature-256`; 202 valid, 401 bad signature (stored refusal), 404 missing or archived; 1 MiB body cap, 413 above it (not stored) |
+| `POST` | `/hooks/slack` | Slack HMAC + user allowlist; 1 MiB body cap, 413 above it |
 | `POST` | `/runners/hello` | worker secret |
 | `POST` | `/sessions/{id}/events` | turn/session auth |
 | `POST` | `/turns/{id}/actions` | runner turn token or worker secret; guest grant refused; 64 KiB body; type allow-list; per-turn row and byte budget |
