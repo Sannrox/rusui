@@ -895,6 +895,9 @@ func (e *Engine) ClaimToken(repo, tokenHash string) (*Claim, error) {
 		if err := store.SetTurnClaimTokenTx(tx, j.ID, tokenHash); err != nil {
 			return err
 		}
+		if err := store.SetTurnPolicyRevisionTx(tx, j.ID, activePolicy.Hash); err != nil {
+			return err
+		}
 		if j.Lane == "review" {
 			reviewCountDay = e.now().Format("2006-01-02")
 			if err := store.IncrReviewsToday(tx, repo, reviewCountDay); err != nil {

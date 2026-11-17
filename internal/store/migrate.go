@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 56
+const CurrentSchema = 57
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -656,8 +656,37 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 57 {
+		if err := migrateV57(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 57); err != nil {
+			return err
+		}
+	}
 	if upgrading {
 		if err := clearUpgradeLock(s.DB); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// migrateV57 binds each review to the policy revision its turn was
+// claimed under (#661). turns.policy_revision_id is set at claim;
+// review_revisions.policy_revision_id copies it when the review is stored.
+// Both are nullable: rows from before the migration have no known revision
+// and their receipts omit it.
+func migrateV57(db *sql.DB) error {
+	for _, table := range []string{"turns", "review_revisions"} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name='policy_revision_id'`, table).Scan(&n); err != nil {
+			return err
+		}
+		if n > 0 {
+			continue
+		}
+		if _, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN policy_revision_id INTEGER`); err != nil {
 			return err
 		}
 	}

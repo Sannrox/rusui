@@ -592,3 +592,34 @@ INSERT INTO approval_decisions(action_id, decision, decided_at) VALUES ('old', '
 		t.Fatalf("new row %v %v %v", by, via, err)
 	}
 }
+
+// A schema 56 store gains the nullable policy binding on upgrade; older
+// reviews read back with no revision (#661).
+func TestV57ReviewsGainNullablePolicyBinding(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "v56.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`
+ALTER TABLE turns DROP COLUMN policy_revision_id;
+ALTER TABLE review_revisions DROP COLUMN policy_revision_id;
+DELETE FROM schema_migrations WHERE version>=57;
+`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	st, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	for _, table := range []string{"turns", "review_revisions"} {
+		var n int
+		if err := st.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name='policy_revision_id'`, table).Scan(&n); err != nil || n != 1 {
+			t.Fatalf("%s policy_revision_id: %d %v", table, n, err)
+		}
+	}
+}

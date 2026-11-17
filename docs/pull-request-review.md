@@ -22,8 +22,8 @@ rusui receipt -format json SESSION_ID
 rusui receipt -out records SESSION_ID
 ```
 
-The Markdown states the verdict, evidence class, policy revision, source git
-pin, guest identity, reported usage when present, and whether any GitHub
-action occurred. Dry-run intended-actions stay labeled dry-run. The files are
+The Markdown states the verdict, evidence counts by class, the policy
+revision the review was claimed under, source git pin, guest identity,
+reported usage when present, and whether any GitHub action occurred. Dry-run intended-actions stay labeled dry-run. The files are
 regenerated from SQLite; they are not recovery inputs and do not authorize a
 write. They are unsigned.

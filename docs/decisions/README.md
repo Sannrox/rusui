@@ -99,10 +99,11 @@ is stale.
 | [0083](0083-retain-single-operator-access.md) | Retain single-operator access for shared sessions | Accepted on merge; amended by 0088 |
 | [0084](0084-core-draft-actions.md) | Definition drafts are operator-applied core Actions | Accepted |
 | [0085](0085-freeze-on-author-validated-journey.md) | The stable-core freeze starts on the author-validated journey | Accepted; amended by 0086 |
-| [0086](0086-supported-1.0-core-contract.md) | Freeze the supported 1.0 core contract | Accepted |
+| [0086](0086-supported-1.0-core-contract.md) | Freeze the supported 1.0 core contract | Accepted; amended by 0090 |
 | [0087](0087-acp-guest-session-load.md) | Resume ACP guests with session/load | Accepted |
 | [0088](0088-issuer-vouched-subjects.md) | A configured issuer vouches for several subjects | Proposed |
 | [0089](0089-redundant-plane.md) | The plane survives the loss of its host | Accepted |
+| [0090](0090-receipt-evidence-and-policy-binding.md) | Review receipts count evidence by class and cite the claim-time policy | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR
