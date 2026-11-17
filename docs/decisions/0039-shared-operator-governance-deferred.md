@@ -1,13 +1,15 @@
 # ADR 0039: Shared-operator governance is deferred
 
-- Status: Accepted; amended by 0059, 0074, 0083
+- Status: Accepted; amended by 0059, 0074, 0083, 0088
 - Date: 2026-09-29
 - Amends: none. At acceptance, [ADR 0012](0012-operator-access.md) stood unchanged.
 - Amended by: [ADR 0059](0059-unattributed-operator-retained.md),
   [ADR 0074](0074-single-operator-oidc-cli.md) (OIDC CLI credential form only),
   [ADR 0083](0083-retain-single-operator-access.md) (restated D3 gate;
-  a later person-level actor arrives only as a verified assertion).
-  Operator calls stay unattributed. A member id is not identity.
+  a later person-level actor arrives only as a verified assertion),
+  [ADR 0088](0088-issuer-vouched-subjects.md) (vouched subjects are
+  attributed operator calls scoped to one tenant and actor).
+  A member id is not identity.
 - Resolves: [#127](https://github.com/Sannrox/rusui/issues/127)
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0003](0003-operator-surface.md) (Slack is notify and approve;

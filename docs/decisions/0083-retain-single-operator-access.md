@@ -1,6 +1,7 @@
 # ADR 0083: Retain single-operator access for shared sessions
 
-- Status: Accepted on merge
+- Status: Accepted on merge; amended by 0088
+- Amended by: [ADR 0088](0088-issuer-vouched-subjects.md) (a configured issuer may vouch for several subjects) opens the D2 gate.
 - Date: 2026-10-20
 - Amends: [ADR 0039](0039-shared-operator-governance-deferred.md)
   (restates the D3 gate and fixes the form a later actor must take).

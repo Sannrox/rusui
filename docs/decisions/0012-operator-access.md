@@ -1,6 +1,6 @@
 # ADR 0012: Single-operator access for terminal and preview
 
-- Status: Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077
+- Status: Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077, 0088
 - Date: 2026-09-20
 - Amends: [ADR 0003](0003-operator-surface.md) reachability (credential
   classes, browser session, preview origin). The API-first, CLI-first,
@@ -22,6 +22,8 @@
   tenant isolation key. [ADR 0077](0077-session-access-grants.md)
   records session creators and allows an owning tenant to grant
   cross-tenant read and reopen of a session by id.
+  [ADR 0088](0088-issuer-vouched-subjects.md) lets the configured OIDC
+  issuer vouch for several subjects, each bound to one tenant and actor.
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
   Objects: operator credential, worker credential, turn grant, browser

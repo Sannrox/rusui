@@ -1,6 +1,7 @@
 # ADR 0074: Optional OIDC CLI authentication for one operator
 
-- Status: Accepted
+- Status: Accepted; amended by 0088
+- Amended by: [ADR 0088](0088-issuer-vouched-subjects.md) (a configured issuer may vouch for several subjects).
 - Date: 2026-10-09
 - Amends: [ADR 0012](0012-operator-access.md) (CLI authentication only),
   [ADR 0039](0039-shared-operator-governance-deferred.md) (token-only authentication),
