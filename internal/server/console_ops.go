@@ -79,7 +79,7 @@ func (s *Server) consoleDecide(w http.ResponseWriter, r *http.Request) {
 		return
 	} else if found {
 		notice = "stale: already decided"
-	} else if err := store.PutApprovalDecision(s.Eng.Store, id, dec, store.Attribution{}); err != nil {
+	} else if err := s.recordApprovalDecision(id, dec, store.Attribution{}); err != nil {
 		notice = "could not record decision"
 	} else if dec == "allow" && !s.allowStillValid(id) {
 		notice = "recorded allow but not valid for resume (expired, paused, or policy)"
