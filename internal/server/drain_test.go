@@ -15,6 +15,7 @@ import (
 )
 
 func TestDrainHTTPRequiresWorkerAndStopsClaims(t *testing.T) {
+	t.Parallel()
 	e, _, _ := eventEnv(t)
 	hs := httptest.NewServer((&Server{Eng: e, WorkerSec: "wsec"}).Handler())
 	t.Cleanup(hs.Close)
@@ -62,6 +63,7 @@ func TestDrainHTTPRequiresWorkerAndStopsClaims(t *testing.T) {
 
 // Resume lifts drain's pause without Slack; it needs the worker token.
 func TestResumeHTTPLiftsDrainPause(t *testing.T) {
+	t.Parallel()
 	e, _, _ := eventEnv(t)
 	hs := httptest.NewServer((&Server{Eng: e, WorkerSec: "wsec"}).Handler())
 	t.Cleanup(hs.Close)

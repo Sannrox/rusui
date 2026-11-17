@@ -14,6 +14,7 @@ import (
 )
 
 func TestSessionDetailReceiptHistoryIsExplicitAndPaged(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sessionID, err := e.StartRun("test", "receipt history", "")
 	if err != nil {

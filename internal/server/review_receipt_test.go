@@ -13,6 +13,7 @@ import (
 )
 
 func TestSessionReceiptExportsStoredReview(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid := seedSessionReview(t, e.Store, "example/test-repo", 7, "keep", "")
 	req, err := http.NewRequest(http.MethodGet, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/receipt", nil)
@@ -60,6 +61,7 @@ func TestSessionReceiptExportsStoredReview(t *testing.T) {
 }
 
 func TestSessionReceiptAuthAndMissingReview(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "no review yet", "")
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 )
 
 func TestApplySessionWriteRequiresOperatorAndProposal(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "ordinary", "")
 	if err != nil {

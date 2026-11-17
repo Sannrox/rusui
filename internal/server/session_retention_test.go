@@ -11,6 +11,7 @@ import (
 )
 
 func TestRetentionHTTPOverrideAndDelete(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "keep-secret", "")
 	if err != nil {

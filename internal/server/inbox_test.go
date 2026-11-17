@@ -53,6 +53,7 @@ func getInbox(t *testing.T, url, tok string) (int, inboxResponse) {
 }
 
 func TestInboxListsLatestUndisposedCurrentReviewResults(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	snapshot := func(item int, hash string) {
 		t.Helper()
@@ -107,6 +108,7 @@ func TestInboxListsLatestUndisposedCurrentReviewResults(t *testing.T) {
 }
 
 func TestInboxRefusesWorkerTokenAndBadFilter(t *testing.T) {
+	t.Parallel()
 	_, hs, _ := consoleEnv(t)
 	if code, _ := getInbox(t, hs.URL+"/inbox", "wsec"); code != http.StatusUnauthorized {
 		t.Fatalf("worker token %d", code)

@@ -12,6 +12,7 @@ import (
 )
 
 func TestApprovalRevalidationHonoursRejectRules(t *testing.T) {
+	t.Parallel()
 	e, _, _ := leasedTurn(t)
 	var turnID, sessID int64
 	if err := e.Store.DB.QueryRow(`SELECT id, session_id FROM turns WHERE state='leased'`).Scan(&turnID, &sessID); err != nil {
@@ -50,6 +51,7 @@ func TestApprovalRevalidationHonoursRejectRules(t *testing.T) {
 }
 
 func TestFencedApprovalIsInvalidInImplementSessions(t *testing.T) {
+	t.Parallel()
 	_, e := agentCredentialEnv(t, true, agentToken)
 	task, err := e.StartTask("test", implementTask())
 	if err != nil {

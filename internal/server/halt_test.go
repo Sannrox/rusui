@@ -15,6 +15,7 @@ import (
 )
 
 func TestHaltHTTPRequiresWorkerAndStopsClaims(t *testing.T) {
+	t.Parallel()
 	e, _, _ := eventEnv(t)
 	hs := httptest.NewServer((&Server{Eng: e, WorkerSec: "wsec"}).Handler())
 	t.Cleanup(hs.Close)

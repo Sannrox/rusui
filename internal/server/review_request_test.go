@@ -18,6 +18,7 @@ import (
 )
 
 func TestReviewRequestRefusesPolicyGates(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name       string
 		repo       string
@@ -77,11 +78,7 @@ func TestReviewRequestRefusesPolicyGates(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			st, err := store.Open(filepath.Join(t.TempDir(), "review.db"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = st.Close() })
+			st := openStore(t, filepath.Join(t.TempDir(), "review.db"))
 			p, err := policy.Parse([]byte(slackPol))
 			if err != nil {
 				t.Fatal(err)

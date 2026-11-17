@@ -11,6 +11,7 @@ import (
 )
 
 func TestDispositionIsOperatorOnly(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "disp", "")
 	if err != nil {

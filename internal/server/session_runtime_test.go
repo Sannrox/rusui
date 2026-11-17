@@ -14,6 +14,7 @@ import (
 )
 
 func TestSessionDetailReturnsSeparateProcessAndAttachIdentities(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	now := time.Date(2026, 9, 23, 18, 0, 0, 0, time.UTC)
 	res, err := e.Store.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)

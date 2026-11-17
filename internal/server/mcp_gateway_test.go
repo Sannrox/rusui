@@ -13,16 +13,12 @@ import (
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/runner"
-	"github.com/sannrox/rusui/internal/store"
 )
 
 func TestGatewayModeAssignsOnlyTheGateway(t *testing.T) {
+	t.Parallel()
 	const gateway = "https://gateway.example/mcp"
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
 	p, err := policy.Parse([]byte(strings.Replace(slackPol, "defaults:\n", "defaults:\n  mcp_gateway: '"+gateway+"'\n", 1)))
 	if err != nil {
 		t.Fatal(err)

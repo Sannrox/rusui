@@ -18,7 +18,6 @@ import (
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/policy"
-	"github.com/sannrox/rusui/internal/store"
 )
 
 func pkt(payload string) string {
@@ -26,6 +25,7 @@ func pkt(payload string) string {
 }
 
 func TestSplitReceivePackAndRefAllow(t *testing.T) {
+	t.Parallel()
 	old := strings.Repeat("0", 40)
 	nw := strings.Repeat("a", 40)
 	body := pkt(old+" "+nw+" refs/heads/rusui/8/work\x00report-status") + "0000PACK"
@@ -49,6 +49,7 @@ func TestSplitReceivePackAndRefAllow(t *testing.T) {
 }
 
 func TestGitProxyUploadPackSwapsAuth(t *testing.T) {
+	t.Parallel()
 	var sawAuth, sawPath string
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sawAuth = r.Header.Get("Authorization")
@@ -84,6 +85,7 @@ func TestGitProxyUploadPackSwapsAuth(t *testing.T) {
 }
 
 func TestGitProxyForbidsOtherRepoAndMainPush(t *testing.T) {
+	t.Parallel()
 	e, _, tok := leasedTurn(t)
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("upstream reached")
@@ -118,6 +120,7 @@ func TestGitProxyForbidsOtherRepoAndMainPush(t *testing.T) {
 }
 
 func TestGitProxyAllowsSessionRefPush(t *testing.T) {
+	t.Parallel()
 	var sawPath string
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sawPath = r.URL.Path
@@ -152,6 +155,7 @@ func TestGitProxyAllowsSessionRefPush(t *testing.T) {
 }
 
 func TestGitProxyRejectsUnapprovedHostExpiredCrossSessionAndPreparePush(t *testing.T) {
+	t.Parallel()
 	e, clk, tok := leasedTurn(t)
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("upstream reached")
@@ -255,11 +259,7 @@ func TestGitProxyRejectsUnapprovedHostExpiredCrossSessionAndPreparePush(t *testi
 
 func leasedImplementTurn(t *testing.T, ship string) (*engine.Engine, string, int64) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
 	raw := strings.Replace(slackPol, "implement: false", "implement: true", 1)
 	if ship != "" {
 		raw = strings.Replace(raw, "test:\n", "test:\n    ship: "+ship+"\n", 1)
@@ -306,6 +306,7 @@ func receivePack(t *testing.T, hs *httptest.Server, tok, ref string) int {
 }
 
 func TestGitProxyPushBaseAllowsDefaultBranchAndPullRequestStillForbids(t *testing.T) {
+	t.Parallel()
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("ok"))
 	}))
@@ -342,6 +343,7 @@ func TestGitProxyPushBaseAllowsDefaultBranchAndPullRequestStillForbids(t *testin
 }
 
 func TestGitProxyMissingToken(t *testing.T) {
+	t.Parallel()
 	e, _, tok := leasedTurn(t)
 	hs := httptest.NewServer((&Server{Eng: e}).Handler())
 	t.Cleanup(hs.Close)
@@ -370,6 +372,7 @@ func (s *scopedTokens) RepoToken(repo string) (string, error) {
 // Under plane publication the proxy forwards with the repository-scoped
 // App token, and fails closed without falling back when it cannot mint one.
 func TestGitProxyUsesRepoScopedTokenAndFailsClosed(t *testing.T) {
+	t.Parallel()
 	var sawAuth string
 	var calls int
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

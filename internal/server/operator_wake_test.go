@@ -18,6 +18,7 @@ import (
 // Operator terminal, preview, and prompt each wake the same sleeping
 // environment, run resume and services once, and attribute the wake (#330).
 func TestOperatorActionsWakeSleepingEnvironment(t *testing.T) {
+	t.Parallel()
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "guest-ok")
 	}))
@@ -201,6 +202,7 @@ func TestOperatorActionsWakeSleepingEnvironment(t *testing.T) {
 // Preview mint wakes a sleeping environment by itself, with its own
 // receipt cause.
 func TestPreviewMintWakesSleepingEnvironment(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	rt := &env.FakeRuntime{GuestAddrs: map[string]string{"ctr-1/3000": "127.0.0.1:1"}}
 	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}

@@ -13,6 +13,7 @@ import (
 )
 
 func TestExecutionModeReturnedAndImmutable(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	s.TenantToks = map[string]string{"globex": "tok-globex-secret"}
 	s.MemberToks = map[string]string{"tok-alice": "acme", "tok-bob": "acme"}
@@ -87,6 +88,7 @@ func TestExecutionModeReturnedAndImmutable(t *testing.T) {
 }
 
 func TestMemberCreatesUserModeSession(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	s.MemberToks = map[string]string{"tok-alice": "acme", "tok-bob": "acme"}
 	s.ActorToks = map[string]string{"tok-alice": "alice", "tok-bob": "bob"}
@@ -150,6 +152,7 @@ projects:
 }
 
 func TestPinnedAndWorkerRejectUserMode(t *testing.T) {
+	t.Parallel()
 	_, hs, _ := consoleEnv(t)
 	if code := postJSONStatus(t, hs.URL+"/projects/test/sessions", "wsec", `{"kind":"run","prompt":"x","execution_mode":"user"}`); code != http.StatusConflict {
 		t.Fatalf("worker user-mode: %d", code)
@@ -163,6 +166,7 @@ func TestPinnedAndWorkerRejectUserMode(t *testing.T) {
 }
 
 func TestLoadTenantTokensNestedActors(t *testing.T) {
+	t.Parallel()
 	tokens, members, actors, err := LoadTenantTokens(`{"acme":{"alice":"tok-a","bob":"tok-b"}}`)
 	if err != nil {
 		t.Fatal(err)
@@ -179,6 +183,7 @@ func TestLoadTenantTokensNestedActors(t *testing.T) {
 }
 
 func TestUserModeHidesApprovalsFromOtherMembers(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	s.MemberToks = map[string]string{"tok-alice": "acme", "tok-bob": "acme"}
 	s.ActorToks = map[string]string{"tok-alice": "alice", "tok-bob": "bob"}
@@ -214,6 +219,7 @@ func TestUserModeHidesApprovalsFromOtherMembers(t *testing.T) {
 }
 
 func TestIdempotencyDoesNotReuseOtherActorSession(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	s.MemberToks = map[string]string{"tok-alice": "acme", "tok-bob": "acme"}
 	s.ActorToks = map[string]string{"tok-alice": "alice", "tok-bob": "bob"}

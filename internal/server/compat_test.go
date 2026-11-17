@@ -12,6 +12,7 @@ import (
 )
 
 func TestRunnerHelloRejectsMismatchedCommit(t *testing.T) {
+	t.Parallel()
 	s, hs, _ := consoleEnv(t)
 	s.GitCommit = "aaa111"
 	req, err := http.NewRequest(http.MethodPost, hs.URL+"/runners/hello", strings.NewReader(`{"name":"local","commit":"bbb222"}`))
@@ -31,6 +32,7 @@ func TestRunnerHelloRejectsMismatchedCommit(t *testing.T) {
 }
 
 func TestRunnerHelloAcceptsMatchingAndUnknownCommits(t *testing.T) {
+	t.Parallel()
 	s, hs, _ := consoleEnv(t)
 	s.GitCommit = "aaa111"
 	for _, body := range []string{
@@ -60,6 +62,7 @@ func TestRunnerHelloAcceptsMatchingAndUnknownCommits(t *testing.T) {
 }
 
 func TestCreateAndFollowUpOmitOptionalRequestFields(t *testing.T) {
+	t.Parallel()
 	_, hs, _ := consoleEnv(t)
 	sid := createRunSession(t, hs, "hello")
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/sessions/%d/turns", hs.URL, sid), strings.NewReader(`{"prompt":"again"}`))

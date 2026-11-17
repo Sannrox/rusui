@@ -15,6 +15,7 @@ import (
 )
 
 func TestQualifyGuestHTTPRequiresWorkerAndReturnsSignedReceipt(t *testing.T) {
+	t.Parallel()
 	e, _, _ := eventEnv(t)
 	key := []byte(strings.Repeat("k", 32))
 	e.ConformanceKey = key

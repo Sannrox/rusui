@@ -10,6 +10,7 @@ import (
 )
 
 func TestConsolePromptSteersWithCSRF(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "original", "")
 	if err != nil {

@@ -41,11 +41,7 @@ projects:
 
 func slackEnv(t *testing.T) (*Server, *engine.Engine, *clock.Fake, *httptest.Server) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { st.Close() })
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
 	p, err := policy.Parse([]byte(slackPol))
 	if err != nil {
 		t.Fatal(err)
@@ -88,6 +84,7 @@ func readText(t *testing.T, res *http.Response) (int, string) {
 }
 
 func TestSlackSignatureAndAllowlist(t *testing.T) {
+	t.Parallel()
 	_, _, clk, hs := slackEnv(t)
 	form := "user_id=U1&text=status"
 	req, _ := http.NewRequest("POST", hs.URL+"/hooks/slack", strings.NewReader(form))
@@ -110,6 +107,7 @@ func TestSlackSignatureAndAllowlist(t *testing.T) {
 }
 
 func TestSlackCommands(t *testing.T) {
+	t.Parallel()
 	s, e, clk, hs := slackEnv(t)
 	f := e.GitHub.(*gh.Fake)
 	it := snapshot.Item{Repo: "example/test-repo", Item: 1, ItemKind: "issue", State: "open", Title: "t", Body: "b", DefaultBranch: "main", MainSHA: "aaa"}
@@ -170,6 +168,7 @@ func TestSlackCommands(t *testing.T) {
 }
 
 func TestSlackChallenge(t *testing.T) {
+	t.Parallel()
 	_, _, _, hs := slackEnv(t)
 	req, _ := http.NewRequest("POST", hs.URL+"/hooks/slack", strings.NewReader(`{"type":"url_verification","challenge":"xyz"}`))
 	res, err := http.DefaultClient.Do(req)
@@ -184,6 +183,7 @@ func TestSlackChallenge(t *testing.T) {
 }
 
 func TestSlackExceptionNotify(t *testing.T) {
+	t.Parallel()
 	_, e, clk, _ := slackEnv(t)
 	var got []string
 	e.Notify = func(msg string) { got = append(got, msg) }

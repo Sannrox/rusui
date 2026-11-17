@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 )
 
 func TestTurnActionIngest(t *testing.T) {
+	t.Parallel()
 	e, clk, hs := eventEnv(t)
 	sid, turnID := leasedActionTurn(t, e, clk, 4)
 	sec, err := issueTurnSecrets(e.Store, turnID, 1, clk.T)
@@ -61,6 +63,7 @@ func TestTurnActionIngest(t *testing.T) {
 }
 
 func TestTurnActionBodyCap(t *testing.T) {
+	t.Parallel()
 	e, clk, hs := eventEnv(t)
 	_, turnID := leasedActionTurn(t, e, clk, 5)
 	sec, err := issueTurnSecrets(e.Store, turnID, 1, clk.T)
@@ -74,6 +77,7 @@ func TestTurnActionBodyCap(t *testing.T) {
 }
 
 func TestTurnActionBudget(t *testing.T) {
+	t.Parallel()
 	e, clk, hs := eventEnv(t)
 	_, turnID := leasedActionTurn(t, e, clk, 6)
 	sec, err := issueTurnSecrets(e.Store, turnID, 1, clk.T)
@@ -85,14 +89,20 @@ func TestTurnActionBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	sid := turn.SessionID
-	for i := range engine.TurnActionRowCap {
-		if err := store.InsertAction(e.Store, store.Action{
-			ID: "fill-" + strconv.Itoa(i), SessionID: &sid, TurnID: &turnID,
-			Repo: "example/test-repo", Item: 6, Type: "resume", ReasonCode: "recorded",
-			EvidenceClass: "plane_observed", Body: "{}",
-		}); err != nil {
-			t.Fatal(err)
+	// One transaction for the fill: a commit per row costs seconds under -race.
+	if err := e.Store.Tx(func(tx *sql.Tx) error {
+		for i := range engine.TurnActionRowCap {
+			if err := store.InsertActionTx(tx, store.Action{
+				ID: "fill-" + strconv.Itoa(i), SessionID: &sid, TurnID: &turnID,
+				Repo: "example/test-repo", Item: 6, Type: "resume", ReasonCode: "recorded",
+				EvidenceClass: "plane_observed", Body: "{}",
+			}); err != nil {
+				return err
+			}
 		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 	if code := postTurnAction(t, hs, turnID, sec.Runner, `{"type":"resume","reason":"succeeded"}`); code != http.StatusTooManyRequests {
 		t.Fatalf("budget %d", code)
@@ -100,6 +110,7 @@ func TestTurnActionBudget(t *testing.T) {
 }
 
 func TestGuestGrantCannotCompleteTurn(t *testing.T) {
+	t.Parallel()
 	e, clk, hs := eventEnv(t)
 	_, turnID := leasedActionTurn(t, e, clk, 7)
 	sec, err := issueTurnSecrets(e.Store, turnID, 1, clk.T)
