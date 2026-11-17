@@ -411,7 +411,10 @@ Stop the process (SIGINT). Data that remains until you delete it:
 Secrets live in the operator environment, not in those files. Do not
 embed token values in examples. Restore a copied database with
 `rusui restore -db <copy>` (inventory, clear live leases, drop grants,
-release guests). Guest
+release guests). On the PostgreSQL store, restore the database with the
+server's own tooling, then run `rusui restore` with every instance stopped
+and `RUSUI_STORE_URL` set to it; the inventory names only the server and
+database, never credentials. Guest
 containers named `rusui-*` are not in the backup; destroy them with the
 container CLI if any are left. New container names carry the database's
 plane id (`rusui-<plane id>-<environment name>`), so two planes or a replaced database on

@@ -54,6 +54,12 @@ A schema newer than this binary, or an interrupted upgrade
 start on the half-upgraded file. Versions and checks:
 [compatibility.md](compatibility.md).
 
+On the PostgreSQL store, step 3 is a backup taken with the server's own
+tooling, and step 6 restores that backup with the same tooling, then runs
+`rusui restore` with all instances stopped and `RUSUI_STORE_URL` naming the
+restored database. It applies the same steps there; start the instances on
+that URL afterwards.
+
 Durable session, approval, budget, and receipt rows stay in SQLite across
 a successful upgrade. Live grants do not. Schema v50 defaults existing
 sessions to short-lived retention (72h from `created_at`); expiry
