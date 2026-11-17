@@ -10,10 +10,11 @@ import (
 // Recover runs the startup recovery paths ARCHITECTURE.md requires:
 // mark local runtime observations unknown, expire in-flight refresh owners,
 // fail or requeue overdue leases, reconcile hook deliveries, catch up
-// open and locally tracked items, retry unpublished apply attempts, and
-// retry in-flight or uncertain publications.
-// Periodic callers use the same ReconcileConfigured, CatchUpConfigured,
-// and RetryApplyAttempts methods. Errors besides owner expiry are
+// open and locally tracked items, and reap environments. It runs on every
+// instance, so it leaves apply retries, which write to GitHub, to the
+// scheduler lease holder (RetryApplyAttempts).
+// Periodic callers use the same ReconcileConfigured and CatchUpConfigured
+// methods. Errors besides owner expiry are
 // reported through Notify and do not prevent the remaining paths.
 func (e *Engine) Recover() error {
 	if err := store.MarkRuntimeObservationsUnknown(e.Store, e.now()); err != nil {
@@ -35,7 +36,6 @@ func (e *Engine) Recover() error {
 	if err := e.CatchUpConfigured(); err != nil {
 		e.exception("catch-up: " + err.Error())
 	}
-	_ = e.RetryApplyAttempts()
 	if err := e.ReapEnvironments(); err != nil {
 		e.exception("reap environments: " + err.Error())
 	}
@@ -83,8 +83,11 @@ func (e *Engine) CatchUpConfigured() error {
 }
 
 // RetryApplyAttempts retries apply rows left planned, in_flight, or
-// uncertain, under the same action_id.
-func (e *Engine) RetryApplyAttempts() error {
+// uncertain, under the same action_id. It writes to GitHub, so it runs only
+// under the scheduler lease: fence is checked before each item, and a lost
+// lease stops the pass (ADR 0089 D6). Startup recovery leaves it to the
+// scheduler, which runs it as soon as it holds the lease.
+func (e *Engine) RetryApplyAttempts(fence store.PlaneLease) error {
 	items, err := store.ListRetryableApply(e.Store)
 	if err != nil {
 		e.exception("list apply retries: " + err.Error())
@@ -92,6 +95,9 @@ func (e *Engine) RetryApplyAttempts() error {
 	}
 	var first error
 	for _, it := range items {
+		if err := e.Store.Tx(fence.Check); err != nil {
+			return err
+		}
 		if err := e.ApplyAttempt(it.Repo, it.Item); err != nil {
 			e.exception(fmt.Sprintf("apply retry %s#%d: %v", it.Repo, it.Item, err))
 			if first == nil {

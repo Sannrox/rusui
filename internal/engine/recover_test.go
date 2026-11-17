@@ -164,7 +164,9 @@ func TestRecoverCatchUpClosedLocalItem(t *testing.T) {
 	}
 }
 
-func TestRecoverRetriesInFlightApply(t *testing.T) {
+// An apply left in flight by an instance that stopped is retried under the
+// same action_id by whichever instance holds the scheduler lease.
+func TestLeaseHolderRetriesInFlightApply(t *testing.T) {
 	h := setup(t)
 	it := issue(1)
 	it.CreatedAt = h.clk.T.Add(-90 * 24 * time.Hour).Format(time.RFC3339)
@@ -188,12 +190,12 @@ func TestRecoverRetriesInFlightApply(t *testing.T) {
 	if err := h.e.SetPause("test", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.e.Recover(); err != nil {
+	if err := h.e.RetryApplyAttempts(holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	n, _ := store.CountIntended(h.st, it.Repo, it.Item)
 	if n != 1 {
-		t.Fatalf("intended %d; startup must retry the same action_id", n)
+		t.Fatalf("intended %d; the retry must reuse the same action_id", n)
 	}
 }
 

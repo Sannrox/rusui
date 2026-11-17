@@ -45,7 +45,7 @@ func TestLiveCommentPostsOnceAfterRetry(t *testing.T) {
 	if err := h.e.ApplyAttempt("example/test-repo", 1); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.e.RetryApplyAttempts(); err != nil {
+	if err := h.e.RetryApplyAttempts(holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	got = h.f.IssueComments("example/test-repo", 1)
