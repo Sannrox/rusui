@@ -2,8 +2,10 @@ package store
 
 import (
 	"database/sql"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +13,13 @@ import (
 )
 
 func TestRestoreMissingAndCorruptArtifacts(t *testing.T) {
-	storetest.SQLiteOnly(t, "restore reads a SQLite file artifact")
+	if storetest.OnPostgres() {
+		// A database the backup never reached is empty.
+		if _, _, err := Restore(storetest.DSN(t)); err == nil {
+			t.Fatal("empty database restored")
+		}
+		return
+	}
 	dir := t.TempDir()
 	if _, _, err := Restore(filepath.Join(dir, "missing.db")); err == nil {
 		t.Fatal("missing artifact succeeded")
@@ -25,10 +33,16 @@ func TestRestoreMissingAndCorruptArtifacts(t *testing.T) {
 	}
 }
 
+// A malformed store URL fails without echoing any part of its password.
+func TestRestoreMalformedURLHidesThePassword(t *testing.T) {
+	_, _, err := Restore("postgres://rusui:zq7/xk@db/rusui")
+	if err == nil || strings.Contains(err.Error(), "zq7") {
+		t.Fatalf("err %v", err)
+	}
+}
+
 func TestRestoreClearsStaleAuthority(t *testing.T) {
-	storetest.SQLiteOnly(t, "restore reads a SQLite file artifact")
-	dir := t.TempDir()
-	src := filepath.Join(dir, "rusui.db")
+	src := storetest.DSN(t)
 	st, err := Open(src)
 	if err != nil {
 		t.Fatal(err)
@@ -73,14 +87,7 @@ func TestRestoreClearsStaleAuthority(t *testing.T) {
 	if err := st.Close(); err != nil {
 		t.Fatal(err)
 	}
-	dst := filepath.Join(dir, "restore.db")
-	b, err := os.ReadFile(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(dst, b, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	dst := storetest.Copy(t, src)
 	st2, rep, err := Restore(dst)
 	if err != nil {
 		t.Fatal(err)
@@ -88,6 +95,11 @@ func TestRestoreClearsStaleAuthority(t *testing.T) {
 	t.Cleanup(func() { _ = st2.Close() })
 	if rep.Sessions < 1 || rep.LeasesCleared != 1 || rep.GrantsDropped != 1 || rep.ApprovalRecords != 1 {
 		t.Fatalf("report %+v", rep)
+	}
+	if u, err := url.Parse(dst); err == nil && u.Scheme != "" {
+		if want := u.Scheme + "://" + u.Host + u.Path; rep.Path != want {
+			t.Fatalf("report names %q, want only %q", rep.Path, want)
+		}
 	}
 	sess, err := GetSession(st2, sid)
 	if err != nil || sess.Prompt != "hello" {
@@ -117,9 +129,7 @@ func TestRestoreClearsStaleAuthority(t *testing.T) {
 // A restored copy may run beside its source on one container host. It must
 // not adopt the source's guests or reuse its plane identity in guest names.
 func TestRestoreReleasesGuestHandlesAndPlaneIdentity(t *testing.T) {
-	storetest.SQLiteOnly(t, "restore reads a SQLite file artifact")
-	dir := t.TempDir()
-	src := filepath.Join(dir, "rusui.db")
+	src := storetest.DSN(t)
 	st, err := Open(src)
 	if err != nil {
 		t.Fatal(err)
@@ -146,14 +156,7 @@ func TestRestoreReleasesGuestHandlesAndPlaneIdentity(t *testing.T) {
 	if err := st.Close(); err != nil {
 		t.Fatal(err)
 	}
-	dst := filepath.Join(dir, "restore.db")
-	b, err := os.ReadFile(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(dst, b, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	dst := storetest.Copy(t, src)
 
 	st2, rep, err := Restore(dst)
 	if err != nil {
@@ -178,9 +181,7 @@ func TestRestoreReleasesGuestHandlesAndPlaneIdentity(t *testing.T) {
 }
 
 func TestRestorePreservesIdentitiesRetentionAndReceipts(t *testing.T) {
-	storetest.SQLiteOnly(t, "restore reads a SQLite file artifact")
-	dir := t.TempDir()
-	src := filepath.Join(dir, "rusui.db")
+	src := storetest.DSN(t)
 	st, err := Open(src)
 	if err != nil {
 		t.Fatal(err)
@@ -215,14 +216,7 @@ func TestRestorePreservesIdentitiesRetentionAndReceipts(t *testing.T) {
 	if err := st.Close(); err != nil {
 		t.Fatal(err)
 	}
-	dst := filepath.Join(dir, "restore.db")
-	b, err := os.ReadFile(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(dst, b, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	dst := storetest.Copy(t, src)
 	st2, _, err := Restore(dst)
 	if err != nil {
 		t.Fatal(err)

@@ -4,7 +4,9 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 )
@@ -23,31 +25,63 @@ type RestoreReport struct {
 	EnvironmentsReleased int
 }
 
-// Restore opens a captured SQLite artifact and strips live authority.
-// Missing or corrupt files fail; they must not look like a successful restore.
-// Historical approval_decisions remain as records, not grants for new RPCs.
-// The copy never adopts the source's guests: managed environments are
-// expired with a receipt and the plane identity is rotated, so a copy
-// beside its source on one host cannot attach or name-collide with them.
-func Restore(path string) (*Store, RestoreReport, error) {
-	st, err := os.Stat(path)
-	if err != nil {
-		return nil, RestoreReport{Path: path}, fmt.Errorf("restore: missing artifact: %w", err)
+// Restore opens a captured store and strips live authority: a SQLite file,
+// or a PostgreSQL URL naming a database restored with the server's own
+// tooling. Missing or corrupt files fail; they must not look like a
+// successful restore. Historical approval_decisions remain as records, not
+// grants for new RPCs. The copy never adopts the source's guests: managed
+// environments are expired with a receipt and the plane identity is
+// rotated, so a copy beside its source cannot attach or name-collide with
+// them. For a URL the report names only the server and database.
+func Restore(dsn string) (*Store, RestoreReport, error) {
+	where := dsn
+	if IsPostgresURL(dsn) {
+		u, err := url.Parse(dsn)
+		if err != nil {
+			// Any parse error may quote part of the password; name none of it.
+			return nil, RestoreReport{}, errors.New("restore: malformed store URL (percent-encode the password)")
+		}
+		// Name the database only: credentials ride in the user info or in
+		// query parameters (password, sslpassword).
+		where = (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: u.Path}).String()
+		if err := hasPostgresSchema(dsn); err != nil {
+			return nil, RestoreReport{Path: where}, fmt.Errorf("restore: missing artifact: %w", err)
+		}
+	} else if st, err := os.Stat(dsn); err != nil {
+		return nil, RestoreReport{Path: where}, fmt.Errorf("restore: missing artifact: %w", err)
+	} else if st.IsDir() || st.Size() == 0 {
+		return nil, RestoreReport{Path: where}, fmt.Errorf("restore: corrupt artifact")
 	}
-	if st.IsDir() || st.Size() == 0 {
-		return nil, RestoreReport{Path: path}, fmt.Errorf("restore: corrupt artifact")
-	}
-	db, err := Open(path)
+	db, err := Open(dsn)
 	if err != nil {
-		return nil, RestoreReport{Path: path}, fmt.Errorf("restore: corrupt artifact: %w", err)
+		return nil, RestoreReport{Path: where}, fmt.Errorf("restore: corrupt artifact: %w", err)
 	}
 	rep, err := sanitizeRestored(db)
-	rep.Path = path
+	rep.Path = where
 	if err != nil {
 		_ = db.Close()
 		return nil, rep, err
 	}
 	return db, rep, nil
+}
+
+// hasPostgresSchema fails unless the database at dsn already holds a rusui
+// schema. Open would give an empty database a fresh one, which must not
+// pass for a restored backup.
+func hasPostgresSchema(dsn string) error {
+	db, err := sql.Open(pgDriverName, dsn)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	var ok bool
+	if err := db.QueryRow(`SELECT to_regclass('schema_migrations') IS NOT NULL`).Scan(&ok); err != nil {
+		return err
+	}
+	if !ok {
+		return errors.New("database holds no rusui schema")
+	}
+	return nil
 }
 
 func sanitizeRestored(s *Store) (RestoreReport, error) {

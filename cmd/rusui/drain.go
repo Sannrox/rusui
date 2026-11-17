@@ -86,23 +86,40 @@ func postWorker(name, base, path, token string, out io.Writer) int {
 }
 
 func restoreCLI(args []string) {
-	os.Exit(restoreMain(args, os.Stdout))
+	os.Exit(restoreMain(args, os.Getenv("RUSUI_STORE_URL"), os.Stdout))
 }
 
-// restoreMain runs store.Restore on a copied database with the plane
-// stopped and prints the inventory. Start the plane on -db afterwards.
-func restoreMain(args []string, out io.Writer) int {
+// restoreMain runs store.Restore with the plane stopped and prints the
+// inventory. It restores either the copied SQLite file at -db or storeURL
+// (RUSUI_STORE_URL), a database the operator restored with PostgreSQL's
+// own tooling; setting both is an error. Start the plane on the same store
+// afterwards.
+func restoreMain(args []string, storeURL string, out io.Writer) int {
 	fs := flag.NewFlagSet("restore", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	db := fs.String("db", "", "copied sqlite database to restore (required)")
+	db := fs.String("db", "", "copied sqlite database to restore; or set RUSUI_STORE_URL instead")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *db == "" {
-		fmt.Fprintln(os.Stderr, "restore: -db is required")
+	target := *db
+	if storeURL != "" {
+		if *db != "" {
+			// Restore rewrites the store in place; never let an inherited
+			// variable redirect an explicit -db to the live database.
+			fmt.Fprintln(os.Stderr, "restore: set -db or RUSUI_STORE_URL, not both")
+			return 2
+		}
+		if !store.IsPostgresURL(storeURL) {
+			fmt.Fprintln(os.Stderr, "restore: RUSUI_STORE_URL must be a postgres:// or postgresql:// URL")
+			return 2
+		}
+		target = storeURL
+	}
+	if target == "" {
+		fmt.Fprintln(os.Stderr, "restore: -db or RUSUI_STORE_URL is required")
 		return 2
 	}
-	st, rep, err := store.Restore(*db)
+	st, rep, err := store.Restore(target)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

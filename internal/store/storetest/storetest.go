@@ -86,6 +86,41 @@ func DSN(t testing.TB) string {
 	return dsn
 }
 
+// Copy returns a DSN for a copy of the store at src, owned by t, as an
+// operator's backup and restore would produce. Close every handle on src
+// first: PostgreSQL copies a database only while nobody is connected to it.
+func Copy(t testing.TB, src string) string {
+	t.Helper()
+	dst := DSN(t)
+	if !OnPostgres() {
+		raw, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(dst, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return dst
+	}
+	from, to := dbName(t, src), dbName(t, dst)
+	if _, err := adminDB.Exec(`DROP DATABASE ` + to); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adminDB.Exec(`CREATE DATABASE ` + to + ` TEMPLATE ` + from); err != nil {
+		t.Fatal(err)
+	}
+	return dst
+}
+
+func dbName(t testing.TB, dsn string) string {
+	t.Helper()
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u.Path[1:]
+}
+
 // Dir returns the attachment directory for a PostgreSQL DSN from DSN, which
 // the caller assigns to Store.Dir. For a SQLite path it returns "", false:
 // store.Open already keeps attachments beside the file.

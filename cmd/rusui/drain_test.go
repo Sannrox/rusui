@@ -96,17 +96,30 @@ func TestRestoreMainRestoresACopyAndPrintsInventory(t *testing.T) {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
-	if code := restoreMain([]string{"-db", path}, &buf); code != 0 {
+	if code := restoreMain([]string{"-db", path}, "", &buf); code != 0 {
 		t.Fatalf("code %d", code)
 	}
 	var rep store.RestoreReport
 	if err := json.Unmarshal(buf.Bytes(), &rep); err != nil || rep.Path != path {
 		t.Fatalf("report %s %v", buf.String(), err)
 	}
-	if code := restoreMain(nil, &buf); code != 2 {
+	if code := restoreMain(nil, "", &buf); code != 2 {
 		t.Fatalf("missing -db code %d", code)
 	}
-	if code := restoreMain([]string{"-db", filepath.Join(t.TempDir(), "missing.db")}, &buf); code != 1 {
+	if code := restoreMain([]string{"-db", filepath.Join(t.TempDir(), "missing.db")}, "", &buf); code != 1 {
 		t.Fatalf("missing artifact code %d", code)
+	}
+}
+
+// Restore rewrites its store in place, so an inherited RUSUI_STORE_URL must
+// not redirect an explicit -db, and a URL the plane would refuse is refused.
+func TestRestoreMainRefusesAmbiguousOrForeignStores(t *testing.T) {
+	var buf bytes.Buffer
+	copyPath := filepath.Join(t.TempDir(), "copy.db")
+	if code := restoreMain([]string{"-db", copyPath}, "postgres://example/rusui", &buf); code != 2 {
+		t.Fatalf("both -db and RUSUI_STORE_URL: code %d", code)
+	}
+	if code := restoreMain(nil, "mysql://example/rusui", &buf); code != 2 {
+		t.Fatalf("non-PostgreSQL store URL: code %d", code)
 	}
 }

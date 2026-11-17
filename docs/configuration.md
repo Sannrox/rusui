@@ -56,7 +56,8 @@ claims, and lists leased turns. `rusui resume [-project P]` POSTs `/resume`
 (worker auth) and lifts that pause. `rusui archive SESSION` sleeps that
 session's environment and refuses prompts until `rusui unarchive SESSION`.
 `rusui restore -db PATH` restores a copied
-database offline and prints its inventory. Do not open `rusui.db` while the
+database offline and prints its inventory. On PostgreSQL, set
+`RUSUI_STORE_URL` instead of `-db`; setting both fails. Do not open `rusui.db` while the
 plane holds it.
 `rusui diagnostics` writes a redacted bundle (`diagnostics.json`).
 `rusui receipt [-url URL] [-token TOKEN] [-format md|json] [-out DIR] SESSION_ID`
