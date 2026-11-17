@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -32,6 +33,44 @@ type TaskSpec struct {
 	ContextRefs      []string
 	InstructionPaths []string // repository-offered extra paths; cannot expand scope
 	BudgetRepairs    int
+}
+
+var fullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// checkTaskBase refuses a base that is not the live default tip. Under
+// task_base ancestor it also admits a full commit SHA the tip descends
+// from, so a historical task starts from its own base; every lookup
+// failure then refuses, since the forge is the only proof of ancestry.
+func (e *Engine) checkTaskBase(mode, repo, base string) error {
+	d, ok := e.GitHub.(interface {
+		DefaultSHA(string) (string, error)
+	})
+	if !ok {
+		if mode == policy.TaskBaseAncestor {
+			return fmt.Errorf("%w: default tip unavailable", ErrStaleSource)
+		}
+		return nil
+	}
+	live, err := d.DefaultSHA(repo)
+	if mode != policy.TaskBaseAncestor {
+		if err == nil && live != "" && live != base {
+			return ErrStaleSource
+		}
+		return nil
+	}
+	if err != nil || live == "" {
+		return fmt.Errorf("%w: default tip unavailable", ErrStaleSource)
+	}
+	if !fullSHA.MatchString(base) {
+		return fmt.Errorf("%w: base must be a full commit SHA", ErrStaleSource)
+	}
+	if base == live {
+		return nil
+	}
+	if ok, err := e.GitHub.IsAncestor(repo, base, live); err != nil || !ok {
+		return fmt.Errorf("%w: base is not an ancestor of the default tip", ErrStaleSource)
+	}
+	return nil
 }
 
 func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
@@ -63,12 +102,8 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 	if spec.BudgetRepairs == 0 {
 		spec.BudgetRepairs = 3
 	}
-	if d, ok := e.GitHub.(interface {
-		DefaultSHA(string) (string, error)
-	}); ok {
-		if live, err := d.DefaultSHA(spec.Repo); err == nil && live != "" && live != spec.BaseSHA {
-			return nil, fmt.Errorf("%w", ErrStaleSource)
-		}
+	if err := e.checkTaskBase(p.TaskBase, spec.Repo, spec.BaseSHA); err != nil {
+		return nil, err
 	}
 	paths, err := json.Marshal(spec.AllowedPaths)
 	if err != nil {

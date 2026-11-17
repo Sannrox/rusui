@@ -63,3 +63,58 @@ kept.
 
 For the steps to add cases, see the
 [evaluation how-to](../docs/evaluate-reviews.md#add-a-development-case).
+
+## Task runs
+
+[`eval/taskrun`](taskrun/main.go) is a development tool, not part of the
+shipped binary. It runs historical implementation tasks through a running
+plane and scores each published head with checks the agent never sees.
+The project must set `task_base: ancestor`
+([configuration](../docs/configuration.md)) so each task is admitted at
+its own base.
+
+```sh
+go run ./eval/taskrun -corpus FILE -policy FILE -revision REV \
+  [-guest NAME] [-url URL] [-out DIR] [-check PRIOR]
+```
+
+It admits pinned runs with the worker secret (`RUSUI_WORKER_SECRET`) and
+reads turns with the operator token (`RUSUI_OPERATOR_TOKEN`). Tasks run
+one at a time. A rerun with the same inputs resumes the same sessions
+instead of admitting tasks again.
+
+A task corpus holds `version` (1), `project`, `repo`, `ref`, an optional
+`gate` command, and `tasks`. A task has:
+
+| field | meaning |
+|---|---|
+| `id` | lowercase identity, unique in the corpus |
+| `base_sha` | full commit SHA the task starts from |
+| `prompt`, `allowed_paths` | the only task fields sent to the plane |
+| `test_patch` | held-back tests, applied outside the guest before checks |
+| `checks` | commands (argv lists) that must fail on the base and pass on the head |
+
+Unknown fields fail to load. Checks and the test patch never enter the
+prompt, the guest workspace, or the guest's grant. They run in fresh
+checkouts on the operator's machine with an empty `HOME` and `TMPDIR`
+and only `PATH` and `LANG` from the caller's environment. That keeps
+plane tokens and the caller's credential files out of reach, but it is
+not a sandbox: checks run the agent's code as the calling user, so run
+the tool where that user holds nothing else worth taking.
+
+Each task scores `verified` (checks fail on the base and pass on the
+head, and the gate passes on the unpatched head), `failed` (a check or
+the gate fails on the head), `invalid` (a check already passes on the
+base), or `not_verified` (no published head: blocked, unconfirmed, no
+pull request, or timeout). A gate failure is also counted as a
+regression. Per task the report records interventions (operator
+permission decisions and turns after the first), tokens, and wall clock.
+Totals add tokens per verified success. A task with unreported usage
+counts in `unknown_tokens` instead of the token sum.
+
+A report names the candidate revision, guest, and SHA-256 digests of the
+policy file and the corpus file. As with replay evidence, a change to any
+of them, or to the scorer, makes `-check` report it stale (exit 3) before any task is admitted, and
+`-out` never replaces an existing report. Every report also states that
+guests can reach the source repository's public history, so a task's
+upstream fix may be visible to the agent.

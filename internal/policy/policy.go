@@ -88,6 +88,9 @@ type ProjectYAML struct {
 	Secrets []string `yaml:"secrets"`
 	// Ship is pull-request (default) or push-base (ADR 0068).
 	Ship string `yaml:"ship"`
+	// TaskBase is tip (default) or ancestor: which task base commits
+	// implement admission accepts (#737).
+	TaskBase string `yaml:"task_base"`
 	// Tenant is the isolation key for sessions created in this project.
 	// Empty means the single-operator default tenant.
 	Tenant string `yaml:"tenant"`
@@ -160,8 +163,10 @@ type Project struct {
 	Secrets []string
 	// Ship is pull-request or push-base (ADR 0068). Parse stores the
 	// default as pull-request when the field is omitted.
-	Ship  string
-	Repos []string
+	Ship string
+	// TaskBase is tip or ancestor. Parse stores tip when omitted.
+	TaskBase string
+	Repos    []string
 	// Tenant is the isolation key; empty means the default tenant.
 	Tenant     string
 	MCPServers []MCPServer
@@ -275,6 +280,10 @@ func Parse(raw []byte) (*Effective, error) {
 		if err != nil {
 			return nil, err
 		}
+		taskBase, err := validTaskBase(slug, y.TaskBase)
+		if err != nil {
+			return nil, err
+		}
 		if err := validProjectGuests(slug, y.Guests, guests); err != nil {
 			return nil, err
 		}
@@ -296,6 +305,7 @@ func Parse(raw []byte) (*Effective, error) {
 			Permissions:  y.Permissions,
 			Secrets:      secrets,
 			Ship:         ship,
+			TaskBase:     taskBase,
 			Tenant:       y.Tenant,
 			MCPServers:   y.MCPServers,
 		}
@@ -466,6 +476,24 @@ func validLocalRuntime(slug string, runtime *LocalRuntimeYAML, kinds []string) (
 		return nil, fmt.Errorf("policy: %s local_runtime.cwd must be a clean absolute path", slug)
 	}
 	return &LocalRuntime{Argv: append([]string(nil), runtime.Argv...), Cwd: runtime.Cwd}, nil
+}
+
+// Task base modes: tip admits only the live default tip; ancestor also
+// admits a commit the tip descends from (#737).
+const (
+	TaskBaseTip      = "tip"
+	TaskBaseAncestor = "ancestor"
+)
+
+func validTaskBase(slug, v string) (string, error) {
+	switch v {
+	case "", TaskBaseTip:
+		return TaskBaseTip, nil
+	case TaskBaseAncestor:
+		return v, nil
+	default:
+		return "", fmt.Errorf("policy: %s invalid task_base %q", slug, v)
+	}
 }
 
 func validEgress(slug, egress string) error {

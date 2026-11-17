@@ -465,6 +465,17 @@ value is a policy load error. Review and ordinary run still have no
 GitHub write credential. This repository does not set `push-base`. Live
 merge, comment, and close stay unauthorized.
 
+Project `task_base` is `tip` (default when omitted) or `ancestor`. Under
+`tip`, a pinned run is admitted only at the live default-branch tip.
+Under `ancestor`, it is also admitted at a full 40-character commit SHA
+that GitHub's compare places under that tip, so a historical task (for
+example a benchmark task) starts from its own base. A base that is not an
+ancestor, a branch name, or a failed tip or compare lookup is refused as a
+stale source. Nothing rewrites the default branch. Any other value is a
+policy load error, and an older plane rejects the key, so set it only
+after every plane runs a version that knows it. The
+[task runner](../eval/set.md#task-runs) relies on it.
+
 Project `secrets` is an allowlist of plane secret ids (`^[a-z][a-z0-9_]{0,31}$`).
 At wake the plane injects ids that also have a `RUSUI_SECRET_<ID>` value
 into `/run/rusui/secrets/<id>` and the guest environment as uppercase
