@@ -76,6 +76,20 @@ field fails the mapped check. Regenerate the file with
 `go test ./internal/server -run TestOperatorAPIResponseShapes -update`
 only for a change this contract allows.
 
+## Tenkai product
+
+`deploy/tenkai.toml` installs the release binaries (checked against the
+release `SHA256SUMS`) through `rusui setup apply`, with state in the
+Tenkai workdir. Its profile v2 block provides `rusui.admission` (session
+create) and `rusui.environment` (the rest of the operator HTTP+SSE
+surface), both `1.0.0`. Each version is derived from that contract's
+part of the operator-API golden file, so a shape change fails
+`TestTenkaiProfileIsCurrent` until `contractVersions` in
+`internal/compat/tenkai_test.go` names the new version. A `VERSION`
+bump fails the same test until the product version, the install
+version, and the pin move with it
+(`go test ./internal/compat -run TestTenkaiProfileIsCurrent -update`).
+
 Record the printed `commit` and `schema` with the candidate you tested.
 The C3 independent-review brief freezes one candidate in
 [independent-review.md](independent-review.md).

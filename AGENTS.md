@@ -322,3 +322,5 @@ Rows beyond [Build, Test, and Development Commands](#build-test-and-development-
 - security, backup, rollback, and operator actions;
 - `rusui` / `rusui-runner` binaries and runtime images;
 - GitHub Release notes come from the matching CHANGELOG section.
+- `deploy/tenkai.toml` product version, install version, and profile v2
+  block match `VERSION` (`TestTenkaiProfileIsCurrent`).
