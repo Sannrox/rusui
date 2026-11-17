@@ -228,7 +228,7 @@ func TestFollowReadStreamsHistoryThenLiveEventsAndOutcome(t *testing.T) {
 	if st := stateOf(t, s.expect("state")); st.State != followWaiting {
 		t.Fatalf("waiting %+v", st)
 	}
-	if err := store.PutApprovalDecision(e.Store, "approve-1", "allow"); err != nil {
+	if err := store.PutApprovalDecision(e.Store, "approve-1", "allow", store.Attribution{}); err != nil {
 		t.Fatal(err)
 	}
 	if st := stateOf(t, s.expect("state")); st.State != followRunning {
@@ -499,7 +499,7 @@ func TestFollowReadTurnRecordWaiting(t *testing.T) {
 	if got := turnOf(t, ev); got != want {
 		t.Fatalf("turn record %+v, want %+v", got, want)
 	}
-	if err := store.PutApprovalDecision(e.Store, "approve-1", "allow"); err != nil {
+	if err := store.PutApprovalDecision(e.Store, "approve-1", "allow", store.Attribution{}); err != nil {
 		t.Fatal(err)
 	}
 	if ev := s.nextNonComment(); ev.event != "state" || stateOf(t, ev).State != followRunning {

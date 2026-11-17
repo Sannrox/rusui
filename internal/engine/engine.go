@@ -1881,7 +1881,10 @@ func (e *Engine) SetPause(project string, on bool) error {
 	})
 }
 
-func (e *Engine) OperatorRetry(repo string, item int, actor string) error {
+// OperatorRetry requeues a failed review job and appends a retry_audit row
+// naming who asked: by.Actor is required, by.Delegate is recorded when an
+// issuer-vouched subject retried through a delegating service.
+func (e *Engine) OperatorRetry(repo string, item int, by store.Attribution) error {
 	return e.Store.Tx(func(tx *sql.Tx) error {
 		j, err := store.GetJobTx(tx, repo, item, "review")
 		if err != nil {
@@ -1893,8 +1896,8 @@ func (e *Engine) OperatorRetry(repo string, item int, actor string) error {
 		if j.State != "failed" {
 			return fmt.Errorf("not failed")
 		}
-		_, err = tx.Exec(`INSERT INTO retry_audit (job_id, actor, ts, pending_revision, previous_retry_count) VALUES (?,?,?,?,?)`,
-			j.ID, actor, e.now().Format(time.RFC3339Nano), j.PendingRevision, j.RetryCount)
+		_, err = tx.Exec(`INSERT INTO retry_audit (job_id, actor, ts, pending_revision, previous_retry_count, delegated_by) VALUES (?,?,?,?,?,?)`,
+			j.ID, by.Actor, e.now().Format(time.RFC3339Nano), j.PendingRevision, j.RetryCount, sql.NullString{String: by.Delegate, Valid: by.Delegate != ""})
 		if err != nil {
 			return err
 		}
@@ -1953,7 +1956,7 @@ func (e *Engine) RetryAll(repo, actor string) (int, error) {
 		items = append(items, n)
 	}
 	for _, n := range items {
-		if err := e.OperatorRetry(repo, n, actor); err != nil {
+		if err := e.OperatorRetry(repo, n, store.Attribution{Actor: actor}); err != nil {
 			return 0, err
 		}
 	}

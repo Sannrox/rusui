@@ -7,6 +7,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"math/big"
 	"net/http"
@@ -21,6 +22,9 @@ import (
 type Config struct {
 	Metadata
 	Subject string
+	// Now is the plane clock for expiry and key-age checks. Nil means
+	// time.Now; tests set a fake clock.
+	Now func() time.Time
 }
 
 func ConfigFromEnv() (Config, error) {
@@ -43,6 +47,13 @@ type signingKey struct {
 	key any
 }
 
+// Vouched-subject bounds (ADR 0088 D7). Fixed values, not settings.
+const (
+	VouchedMaxLifetime = time.Hour
+	VouchedMaxKeyAge   = time.Hour
+	VouchedIssuedSkew  = time.Minute
+)
+
 // Verifier checks only cached keys on the request path. Refreshes replace keys atomically.
 type Verifier struct {
 	config  Config
@@ -50,7 +61,31 @@ type Verifier struct {
 	jwks    string
 	mu      sync.RWMutex
 	keys    map[string]signingKey
+	fetched time.Time // last successful key fetch
 	refresh chan struct{}
+	now     func() time.Time
+}
+
+// Identity is the subject of a verified access token.
+type Identity struct {
+	Subject string
+	// Delegate is the sub of the token's act claim: the service acting for
+	// Subject. It is recorded, never used for access (ADR 0088 D2).
+	Delegate string
+	// Vouched is true for any subject other than the configured operator
+	// subject. Such a token already passed the ADR 0088 D7 bounds; the
+	// caller still decides whether the subject is mapped.
+	Vouched bool
+}
+
+// maxDelegate bounds the recorded act sub; a longer one refuses the token.
+const maxDelegate = 256
+
+type accessClaims struct {
+	jwt.RegisteredClaims
+	// Act stays raw so a non-object act never fails the parse: only an
+	// object's sub is read, and only for vouched subjects.
+	Act json.RawMessage `json:"act,omitempty"`
 }
 
 func NewVerifier(ctx context.Context, c Config) (*Verifier, error) {
@@ -62,7 +97,10 @@ func NewVerifier(ctx context.Context, c Config) (*Verifier, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := &Verifier{config: c, client: client, jwks: d.JWKSURI, refresh: make(chan struct{}, 1)}
+	v := &Verifier{config: c, client: client, jwks: d.JWKSURI, refresh: make(chan struct{}, 1), now: c.Now}
+	if v.now == nil {
+		v.now = time.Now
+	}
 	if err = v.loadKeys(ctx); err != nil {
 		return nil, err
 	}
@@ -72,11 +110,16 @@ func NewVerifier(ctx context.Context, c Config) (*Verifier, error) {
 
 func (v *Verifier) Metadata() Metadata { return v.config.Metadata }
 
-func (v *Verifier) Valid(raw string) bool {
+// Verify checks signature, algorithm, issuer, audience and expiry against
+// cached keys. The configured operator subject keeps the ADR 0074 rules.
+// Any other subject must also carry iat and exp no more than an hour apart,
+// iat at most a minute ahead, and keys fetched within the last hour.
+func (v *Verifier) Verify(raw string) (Identity, bool) {
 	if len(raw) > 32<<10 {
-		return false
+		return Identity{}, false
 	}
-	_, err := jwt.ParseWithClaims(raw, &jwt.RegisteredClaims{}, func(token *jwt.Token) (any, error) {
+	var c accessClaims
+	_, err := jwt.ParseWithClaims(raw, &c, func(token *jwt.Token) (any, error) {
 		kid, _ := token.Header["kid"].(string)
 		v.mu.RLock()
 		k, ok := v.keys[kid]
@@ -92,8 +135,39 @@ func (v *Verifier) Valid(raw string) bool {
 			return nil, errors.New("signing algorithm mismatch")
 		}
 		return k.key, nil
-	}, jwt.WithValidMethods([]string{"RS256", "ES256"}), jwt.WithIssuer(v.config.Issuer), jwt.WithAudience(v.config.Audience), jwt.WithSubject(v.config.Subject), jwt.WithExpirationRequired(), jwt.WithIssuedAt())
-	return err == nil
+	}, jwt.WithValidMethods([]string{"RS256", "ES256"}), jwt.WithIssuer(v.config.Issuer), jwt.WithAudience(v.config.Audience), jwt.WithExpirationRequired(), jwt.WithTimeFunc(v.now))
+	if err != nil || c.Subject == "" {
+		return Identity{}, false
+	}
+	now := v.now()
+	id := Identity{Subject: c.Subject, Vouched: c.Subject != v.config.Subject}
+	if !id.Vouched {
+		// ADR 0074: an iat, when present, may not be in the future.
+		return id, c.IssuedAt == nil || !c.IssuedAt.After(now)
+	}
+	if c.IssuedAt == nil {
+		return Identity{}, false
+	}
+	iat, exp := c.IssuedAt.Time, c.ExpiresAt.Time
+	if exp.Sub(iat) > VouchedMaxLifetime || iat.After(now.Add(VouchedIssuedSkew)) {
+		return Identity{}, false
+	}
+	v.mu.RLock()
+	fetched := v.fetched
+	v.mu.RUnlock()
+	if now.Sub(fetched) > VouchedMaxKeyAge {
+		return Identity{}, false
+	}
+	if len(c.Act) > 0 {
+		var act struct {
+			Sub string `json:"sub"`
+		}
+		if json.Unmarshal(c.Act, &act) != nil || len(act.Sub) > maxDelegate {
+			return Identity{}, false
+		}
+		id.Delegate = act.Sub
+	}
+	return id, true
 }
 
 func (v *Verifier) refreshKeys(ctx context.Context) {
@@ -198,6 +272,7 @@ func (v *Verifier) loadKeys(ctx context.Context) error {
 	}
 	v.mu.Lock()
 	v.keys = keys
+	v.fetched = v.now()
 	v.mu.Unlock()
 	return nil
 }

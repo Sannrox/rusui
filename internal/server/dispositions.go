@@ -45,6 +45,7 @@ func (s *Server) recordDisposition(w http.ResponseWriter, r *http.Request) {
 	}
 	d, err := store.RecordDisposition(s.Eng.Store, store.Disposition{
 		ReviewRevisionID: id, Value: req.Disposition, WrongFinding: req.WrongFinding, Note: req.Note,
+		By: attribution(s.identify(r)),
 	})
 	switch {
 	case errors.Is(err, store.ErrUnknownResult):

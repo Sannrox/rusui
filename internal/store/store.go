@@ -1282,9 +1282,20 @@ func GetApprovalDecision(s *Store, actionID string) (string, bool, error) {
 	return d, true, nil
 }
 
-func PutApprovalDecision(s *Store, actionID, decision string) error {
-	_, err := s.DB.Exec(`INSERT INTO approval_decisions(action_id, decision, decided_at) VALUES(?,?,?)`,
-		actionID, decision, time.Now().UTC().Format(time.RFC3339Nano))
+// Attribution names who caused a decision row: the ADR 0078 actor of an
+// issuer-vouched subject and the service that delegated for it (ADR 0088
+// D3). It is empty for credentials that stay unattributed (ADR 0059); the
+// row then stores NULL, like rows written before attribution existed.
+type Attribution struct {
+	Actor    string `json:"decided_by,omitempty"`
+	Delegate string `json:"delegated_by,omitempty"`
+}
+
+func nullable(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }
+
+func PutApprovalDecision(s *Store, actionID, decision string, by Attribution) error {
+	_, err := s.DB.Exec(`INSERT INTO approval_decisions(action_id, decision, decided_at, decided_by, delegated_by) VALUES(?,?,?,?,?)`,
+		actionID, decision, time.Now().UTC().Format(time.RFC3339Nano), nullable(by.Actor), nullable(by.Delegate))
 	return err
 }
 

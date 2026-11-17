@@ -62,7 +62,7 @@ func (p *Provider) Claims() jwt.RegisteredClaims {
 	return jwt.RegisteredClaims{Issuer: p.Server.URL, Subject: "operator", Audience: jwt.ClaimStrings{"rusui"}, ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)), IssuedAt: jwt.NewNumericDate(time.Now().Add(-time.Minute))}
 }
 
-func (p *Provider) Token(t *testing.T, claims jwt.RegisteredClaims) string {
+func (p *Provider) Token(t *testing.T, claims jwt.Claims) string {
 	t.Helper()
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = p.Kid.Load().(string)

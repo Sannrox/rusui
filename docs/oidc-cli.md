@@ -40,6 +40,39 @@ verification performs no network I/O. Refresh failures retain the last
 usable keys; unexpired signed tokens may still authenticate during an
 issuer outage. Expired credentials cannot.
 
+## Vouch for more subjects
+
+A service that fronts rusui for its own users can pass each user's access
+token instead of one shared operator credential
+([ADR 0088](decisions/0088-issuer-vouched-subjects.md)). Map each subject to
+a tenant and actor:
+
+```sh
+RUSUI_OIDC_SUBJECTS='{"8f1c...":{"tenant":"acme","actor":"alice"}}'
+```
+
+The value may also be a path to a file with the same JSON. Tenant and
+actor come only from this map, never from a token claim. A mapped subject
+sees its tenant's projects and sessions, and user-mode sessions only when
+it is their actor. Its approval decisions, retries, and dispositions record
+the actor, plus the token's `act` claim as the delegating service. The
+`sub` and the token are never stored or logged.
+
+Vouched-subject tokens are stricter than the single operator's:
+
+- `iat` and `exp` are required and at most one hour apart;
+- `iat` may be at most one minute ahead of the plane clock;
+- once the last successful key fetch is more than one hour old, every
+  vouched subject is refused until the issuer is reachable again. The
+  single operator subject and `RUSUI_OPERATOR_TOKEN` keep working.
+
+To revoke a person, remove the entry and restart the plane. Start fails
+when a mapped subject equals `RUSUI_OIDC_SUBJECT`, or when an entry shares
+its tenant and actor with another entry, the default operator, or a
+`RUSUI_TENANT_TOKENS` bearer. A subject mapped into tenant `default` sees
+and decides that tenant's space-mode sessions, as the operator does; give
+it its own tenant when that is too broad.
+
 Keep `RUSUI_OPERATOR_TOKEN` for console access and explicit break-glass
 API access. It remains separate from `RUSUI_WORKER_SECRET`.
 

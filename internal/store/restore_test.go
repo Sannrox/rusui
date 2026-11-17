@@ -51,7 +51,7 @@ func TestRestoreClearsStaleAuthority(t *testing.T) {
 	if err := PutTurnCredential(st, tid, 3, "deadbeef", now); err != nil {
 		t.Fatal(err)
 	}
-	if err := PutApprovalDecision(st, "old-allow", "allow"); err != nil {
+	if err := PutApprovalDecision(st, "old-allow", "allow", Attribution{}); err != nil {
 		t.Fatal(err)
 	}
 	localSessionID := insertLocalSession(t, st)
@@ -200,7 +200,7 @@ func TestRestorePreservesIdentitiesRetentionAndReceipts(t *testing.T) {
 	if _, err := st.DB.Exec(`INSERT INTO policy_revisions (hash, payload) VALUES ('pol-keep', ?)`, "version: 2\nprojects: {}\n"); err != nil {
 		t.Fatal(err)
 	}
-	if err := PutApprovalDecision(st, "act-keep", "allow"); err != nil {
+	if err := PutApprovalDecision(st, "act-keep", "allow", Attribution{}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := st.DB.Exec(`INSERT INTO daily_review_counts (repo, day, count) VALUES ('example/test-repo', '2026-01-02', 4)`); err != nil {
