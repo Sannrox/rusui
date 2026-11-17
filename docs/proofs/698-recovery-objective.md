@@ -1,6 +1,8 @@
 # #698 Recovery objective for a redundant plane
 
-- Status: desk research. The baseline drill has **not yet been measured**.
+- Status: desk research. The baseline restore drill has **not yet been
+  measured**. The redundant plane's takeover was measured in
+  [#700](700-plane-takeover.md).
 - Feeds: [#699](https://github.com/Sannrox/rusui/issues/699) (the redundant
   plane ADR).
 - Source baseline: `48347e0`.
