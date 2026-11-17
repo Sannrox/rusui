@@ -130,7 +130,8 @@ func runCodex(rw io.ReadWriteCloser, _ Instance, turn Turn, decide Decide) (Resu
 	method := "thread/start"
 	// Override account/workspace defaults. The native sandbox remains read-only;
 	// write or network escalation must ask the plane and cannot persist approvals.
-	params := map[string]any{"cwd": turn.Workspace, "approvalPolicy": "untrusted", "sandbox": "read-only"}
+	// Approvals go to this client, never to a model reviewer.
+	params := map[string]any{"cwd": turn.Workspace, "approvalPolicy": "untrusted", "approvalsReviewer": "user", "sandbox": "read-only"}
 	if turn.ModelBaseURL != "" {
 		base := strings.TrimRight(turn.ModelBaseURL, "/")
 		if !strings.HasSuffix(base, "/v1") {
@@ -176,7 +177,7 @@ func runCodex(rw io.ReadWriteCloser, _ Instance, turn Turn, decide Decide) (Resu
 			return Result{}, err
 		}
 	}
-	if err := writeJSON(rw, map[string]any{"id": 3, "method": "turn/start", "params": map[string]any{"threadId": opened.Thread.ID, "input": []map[string]string{{"type": "text", "text": turn.Prompt}}, "cwd": turn.Workspace, "approvalPolicy": "untrusted", "sandboxPolicy": map[string]any{"type": "readOnly"}}}); err != nil {
+	if err := writeJSON(rw, map[string]any{"id": 3, "method": "turn/start", "params": map[string]any{"threadId": opened.Thread.ID, "input": []map[string]string{{"type": "text", "text": turn.Prompt}}, "cwd": turn.Workspace, "approvalPolicy": "untrusted", "approvalsReviewer": "user", "sandboxPolicy": map[string]any{"type": "readOnly"}}}); err != nil {
 		return Result{}, err
 	}
 	return readProviderLoop(r, rw, opened.Thread.ID, decide, "codex", turn.Observe)
@@ -226,6 +227,9 @@ func answerCodexRequest(w io.Writer, msg map[string]any, decide Decide) (Event, 
 		err := writeJSON(w, map[string]any{"id": msg["id"], "result": map[string]any{"permissions": map[string]any{}, "scope": "turn"}})
 		return Event{Kind: "permission", OptionID: "deny", Body: "deny"}, err
 	}
+	if method == "mcpServer/elicitation/request" {
+		return answerCodexElicitation(w, msg["id"], params, decide)
+	}
 	if method != "item/commandExecution/requestApproval" && method != "item/fileChange/requestApproval" {
 		return Event{}, fmt.Errorf("provider: unsupported codex request %q", method)
 	}
@@ -244,6 +248,33 @@ func answerCodexRequest(w io.Writer, msg map[string]any, decide Decide) (Event, 
 	}
 	err := writeJSON(w, map[string]any{"id": msg["id"], "result": map[string]string{"decision": decision}})
 	return Event{Kind: "permission", OptionID: decision, Body: decision}, err
+}
+
+// answerCodexElicitation answers a tool-server elicitation. Codex sends one
+// before each call to a server in approval mode prompt, carrying the tool
+// name and the exact arguments it will run. The call is decided as tool
+// mcp__<server>__<tool>, the name Claude uses, so one rule covers both
+// guests. An accept carries no persist marker, so it covers this call only.
+// Any other elicitation, or one whose tool or arguments cannot be read, is
+// declined without failing the turn.
+func answerCodexElicitation(w io.Writer, id any, params map[string]any, decide Decide) (Event, error) {
+	action := "decline"
+	meta, _ := params["_meta"].(map[string]any)
+	server, _ := params["serverName"].(string)
+	tool, _ := meta["tool_name"].(string)
+	args, argsOK := meta["tool_params"].(map[string]any)
+	if _, present := meta["tool_params"]; !present {
+		args, argsOK = map[string]any{}, true // a call without arguments
+	}
+	if meta["codex_approval_kind"] == "mcp_tool_call" && server != "" && tool != "" && argsOK && decide != nil {
+		name := "mcp__" + server + "__" + tool
+		raw, _ := json.Marshal(map[string]any{"title": name, "toolName": name, "kind": "other", "rawInput": args})
+		if option, allow := decide([]Option{{ID: "accept"}, {ID: "decline"}}, raw); allow && option == "accept" {
+			action = "accept"
+		}
+	}
+	err := writeJSON(w, map[string]any{"id": id, "result": map[string]string{"action": action}})
+	return Event{Kind: "permission", OptionID: action, Body: action}, err
 }
 
 func readProviderLoop(r *bufio.Reader, w io.Writer, cursor string, decide Decide, kind string, observe func(Event)) (Result, error) {

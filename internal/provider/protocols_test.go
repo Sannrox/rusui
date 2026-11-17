@@ -92,3 +92,56 @@ func TestCodexNetworkApprovalDoesNotInheritExecuteGrant(t *testing.T) {
 		t.Fatal("network approval inherited execution grant")
 	}
 }
+
+// A tool-server call is decided as mcp__<server>__<tool> on the exact
+// arguments Codex will run; anything unreadable or unrelated is declined
+// without asking the fence and without failing the turn (#750).
+func TestCodexToolElicitationGoesThroughTheFence(t *testing.T) {
+	toolCall := func(args any) map[string]any {
+		meta := map[string]any{"codex_approval_kind": "mcp_tool_call", "tool_name": "write", "tool_params": args}
+		return map[string]any{"serverName": "docs", "threadId": "t", "mode": "form", "message": "allow?", "_meta": meta, "requestedSchema": map[string]any{}}
+	}
+	cases := []struct {
+		name       string
+		params     map[string]any
+		allow      bool
+		wantAsked  bool
+		wantAction string
+	}{
+		{"allowed call", toolCall(map[string]any{"path": "a"}), true, true, "accept"},
+		{"denied call", toolCall(map[string]any{"path": "a"}), false, true, "decline"},
+		{"unreadable arguments", toolCall("path=a"), true, false, "decline"},
+		{"server form", map[string]any{"serverName": "docs", "threadId": "t", "mode": "form", "message": "your name?", "requestedSchema": map[string]any{}}, true, false, "decline"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var asked struct {
+				ToolName string         `json:"toolName"`
+				RawInput map[string]any `json:"rawInput"`
+			}
+			called := false
+			var out strings.Builder
+			ev, err := answerCodexRequest(&out, map[string]any{"id": 9, "method": "mcpServer/elicitation/request", "params": tc.params}, func(options []Option, raw json.RawMessage) (string, bool) {
+				called = true
+				_ = json.Unmarshal(raw, &asked)
+				return options[0].ID, tc.allow
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var reply struct {
+				Result map[string]any `json:"result"`
+			}
+			if err := json.Unmarshal([]byte(out.String()), &reply); err != nil {
+				t.Fatal(err)
+			}
+			// Only an action: no persist marker, so an accept covers this call alone.
+			if called != tc.wantAsked || ev.OptionID != tc.wantAction || len(reply.Result) != 1 || reply.Result["action"] != tc.wantAction {
+				t.Fatalf("asked %v, event %q, reply %v", called, ev.OptionID, reply.Result)
+			}
+			if tc.wantAsked && (asked.ToolName != "mcp__docs__write" || asked.RawInput["path"] != "a" || len(asked.RawInput) != 1) {
+				t.Fatalf("decided %+v", asked)
+			}
+		})
+	}
+}

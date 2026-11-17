@@ -3,6 +3,7 @@ package runner
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/guest"
@@ -56,27 +57,40 @@ func acpMCPServers(a *Assignment, servers []MCPServer) []any {
 }
 
 // mcpArgv adds the servers to a native guest's command line. The credential
-// is referenced by environment variable name only. Only Claude gets them:
-// its can_use_tool request puts every tool-server call through the
-// permission fence. The pinned Codex app-server protocol has no per-call
-// approval for tool-server calls, so Codex is never sent servers (#684).
+// is referenced by environment variable name only. Every tool-server call
+// must reach the permission fence: Claude asks through can_use_tool, and
+// Codex servers use approval mode prompt, so Codex sends a tool-call
+// elicitation before each call (#750).
 func mcpArgv(a *Assignment, argv []string, servers []MCPServer) []string {
-	if len(servers) == 0 || a.Guest != guest.KindClaude {
+	if len(servers) == 0 {
 		return argv
 	}
-	type entry struct {
-		Type    string            `json:"type"`
-		URL     string            `json:"url"`
-		Headers map[string]string `json:"headers,omitempty"`
-	}
-	cfg := map[string]map[string]entry{"mcpServers": {}}
-	for _, s := range servers {
-		e := entry{Type: "http", URL: s.URL}
-		if a.authenticated(s) {
-			e.Headers = map[string]string{"Authorization": "Bearer ${" + turnTokenEnv + "}"}
+	switch a.Guest {
+	case guest.KindClaude:
+		type entry struct {
+			Type    string            `json:"type"`
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers,omitempty"`
 		}
-		cfg["mcpServers"][s.Name] = e
+		cfg := map[string]map[string]entry{"mcpServers": {}}
+		for _, s := range servers {
+			e := entry{Type: "http", URL: s.URL}
+			if a.authenticated(s) {
+				e.Headers = map[string]string{"Authorization": "Bearer ${" + turnTokenEnv + "}"}
+			}
+			cfg["mcpServers"][s.Name] = e
+		}
+		raw, _ := json.Marshal(cfg)
+		argv = append(argv, "--mcp-config", string(raw))
+	case guest.KindCodex:
+		for _, s := range servers {
+			key := "mcp_servers." + s.Name
+			argv = append(argv, "-c", key+".url="+strconv.Quote(s.URL),
+				"-c", key+`.default_tools_approval_mode="prompt"`)
+			if a.authenticated(s) {
+				argv = append(argv, "-c", key+".bearer_token_env_var="+strconv.Quote(turnTokenEnv))
+			}
+		}
 	}
-	raw, _ := json.Marshal(cfg)
-	return append(argv, "--mcp-config", string(raw))
+	return argv
 }

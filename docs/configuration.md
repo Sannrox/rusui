@@ -479,13 +479,14 @@ guest connects to: `name` (`^[a-z0-9][a-z0-9_-]{0,31}$`, not `gateway`)
 and an `http` or `https` `url` without userinfo. No plane credential is
 sent to them. Every call to a listed server is a `tool` permission
 request: a rule decides it or it waits for an operator approval, and an
-allow covers that call's arguments only. The native Codex guest cannot ask
-per call, so it is never sent tool servers.
+allow covers that call's arguments only. The native Codex guest gets every
+server in approval mode `prompt`, so Codex asks before each call; the plane
+decides it as tool `mcp__<server>__<tool>`, the name Claude uses. Other
+server elicitations are declined.
 
 Defaults `mcp_gateway` turns on gateway mode (off when omitted). Every
-session, except on the native Codex guest, then sees one MCP server,
-`gateway`, at that URL, and the guest authenticates with its short-lived
-turn credential. The native Claude guest references it as
+session then sees one MCP server, `gateway`, at that URL, and the guest authenticates with its short-lived
+turn credential. The native Claude and Codex guests reference it as
 `RUSUI_TURN_TOKEN` rather than receiving the value in argv or a file.
 Third-party tool credentials stay in the gateway. A project that still
 names `mcp_servers` is a policy load error, and the runner refuses any
