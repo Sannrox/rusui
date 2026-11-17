@@ -15,6 +15,7 @@ import (
 )
 
 func TestFlightGetAndReplay(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "summarize obj", "")
 	if err != nil {

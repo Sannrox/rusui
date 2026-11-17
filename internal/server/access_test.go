@@ -6,6 +6,7 @@ import (
 )
 
 func TestClassifyBearerSeparatesOperatorAndWorker(t *testing.T) {
+	t.Parallel()
 	if ClassifyBearer("op", "op", "wsec") != CredOperator {
 		t.Fatal("operator")
 	}
@@ -24,6 +25,7 @@ func TestClassifyBearerSeparatesOperatorAndWorker(t *testing.T) {
 }
 
 func TestOperatorBrowserIgnoresMemberHeader(t *testing.T) {
+	t.Parallel()
 	s := &Server{OperatorTok: "op-tok", WorkerSec: "wsec"}
 	req, _ := http.NewRequest("GET", "/sessions", nil)
 	req.Header.Set("X-Member-Id", "alice")
@@ -37,6 +39,7 @@ func TestOperatorBrowserIgnoresMemberHeader(t *testing.T) {
 }
 
 func TestOperatorBrowserRejectsWorkerSecret(t *testing.T) {
+	t.Parallel()
 	s := &Server{OperatorTok: "op-tok", WorkerSec: "wsec"}
 	req, _ := http.NewRequest("GET", "/sessions", nil)
 	req.Header.Set("Authorization", "Bearer wsec")
@@ -50,6 +53,7 @@ func TestOperatorBrowserRejectsWorkerSecret(t *testing.T) {
 }
 
 func TestPreviewOriginIsolated(t *testing.T) {
+	t.Parallel()
 	if PreviewOriginIsolated("https://rusui.example:8080", "https://rusui.example:8080/preview/1") {
 		t.Fatal("path-only preview must fail closed")
 	}

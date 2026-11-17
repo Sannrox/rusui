@@ -13,6 +13,7 @@ import (
 )
 
 func TestApplySessionDraftRequiresOperatorAndProposal(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "ordinary", "")
 	if err != nil {
@@ -28,6 +29,7 @@ func TestApplySessionDraftRequiresOperatorAndProposal(t *testing.T) {
 }
 
 func TestSessionGetReportsDraftPermissionDenied(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	e.Core = &core.Fake{Denied: core.DeniedError{Message: "namespace write required"}}
 	sid, err := e.StartRun("test", "describe the sales domain", "")

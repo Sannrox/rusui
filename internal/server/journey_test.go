@@ -17,6 +17,7 @@ import (
 )
 
 func TestU8OperatorJourney(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 
 	res, err := http.Get(hs.URL + "/healthz")
@@ -198,6 +199,7 @@ func TestU8OperatorJourney(t *testing.T) {
 }
 
 func TestU8HealthzIsNotReadyz(t *testing.T) {
+	t.Parallel()
 	_, hs, _ := consoleEnv(t)
 	res, err := http.Get(hs.URL + "/healthz")
 	if err != nil {

@@ -13,8 +13,10 @@ import (
 )
 
 func TestGuestAttachmentCapabilityAdmission(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"shikigami", "grok", "claude", "codex"} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			for _, tc := range []struct {
 				name     string
 				receipts []string
@@ -33,6 +35,7 @@ func TestGuestAttachmentCapabilityAdmission(t *testing.T) {
 					continue
 				}
 				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
 					s, hs, e := consoleEnv(t)
 					s.Guest = name
 					if name == "claude" || name == "codex" {

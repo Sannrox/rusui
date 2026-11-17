@@ -30,6 +30,7 @@ const operatorAPIGolden = "testdata/operator-api.golden.json"
 // events, and follow-up must match the golden file, so a renamed, removed,
 // or retyped response field fails.
 func TestOperatorAPIResponseShapes(t *testing.T) {
+	// Serial: the follow stream waits on wall-clock poll intervals (sseStream.next).
 	_, hs, e := consoleEnv(t)
 	got := map[string][]string{}
 
@@ -111,6 +112,7 @@ func TestOperatorAPIResponseShapes(t *testing.T) {
 // check: a create without the required `kind` and a follow-up that is both
 // a steer and queued are refused with 400 instead of guessed.
 func TestOperatorAPIRefusesUnsupportedRequests(t *testing.T) {
+	t.Parallel()
 	_, hs, _ := consoleEnv(t)
 	operatorCall(t, hs, http.MethodPost, "/projects/test/sessions", `{"prompt":"no kind"}`, http.StatusBadRequest)
 	sid := createRunSession(t, hs, "p")

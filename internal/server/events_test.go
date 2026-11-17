@@ -18,11 +18,7 @@ import (
 
 func eventEnv(t *testing.T) (*engine.Engine, *clock.Fake, *httptest.Server) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
 	p, err := policy.Parse([]byte(slackPol))
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +47,7 @@ func postEvent(t *testing.T, url string, body []byte) *http.Response {
 }
 
 func TestGenericEventStoreThen202(t *testing.T) {
+	t.Parallel()
 	e, clk, hs := eventEnv(t)
 	body := []byte(`{"delivery_id":"evt-1","source":"cron","repo":"example/test-repo","item":7,"item_kind":"issue"}`)
 	res := postEvent(t, hs.URL+"/hooks/events", body)
@@ -100,6 +97,7 @@ func TestGenericEventStoreThen202(t *testing.T) {
 }
 
 func TestGenericEventRejectsUnsigned(t *testing.T) {
+	t.Parallel()
 	_, _, hs := eventEnv(t)
 	req, err := http.NewRequest("POST", hs.URL+"/hooks/events", strings.NewReader(`{"delivery_id":"x"}`))
 	if err != nil {
@@ -116,6 +114,7 @@ func TestGenericEventRejectsUnsigned(t *testing.T) {
 }
 
 func TestEmptyWebhookSecretRejectsGenericEvent(t *testing.T) {
+	t.Parallel()
 	hs := emptySecretServer(t)
 	req, err := http.NewRequest("POST", hs.URL+"/hooks/events", strings.NewReader(`{}`))
 	if err != nil {

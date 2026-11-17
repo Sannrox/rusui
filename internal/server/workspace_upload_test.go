@@ -17,6 +17,7 @@ import (
 )
 
 func TestWorkspaceUploadHappyPathAndEscape(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "upload", "")
 	if err != nil {
@@ -54,6 +55,7 @@ func TestWorkspaceUploadHappyPathAndEscape(t *testing.T) {
 }
 
 func TestWorkspaceUploadSleepingEnvironment(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "sleep-upload", "")
 	if err != nil {
@@ -71,6 +73,7 @@ func TestWorkspaceUploadSleepingEnvironment(t *testing.T) {
 }
 
 func TestWorkspaceUploadOversized(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "big-upload", "")
 	if err != nil {

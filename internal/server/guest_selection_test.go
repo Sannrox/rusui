@@ -14,6 +14,7 @@ import (
 )
 
 func TestGuestRequestRefusedBeforeEnvironmentStart(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	runtime := &env.FakeRuntime{}
 	e.Container = env.Container{RT: runtime, Image: "fixture:default"}

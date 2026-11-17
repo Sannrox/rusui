@@ -26,11 +26,7 @@ import (
 
 func consoleEnv(t *testing.T) (*Server, *httptest.Server, *engine.Engine) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
 	p, err := policy.Parse([]byte(slackPol))
 	if err != nil {
 		t.Fatal(err)
@@ -65,11 +61,7 @@ func operatorClient(t *testing.T, hs *httptest.Server) *http.Client {
 }
 
 func TestConsoleDisabledWithoutOperatorToken(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
 	p, err := policy.Parse([]byte(slackPol))
 	if err != nil {
 		t.Fatal(err)

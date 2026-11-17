@@ -18,6 +18,7 @@ import (
 )
 
 func TestPreviewGrantIsolatedOrigin(t *testing.T) {
+	t.Parallel()
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "app-ok")
 	}))
@@ -125,6 +126,7 @@ func TestPreviewGrantIsolatedOrigin(t *testing.T) {
 }
 
 func TestPreviewProxyStripsGrantFromGuest(t *testing.T) {
+	t.Parallel()
 	var gotQuery, gotAuth, gotReferer string
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotQuery = r.URL.RawQuery
@@ -231,6 +233,7 @@ func TestPreviewProxyStripsGrantFromGuest(t *testing.T) {
 }
 
 func TestPreviewGrantUsesContainerGuestAddr(t *testing.T) {
+	t.Parallel()
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "guest-ok")
 	}))
@@ -286,6 +289,7 @@ func TestPreviewGrantUsesContainerGuestAddr(t *testing.T) {
 }
 
 func TestPreviewGrantAllowsContainerPortMatchingPlaneNumber(t *testing.T) {
+	t.Parallel()
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "guest-8080")
 	}))
@@ -340,6 +344,7 @@ func TestPreviewGrantAllowsContainerPortMatchingPlaneNumber(t *testing.T) {
 }
 
 func TestPreviewGrantDeniesUnspecifiedPlaneAddr(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	s.Addr = "0.0.0.0:8080"
 	prev := httptest.NewServer(s.PreviewHandler())
@@ -383,6 +388,7 @@ func TestPreviewGrantDeniesUnspecifiedPlaneAddr(t *testing.T) {
 }
 
 func TestPreviewGrantDeniesPlaneListenPort(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	s.Addr = "127.0.0.1:8080"
 	prev := httptest.NewServer(s.PreviewHandler())
@@ -426,6 +432,7 @@ func TestPreviewGrantDeniesPlaneListenPort(t *testing.T) {
 }
 
 func TestPreviewListenerServesCommentBesidePlane(t *testing.T) {
+	t.Parallel()
 	s, _, _ := consoleEnv(t)
 	listen, h, err := s.PreviewListener()
 	if err != nil || listen != "" || h != nil {
@@ -494,6 +501,7 @@ func TestPreviewListenerServesCommentBesidePlane(t *testing.T) {
 }
 
 func TestPlaneHandlerDoesNotServePreviewComment(t *testing.T) {
+	t.Parallel()
 	s, _, _ := consoleEnv(t)
 	req := httptest.NewRequest(http.MethodPost, "/comment?g=deadbeef", strings.NewReader(url.Values{"text": {"x"}}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -511,6 +519,7 @@ func TestPlaneHandlerDoesNotServePreviewComment(t *testing.T) {
 }
 
 func TestPreviewCommentPostsFollowUp(t *testing.T) {
+	t.Parallel()
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "app-ok")
 	}))

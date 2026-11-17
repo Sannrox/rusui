@@ -20,6 +20,7 @@ import (
 )
 
 func TestModelProxySwapsTurnToken(t *testing.T) {
+	t.Parallel()
 	var sawAuth, sawPath string
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sawAuth = r.Header.Get("Authorization")
@@ -61,6 +62,7 @@ func TestModelProxySwapsTurnToken(t *testing.T) {
 }
 
 func TestModelProxyRejectsBadTokenAndMissingKey(t *testing.T) {
+	t.Parallel()
 	e, _, tok := leasedTurn(t)
 	origin, _ := url.Parse("http://127.0.0.1:1")
 	hs := httptest.NewServer((&Server{Eng: e, ModelKey: "k", ModelOrigin: origin}).Handler())
@@ -90,6 +92,7 @@ func TestModelProxyRejectsBadTokenAndMissingKey(t *testing.T) {
 }
 
 func TestModelProxyRejectsRunnerTurnToken(t *testing.T) {
+	t.Parallel()
 	e, clk, _ := eventEnv(t)
 	now := clk.T.UTC().Format(time.RFC3339Nano)
 	res, err := e.Store.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'review','example/test-repo',9,'issue','open',?)`, now)
@@ -124,6 +127,7 @@ func TestModelProxyRejectsRunnerTurnToken(t *testing.T) {
 }
 
 func TestModelProxyRejectsPrepareExpiredAndRequiresTLS(t *testing.T) {
+	t.Parallel()
 	e, clk, tok := leasedTurn(t)
 	origin, _ := url.Parse("http://127.0.0.1:1")
 	hs := httptest.NewServer((&Server{Eng: e, ModelKey: "k", ModelOrigin: origin, GuestHTTPSOnly: true}).Handler())
@@ -167,6 +171,7 @@ func TestModelProxyRejectsPrepareExpiredAndRequiresTLS(t *testing.T) {
 }
 
 func TestModelProxyTLSIdentity(t *testing.T) {
+	t.Parallel()
 	var sawAuth bool
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sawAuth = r.Header.Get("Authorization") != ""
@@ -267,6 +272,7 @@ func upstreamSaw(t *testing.T, srv *Server, guestHeaders map[string]string) http
 }
 
 func TestModelProxyAnthropicSendsAPIKeyHeader(t *testing.T) {
+	t.Parallel()
 	saw := upstreamSaw(t, &Server{ModelProvider: ProviderAnthropic, ModelKey: "sk-ant-plane"},
 		map[string]string{"X-Api-Key": "$GRANT", "Anthropic-Version": "2023-06-01"})
 	if saw.Get("X-Api-Key") != "sk-ant-plane" || saw.Get("Authorization") != "" {
@@ -278,6 +284,7 @@ func TestModelProxyAnthropicSendsAPIKeyHeader(t *testing.T) {
 }
 
 func TestModelProxyKeylessOperatorUpstream(t *testing.T) {
+	t.Parallel()
 	// A CLI proxy on the plane host holds the operator's login itself.
 	saw := upstreamSaw(t, &Server{ModelProvider: ProviderAnthropic}, nil)
 	if saw.Get("X-Api-Key") != "" || saw.Get("Authorization") != "" {
@@ -286,6 +293,7 @@ func TestModelProxyKeylessOperatorUpstream(t *testing.T) {
 }
 
 func TestModelConfigFromEnv(t *testing.T) {
+	t.Parallel()
 	env := func(kv map[string]string) func(string) string { return func(k string) string { return kv[k] } }
 	c, err := ModelConfigFromEnv(env(map[string]string{"RUSUI_XAI_API_KEY": "x"}))
 	if err != nil || c.Provider != ProviderXAI || c.Key != "x" || c.Origin != nil {
@@ -332,6 +340,7 @@ func TestModelConfigFromEnv(t *testing.T) {
 }
 
 func TestModelUpstreamErrorsNeverEchoCredentials(t *testing.T) {
+	t.Parallel()
 	for _, raw := range []string{"ftp://op:s3cret-key@gateway", "http://op:s3cret-key@[bad", "op:s3cret-key@gateway"} {
 		_, err := ModelConfigFromEnv(func(k string) string {
 			if k == "RUSUI_MODEL_UPSTREAM" {
@@ -347,6 +356,7 @@ func TestModelUpstreamErrorsNeverEchoCredentials(t *testing.T) {
 
 // A failing upstream must not put the provider key or the guest grant in
 // the plane log or the guest-visible response.
+// Serial: it captures the package-global logger.
 func TestModelProxyFailureLeaksNoSecrets(t *testing.T) {
 	var logs strings.Builder
 	log.SetOutput(&logs)
@@ -377,6 +387,7 @@ func TestModelProxyFailureLeaksNoSecrets(t *testing.T) {
 }
 
 func TestPolicyDefaultSelectsModelProviderWithoutChangingLegacyOverride(t *testing.T) {
+	t.Parallel()
 	pol, err := policy.Parse([]byte(`version: 2
 projects:
   default:
@@ -402,6 +413,7 @@ projects:
 }
 
 func TestGenericPolicyGuestKeepsLegacyModelProvider(t *testing.T) {
+	t.Parallel()
 	pol := &policy.Effective{Projects: map[string]policy.Project{
 		"default": {Guests: &policy.ProjectGuests{Default: "second", Allowed: []string{"second"}}},
 	}}

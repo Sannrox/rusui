@@ -16,6 +16,7 @@ import (
 )
 
 func TestReadyzAndBoundedRunSession(t *testing.T) {
+	t.Parallel()
 	e, _, _ := eventEnv(t)
 	dir := t.TempDir()
 	pol := filepath.Join(dir, "policy.yaml")
@@ -136,6 +137,7 @@ func readyzStore(t *testing.T, base string) ops.Check {
 }
 
 func TestReadyzUnavailableWhenPlaneDown(t *testing.T) {
+	t.Parallel()
 	e, _, _ := eventEnv(t)
 	srv := &Server{
 		Eng: e, PolicyPath: filepath.Join(t.TempDir(), "missing.yaml"),

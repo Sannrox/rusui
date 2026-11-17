@@ -12,6 +12,7 @@ import (
 )
 
 func TestOperatorTokenReadsSession(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	_ = s
 	sid, err := e.StartRun("test", "editor", "")
@@ -35,6 +36,7 @@ func TestOperatorTokenReadsSession(t *testing.T) {
 }
 
 func TestEditorHTTPPlaneFollowUp(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "editor", "")
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 )
 
 func TestSessionEnvlogServesBoundedHookAndServiceCaptures(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	var (
 		mu      sync.Mutex

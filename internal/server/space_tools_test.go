@@ -12,6 +12,7 @@ import (
 )
 
 func TestSpaceSessionDeniesWriteToolUntilGranted(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "space-tools", "")
 	if err != nil {
@@ -84,6 +85,7 @@ func TestSpaceSessionDeniesWriteToolUntilGranted(t *testing.T) {
 }
 
 func TestUserModeRejectsToolGrantHTTP(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid, err := e.StartRunExec("test", "user-tools", "", "", "", "", store.ExecutionUser, "default", "default")
 	if err != nil {
@@ -96,6 +98,7 @@ func TestUserModeRejectsToolGrantHTTP(t *testing.T) {
 }
 
 func TestSpaceReadGateUsedForApprovals(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "space-approval", "")
 	if err != nil {
@@ -120,6 +123,7 @@ func TestSpaceReadGateUsedForApprovals(t *testing.T) {
 }
 
 func TestSpaceApprovalInvalidWithoutGrant(t *testing.T) {
+	t.Parallel()
 	e, _, _ := leasedTurn(t)
 	var turnID, sessID int64
 	if err := e.Store.DB.QueryRow(`SELECT id, session_id FROM turns WHERE state='leased'`).Scan(&turnID, &sessID); err != nil {

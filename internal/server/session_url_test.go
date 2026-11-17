@@ -8,6 +8,7 @@ import (
 )
 
 func TestSessionTrailerFollowsTheConfiguredURL(t *testing.T) {
+	t.Parallel()
 	sess := &store.Session{ID: 42, Kind: store.SessionKindRun}
 	// Unconfigured: the id.
 	if got := (&Server{NoCoauthorTrailer: true}).commitTrailers(sess); len(got) != 1 || got[0] != "Rusui-Session: 42" {
@@ -29,6 +30,7 @@ func TestSessionTrailerFollowsTheConfiguredURL(t *testing.T) {
 }
 
 func TestSessionURLTemplateRefusesAnythingButAnHTTPSPathWithOneSession(t *testing.T) {
+	t.Parallel()
 	if url, err := ParseSessionURL(""); url != nil || err != nil {
 		t.Fatalf("empty: %v %v", url, err)
 	}

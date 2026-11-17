@@ -11,6 +11,7 @@ import (
 )
 
 func TestProjectGuestsRequiresAuthAndHidesUnknownProjects(t *testing.T) {
+	t.Parallel()
 	_, hs, _ := consoleEnv(t)
 	req, err := http.NewRequest(http.MethodGet, hs.URL+"/projects/test/guests", nil)
 	if err != nil {
@@ -58,6 +59,7 @@ func TestProjectGuestsRequiresAuthAndHidesUnknownProjects(t *testing.T) {
 }
 
 func TestProjectGuestsReturnsDefaultAndPins(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	var config policy.File
 	if err := yaml.Unmarshal(e.PolicySnapshot().Raw, &config); err != nil {

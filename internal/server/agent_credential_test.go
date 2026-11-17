@@ -23,11 +23,7 @@ const agentToken = "github_pat_agent_test"
 
 func agentCredentialEnv(t *testing.T, implement bool, token string) (*httptest.Server, *engine.Engine) {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
 	pol := strings.Replace(slackPol, "implement: false", "implement: "+strconv.FormatBool(implement), 1)
 	p, err := policy.Parse([]byte(pol))
 	if err != nil {
@@ -84,6 +80,7 @@ func gitCredential(t *testing.T, guestEnv []string) string {
 }
 
 func TestImplementSessionNeverReceivesGitHubToken(t *testing.T) {
+	t.Parallel()
 	hs, e := agentCredentialEnv(t, true, agentToken)
 	a := claim(t, hs, e, true)
 	if a.GitHubToken != "" || a.Publication != "plane" {
@@ -111,6 +108,7 @@ func TestImplementSessionNeverReceivesGitHubToken(t *testing.T) {
 }
 
 func TestSessionsWithoutImplementKeepTheProxyGrant(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		implement bool
 		token     string
@@ -142,6 +140,7 @@ func TestSessionsWithoutImplementKeepTheProxyGrant(t *testing.T) {
 }
 
 func TestOnlyOpenImplementTasksReceiveTheAgentCredential(t *testing.T) {
+	t.Parallel()
 	_, e := agentCredentialEnv(t, true, agentToken)
 	s := &Server{Eng: e, AgentGitHubToken: agentToken}
 	task, err := e.StartTask("test", implementTask())
@@ -201,6 +200,7 @@ func (repoTokens) RepoToken(string) (string, error) { return "ghs_scoped", nil }
 // credential, even when the operator token is configured, and pushes
 // through the proxy grant; the assignment says the plane publishes.
 func TestPlanePublicationGivesImplementGuestsNoCredential(t *testing.T) {
+	t.Parallel()
 	_, e := agentCredentialEnv(t, true, agentToken)
 	hs := httptest.NewServer((&Server{Eng: e, WorkerSec: "wsec", AgentGitHubToken: agentToken, RepoTokens: repoTokens{}}).Handler())
 	t.Cleanup(hs.Close)
@@ -227,11 +227,8 @@ func TestPlanePublicationGivesImplementGuestsNoCredential(t *testing.T) {
 }
 
 func TestImplementPushBaseClaimNamesDefaultBranchAndKeepsReviewReadOnly(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	t.Parallel()
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
 	raw := strings.Replace(slackPol, "implement: false", "implement: true", 1)
 	raw = strings.Replace(raw, "test:\n", "test:\n    ship: push-base\n", 1)
 	p, err := policy.Parse([]byte(raw))

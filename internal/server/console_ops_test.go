@@ -14,6 +14,7 @@ import (
 )
 
 func TestConsoleOpsViewsAndApproval(t *testing.T) {
+	t.Parallel()
 	s, hs, e := consoleEnv(t)
 	sid, err := e.StartRun("test", "ops", "")
 	if err != nil {
@@ -107,6 +108,7 @@ func TestConsoleOpsViewsAndApproval(t *testing.T) {
 }
 
 func TestConsoleOpsRevokedWithoutCookie(t *testing.T) {
+	t.Parallel()
 	_, hs, _ := consoleEnv(t)
 	res, err := http.Get(hs.URL + "/console/health")
 	if err != nil {

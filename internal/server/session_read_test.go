@@ -21,6 +21,7 @@ import (
 )
 
 func TestSessionReadMatchesConsoleTranscriptAndDiff(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid := createRunSession(t, hs, "first prompt")
 	dir := t.TempDir()
@@ -69,6 +70,7 @@ func TestSessionReadMatchesConsoleTranscriptAndDiff(t *testing.T) {
 }
 
 func TestSessionReadExplicitErrors(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	missing := authedGet(t, hs, "/sessions/999999/read", "op-tok")
 	if missing.code != http.StatusNotFound || !strings.Contains(missing.body, "not found") {
@@ -102,6 +104,7 @@ func TestSessionReadExplicitErrors(t *testing.T) {
 }
 
 func TestSessionReadDoesNotFollowWorkspaceSymlink(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid := createRunSession(t, hs, "first prompt")
 	dir := t.TempDir()
@@ -210,6 +213,7 @@ func consoleGet(t *testing.T, hs *httptest.Server, path string) string {
 // runtime, and a sleeping environment states its condition without being
 // woken (#440).
 func TestSessionReadShowsContainerWorkspaceDiff(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	rt := &env.FakeRuntime{}
 	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}

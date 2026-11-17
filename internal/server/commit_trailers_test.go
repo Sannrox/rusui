@@ -79,6 +79,7 @@ func trailerServer(t *testing.T, s func(*Server)) (*httptest.Server, *Server) {
 }
 
 func TestAgentCommitsCarryAttributionTrailers(t *testing.T) {
+	t.Parallel()
 	hs, srv := trailerServer(t, func(*Server) {})
 	msg, amended, repoHookRan := agentCommit(t, hs, srv)
 	if !strings.Contains(msg, CoauthorTrailer) || !strings.Contains(msg, "Rusui-Session: ") {
@@ -93,6 +94,7 @@ func TestAgentCommitsCarryAttributionTrailers(t *testing.T) {
 }
 
 func TestTrailerSwitchesDropOnlyTheirTrailer(t *testing.T) {
+	t.Parallel()
 	hs, srv := trailerServer(t, func(s *Server) { s.NoCoauthorTrailer = true })
 	msg, _, _ := agentCommit(t, hs, srv)
 	if strings.Contains(msg, "Co-authored-by") || !strings.Contains(msg, "Rusui-Session: ") {
@@ -106,6 +108,7 @@ func TestTrailerSwitchesDropOnlyTheirTrailer(t *testing.T) {
 }
 
 func TestReviewSessionsGetNoTrailers(t *testing.T) {
+	t.Parallel()
 	s := &Server{}
 	if got := s.commitTrailers(&store.Session{ID: 7, Kind: store.SessionKindReview}); got != nil {
 		t.Fatalf("review trailers %q", got)
@@ -119,6 +122,7 @@ func TestReviewSessionsGetNoTrailers(t *testing.T) {
 // Agents export their own GIT_CONFIG_COUNT settings (for example a
 // safe.directory workaround); the runner's settings must survive (#221).
 func TestAgentGitConfigExportKeepsRunnerSettings(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}

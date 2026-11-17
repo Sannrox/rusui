@@ -12,16 +12,11 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/policy"
-	"github.com/sannrox/rusui/internal/store"
 )
 
 func emptySecretServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
 	p, err := policy.Parse([]byte(slackPol))
 	if err != nil {
 		t.Fatal(err)
@@ -36,6 +31,7 @@ func emptySecretServer(t *testing.T) *httptest.Server {
 }
 
 func TestEmptyWorkerSecretRejectsClaim(t *testing.T) {
+	t.Parallel()
 	hs := emptySecretServer(t)
 	req, err := http.NewRequest("POST", hs.URL+"/jobs/claim", strings.NewReader(`{"repo":"example/test-repo"}`))
 	if err != nil {
@@ -53,6 +49,7 @@ func TestEmptyWorkerSecretRejectsClaim(t *testing.T) {
 }
 
 func TestEmptyWebhookSecretRejectsUnsigned(t *testing.T) {
+	t.Parallel()
 	hs := emptySecretServer(t)
 	body := `{"repository":{"full_name":"example/test-repo"},"issue":{"number":1}}`
 	req, err := http.NewRequest("POST", hs.URL+"/hooks/github", strings.NewReader(body))
@@ -70,11 +67,8 @@ func TestEmptyWebhookSecretRejectsUnsigned(t *testing.T) {
 }
 
 func TestWrongWebhookSignatureRejectsGitHubHook(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	t.Parallel()
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
 	p, err := policy.Parse([]byte(slackPol))
 	if err != nil {
 		t.Fatal(err)
@@ -103,6 +97,7 @@ func TestWrongWebhookSignatureRejectsGitHubHook(t *testing.T) {
 }
 
 func TestEmptySlackSecretRejectsUnsigned(t *testing.T) {
+	t.Parallel()
 	hs := emptySecretServer(t)
 	req, err := http.NewRequest("POST", hs.URL+"/hooks/slack", strings.NewReader("user_id=U1&text=status"))
 	if err != nil {

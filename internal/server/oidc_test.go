@@ -11,6 +11,7 @@ import (
 )
 
 func TestOIDCSeparatesOperatorAPIFromBrowserAndWorker(t *testing.T) {
+	t.Parallel()
 	p := oidctest.New(t)
 	ctx := t.Context()
 	verifier, err := oidc.NewVerifier(ctx, oidc.Config{Metadata: oidc.Metadata{Issuer: p.Server.URL, Audience: "rusui", ClientID: "cli", Scopes: []string{"openid"}}, Subject: "operator"})

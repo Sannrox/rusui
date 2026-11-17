@@ -12,6 +12,7 @@ import (
 // `rusui retry` requeues a failed review job without Slack; worker tokens
 // and unknown items are refused (#401).
 func TestRetryRequeuesFailedReviewForOperator(t *testing.T) {
+	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	e.GitHub.(*gh.Fake).Put(snapshot.Item{Repo: "example/test-repo", Item: 5, ItemKind: "issue", State: "open", Title: "t", DefaultBranch: "main", MainSHA: "aaa"})
 	if err := e.CatchUpItem("example/test-repo", 5, "issue"); err != nil {

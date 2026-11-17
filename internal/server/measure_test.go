@@ -209,10 +209,7 @@ func jsonNumber(n int64) string {
 
 func openMeasurePlane(t *testing.T, dbPath string, clk *clock.Fake, f *gh.Fake) (*store.Store, *engine.Engine) {
 	t.Helper()
-	st, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	st := openStore(t, dbPath)
 	pol, err := policy.Parse([]byte(measureFixture))
 	if err != nil {
 		t.Fatal(err)

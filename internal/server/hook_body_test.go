@@ -12,18 +12,14 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/gh"
 	"github.com/sannrox/rusui/internal/policy"
-	"github.com/sannrox/rusui/internal/store"
 )
 
 // TestHookBodyCap checks each inbound hook at its cap: a body of exactly the
 // cap is read and reaches verification (so it fails on its bad signature, not
 // on size), and one byte more is refused with 413 before verification.
 func TestHookBodyCap(t *testing.T) {
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	t.Parallel()
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
 	p, err := policy.Parse([]byte(slackPol))
 	if err != nil {
 		t.Fatal(err)
