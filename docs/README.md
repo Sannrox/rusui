@@ -52,7 +52,7 @@ Use these for precise commands, fields, interfaces, and source layout.
 - [ACP editor shim](acp-editor.md).
 - [Build and runtime image internals](../build/README.md).
 - [Maintenance evaluation corpus and measures](../eval/set.md).
-- [Turn measurements and review dispositions](review-results.md).
+- [Turn measurements, the review inbox, and review dispositions](review-results.md).
 - [MIT license](../LICENSE).
 
 ## Understand: explanations
