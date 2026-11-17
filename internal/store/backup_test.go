@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sannrox/rusui/internal/store/storetest"
 )
@@ -22,6 +23,10 @@ func TestCopiedDatabaseRestoresSession(t *testing.T) {
 	err = st.Tx(func(tx *sql.Tx) error {
 		id, _, err := InsertRunSessionTx(tx, "test", "example/test-repo", "hello")
 		sid = id
+		if err != nil {
+			return err
+		}
+		_, err = InsertPromptAttachmentsTx(st, tx, id, 1, []PromptFile{{Name: "note.txt", Body: []byte("kept in the copy")}}, time.Now().UTC())
 		return err
 	})
 	if err != nil {
@@ -30,7 +35,8 @@ func TestCopiedDatabaseRestoresSession(t *testing.T) {
 	if err := st.Close(); err != nil {
 		t.Fatal(err)
 	}
-	dst := filepath.Join(dir, "restore.db")
+	// The copy lands in another directory, without the attachment cache.
+	dst := filepath.Join(t.TempDir(), "restore.db")
 	in, err := os.Open(src)
 	if err != nil {
 		t.Fatal(err)
@@ -55,5 +61,12 @@ func TestCopiedDatabaseRestoresSession(t *testing.T) {
 	}
 	if sess.Prompt != "hello" || sess.Project != "test" {
 		t.Fatalf("restored %+v", sess)
+	}
+	atts, err := ListPromptAttachments(st2, sid, 0)
+	if err != nil || len(atts) != 1 {
+		t.Fatalf("restored attachments %v %v", atts, err)
+	}
+	if b, err := os.ReadFile(atts[0].Path); err != nil || string(b) != "kept in the copy" {
+		t.Fatalf("restored attachment %q %v", b, err)
 	}
 }

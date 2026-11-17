@@ -68,7 +68,12 @@ outside the 1.0 core until
 
 Set `RUSUI_STORE_URL=postgres://...` to use it. An empty database gets the
 current schema on first start; a database at another schema version fails
-closed. Prompt attachments stay as files beside `-db`.
+closed. Prompt attachment bytes live in the store, so any instance can
+serve an attachment another stored. The files beside `-db` are each
+instance's cache: a missing file is rebuilt from the store, and files whose
+rows retention removed are deleted once they are an hour old. On upgrade, each
+instance copies the files it holds into rows stored without bytes; serve
+the old files from the instance that stored them until then.
 
 The server must commit each write synchronously to storage that survives
 the loss of any one host before it acknowledges. Run with

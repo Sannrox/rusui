@@ -373,6 +373,10 @@ func main() {
 // runScheduler runs the plane-wide timers while this instance holds the
 // scheduler lease. Other instances keep trying to claim it each renewal, so
 // one of them takes over within a lease length after the holder stops.
+// attachmentCacheEvery is how often an instance drops cached attachment
+// files whose rows retention removed, possibly on another instance.
+const attachmentCacheEvery = 10 * time.Minute
+
 func runScheduler(eng *engine.Engine) {
 	lease := engine.NewSchedulerLease(eng.Store)
 	if err := lease.Renew(); err != nil {
@@ -386,6 +390,12 @@ func runScheduler(eng *engine.Engine) {
 	apply := time.NewTicker(engine.ApplyRetryEvery)
 	sched := time.NewTicker(time.Minute)
 	sumikaReconcile := time.NewTicker(engine.SumikaReconcileEvery)
+	// The attachment cache is per instance, so it syncs without the lease.
+	if err := store.SyncAttachmentCache(eng.Store); err != nil {
+		eng.Notify("attachment cache: " + err.Error())
+	}
+	attachCache := time.NewTicker(attachmentCacheEvery)
+	defer attachCache.Stop()
 	defer refresh.Stop()
 	defer reconcile.Stop()
 	defer catchup.Stop()
@@ -398,6 +408,11 @@ func runScheduler(eng *engine.Engine) {
 		case <-renew.C:
 			if err := lease.Renew(); err != nil {
 				eng.Notify("scheduler lease: " + err.Error())
+			}
+			continue
+		case <-attachCache.C:
+			if err := store.SyncAttachmentCache(eng.Store); err != nil {
+				eng.Notify("attachment cache: " + err.Error())
 			}
 			continue
 		case <-refresh.C:

@@ -76,8 +76,9 @@ func TestPromptAttachmentReachesGuestAndStaysOffWorkspace(t *testing.T) {
 		t.Fatalf("stored %+v %v", atts, err)
 	}
 	var bodyLen int
-	if err := h.st.DB.QueryRow(`SELECT length(body) FROM prompt_attachments WHERE digest=?`, digest).Scan(&bodyLen); err != nil || bodyLen != 0 {
-		t.Fatalf("sqlite body %d %v", bodyLen, err)
+	// The store keeps the durable bytes so any instance can serve them (#746).
+	if err := h.st.DB.QueryRow(`SELECT length(body) FROM prompt_attachments WHERE digest=?`, digest).Scan(&bodyLen); err != nil || bodyLen != len(png1x1) {
+		t.Fatalf("stored body %d %v", bodyLen, err)
 	}
 	sess, err := store.GetSession(h.st, sid)
 	if err != nil {
