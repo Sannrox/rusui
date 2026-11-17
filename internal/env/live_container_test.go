@@ -374,3 +374,50 @@ func TestLiveCaptureTreeRoundTrip(t *testing.T) {
 		t.Fatalf("placed %q %v", b, err)
 	}
 }
+
+// A guest container starts with HardeningRunArgs: only the named
+// capabilities, no privilege gain through a setuid binary, and the pids
+// cap (#680). Without no-new-privileges the setuid probe gets saved uid 0.
+func TestLiveGuestHardening(t *testing.T) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		t.Skip("docker required for live proof")
+	}
+	rt, err := LookRuntime()
+	if err != nil {
+		t.Skip(err)
+	}
+	d := Container{RT: rt, Image: "alpine:3.20"}
+	id, err := d.Create(fmt.Sprintf("harden-%d", time.Now().UnixNano()%1_000_000_000))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+			t.Skipf("container runtime unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Destroy(id) })
+	probe := `grep -E '^(CapEff|NoNewPrivs)' /proc/self/status > status && cat /sys/fs/cgroup/pids.max > pids &&
+mkdir -p /tmp/s && cp /bin/busybox /tmp/s/busybox && chmod 4755 /tmp/s/busybox`
+	if err := d.RT.Exec(id, []string{"sh", "-c", probe}); err != nil {
+		t.Fatalf("probe as root: %v", err)
+	}
+	status, err := d.RT.ReadFile(id, "status")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"CapEff:\t000000000000000b", "NoNewPrivs:\t1"} {
+		if !strings.Contains(string(status), want) {
+			t.Fatalf("status %q lacks %q", status, want)
+		}
+	}
+	if pids, err := d.RT.ReadFile(id, "pids"); err != nil || strings.TrimSpace(string(pids)) != fmt.Sprint(GuestPidsLimit) {
+		t.Fatalf("pids.max %q %v", pids, err)
+	}
+	out, err := exec.Command(rt.(DockerCLI).bin(), "exec", "-u", "65534", id,
+		"/tmp/s/busybox", "grep", "^Uid", "/proc/self/status").CombinedOutput()
+	if err != nil {
+		t.Fatalf("setuid probe: %v %s", err, out)
+	}
+	if uids := strings.Fields(string(out))[1:]; strings.Join(uids, " ") != "65534 65534 65534 65534" {
+		t.Fatalf("setuid binary gained privileges: %s", out)
+	}
+}
