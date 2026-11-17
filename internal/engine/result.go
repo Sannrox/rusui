@@ -2,11 +2,11 @@ package engine
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
 	"slices"
 
 	"github.com/sannrox/rusui/internal/store"
@@ -166,7 +166,7 @@ func (e *Engine) observeFollowUpPublication(jobID int64, art *Artifact) {
 // priorPublication is the newest result this turn actually published.
 // A later blocked or unconfirmed follow-up does not erase it.
 func priorPublication(s *store.Store, jobID int64) (Publication, bool) {
-	p, ok, err := newestPublication(s, `SELECT payload FROM review_revisions WHERE job_id=? ORDER BY id DESC`, jobID)
+	p, ok, err := newestPublication(store.JobReviewPayloads(s, jobID))
 	if err != nil || !ok {
 		return Publication{}, false
 	}
@@ -191,12 +191,12 @@ func SessionPublication(s *store.Store, sessionID int64) (Publication, bool, err
 	if p, ok, err := publicationFromWriteApply(s, sessionID); err != nil || ok {
 		return p, ok, err
 	}
-	return newestPublication(s, `SELECT r.payload FROM review_revisions r JOIN turns t ON t.id=r.job_id WHERE t.session_id=? ORDER BY r.id DESC`, sessionID)
+	return newestPublication(store.SessionReviewPayloads(s, sessionID))
 }
 
 func publicationFromWriteApply(s *store.Store, sessionID int64) (Publication, bool, error) {
 	a, err := store.LatestAction(s, sessionID, ActionWriteApply)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		return Publication{}, false, nil
 	}
 	if err != nil {
@@ -212,14 +212,8 @@ func publicationFromWriteApply(s *store.Store, sessionID int64) (Publication, bo
 // priorPublishAsk is the branch the session already proposed, so a
 // follow-up cannot switch heads.
 func priorPublishAsk(s *store.Store, sessionID int64) (string, bool) {
-	rows, err := s.DB.Query(`SELECT r.payload FROM review_revisions r JOIN turns t ON t.id=r.job_id WHERE t.session_id=? ORDER BY r.id DESC`, sessionID)
-	if err != nil {
-		return "", false
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var raw string
-		if err := rows.Scan(&raw); err != nil {
+	for raw, err := range store.SessionReviewPayloads(s, sessionID) {
+		if err != nil {
 			return "", false
 		}
 		var prev Artifact
@@ -236,15 +230,11 @@ func priorPublishAsk(s *store.Store, sessionID int64) (string, bool) {
 	return "", false
 }
 
-func newestPublication(s *store.Store, query string, id int64) (Publication, bool, error) {
-	rows, err := s.DB.Query(query, id)
-	if err != nil {
-		return Publication{}, false, err
-	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var raw string
-		if err := rows.Scan(&raw); err != nil {
+// newestPublication returns the first published result among review
+// payloads ordered newest first.
+func newestPublication(payloads iter.Seq2[string, error]) (Publication, bool, error) {
+	for raw, err := range payloads {
+		if err != nil {
 			return Publication{}, false, err
 		}
 		var prev Artifact
@@ -259,5 +249,5 @@ func newestPublication(s *store.Store, query string, id int64) (Publication, boo
 			return p, true, nil
 		}
 	}
-	return Publication{}, false, rows.Err()
+	return Publication{}, false, nil
 }

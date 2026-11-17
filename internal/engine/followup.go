@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -46,7 +45,7 @@ func (e *Engine) promptFollowUp(sessionID int64, prompt string, files []store.Pr
 	}
 	var turnID int64
 	var pending int
-	err = e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *store.Tx) error {
 		paused, err := store.Paused(tx, sess.Project)
 		if err != nil {
 			return err
@@ -105,7 +104,7 @@ func (e *Engine) promptQueued(sessionID int64, prompt string, files []store.Prom
 	var turnID int64
 	var pending int
 	var held bool
-	err = e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *store.Tx) error {
 		paused, err := store.Paused(tx, sess.Project)
 		if err != nil {
 			return err
@@ -145,7 +144,7 @@ func (e *Engine) DropQueuedPrompts(sessionID int64) (int, error) {
 		return 0, fmt.Errorf("no turns")
 	}
 	var n int
-	err = e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *store.Tx) error {
 		var err error
 		n, err = store.DropQueuedPromptsTx(tx, sessionID)
 		if err != nil || n == 0 {
@@ -197,7 +196,7 @@ func (e *Engine) PromptSteer(sessionID int64, prompt string) (int64, int, bool, 
 	var turnID int64
 	var pending int
 	var live bool
-	err = e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *store.Tx) error {
 		paused, err := store.Paused(tx, sess.Project)
 		if err != nil {
 			return err
@@ -232,7 +231,7 @@ func (e *Engine) PromptSteer(sessionID int64, prompt string) (int64, int, bool, 
 	return turnID, pending, live, err
 }
 
-func insertOperatorSteerTx(tx *sql.Tx, id int64, sess *store.Session, j *store.Job, prompt, delivery string) error {
+func insertOperatorSteerTx(tx *store.Tx, id int64, sess *store.Session, j *store.Job, prompt, delivery string) error {
 	body, err := json.Marshal(map[string]string{"actor": "operator", "delivery": delivery, "prompt": prompt})
 	if err != nil {
 		return err
@@ -287,7 +286,7 @@ func validatePromptFiles(prompt string, files []store.PromptFile) error {
 	return nil
 }
 
-func insertPromptFileReceiptsTx(tx *sql.Tx, sess *store.Session, j *store.Job, files []store.PromptAttachment) error {
+func insertPromptFileReceiptsTx(tx *store.Tx, sess *store.Session, j *store.Job, files []store.PromptAttachment) error {
 	sid, tid := sess.ID, j.ID
 	for _, f := range files {
 		id, err := newActionID()
@@ -318,7 +317,7 @@ func insertPromptFileReceiptsTx(tx *sql.Tx, sess *store.Session, j *store.Job, f
 
 // enqueuePromptTx appends the prompt to the session FIFO, then lets the
 // FIFO head become the pending revision when nothing is ahead of it.
-func (e *Engine) enqueuePromptTx(tx *sql.Tx, j *store.Job, sessionID int64, prompt string, queued bool, files []store.PromptFile, now time.Time) (int, error) {
+func (e *Engine) enqueuePromptTx(tx *store.Tx, j *store.Job, sessionID int64, prompt string, queued bool, files []store.PromptFile, now time.Time) (int, error) {
 	if j.State != "queued" && j.State != "leased" {
 		if err := e.checkChildReactivationTx(tx, sessionID); err != nil {
 			return 0, err
@@ -352,7 +351,7 @@ func (e *Engine) enqueuePromptTx(tx *sql.Tx, j *store.Job, sessionID int64, prom
 // promoteFollowUpTx makes the FIFO head the pending revision unless an
 // earlier revision or steer is still owed. A queued head waits while the
 // turn is leased or waiting for a claim; the turn ending applies it.
-func promoteFollowUpTx(tx *sql.Tx, j *store.Job, sessionID int64) error {
+func promoteFollowUpTx(tx *store.Tx, j *store.Job, sessionID int64) error {
 	if hasUnclaimedFollowUp(j) {
 		return nil
 	}
@@ -370,7 +369,7 @@ func promoteFollowUpTx(tx *sql.Tx, j *store.Job, sessionID int64) error {
 	return applyFollowUpTx(tx, j, sessionID, next.Seq, next.Prompt)
 }
 
-func applyFollowUpTx(tx *sql.Tx, j *store.Job, sessionID int64, seq int, prompt string) error {
+func applyFollowUpTx(tx *store.Tx, j *store.Job, sessionID int64, seq int, prompt string) error {
 	rev := j.PendingRevision + 1
 	it := snapshot.Item{
 		Repo: j.Repo, Item: j.Item, ItemKind: j.ItemKind, State: "open",
@@ -395,7 +394,7 @@ func applyFollowUpTx(tx *sql.Tx, j *store.Job, sessionID int64, seq int, prompt 
 	return store.BindPromptAttachmentsTx(tx, sessionID, seq, rev)
 }
 
-func applyNextFollowUpTx(tx *sql.Tx, j *store.Job) error {
+func applyNextFollowUpTx(tx *store.Tx, j *store.Job) error {
 	turn, err := store.GetTurnTx(tx, j.ID)
 	if err != nil {
 		return err

@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"crypto/subtle"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -286,7 +285,7 @@ func (s *Server) visibleSession(r *http.Request, id int64) (*store.Session, erro
 		return nil, err
 	}
 	if !s.sessionAllowed(r, sess) {
-		return nil, sql.ErrNoRows
+		return nil, store.ErrNoRows
 	}
 	return sess, nil
 }
@@ -301,20 +300,20 @@ func (s *Server) visibleOwnedSession(r *http.Request, id int64) (*store.Session,
 		return sess, nil
 	case CredOperator:
 		if !s.sessionOwner(r, sess) {
-			return nil, sql.ErrNoRows
+			return nil, store.ErrNoRows
 		}
 		if userMode(sess) && store.NormalizeActor(sess.Act) != store.NormalizeActor(s.operatorActor(s.identify(r))) {
-			return nil, sql.ErrNoRows
+			return nil, store.ErrNoRows
 		}
 		return sess, nil
 	}
 	if s.consoleAuthed(r) && store.NormalizeTenantID(sess.TenantID) == store.DefaultTenantID {
 		if userMode(sess) && store.NormalizeActor(sess.Act) != store.DefaultTenantID {
-			return nil, sql.ErrNoRows
+			return nil, store.ErrNoRows
 		}
 		return sess, nil
 	}
-	return nil, sql.ErrNoRows
+	return nil, store.ErrNoRows
 }
 
 func (s *Server) sessionStillAllowed(r *http.Request, id int64) bool {
@@ -328,7 +327,7 @@ func (s *Server) visibleApprovalAction(r *http.Request, id string) (*store.Actio
 		return nil, err
 	}
 	if !s.actionSessionVisible(r, act) {
-		return nil, sql.ErrNoRows
+		return nil, store.ErrNoRows
 	}
 	return act, nil
 }

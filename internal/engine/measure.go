@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"time"
 
 	"github.com/sannrox/rusui/internal/store"
@@ -24,7 +23,7 @@ func measurementPublication(r *TaskResult) string {
 	return ""
 }
 
-func (e *Engine) finishMeasurementTx(tx *sql.Tx, turnID int64, terminal string, art Artifact, ended time.Time) error {
+func (e *Engine) finishMeasurementTx(tx *store.Tx, turnID int64, terminal string, art Artifact, ended time.Time) error {
 	if err := e.recordModelSummaryTx(tx, turnID); err != nil {
 		e.Log.Printf("model summary: %v", err)
 	}

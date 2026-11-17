@@ -2,7 +2,6 @@ package server
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -11,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/store"
 )
 
 // Inbound hook body caps. The hooks are reachable before any credential is
@@ -57,7 +57,7 @@ func (s *Server) sessionWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	path, secret, err := s.Eng.EnsureSessionWebhook(id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, store.ErrNoRows) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -95,7 +95,7 @@ func (s *Server) sessionWebhookHook(w http.ResponseWriter, r *http.Request) {
 		sig = r.Header.Get("X-Hub-Signature-256")
 	}
 	if err := s.Eng.DeliverSessionWebhook(id, sig, body, deliveryID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, engine.ErrArchived) {
+		if errors.Is(err, store.ErrNoRows) || errors.Is(err, engine.ErrArchived) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}

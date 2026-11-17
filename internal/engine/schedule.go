@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -81,7 +80,7 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string, fence store.Plan
 	repo, sha := e.operatorSessionPin(p)
 	var sessionID int64
 	already := false
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		// A stale scheduler (paused past its lease) must not start a session.
 		if err := fence.Check(tx); err != nil {
 			return err
@@ -112,16 +111,14 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string, fence store.Plan
 			}
 		}
 		if sc.SessionID != 0 {
-			var project string
-			var archived int
-			err := tx.QueryRow(`SELECT project, archived FROM sessions WHERE id=?`, sc.SessionID).Scan(&project, &archived)
+			project, archived, err := store.SessionProjectArchivedTx(tx, sc.SessionID)
 			if err != nil {
 				return err
 			}
 			if project != sc.Project {
 				return fmt.Errorf("schedule session project mismatch")
 			}
-			if archived != 0 {
+			if archived {
 				already = true
 			}
 			if idem != "" {
@@ -209,7 +206,7 @@ func (e *Engine) GuestScheduleRequest(turnID int64, req ScheduleRequest) (Schedu
 		return ScheduleReceipt{}, fmt.Errorf("op")
 	}
 	var rec ScheduleReceipt
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		turn, err := store.GetTurnTx(tx, turnID)
 		if err != nil {
 			return err
@@ -217,9 +214,8 @@ func (e *Engine) GuestScheduleRequest(turnID int64, req ScheduleRequest) (Schedu
 		if turn.State != "leased" {
 			return fmt.Errorf("%w: turn is %s", ErrTurnNotLeased, turn.State)
 		}
-		var project, kind string
-		var archived int
-		if err := tx.QueryRow(`SELECT project, kind, archived FROM sessions WHERE id=?`, turn.SessionID).Scan(&project, &kind, &archived); err != nil {
+		project, kind, archived, err := store.SessionProjectKindArchivedTx(tx, turn.SessionID)
+		if err != nil {
 			return err
 		}
 		target := req.SessionID
@@ -229,9 +225,8 @@ func (e *Engine) GuestScheduleRequest(turnID int64, req ScheduleRequest) (Schedu
 		rec = ScheduleReceipt{Op: req.Op, SessionID: target, Every: req.Every, Prompt: req.Prompt}
 		detail := ""
 		if target != turn.SessionID {
-			var tProject string
-			err := tx.QueryRow(`SELECT project FROM sessions WHERE id=?`, target).Scan(&tProject)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			tProject, err := store.SessionProjectTx(tx, target)
+			if err != nil && !errors.Is(err, store.ErrNoRows) {
 				return err
 			}
 			if err == nil && tProject != project {
@@ -239,7 +234,7 @@ func (e *Engine) GuestScheduleRequest(turnID int64, req ScheduleRequest) (Schedu
 			} else {
 				detail = "another session"
 			}
-		} else if archived != 0 {
+		} else if archived {
 			detail = "archived"
 		} else if kind != store.SessionKindRun && kind != store.SessionKindScheduled {
 			detail = "kind"
@@ -270,7 +265,7 @@ func (e *Engine) GuestScheduleRequest(turnID int64, req ScheduleRequest) (Schedu
 		}
 		name := guestScheduleName(target)
 		existing, err := store.ScheduleByNameTx(tx, project, name)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !errors.Is(err, store.ErrNoRows) {
 			return err
 		}
 		switch req.Op {
@@ -284,7 +279,7 @@ func (e *Engine) GuestScheduleRequest(turnID int64, req ScheduleRequest) (Schedu
 				rec.Prompt = existing.Prompt
 			}
 		default:
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, store.ErrNoRows) {
 				id, err := store.InsertScheduleTx(tx, project, name, secs, req.Prompt, target, e.now())
 				if err != nil {
 					return err
@@ -303,7 +298,7 @@ func (e *Engine) GuestScheduleRequest(turnID int64, req ScheduleRequest) (Schedu
 	return rec, err
 }
 
-func (e *Engine) insertScheduleReceiptTx(tx *sql.Tx, turn *store.Turn, rec *ScheduleReceipt) error {
+func (e *Engine) insertScheduleReceiptTx(tx *store.Tx, turn *store.Turn, rec *ScheduleReceipt) error {
 	id, err := newActionID()
 	if err != nil {
 		return err
@@ -318,9 +313,8 @@ func (e *Engine) insertScheduleReceiptTx(tx *sql.Tx, turn *store.Turn, rec *Sche
 		return err
 	}
 	sid, tid := turn.SessionID, turn.ID
-	var repo string
-	var item int
-	if err := tx.QueryRow(`SELECT repo, item FROM sessions WHERE id=?`, turn.SessionID).Scan(&repo, &item); err != nil {
+	repo, item, err := store.SessionSourceTx(tx, turn.SessionID)
+	if err != nil {
 		return err
 	}
 	return store.InsertActionTx(tx, store.Action{

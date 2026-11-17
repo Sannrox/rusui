@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -40,7 +39,7 @@ func (e *Engine) ResumeHalt(scope, target string, rec store.HaltRecord) error {
 	if rec.Source == "" {
 		rec.Source = store.HaltSourceOp
 	}
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	return e.Store.Tx(func(tx *store.Tx) error {
 		return store.ClearHaltTx(tx, scope, target, rec)
 	})
 }
@@ -76,7 +75,7 @@ func (e *Engine) applyHalt(scope, target string, rec store.HaltRecord) (HaltRepo
 	// Overlay commit shares sumikaMu with local start/restart so a
 	// successful halt cannot be followed by a pending process launch.
 	e.sumikaMu.Lock()
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		if err := store.SetHaltTx(tx, scope, target, rec); err != nil {
 			return err
 		}
@@ -138,7 +137,7 @@ func (e *Engine) applyHalt(scope, target string, rec store.HaltRecord) (HaltRepo
 
 func (e *Engine) holdHaltEnvironments(scope, target string, repos []string, heldEnv map[int64]struct{}, releases *[]func()) error {
 	var ids []int64
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		var err error
 		ids, err = store.ListOpenSessionIDsForHaltTx(tx, scope, target, repos)
 		return err
@@ -200,7 +199,7 @@ func (e *Engine) haltGuest(sessionID int64) error {
 	return nil
 }
 
-func (e *Engine) haltLeasedTurnTx(tx *sql.Tx, turnID int64) error {
+func (e *Engine) haltLeasedTurnTx(tx *store.Tx, turnID int64) error {
 	j, err := store.GetJobByIDTx(tx, turnID)
 	if err != nil {
 		return err

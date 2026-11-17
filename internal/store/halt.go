@@ -131,7 +131,7 @@ func ListOpenSessionIDsForHaltTx(tx *sql.Tx, scope, target string, repos []strin
 		if len(repos) == 0 {
 			q += `project=?`
 		} else {
-			q += `(project=? OR (COALESCE(project,'')='' AND repo IN (` + haltPlaceholders(len(repos)) + `)))`
+			q += `(project=? OR (COALESCE(project,'')='' AND repo IN (` + placeholders(len(repos)) + `)))`
 			for _, r := range repos {
 				args = append(args, r)
 			}
@@ -156,7 +156,8 @@ func ListOpenSessionIDsForHaltTx(tx *sql.Tx, scope, target string, repos []strin
 	return ids, rows.Err()
 }
 
-func haltPlaceholders(n int) string {
+// placeholders returns n comma-separated bind markers for an IN list.
+func placeholders(n int) string {
 	if n <= 0 {
 		return ""
 	}

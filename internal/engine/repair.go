@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"path"
@@ -152,7 +151,7 @@ func (e *Engine) maybeAdmitRepair(it snapshot.Item) {
 	}
 	blocked := ""
 	var selectedID int64
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		paused, err := e.repoPaused(tx, it.Repo)
 		if err != nil {
 			return err
@@ -254,7 +253,7 @@ func (e *Engine) repairCompeting(it snapshot.Item, excludeBranches []string, exc
 }
 
 func (e *Engine) recordRepair(it snapshot.Item, hash, decision, reason string) {
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		_, err := e.insertRepairTx(tx, it, hash, decision, reason)
 		return err
 	})
@@ -263,7 +262,7 @@ func (e *Engine) recordRepair(it snapshot.Item, hash, decision, reason string) {
 	}
 }
 
-func (e *Engine) insertRepairTx(tx *sql.Tx, it snapshot.Item, hash, decision, reason string) (int64, error) {
+func (e *Engine) insertRepairTx(tx *store.Tx, it snapshot.Item, hash, decision, reason string) (int64, error) {
 	return store.InsertRepairDecisionTx(tx, store.RepairDecision{
 		Repo: it.Repo, Item: it.Item, ItemHash: hash,
 		Decision: decision, Reason: reason,
@@ -272,7 +271,7 @@ func (e *Engine) insertRepairTx(tx *sql.Tx, it snapshot.Item, hash, decision, re
 }
 
 func (e *Engine) retractRepairSelection(it snapshot.Item, hash string, selectedID int64) {
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		if err := store.DeleteRepairDecisionTx(tx, selectedID); err != nil {
 			return err
 		}
@@ -320,7 +319,7 @@ func (e *Engine) recheckRepair(task *store.Task, ask WriteProposal) error {
 		return fmt.Errorf("%w: %w", ErrRepairRecheck, ErrStaleSource)
 	}
 	paused := false
-	if err := e.Store.Tx(func(tx *sql.Tx) error {
+	if err := e.Store.Tx(func(tx *store.Tx) error {
 		var err error
 		paused, err = e.repoPaused(tx, repo)
 		return err

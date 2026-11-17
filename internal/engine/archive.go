@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"errors"
 
 	"github.com/sannrox/rusui/internal/store"
@@ -81,7 +80,7 @@ func (e *Engine) failArchivedTurns(sessionID int64) error {
 	if len(turns) == 0 {
 		return nil
 	}
-	return e.Store.Tx(func(tx *sql.Tx) error {
+	return e.Store.Tx(func(tx *store.Tx) error {
 		for _, turn := range turns {
 			if err := e.cancelTurnTx(tx, turn.ID); err != nil {
 				return err

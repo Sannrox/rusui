@@ -110,21 +110,14 @@ func (s *Server) consoleEnvironments(w http.ResponseWriter, r *http.Request) {
 	if !s.consoleRequire(w, r) {
 		return
 	}
-	rows, err := s.Eng.Store.DB.Query(`SELECT DISTINCT e.id, e.name, e.driver, e.state, IFNULL(e.source_hash,'') FROM environments e JOIN sessions s ON s.environment_id=e.id WHERE COALESCE(s.tenant_id,'default')=? ORDER BY e.id DESC LIMIT 50`, store.DefaultTenantID)
+	envs, err := store.ListTenantEnvironments(s.Eng.Store, store.DefaultTenantID)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	defer func() { _ = rows.Close() }()
 	var out [][]string
-	for rows.Next() {
-		var id int64
-		var name, driver, state, hash string
-		if err := rows.Scan(&id, &name, &driver, &state, &hash); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		out = append(out, []string{strconv.FormatInt(id, 10), name, driver, state, hash})
+	for _, e := range envs {
+		out = append(out, []string{strconv.FormatInt(e.ID, 10), e.Name, e.Driver, e.State, e.SourceHash})
 	}
 	s.consoleTable(w, r, "Environments", []string{"id", "name", "driver", "state", "source_hash"}, out, "")
 }
@@ -133,21 +126,14 @@ func (s *Server) consoleRunners(w http.ResponseWriter, r *http.Request) {
 	if !s.consoleRequire(w, r) {
 		return
 	}
-	rows, err := s.Eng.Store.DB.Query(`SELECT id, name, kind, state FROM runners ORDER BY id`)
+	runners, err := store.ListRunners(s.Eng.Store)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	defer func() { _ = rows.Close() }()
 	var out [][]string
-	for rows.Next() {
-		var id int64
-		var name, kind, state string
-		if err := rows.Scan(&id, &name, &kind, &state); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		out = append(out, []string{strconv.FormatInt(id, 10), name, kind, state})
+	for _, rn := range runners {
+		out = append(out, []string{strconv.FormatInt(rn.ID, 10), rn.Name, rn.Kind, rn.State})
 	}
 	s.consoleTable(w, r, "Runners", []string{"id", "name", "kind", "state"}, out, "")
 }
@@ -156,21 +142,14 @@ func (s *Server) consoleReceipts(w http.ResponseWriter, r *http.Request) {
 	if !s.consoleRequire(w, r) {
 		return
 	}
-	rows, err := s.Eng.Store.DB.Query(`SELECT r.job_id, r.kind FROM receipts r JOIN turns t ON t.id=r.job_id JOIN sessions s ON s.id=t.session_id WHERE COALESCE(s.tenant_id,'default')=? ORDER BY r.job_id DESC LIMIT 50`, store.DefaultTenantID)
+	receipts, err := store.ListTenantReceiptKinds(s.Eng.Store, store.DefaultTenantID)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	defer func() { _ = rows.Close() }()
 	var out [][]string
-	for rows.Next() {
-		var id int64
-		var kind string
-		if err := rows.Scan(&id, &kind); err != nil {
-			http.Error(w, err.Error(), 500)
-			return
-		}
-		out = append(out, []string{strconv.FormatInt(id, 10), kind})
+	for _, rc := range receipts {
+		out = append(out, []string{strconv.FormatInt(rc.JobID, 10), rc.Kind})
 	}
 	s.consoleTable(w, r, "Receipts", []string{"job_id", "kind"}, out, "payloads omitted")
 }
@@ -188,8 +167,7 @@ func (s *Server) consoleBudgets(w http.ResponseWriter, r *http.Request) {
 		if p.Budgets != nil {
 			cap = p.Budgets[policy.BudgetMaxConcurrentLeases]
 		}
-		var n int
-		_ = s.Eng.Store.DB.QueryRow(`SELECT COUNT(*) FROM turns t JOIN sessions s ON s.id=t.session_id WHERE s.project=? AND t.state='leased' AND COALESCE(s.tenant_id,'default')=?`, slug, store.DefaultTenantID).Scan(&n)
+		n, _ := store.CountTenantProjectLeasedTurns(s.Eng.Store, slug, store.DefaultTenantID)
 		limit := "unset (not an enforced estimate)"
 		if cap > 0 {
 			limit = strconv.Itoa(cap)

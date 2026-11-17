@@ -1,20 +1,16 @@
 package main
 
 import (
-	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/store"
-	_ "modernc.org/sqlite"
 )
 
 type policyRuntimeState struct {
@@ -163,59 +159,33 @@ func readPolicyRuntimeState(dbPath, project, repo string, now time.Time) (policy
 		}
 		return state, err
 	}
-	db, err := openPolicyStateDBReadOnly(dbPath)
+	ro, err := store.OpenReadOnly(dbPath)
 	if err != nil {
 		return state, err
 	}
-	defer func() { _ = db.Close() }()
-	tx, err := db.Begin()
-	if err != nil {
-		return state, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	global, err := store.OverlayGet(tx, "pause:global")
-	if err != nil {
-		return state, err
-	}
-	projectPause := ""
-	if project != "" {
-		projectPause, err = store.OverlayGet(tx, "pause:"+project)
+	defer func() { _ = ro.Close() }()
+	err = ro.Tx(func(tx *store.Tx) error {
+		global, err := store.OverlayGet(tx, "pause:global")
 		if err != nil {
-			return state, err
+			return err
 		}
-	}
-	state.GlobalPaused = global == "1"
-	state.ProjectPaused = projectPause == "1"
-	err = tx.QueryRow(`SELECT count FROM daily_review_counts WHERE repo=? AND day=?`, repo, state.Day).Scan(&state.ReviewsToday)
-	if errors.Is(err, sql.ErrNoRows) {
-		err = nil
-	}
+		projectPause := ""
+		if project != "" {
+			projectPause, err = store.OverlayGet(tx, "pause:"+project)
+			if err != nil {
+				return err
+			}
+		}
+		state.GlobalPaused = global == "1"
+		state.ProjectPaused = projectPause == "1"
+		state.ReviewsToday, err = store.CountReviewsToday(tx, repo, state.Day)
+		return err
+	})
 	if err != nil {
-		return state, err
-	}
-	if err := tx.Commit(); err != nil {
 		return state, err
 	}
 	state.DatabaseFound = true
 	return state, nil
-}
-
-func openPolicyStateDBReadOnly(dbPath string) (*sql.DB, error) {
-	path, err := filepath.Abs(dbPath)
-	if err != nil {
-		return nil, err
-	}
-	fileURL := url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
-	db, err := sql.Open("sqlite", fileURL.String()+"?mode=ro&_pragma=busy_timeout(5000)")
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(1)
-	if err := db.Ping(); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	return db, nil
 }
 
 func printPolicyExplanation(out io.Writer, effective *policy.Effective, explanation policy.RepoExplanation, bound bool, state policyRuntimeState, dbPath string) {

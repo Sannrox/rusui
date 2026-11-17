@@ -2,7 +2,6 @@ package engine
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -84,7 +83,7 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 	}
 	hash := specHash(spec, pol.Hash)
 	var out *store.Task
-	err = e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *store.Tx) error {
 		paused, err := store.Paused(tx, project)
 		if err != nil {
 			return err

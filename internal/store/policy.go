@@ -24,3 +24,9 @@ func LatestPolicyRevision(s *Store) (id int64, hash string, ok bool, err error) 
 	}
 	return id, hash, err == nil, err
 }
+
+// RecordPolicyRevisionTx appends a loaded policy revision.
+func RecordPolicyRevisionTx(tx *sql.Tx, hash, payload string) error {
+	_, err := tx.Exec(`INSERT INTO policy_revisions(hash,payload) VALUES(?,?)`, hash, payload)
+	return err
+}

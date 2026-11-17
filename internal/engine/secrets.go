@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -67,7 +66,7 @@ func (e *Engine) injectSecrets(envRow *store.Environment, repo string, turnID in
 	if repo == "" {
 		if sess, err := store.GetSessionByEnvironment(e.Store, envRow.ID); err == nil {
 			repo = sess.Repo
-		} else if !errors.Is(err, sql.ErrNoRows) {
+		} else if !errors.Is(err, store.ErrNoRows) {
 			return err
 		}
 	}

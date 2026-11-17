@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +9,7 @@ import (
 	"github.com/sannrox/rusui/internal/store"
 )
 
-func (e *Engine) applyDefaultRetentionTx(tx *sql.Tx, sessionID int64) error {
+func (e *Engine) applyDefaultRetentionTx(tx *store.Tx, sessionID int64) error {
 	exp := store.DefaultRetentionExpiry(e.now())
 	return store.SetSessionRetentionTx(tx, sessionID, store.RetentionShort, &exp)
 }
@@ -53,7 +52,7 @@ func dueForExpiry(sess *store.Session, now time.Time) bool {
 }
 
 func (e *Engine) finishRetention(sessionID int64, actionType, sentence string, requireDue bool) error {
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		sess, err := store.GetSessionTx(tx, sessionID)
 		if err != nil {
 			return err

@@ -2,7 +2,6 @@ package engine
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -48,7 +47,7 @@ func (e *Engine) StartLocalSession(project, idem string) (LocalSessionResult, er
 	}
 	var sessionID int64
 	created := false
-	err := e.Store.Tx(func(tx *sql.Tx) error {
+	err := e.Store.Tx(func(tx *store.Tx) error {
 		paused, err := store.Paused(tx, project)
 		if err != nil {
 			return err
@@ -69,8 +68,8 @@ func (e *Engine) StartLocalSession(project, idem string) (LocalSessionResult, er
 				return err
 			}
 			if found {
-				var kind, existingProject string
-				if err := tx.QueryRow(`SELECT kind, project FROM sessions WHERE id=?`, id).Scan(&kind, &existingProject); err != nil {
+				kind, existingProject, err := store.SessionKindProjectTx(tx, id)
+				if err != nil {
 					return err
 				}
 				if kind != store.SessionKindLocal || existingProject != project {
@@ -124,7 +123,7 @@ func (e *Engine) RestartLocalProcess(sessionID int64) (LocalSessionResult, error
 	if sess.Kind != store.SessionKindLocal || sess.State != "open" {
 		return LocalSessionResult{}, fmt.Errorf("session is not an open local session")
 	}
-	err = e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *store.Tx) error {
 		halted, err := store.Halted(tx, sess.TenantID, sess.Project, sess.Act)
 		if err != nil {
 			return err
@@ -163,7 +162,7 @@ func (e *Engine) startLocalProcess(sessionID int64) (*store.Process, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *store.Tx) error {
 		halted, err := store.Halted(tx, sess.TenantID, sess.Project, sess.Act)
 		if err != nil {
 			return err
@@ -199,7 +198,7 @@ func (e *Engine) startLocalProcess(sessionID int64) (*store.Process, error) {
 		}
 		return updated, errors.Join(err, observeErr)
 	}
-	err = e.Store.Tx(func(tx *sql.Tx) error {
+	err = e.Store.Tx(func(tx *store.Tx) error {
 		halted, err := store.Halted(tx, sess.TenantID, sess.Project, sess.Act)
 		if err != nil {
 			return err
@@ -298,7 +297,7 @@ func (e *Engine) localSessionResult(sessionID int64) (LocalSessionResult, error)
 		return LocalSessionResult{}, err
 	}
 	process, err := store.LatestSumikaProcess(e.Store, sessionID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		return LocalSessionResult{Session: sess}, nil
 	}
 	if err != nil {
@@ -318,7 +317,7 @@ func (e *Engine) CancelLocalSession(sessionID int64) (bool, error) {
 		return false, fmt.Errorf("session is not local")
 	}
 	process, err := store.LatestSumikaProcess(e.Store, sessionID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		err := store.CancelLocalSessionWithoutProcess(e.Store, sessionID, e.now())
 		return err == nil, err
 	}
@@ -434,7 +433,7 @@ func (e *Engine) ReconcileSumika() error {
 			continue
 		}
 		process, err := store.LatestSumikaProcess(e.Store, sess.ID)
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, store.ErrNoRows) {
 			continue
 		}
 		if err != nil {
@@ -582,7 +581,7 @@ func (e *Engine) AttachLocalSession(sessionID int64) (*store.Attach, io.ReadWrit
 		return nil, nil, fmt.Errorf("session is not local")
 	}
 	process, err := store.LatestSumikaProcess(e.Store, sessionID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		return nil, nil, store.ErrProcessNotAttachable
 	}
 	if err != nil {
@@ -603,7 +602,7 @@ func (e *Engine) AttachLocalSessionWithIdentity(expectedSession store.Session, e
 		return nil, nil, fmt.Errorf("local session identity does not match authenticated detail")
 	}
 	process, err := store.LatestSumikaProcess(e.Store, sessionID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		if expectedProcess != nil {
 			return nil, nil, fmt.Errorf("local process identity does not match authenticated detail")
 		}
@@ -647,7 +646,7 @@ func (e *Engine) AttachLocalSessionWithIdentity(expectedSession store.Session, e
 		return nil, nil, fmt.Errorf("policy")
 	}
 	process, err = store.LatestSumikaProcess(e.Store, sessionID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		return nil, nil, store.ErrProcessNotAttachable
 	}
 	if err != nil {

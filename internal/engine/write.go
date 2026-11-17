@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -65,7 +64,7 @@ func (e *Engine) ApplySessionWrite(sessionID int64) (WriteApplyReceipt, error) {
 		return WriteApplyReceipt{}, ErrWritePublisherOff
 	}
 	proposal, err := store.LatestAction(e.Store, sessionID, ActionWritePropose)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		return WriteApplyReceipt{}, ErrWriteNoProposal
 	}
 	if err != nil {

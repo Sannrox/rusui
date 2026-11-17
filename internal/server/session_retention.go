@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,7 +40,7 @@ func (s *Server) putSessionRetention(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := s.operatorActor(s.identify(r))
 	now := s.Eng.Clock.Now().UTC()
-	err = s.Eng.Store.Tx(func(tx *sql.Tx) error {
+	err = s.Eng.Store.Tx(func(tx *store.Tx) error {
 		var exp *time.Time
 		if class == store.RetentionShort {
 			t := store.DefaultRetentionExpiry(now)
@@ -110,7 +109,7 @@ func (s *Server) postSessionWriteOverride(w http.ResponseWriter, r *http.Request
 	}
 	actor := s.operatorActor(s.identify(r))
 	now := s.Eng.Clock.Now().UTC()
-	err = s.Eng.Store.Tx(func(tx *sql.Tx) error {
+	err = s.Eng.Store.Tx(func(tx *store.Tx) error {
 		if err := store.SetRetentionWriteOverrideTx(tx, id, actor, now); err != nil {
 			return err
 		}

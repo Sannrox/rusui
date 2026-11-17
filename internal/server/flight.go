@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -32,7 +31,7 @@ func (s *Server) loadFlight(r *http.Request) (flight.Record, *store.Session, int
 		return flight.Record{}, nil, http.StatusNotFound
 	}
 	rec, err := store.GetFlightRecord(s.Eng.Store, tid)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, store.ErrNoRows) {
 		return flight.Record{}, nil, http.StatusNotFound
 	}
 	if err != nil {

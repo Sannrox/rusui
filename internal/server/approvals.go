@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -154,7 +153,7 @@ func (s *Server) allowStillValid(actionID string) bool {
 		return false
 	}
 	var paused bool
-	_ = s.Eng.Store.Tx(func(tx *sql.Tx) error {
+	_ = s.Eng.Store.Tx(func(tx *store.Tx) error {
 		paused, err = store.Paused(tx, sess.Project)
 		return err
 	})
