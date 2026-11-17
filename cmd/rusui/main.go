@@ -271,9 +271,14 @@ func main() {
 		Channel: os.Getenv("RUSUI_SLACK_CHANNEL"),
 	}
 	logNotify := eng.Notify
+	slackQuiet := &slackpkg.Throttle{Window: slackpkg.ExceptionQuiet}
 	eng.Notify = func(msg string) {
 		logNotify(msg)
+		if !slackQuiet.Allow(msg) {
+			return
+		}
 		if err := poster.Exception(msg); err != nil {
+			slackQuiet.Forget(msg)
 			log.Printf("slack exception: %v", err)
 		}
 	}
