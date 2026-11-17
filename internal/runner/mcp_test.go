@@ -44,23 +44,28 @@ func TestGatewayACPEntryCarriesTurnCredential(t *testing.T) {
 }
 
 func TestNativeGatewayArgvReferencesCredentialByName(t *testing.T) {
-	a := gatewayAssignment(guest.KindClaude)
-	argv := strings.Join(mcpArgv(a, nil, a.MCPServers), " ")
-	if strings.Contains(argv, a.GuestGrant) {
-		t.Fatalf("argv leaks the credential: %s", argv)
-	}
-	if !strings.Contains(argv, testGateway) || !strings.Contains(argv, turnTokenEnv) {
-		t.Fatalf("argv %s", argv)
+	for _, kind := range []string{guest.KindClaude, guest.KindCodex} {
+		a := gatewayAssignment(kind)
+		argv := strings.Join(mcpArgv(a, nil, a.MCPServers), " ")
+		if strings.Contains(argv, a.GuestGrant) {
+			t.Fatalf("%s argv leaks the credential: %s", kind, argv)
+		}
+		if !strings.Contains(argv, testGateway) || !strings.Contains(argv, turnTokenEnv) {
+			t.Fatalf("%s argv %s", kind, argv)
+		}
 	}
 }
 
-// Codex has no per-call approval for tool-server calls, so a listed server
-// would bypass the permission fence: it is never sent one (#684).
-func TestCodexIsNeverSentToolServers(t *testing.T) {
+// A Codex server outside prompt mode would run tool calls without asking,
+// bypassing the permission fence (#750).
+func TestCodexToolServersAskBeforeEveryCall(t *testing.T) {
 	a := gatewayAssignment(guest.KindCodex)
 	a.MCPGateway = ""
 	a.MCPServers = append(a.MCPServers, MCPServer{Name: "docs", URL: "https://tools.example/mcp"})
-	if argv := mcpArgv(a, []string{"codex"}, a.MCPServers); !slices.Equal(argv, []string{"codex"}) {
-		t.Fatalf("codex argv %v", argv)
+	argv := mcpArgv(a, []string{"codex"}, a.MCPServers)
+	for _, name := range []string{"gateway", "docs"} {
+		if !slices.Contains(argv, "mcp_servers."+name+`.default_tools_approval_mode="prompt"`) {
+			t.Fatalf("%s not in prompt mode: %v", name, argv)
+		}
 	}
 }
