@@ -172,11 +172,9 @@ func TestCorpusRunScoresHeadsWithHeldBackChecks(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var g guest
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		g.serve(ctx, t, e, map[string]int{"set the answer": 11, "set the answer too": 12})
-	}()
+	})
 	t.Cleanup(func() { cancel(); wg.Wait() })
 
 	patch := "diff --git a/check.sh b/check.sh\nnew file mode 100644\n--- /dev/null\n+++ b/check.sh\n@@ -0,0 +1 @@\n+grep -qx 42 answer # " + heldBack + "\n"
