@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -45,7 +46,14 @@ type Options struct {
 	LookRuntime func() (env.Runtime, error)
 	Env         func(string) string
 	HTTP        *http.Client
+	// Store, when set, runs one store round trip. The plane's /readyz sets
+	// it; `rusui diagnose` has no store and leaves it nil.
+	Store func(context.Context) error
 }
+
+// StoreBound caps the store round trip. A store slower than this cannot do
+// work, so the instance reports not ready (ADR 0089 D9).
+const StoreBound = 2 * time.Second
 
 func Diagnose(opt Options) Report {
 	getenv := opt.Env
@@ -65,6 +73,9 @@ func Diagnose(opt Options) Report {
 	r.add(checkPlaneTLS(getenv, rtErr == nil))
 	r.add(checkPlaneCA(getenv, rtErr == nil))
 	r.add(checkPlane(opt.PlaneURL, opt.HTTP, opt.CAFile))
+	if opt.Store != nil {
+		r.add(checkStore(opt.Store))
+	}
 	for _, c := range r.Checks {
 		if c.Blocker && c.Status != StatusReady {
 			r.Ready = false
@@ -232,6 +243,17 @@ func StreamTLSClient(caFile string) (*http.Client, error) {
 	return &http.Client{
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}},
 	}, nil
+}
+
+func checkStore(ping func(context.Context) error) Check {
+	c := Check{Name: "store", Blocker: true, Status: StatusReady, Detail: "store answered"}
+	ctx, cancel := context.WithTimeout(context.Background(), StoreBound)
+	defer cancel()
+	if err := ping(ctx); err != nil {
+		c.Status = StatusUnavailable
+		c.Detail = "store unreachable"
+	}
+	return c
 }
 
 func checkPlane(url string, client *http.Client, caFile string) Check {

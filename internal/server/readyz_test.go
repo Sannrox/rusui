@@ -97,6 +97,42 @@ func TestReadyzAndBoundedRunSession(t *testing.T) {
 	if !strings.Contains(string(body), `"session_id"`) {
 		t.Fatalf("session body %s", body)
 	}
+
+	// Ready means able to work: once the store cannot answer, /readyz fails.
+	if c := readyzStore(t, hs.URL); c.Status != ops.StatusReady {
+		t.Fatalf("store check before close %+v", c)
+	}
+	if err := e.Store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if c := readyzStore(t, hs.URL); c.Status != ops.StatusUnavailable || !c.Blocker {
+		t.Fatalf("store check after close %+v", c)
+	}
+}
+
+// readyzStore fetches /readyz, checks that ready matches the status code,
+// and returns the store check.
+func readyzStore(t *testing.T, base string) ops.Check {
+	t.Helper()
+	res, err := http.Get(base + "/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	var rep ops.Report
+	if err := json.NewDecoder(res.Body).Decode(&rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Ready != (res.StatusCode == http.StatusOK) {
+		t.Fatalf("ready %v with status %d", rep.Ready, res.StatusCode)
+	}
+	for _, c := range rep.Checks {
+		if c.Name == "store" {
+			return c
+		}
+	}
+	t.Fatalf("no store check in %+v", rep.Checks)
+	return ops.Check{}
 }
 
 func TestReadyzUnavailableWhenPlaneDown(t *testing.T) {
