@@ -76,10 +76,11 @@ single `runners` row named `local`. Snapshot bytes stay on this host
 _Avoid_: fleet, Kubernetes, additional placement hosts
 
 **Plane store**:
-One SQLite file on the plane host, one writer. Recovery is copy and
-`store.Restore`; live leases and grants do not survive. A redundant plane is
-not selected ([ADR 0001](docs/decisions/0001-environment-plane.md) D8, [ADR 0041](docs/decisions/0041-ha-plane-deferred.md)).
-_Avoid_: Postgres, leader lease, active-active, second writer
+By default one SQLite file on the plane host, one writer. Recovery is copy and
+`store.Restore`; live leases and grants do not survive. The redundant plane
+uses a shared transactional store instead, with plane-wide jobs under one
+fenced `scheduler` lease ([ADR 0089](docs/decisions/0089-redundant-plane.md), not yet implemented).
+_Avoid_: leader, active-active, SQLite shared between plane processes
 
 **Snapshot**:
 The prepared, reusable tree identified by `source_hash` (base image digest, git pin, `.agents/setup` bytes). Two sessions may share a snapshot; they never share an environment. A second session starts from a snapshot, never from a live fork ([ADR 0035](docs/decisions/0035-live-environment-fork-deferred.md)). A snapshot hit skips plane pre-clone, pre-setup, and `.agents/setup`.

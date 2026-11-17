@@ -14,7 +14,7 @@ is stale.
 <!-- adr-index:start -->
 | ADR | Title | Status |
 | --- | --- | --- |
-| [0001](0001-environment-plane.md) | rusui becomes the environment plane for coding agents | Accepted |
+| [0001](0001-environment-plane.md) | rusui becomes the environment plane for coding agents | Accepted; amended by 0089 |
 | [0002](0002-grok-acp-agent-set.md) | P1 agent set is Grok CLI over ACP | Accepted; amended by 0025, 0060 |
 | [0003](0003-operator-surface.md) | Operator surfaces are views of one object API | Accepted |
 | [0004](0004-rusui-services-yaml.md) | services.yaml is `.rusui/services.yaml` only | Accepted |
@@ -42,7 +42,7 @@ is stale.
 | [0026](0026-harness-model-upstream.md) | Harness, model, and upstream are independent | Accepted; amended by 0061 |
 | [0027](0027-guest-reachability-ask.md) | The guest image does not declare reachability yet | Accepted |
 | [0028](0028-container-isolation-profile.md) | The supported machine isolation profile remains the container | Accepted |
-| [0029](0029-single-host-runner.md) | The supported runner topology remains one host | Accepted; amended by 0064 |
+| [0029](0029-single-host-runner.md) | The supported runner topology remains one host | Accepted; amended by 0064, 0089 |
 | [0030](0030-schedule-new-session.md) | A schedule fire starts a new session | Accepted; amended by 0056, 0069 |
 | [0031](0031-cli-command-tree.md) | The rusui CLI stays a flat verb list | Accepted |
 | [0032](0032-named-services.md) | Named services declare a port and a health path | Accepted |
@@ -54,7 +54,7 @@ is stale.
 | [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
 | [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted; amended by 0059, 0074, 0083, 0088 |
 | [0040](0040-child-session-delegation-deferred.md) | Child-session delegation is deferred | Superseded by 0071 |
-| [0041](0041-ha-plane-deferred.md) | An HA plane is deferred | Accepted |
+| [0041](0041-ha-plane-deferred.md) | An HA plane is deferred | Superseded by 0089 |
 | [0042](0042-disconnected-execution-deferred.md) | Disconnected execution is deferred | Accepted |
 | [0043](0043-extension-contract-deferred.md) | An extension contract is deferred | Accepted |
 | [0044](0044-plane-publishes-from-turn-result.md) | The plane publishes from the turn result | Accepted; amended by 0080 |
@@ -102,6 +102,7 @@ is stale.
 | [0086](0086-supported-1.0-core-contract.md) | Freeze the supported 1.0 core contract | Accepted |
 | [0087](0087-acp-guest-session-load.md) | Resume ACP guests with session/load | Accepted |
 | [0088](0088-issuer-vouched-subjects.md) | A configured issuer vouches for several subjects | Proposed |
+| [0089](0089-redundant-plane.md) | The plane survives the loss of its host | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR
