@@ -72,6 +72,7 @@ and releasing work (see [Shared agent skills](#shared-agent-skills)):
 | `prepare-release` | assembling release readiness |
 | `technical-documentation` | writing or reviewing docs and agent instructions |
 | `refactor-docs` | restructuring documentation |
+| `ci-audit` | CI is slow, or a job or trigger in `.github/workflows/` is added or changed |
 
 ## Build, Test, and Development Commands
 
@@ -226,7 +227,7 @@ are pointers. Skill stubs live in `.agents/skills/`.
 ## Shared agent skills
 
 The workflow Skills (`advance-issue-frontier`, `assess-change-impact`,
-`capture-project-decision`, `deliver-ready-issue`, `prepare-release`,
+`capture-project-decision`, `ci-audit`, `deliver-ready-issue`, `prepare-release`,
 `refactor-docs`, `shape-work-item`, `technical-documentation`, `verify-change`)
 are canonical in [Sannrox/agent-kit](https://github.com/Sannrox/agent-kit).
 There is no pin: this repository always uses the latest `main`.
