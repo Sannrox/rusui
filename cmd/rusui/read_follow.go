@@ -50,6 +50,29 @@ type followTurnV struct {
 	ApprovalSeq int64  `json:"approval_seq"`
 }
 
+// Program status reports (OSC 7501, revision 0.4) written to a terminal
+// when the followed session state changes. They are constants, so plane
+// data never reaches the terminal as a control sequence.
+const (
+	statusWorking = "\x1b]7501;state=working:app=rusui\x1b\\"
+	statusBlocked = "\x1b]7501;state=blocked:kind=permission:app=rusui\x1b\\"
+	statusDone    = "\x1b]7501;state=done:app=rusui\x1b\\"
+	statusError   = "\x1b]7501;state=error:app=rusui\x1b\\"
+	statusIdle    = "\x1b]7501;state=idle:app=rusui\x1b\\"
+)
+
+// followStatus maps a session state to its report. A state not named here
+// writes nothing.
+var followStatus = map[string]string{
+	"queued":    statusWorking,
+	"running":   statusWorking,
+	"waiting":   statusBlocked,
+	"completed": statusDone,
+	"failed":    statusError,
+	"cancelled": statusIdle,
+	"open":      statusIdle,
+}
+
 // followRefused is a plane answer that reconnecting cannot change.
 type followRefused struct{ msg string }
 
@@ -63,6 +86,11 @@ type followReader struct {
 	url, token string
 	id         string
 	stdout     io.Writer
+	// terminal enables program status reports on stdout.
+	terminal bool
+	// status is the last report written, so a state resent after a
+	// reconnect, or a new turn in the same state, writes nothing.
+	status string
 
 	cursor  int64
 	header  bool
@@ -72,13 +100,17 @@ type followReader struct {
 	receive bool
 }
 
-func followRead(url, token, id string, stdout, stderr io.Writer) int {
+// followRead follows one session until it ends. With terminal set, it also
+// writes a program status report on stdout each time the state changes.
+func followRead(url, token, id string, stdout, stderr io.Writer, terminal bool) int {
+	f := &followReader{url: strings.TrimRight(url, "/"), token: token, id: id, stdout: stdout, terminal: terminal}
 	client, err := planeHTTP(url)
 	if err != nil {
+		f.report(statusError)
 		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}
-	f := &followReader{client: client, url: strings.TrimRight(url, "/"), token: token, id: id, stdout: stdout}
+	f.client = client
 	connected := false
 	backoff := followBackoffMin
 	for {
@@ -92,6 +124,7 @@ func followRead(url, token, id string, stdout, stderr io.Writer) int {
 		}
 		var refused followRefused
 		if errors.As(err, &refused) || !connected && !f.receive {
+			f.report(statusError)
 			_, _ = fmt.Fprintf(stderr, "read: %v\n", err)
 			return 1
 		}
@@ -215,6 +248,7 @@ func (f *followReader) handle(event, data string) error {
 		if st != f.state {
 			f.state = st
 			_, _ = fmt.Fprintln(f.stdout, formatFollowState(st))
+			f.report(followStatus[st.State])
 		}
 		if event == "end" {
 			f.end = &st
@@ -232,6 +266,16 @@ func (f *followReader) handle(event, data string) error {
 		}
 	}
 	return nil
+}
+
+// report writes a program status report when stdout is a terminal and the
+// report differs from the last one written.
+func (f *followReader) report(status string) {
+	if !f.terminal || status == "" || status == f.status {
+		return
+	}
+	f.status = status
+	_, _ = io.WriteString(f.stdout, status)
 }
 
 // formatFollowTurn is the one line a client can match on without reading

@@ -94,6 +94,19 @@ session has no turn record. The record describes the session now: the
 plane resends it after a reconnect and the command prints it once, but an
 approval answered while the command was disconnected is not printed.
 
+When standard output is a terminal, `-follow` also reports the session
+state to the terminal as a program status sequence (OSC 7501), so a tab in
+the background can show that a session waits for you. `queued` and
+`running` report `working`, `waiting` reports `blocked` with
+`kind=permission`, `completed` reports `done`, `failed` reports `error`, and
+`cancelled` and `open` report `idle`. Each report is written once per
+change, never again after a reconnect, and an error exit (a rejected
+token, a missing session, a plane without the stream) reports `error`
+first. A report carries only the state, the kind, and `app=rusui`: no
+session, turn, prompt, or transcript data. Piped or redirected output gets
+no reports and is unchanged. A terminal without OSC 7501 support ignores
+the sequence; one that prints unknown sequences may show stray characters.
+
 ```bash
 rusui read -follow [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_ID
 ```

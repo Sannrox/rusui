@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 type sessionReadView struct {
@@ -52,7 +54,7 @@ func readMain(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if *follow {
-		return followRead(*url, *token, fs.Arg(0), stdout, stderr)
+		return followRead(*url, *token, fs.Arg(0), stdout, stderr, isTerminal(stdout))
 	}
 	res, err := planeClient(*url, *token, "/sessions/"+fs.Arg(0)+"/read")
 	if err != nil {
@@ -120,4 +122,11 @@ func visibleText(s string) string {
 
 func bytesTrim(b []byte) string {
 	return strings.TrimSpace(string(b))
+}
+
+// isTerminal reports whether w is a terminal, which gates control
+// sequences such as program status reports.
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	return ok && term.IsTerminal(int(f.Fd()))
 }
