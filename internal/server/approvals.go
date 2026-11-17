@@ -215,12 +215,22 @@ func (s *Server) decideApproval(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := store.PutApprovalDecision(s.Eng.Store, r.PathValue("id"), req.Decision, attribution(s.identify(r))); err != nil {
+	if err := s.recordApprovalDecision(r.PathValue("id"), req.Decision, attribution(s.identify(r))); err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
-	if act, err := store.GetAction(s.Eng.Store, r.PathValue("id")); err == nil && act.TurnID != nil {
-		_ = store.NotePermission(s.Eng.Store, *act.TurnID, req.Decision)
-	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// recordApprovalDecision records an operator decision and notes it on the
+// turn's measurement. Every decide surface (API, console) goes through it so
+// the measurement does not depend on where the decision was made.
+func (s *Server) recordApprovalDecision(id, decision string, by store.Attribution) error {
+	if err := store.PutApprovalDecision(s.Eng.Store, id, decision, by); err != nil {
+		return err
+	}
+	if act, err := store.GetAction(s.Eng.Store, id); err == nil && act.TurnID != nil {
+		_ = store.NotePermission(s.Eng.Store, *act.TurnID, decision)
+	}
+	return nil
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sannrox/rusui/internal/acp"
 	"github.com/sannrox/rusui/internal/store"
@@ -24,8 +26,15 @@ func TestConsoleOpsViewsAndApproval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var turnID int64
+	if err := e.Store.DB.QueryRow(`SELECT id FROM turns WHERE session_id=?`, sid).Scan(&turnID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Store.Tx(func(tx *sql.Tx) error { return store.BeginMeasurementTx(tx, turnID, time.Now()) }); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.InsertAction(e.Store, store.Action{
-		ID: "act-ops", SessionID: &sid, Repo: sess.Repo, Item: sess.Item,
+		ID: "act-ops", SessionID: &sid, TurnID: &turnID, Repo: sess.Repo, Item: sess.Item,
 		Type: acp.ActionApproval, ReasonCode: acp.ReasonUnmatched,
 		EvidenceClass: acp.EvidenceObserved, LimitSentence: acp.LimitSentence,
 		Body: `{"tool":"shell"}`,
@@ -81,6 +90,10 @@ func TestConsoleOpsViewsAndApproval(t *testing.T) {
 	s.Handler().ServeHTTP(rr, req)
 	if rr.Code != 200 && rr.Code != 303 {
 		t.Fatalf("deny %d %q loc=%s", rr.Code, rr.Body.String(), rr.Header().Get("Location"))
+	}
+	// A console decision updates the turn measurement as an API decision does.
+	if m, err := store.GetMeasurement(e.Store, turnID); err != nil || m.PermissionDecision != "deny" {
+		t.Fatalf("measurement after console deny %+v %v", m, err)
 	}
 	res, err = c.Get(hs.URL + "/console/approvals")
 	if err != nil {
