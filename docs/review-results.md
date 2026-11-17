@@ -1,7 +1,7 @@
 # Review results reference
 
-This page describes recorded Turn measurements and review-result
-dispositions. For operator procedures, see the [operator guide](operator.md).
+This page describes recorded Turn measurements, the review inbox, and
+review-result dispositions. For operator procedures, see the [operator guide](operator.md).
 
 ## Turn measurements
 
@@ -14,12 +14,35 @@ names the session id. It does not include the prompt, tool arguments,
 diffs, terminal bytes, file contents, or credentials. Export stays off
 unless `RUSUI_OTEL_ENDPOINT` points at a collector you run.
 
+## Review inbox
+
+`rusui inbox` (`GET /inbox`) lists the review results that still need a
+disposition: the latest result of each review session, so of each item,
+scoped to the caller's tenant. `-all` (`?all=1`) also lists results that
+are disposed or superseded.
+
+```sh
+rusui inbox
+rusui inbox -all
+```
+
+Each item carries `result_id`, `session_id`, repo, item, `verdict`, the
+number of `proposed_actions`, the latest `disposition`, and `state`:
+`current` while the item hash matches the latest snapshot, otherwise
+`superseded`. A superseded result is never published
+([ADR 0038](decisions/0038-maintenance-eligibility-and-promotion.md) D4).
+`next` is `dispose` for a current result without a disposition. Per
+repository, `repos` reports `reviews_today`, `review_cap`,
+`budget_exhausted`, and the number of `actionable` items (D5). Reading the
+inbox grants and approves nothing. Repeated reviews of one item replace its
+row rather than adding one.
+
 ## Result dispositions
 
 Record your judgment of an advisory review result so the comment gate
 ([ADR 0038](decisions/0038-maintenance-eligibility-and-promotion.md) D6)
-can be measured. The result id is `review_result.revision_id` from
-`GET /sessions/{id}`.
+can be measured. The result id is `result_id` from `rusui inbox`, or
+`review_result.revision_id` from `GET /sessions/{id}`.
 
 ```sh
 rusui disposition -value useful 42

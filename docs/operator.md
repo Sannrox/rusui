@@ -7,7 +7,7 @@ on GitHub.
 
 For a first credential-free session, start with [the tutorial](tutorial.md).
 For flags, policy fields, and HTTP behavior, see [configuration](configuration.md).
-For turn measurements and review-result dispositions, see the
+For turn measurements, the review inbox, and review-result dispositions, see the
 [review results reference](review-results.md).
 <a id="supported-topology"></a>
 For the supported unattended profile and its boundaries, see the

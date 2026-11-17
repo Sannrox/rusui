@@ -88,6 +88,9 @@ func main() {
 		case "approve":
 			approveCLI(os.Args[2:])
 			return
+		case "inbox":
+			inboxCLI(os.Args[2:])
+			return
 		case "disposition":
 			dispositionCLI(os.Args[2:])
 			return

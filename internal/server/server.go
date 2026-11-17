@@ -171,6 +171,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /projects/{slug}/measurements", s.projectMeasurements)
 	mux.HandleFunc("POST /results/{id}/dispositions", s.recordDisposition)
 	mux.HandleFunc("GET /dispositions/comment-gate", s.commentGate)
+	mux.HandleFunc("GET /inbox", s.inbox)
 	mux.HandleFunc("POST /retry", s.retryFailed)
 	mux.HandleFunc("GET /projects/{slug}/guests", s.projectGuests)
 	mux.HandleFunc("POST /projects/{slug}/sessions", s.createSession)
