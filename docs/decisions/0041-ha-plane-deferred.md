@@ -1,6 +1,6 @@
 # ADR 0041: An HA plane is deferred
 
-- Status: Accepted
+- Status: Superseded by [0089](0089-redundant-plane.md)
 - Date: 2026-09-29
 - Amends: none. [ADR 0001](0001-environment-plane.md) D8 stands: SQLite
   with one writer, behind a repository interface.

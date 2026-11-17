@@ -1,6 +1,9 @@
 # ADR 0001: rusui becomes the environment plane for coding agents
 
-- Status: Accepted
+- Status: Accepted; amended by 0089
+- Amended by: [ADR 0089](0089-redundant-plane.md) (D8: SQLite stays the
+  single-host default; a shared transactional store backs the redundant
+  plane).
 - Date: 2026-09-14
 - Resolves: [PR #12](https://github.com/Sannrox/rusui/pull/12). Tracks
   [#2](https://github.com/Sannrox/rusui/issues/2) to

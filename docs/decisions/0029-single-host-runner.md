@@ -1,6 +1,6 @@
 # ADR 0029: The supported runner topology remains one host
 
-- Status: Accepted; amended by 0064
+- Status: Accepted; amended by 0064, 0089
 - Date: 2026-09-27
 - Amends: [ADR 0007](0007-environment-snapshot.md) (snapshot cache is
   runner-local; P1 is one runner) and
@@ -11,6 +11,8 @@
   registered operator host is not a session location either).
   [ADR 0064](0064-session-size-and-admission-queue.md) queues on this
   single host when the lease budget is full; a fleet stays refused.
+  [ADR 0089](0089-redundant-plane.md) lets the plane run on more than
+  one host; the runner stays on one.
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0001](0001-environment-plane.md) D3,
   [ADR 0028](0028-container-isolation-profile.md) (container isolation
