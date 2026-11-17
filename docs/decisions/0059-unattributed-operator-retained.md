@@ -1,11 +1,12 @@
 # ADR 0059: Plane calls stay one unattributed operator
 
-- Status: Accepted; amended by 0074
+- Status: Accepted; amended by 0074, 0088
 - Date: 2026-10-06
 - Amends: [ADR 0012](0012-operator-access.md) (one operator token),
   [ADR 0039](0039-shared-operator-governance-deferred.md) (shared-
   operator governance is deferred).
-- Amended by: [ADR 0074](0074-single-operator-oidc-cli.md) (credential form only).
+- Amended by: [ADR 0074](0074-single-operator-oidc-cli.md) (credential form only),
+  [ADR 0088](0088-issuer-vouched-subjects.md) (a configured issuer may vouch for several subjects).
 - Resolves: [#490](https://github.com/Sannrox/rusui/issues/490)
 - Related: [#128](https://github.com/Sannrox/rusui/issues/128)
   (shared-operator implementation remains blocked).

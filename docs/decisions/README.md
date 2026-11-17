@@ -25,7 +25,7 @@ is stale.
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066, 0075, 0084 |
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
-| [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077 |
+| [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077, 0088 |
 | [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
 | [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Superseded by 0023 |
 | [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted; amended by 0055, 0068, 0080 |
@@ -52,7 +52,7 @@ is stale.
 | [0036](0036-environment-desktop-deferred.md) | A graphical desktop in the environment is deferred | Accepted |
 | [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Accepted |
 | [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
-| [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted; amended by 0059, 0074, 0083 |
+| [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted; amended by 0059, 0074, 0083, 0088 |
 | [0040](0040-child-session-delegation-deferred.md) | Child-session delegation is deferred | Superseded by 0071 |
 | [0041](0041-ha-plane-deferred.md) | An HA plane is deferred | Accepted |
 | [0042](0042-disconnected-execution-deferred.md) | Disconnected execution is deferred | Accepted |
@@ -72,7 +72,7 @@ is stale.
 | [0056](0056-schedule-still-mints-a-new-session.md) | A schedule fire still mints a new session | Superseded by 0069 |
 | [0057](0057-github-intake-stays-review.md) | GitHub intake stays issues, pull requests, and comments | Superseded by 0070 |
 | [0058](0058-child-session-delegation-retained.md) | Child-session delegation stays deferred | Superseded by 0071 |
-| [0059](0059-unattributed-operator-retained.md) | Plane calls stay one unattributed operator | Accepted; amended by 0074 |
+| [0059](0059-unattributed-operator-retained.md) | Plane calls stay one unattributed operator | Accepted; amended by 0074, 0088 |
 | [0060](0060-shikigami-acp-guest-pin.md) | Pin shikigami acp as a supported guest | Accepted; amended by 0073, 0087 |
 | [0061](0061-one-model-upstream-retained.md) | One model upstream retained | Accepted |
 | [0062](0062-guest-link-desktop-podman-deferred.md) | Docker Desktop and Podman stay unverified for the guest link | Accepted |
@@ -87,7 +87,7 @@ is stale.
 | [0071](0071-bounded-child-session.md) | Bounded child-session delegation | Accepted; amended by 0072, 0073 |
 | [0072](0072-cross-project-child-session.md) | Bounded cross-project child sessions | Accepted |
 | [0073](0073-session-plane-guest-registry.md) | The session is the product; the guest is chosen per session | Accepted |
-| [0074](0074-single-operator-oidc-cli.md) | Optional OIDC CLI authentication for one operator | Accepted |
+| [0074](0074-single-operator-oidc-cli.md) | Optional OIDC CLI authentication for one operator | Accepted; amended by 0088 |
 | [0075](0075-split-guest-grant-from-runner.md) | Guest grant is model and git only; runner token records actions | Accepted |
 | [0076](0076-tenant-isolation.md) | Tenant isolation on the session plane | Accepted; amended by 0077, 0078 |
 | [0077](0077-session-access-grants.md) | Sessions are tenant-owned; cross-tenant access is an audited grant | Accepted; amended by 0078 |
@@ -96,11 +96,12 @@ is stale.
 | [0080](0080-turns-propose-writes-go-through-actions.md) | Agent turns only propose; writes go through governed Actions | Accepted; amended by 0084 |
 | [0081](0081-session-retention.md) | Session retention: short-lived vs indefinite | Accepted |
 | [0082](0082-signed-conformance-receipts.md) | Signed ACP conformance receipts | Accepted |
-| [0083](0083-retain-single-operator-access.md) | Retain single-operator access for shared sessions | Accepted on merge |
+| [0083](0083-retain-single-operator-access.md) | Retain single-operator access for shared sessions | Accepted on merge; amended by 0088 |
 | [0084](0084-core-draft-actions.md) | Definition drafts are operator-applied core Actions | Accepted |
 | [0085](0085-freeze-on-author-validated-journey.md) | The stable-core freeze starts on the author-validated journey | Accepted; amended by 0086 |
 | [0086](0086-supported-1.0-core-contract.md) | Freeze the supported 1.0 core contract | Accepted |
 | [0087](0087-acp-guest-session-load.md) | Resume ACP guests with session/load | Accepted |
+| [0088](0088-issuer-vouched-subjects.md) | A configured issuer vouches for several subjects | Proposed |
 <!-- adr-index:end -->
 
 ## When to write an ADR
