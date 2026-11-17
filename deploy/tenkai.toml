@@ -1,0 +1,72 @@
+# tenkai product manifest for rusui.
+#
+# Installs the plane from the tagged GitHub release: the linux-amd64
+# binaries are checked against the release SHA256SUMS, then
+# `rusui setup apply` installs the managed user service with its state in
+# ./state (docs/user-service.md). The first install creates
+# state/rusui.env and fails until its external credentials are filled in;
+# install again after that. Start `rusui-runner` as docs/operator.md
+# describes; setup does not manage it.
+#
+# Release flow: VERSION, product.version, V= below, and the compatibility
+# block move together. `go test ./internal/compat -run TestTenkaiProfile
+# -update` rewrites the block; CI refuses a stale one.
+
+[product]
+name = "rusui"
+version = "0.1.0"
+description = "Self-hosted environment plane for agent sessions"
+
+[deploy]
+workdir = "."
+install = '''
+set -e
+V=0.1.0
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) ;;
+  *) echo "rusui $V publishes linux-amd64 binaries only" >&2; exit 1 ;;
+esac
+BASE="https://github.com/Sannrox/rusui/releases/download/v$V"
+mkdir -p dl bin
+curl -fsSLo dl/SHA256SUMS "$BASE/SHA256SUMS"
+for f in "rusui-$V-linux-amd64" "rusui-runner-$V-linux-amd64"; do
+  curl -fsSLo "dl/$f" "$BASE/$f"
+  (cd dl && grep -E "  $f\$" SHA256SUMS | sha256sum -c -)
+done
+install -m 0755 "dl/rusui-$V-linux-amd64" bin/rusui
+install -m 0755 "dl/rusui-runner-$V-linux-amd64" bin/rusui-runner
+# Tenkai clears the environment; systemctl --user needs the runtime dir.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+bin/rusui setup apply -state "$PWD/state" -addr 127.0.0.1:8080
+'''
+uninstall = '''
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+bin/rusui setup remove-service -state "$PWD/state"
+'''
+health = '''
+for i in $(seq 1 30); do
+  curl -fsS --cacert state/tls/ca.pem https://127.0.0.1:8080/readyz >/dev/null && exit 0
+  sleep 1
+done
+exit 1
+'''
+
+[delivery]
+has_migration = false
+changes_identity_config = false
+
+# Contracts this release provides to dependents (Tenkai profile v2).
+# Versions are derived from the pinned operator-API response shapes
+# (internal/server/testdata/operator-api.golden.json); the pin is a digest
+# of rusui@<product.version>.
+[compatibility]
+version = 2
+max_evidence_age_ms = 86400000
+
+[compatibility.components.rusui.pin]
+kind = "digest"
+value = "sha256:d810e28e4f7f18de9700c26c0a73a43521d11bd0b75f9862a2de801242361c61"
+
+[compatibility.components.rusui.provides]
+"rusui.admission" = "1.0.0"
+"rusui.environment" = "1.0.0"
