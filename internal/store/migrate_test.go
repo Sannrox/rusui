@@ -565,7 +565,7 @@ func TestV55DecisionsGainNullableAttribution(t *testing.T) {
 ALTER TABLE approval_decisions DROP COLUMN decided_by;
 ALTER TABLE approval_decisions DROP COLUMN delegated_by;
 ALTER TABLE result_dispositions DROP COLUMN delegated_by;
-DELETE FROM schema_migrations WHERE version=55;
+DELETE FROM schema_migrations WHERE version>=55;
 INSERT INTO approval_decisions(action_id, decision, decided_at) VALUES ('old', 'allow', '2026-11-01T00:00:00Z');
 `); err != nil {
 		t.Fatal(err)

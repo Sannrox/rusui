@@ -552,6 +552,13 @@ reconcile every 5 minutes, open-item and locally-tracked catch-up every
 `RUSUI_GITHUB_HOOK_IDS` is unset, reconcile is skipped with a log
 reason and does not fail the scheduler.
 
+These timers, schedule fires, idle sleep, retention expiry and runtime
+reconcile run only while the process holds the `scheduler` row in
+`plane_job_leases` (ADR 0089 D6). The holder renews it every 40 seconds
+for 2 minutes, compared against the store's clock. A claim takes only an
+expired row and increments its generation, and a schedule fire commits
+only under the current generation. Restore expires the row.
+
 ### Admission
 
 Admission compares the freshly fetched **item** snapshot hash to the

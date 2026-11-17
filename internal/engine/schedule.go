@@ -51,7 +51,9 @@ func (e *Engine) DeleteSchedule(project string, id int64) error {
 	return store.DeleteSchedule(e.Store, project, id)
 }
 
-func (e *Engine) StepSchedules(now time.Time) error {
+// StepSchedules fires each schedule's current bucket once. fence is the
+// scheduler lease; a fire after the lease is lost commits nothing.
+func (e *Engine) StepSchedules(now time.Time, fence store.PlaneLease) error {
 	list, err := store.ListSchedules(e.Store)
 	if err != nil {
 		return err
@@ -64,14 +66,14 @@ func (e *Engine) StepSchedules(now time.Time) error {
 		}
 		bucket := now.Unix() / int64(sc.EverySeconds)
 		idem := fmt.Sprintf("sched/%d/%d", sc.ID, bucket)
-		if _, err := e.StartScheduled(sc, idem); err != nil && !errors.Is(err, errPaused) && !errors.Is(err, errHalted) {
+		if _, err := e.StartScheduled(sc, idem, fence); err != nil && !errors.Is(err, errPaused) && !errors.Is(err, errHalted) {
 			errs = append(errs, fmt.Errorf("schedule %d: %w", sc.ID, err))
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func (e *Engine) StartScheduled(sc store.Schedule, idem string) (int64, error) {
+func (e *Engine) StartScheduled(sc store.Schedule, idem string, fence store.PlaneLease) (int64, error) {
 	p, ok := e.PolicySnapshot().Project(sc.Project)
 	if !ok || !p.AllowsKind(policy.KindScheduled) {
 		return 0, fmt.Errorf("policy")
@@ -80,6 +82,10 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string) (int64, error) {
 	var sessionID int64
 	already := false
 	err := e.Store.Tx(func(tx *sql.Tx) error {
+		// A stale scheduler (paused past its lease) must not start a session.
+		if err := fence.Check(tx); err != nil {
+			return err
+		}
 		paused, err := store.Paused(tx, sc.Project)
 		if err != nil {
 			return err

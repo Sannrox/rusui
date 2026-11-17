@@ -70,6 +70,11 @@ func sanitizeRestored(s *Store) (RestoreReport, error) {
 	}
 	n, _ := res.RowsAffected()
 	r.LeasesCleared = int(n)
+	// A restored copy may name a holder that no longer exists. Expire it so
+	// the restored plane claims at once; the claim bumps the generation.
+	if _, err := s.DB.Exec(`UPDATE plane_job_leases SET expires_at=0`); err != nil {
+		return r, err
+	}
 	res, err = s.DB.Exec(`DELETE FROM turn_credentials`)
 	if err != nil {
 		return r, err

@@ -49,7 +49,7 @@ func TestD6SessionWorkflowMatrix(t *testing.T) {
 			t.Fatal(err)
 		}
 		t0 := time.Unix(1_700_000_000, 0).UTC()
-		if err := h.e.StepSchedules(t0); err != nil {
+		if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 			t.Fatal(err)
 		}
 		c, err := h.e.Claim("example/test-repo")
@@ -244,10 +244,10 @@ func TestD6SessionWorkflowMatrix(t *testing.T) {
 			t.Fatal(err)
 		}
 		t0 := time.Unix(1_700_000_000, 0).UTC()
-		if err := h.e.StepSchedules(t0); err != nil {
+		if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 			t.Fatal(err)
 		}
-		if err := h.e.StepSchedules(t0.Add(61 * time.Second)); err != nil {
+		if err := h.e.StepSchedules(t0.Add(61*time.Second), holdScheduler(t, h.st)); err != nil {
 			t.Fatal(err)
 		}
 		var n int

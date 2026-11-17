@@ -370,7 +370,16 @@ func main() {
 	log.Fatal(http.ListenAndServe(*addr, srv.Handler()))
 }
 
+// runScheduler runs the plane-wide timers while this instance holds the
+// scheduler lease. Other instances keep trying to claim it each renewal, so
+// one of them takes over within a lease length after the holder stops.
 func runScheduler(eng *engine.Engine) {
+	lease := engine.NewSchedulerLease(eng.Store)
+	if err := lease.Renew(); err != nil {
+		eng.Notify("scheduler lease: " + err.Error())
+	}
+	renew := time.NewTicker(engine.SchedulerRenewEvery)
+	defer renew.Stop()
 	refresh := time.NewTicker(engine.RefreshTick)
 	reconcile := time.NewTicker(engine.ReconcileEvery)
 	catchup := time.NewTicker(engine.CatchUpEvery)
@@ -384,8 +393,33 @@ func runScheduler(eng *engine.Engine) {
 	defer sched.Stop()
 	defer sumikaReconcile.Stop()
 	for {
+		var tick <-chan time.Time
 		select {
+		case <-renew.C:
+			if err := lease.Renew(); err != nil {
+				eng.Notify("scheduler lease: " + err.Error())
+			}
+			continue
 		case <-refresh.C:
+			tick = refresh.C
+		case <-reconcile.C:
+			tick = reconcile.C
+		case <-catchup.C:
+			tick = catchup.C
+		case <-apply.C:
+			tick = apply.C
+		case <-sched.C:
+			tick = sched.C
+		case <-sumikaReconcile.C:
+			tick = sumikaReconcile.C
+		}
+		// Every timer runs only under the lease; a lost lease skips the tick.
+		fence, held := lease.Held()
+		if !held {
+			continue
+		}
+		switch tick {
+		case refresh.C:
 			if err := eng.ExpireRefreshOwners(); err != nil {
 				eng.Notify("expire owners: " + err.Error())
 			}
@@ -395,20 +429,20 @@ func runScheduler(eng *engine.Engine) {
 			if _, err := eng.StepRefresh(); err != nil {
 				eng.Notify("step refresh: " + err.Error())
 			}
-		case <-reconcile.C:
+		case reconcile.C:
 			if err := eng.ReconcileConfigured(); err != nil {
 				eng.Notify("reconcile: " + err.Error())
 			}
-		case <-catchup.C:
+		case catchup.C:
 			if err := eng.CatchUpConfigured(); err != nil {
 				eng.Notify("catch-up: " + err.Error())
 			}
-		case <-apply.C:
+		case apply.C:
 			if err := eng.RetryApplyAttempts(); err != nil {
 				eng.Notify("apply retry: " + err.Error())
 			}
-		case <-sched.C:
-			if err := eng.StepSchedules(time.Now()); err != nil {
+		case sched.C:
+			if err := eng.StepSchedules(time.Now(), fence); err != nil {
 				eng.Notify("schedules: " + err.Error())
 			}
 			if err := eng.SleepIdleEnvironments(); err != nil {
@@ -417,7 +451,7 @@ func runScheduler(eng *engine.Engine) {
 			if err := eng.ExpireRetainedSessions(); err != nil {
 				eng.Notify("expire retained sessions: " + err.Error())
 			}
-		case <-sumikaReconcile.C:
+		case sumikaReconcile.C:
 			if err := eng.ReconcileSumika(); err != nil {
 				eng.Notify("Sumika reconcile: " + err.Error())
 			}
