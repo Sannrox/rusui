@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -21,17 +22,17 @@ func TestStepSchedulesBucketsAndSkipLive(t *testing.T) {
 		t.Fatalf("%d %v", id, err)
 	}
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	if err := h.e.StepSchedules(t0); err != nil {
+	if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.e.StepSchedules(t0.Add(30 * time.Second)); err != nil {
+	if err := h.e.StepSchedules(t0.Add(30*time.Second), holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	n := countKind(t, h.st, store.SessionKindScheduled)
 	if n != 1 {
 		t.Fatalf("same bucket %d", n)
 	}
-	if err := h.e.StepSchedules(t0.Add(61 * time.Second)); err != nil {
+	if err := h.e.StepSchedules(t0.Add(61*time.Second), holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	if countKind(t, h.st, store.SessionKindScheduled) != 1 {
@@ -50,7 +51,7 @@ func TestScheduleFireAfterCompleteMintsNewSession(t *testing.T) {
 		t.Fatalf("%d %v", id, err)
 	}
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	if err := h.e.StepSchedules(t0); err != nil {
+	if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	c := h.claim()
@@ -62,7 +63,7 @@ func TestScheduleFireAfterCompleteMintsNewSession(t *testing.T) {
 	if err := h.e.CancelSession(first); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.e.StepSchedules(t0.Add(61 * time.Second)); err != nil {
+	if err := h.e.StepSchedules(t0.Add(61*time.Second), holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	if n := countKind(t, h.st, store.SessionKindScheduled); n != 2 {
@@ -151,7 +152,7 @@ projects:
 	h.e.ReloadPolicy(onlyTest2)
 
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	if err := h.e.StepSchedules(t0); err == nil {
+	if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err == nil {
 		t.Fatal("expected refusal to be reported")
 	}
 	if n := countKind(t, h.st, store.SessionKindScheduled); n != 1 {
@@ -184,7 +185,7 @@ func TestBoundScheduleFireQueuesSameSessionAndEnvironment(t *testing.T) {
 		t.Fatalf("fire steered the live turn: %q", c.Snapshot.Body)
 	}
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	if err := h.e.StepSchedules(t0); err != nil {
+	if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	steer, err := h.e.HeartbeatSteer(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision)
@@ -228,10 +229,10 @@ func TestBoundScheduleSameBucketDoesNotDoubleQueue(t *testing.T) {
 	}
 	c := h.claim()
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	if err := h.e.StepSchedules(t0); err != nil {
+	if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.e.StepSchedules(t0.Add(30 * time.Second)); err != nil {
+	if err := h.e.StepSchedules(t0.Add(30*time.Second), holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	var n int
@@ -263,7 +264,7 @@ func TestDeleteScheduleStopsLaterFiresAndKeepsTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	if err := h.e.StepSchedules(t0); err != nil {
+	if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	c := h.claim()
@@ -273,7 +274,7 @@ func TestDeleteScheduleStopsLaterFiresAndKeepsTurn(t *testing.T) {
 	if err := h.e.Heartbeat(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision); err != nil {
 		t.Fatalf("delete cancelled the running turn: %v", err)
 	}
-	if err := h.e.StepSchedules(t0.Add(61 * time.Second)); err != nil {
+	if err := h.e.StepSchedules(t0.Add(61*time.Second), holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	if n := countKind(t, h.st, store.SessionKindScheduled); n != 1 {
@@ -326,7 +327,7 @@ func TestBoundScheduleArchivedFireDoesNotQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	if err := h.e.StepSchedules(t0); err != nil {
+	if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	var n int
@@ -417,7 +418,7 @@ func TestGuestScheduleSetFiresSameSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	if err := h.e.StepSchedules(t0); err != nil {
+	if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	c2, err := h.e.Claim("example/test-repo")
@@ -471,7 +472,7 @@ func TestGuestScheduleReplaceUpdatesPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	if err := h.e.StepSchedules(t0); err != nil {
+	if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	c2, err := h.e.Claim("example/test-repo")
@@ -508,7 +509,7 @@ func TestGuestScheduleClearStopsLaterFires(t *testing.T) {
 		t.Fatal(err)
 	}
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	if err := h.e.StepSchedules(t0); err != nil {
+	if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	if c2, err := h.e.Claim("example/test-repo"); err != nil || c2 != nil {
@@ -545,7 +546,7 @@ func TestGuestScheduleRefusalLeavesPrevious(t *testing.T) {
 		t.Fatal(err)
 	}
 	t0 := time.Unix(1_700_000_000, 0).UTC()
-	if err := h.e.StepSchedules(t0); err != nil {
+	if err := h.e.StepSchedules(t0, holdScheduler(t, h.st)); err != nil {
 		t.Fatal(err)
 	}
 	c2, err := h.e.Claim("example/test-repo")
@@ -640,5 +641,75 @@ func TestGuestScheduleHTTPAuth(t *testing.T) {
 	code, _ = do("Bearer wsec", `{"op":"clear"}`)
 	if code != 409 {
 		t.Fatalf("unleased %d", code)
+	}
+}
+
+// holdScheduler claims the scheduler lease for a fresh holder, which must win.
+func holdScheduler(t *testing.T, st *store.Store) store.PlaneLease {
+	t.Helper()
+	l, ok, err := store.ClaimPlaneLease(st, store.SchedulerLease, "test-holder", engine.SchedulerLeaseTTL)
+	if err != nil || !ok {
+		t.Fatalf("claim scheduler lease ok=%v err=%v", ok, err)
+	}
+	return l
+}
+
+// expireScheduler moves the lease expiry into the past, as a stopped holder's
+// lease would be after one TTL.
+func expireScheduler(t *testing.T, st *store.Store) {
+	t.Helper()
+	if _, err := st.DB.Exec(`UPDATE plane_job_leases SET expires_at = 0 WHERE name = ?`, store.SchedulerLease); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Two instances share one store. Only one holds the scheduler lease; after it
+// stops renewing, the other takes over, the stale holder cannot fire, and a
+// bucket fires once across the takeover.
+func TestSchedulerLeaseTakeover(t *testing.T) {
+	h := setup(t)
+	if _, err := h.e.CreateSchedule("test", "hourly", "1m", "scheduled work", 0); err != nil {
+		t.Fatal(err)
+	}
+	a, b := engine.NewSchedulerLease(h.st), engine.NewSchedulerLease(h.st)
+	if err := a.Renew(); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Renew(); err != nil {
+		t.Fatal(err)
+	}
+	staleA, heldA := a.Held()
+	if _, heldB := b.Held(); !heldA || heldB {
+		t.Fatalf("held a=%v b=%v, want only a", heldA, heldB)
+	}
+	t0 := time.Unix(1_700_000_000, 0).UTC()
+	if err := h.e.StepSchedules(t0, staleA); err != nil {
+		t.Fatal(err)
+	}
+
+	expireScheduler(t, h.st)
+	if err := b.Renew(); err != nil {
+		t.Fatal(err)
+	}
+	fenceB, heldB := b.Held()
+	if !heldB || fenceB.Generation != staleA.Generation+1 {
+		t.Fatalf("takeover held=%v gen %d after %d", heldB, fenceB.Generation, staleA.Generation)
+	}
+	// A resumes with its old lease: its renewal fails and its fire is refused.
+	if err := a.Renew(); err != nil {
+		t.Fatal(err)
+	}
+	if _, held := a.Held(); held {
+		t.Fatal("stale holder still holds after takeover")
+	}
+	if err := h.e.StepSchedules(t0.Add(61*time.Second), staleA); !errors.Is(err, store.ErrPlaneLeaseLost) {
+		t.Fatalf("stale fire err %v", err)
+	}
+	// B re-runs A's bucket: the idempotency key keeps it to one session.
+	if err := h.e.StepSchedules(t0, fenceB); err != nil {
+		t.Fatal(err)
+	}
+	if n := countKind(t, h.st, store.SessionKindScheduled); n != 1 {
+		t.Fatalf("scheduled sessions %d, want 1", n)
 	}
 }

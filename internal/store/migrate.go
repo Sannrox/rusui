@@ -9,7 +9,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 55
+const CurrentSchema = 56
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -648,6 +648,14 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 56 {
+		if err := migrateV56(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 56); err != nil {
+			return err
+		}
+	}
 	if upgrading {
 		if err := clearUpgradeLock(s.DB); err != nil {
 			return err
@@ -681,6 +689,20 @@ func migrateV55(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// migrateV56 adds fenced plane-wide job leases (ADR 0089 D6, #725).
+// expires_at is unix seconds on the store's clock.
+func migrateV56(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS plane_job_leases (
+  name TEXT PRIMARY KEY,
+  holder TEXT NOT NULL,
+  generation INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+`)
+	return err
 }
 
 // migrateV54 records why a repair candidate was selected or declined (#108).
