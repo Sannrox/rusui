@@ -38,15 +38,26 @@ func (s *Store) migratePostgres() error {
 		return err
 	}
 	if hasSchema {
+		// Older releases did not create the floor table; an empty
+		// database gets it with the baseline below.
+		if _, err := tx.ExecContext(ctx, floorSQL); err != nil {
+			return err
+		}
 		var ver int
 		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&ver); err != nil {
 			return err
 		}
 		switch {
 		case ver > CurrentSchema:
-			return fmt.Errorf("store: schema version %d is newer than this binary (%d); restore the pre-upgrade copy or use a matching rusui", ver, CurrentSchema)
+			if err := checkNewerSchema(tx, ver); err != nil {
+				return err
+			}
+			return tx.Commit()
 		case ver < CurrentSchema:
 			return fmt.Errorf("store: PostgreSQL schema version %d is older than this binary (%d); no PostgreSQL migrations exist yet", ver, CurrentSchema)
+		}
+		if err := writeFloor(tx); err != nil {
+			return err
 		}
 		return tx.Commit()
 	}
@@ -75,6 +86,12 @@ func (s *Store) migratePostgres() error {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at) SELECT v, ? FROM generate_series(1, ?::bigint) AS v`, now, CurrentSchema); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, floorSQL); err != nil {
+		return err
+	}
+	if err := writeFloor(tx); err != nil {
 		return err
 	}
 	return tx.Commit()

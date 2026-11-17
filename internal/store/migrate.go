@@ -4,12 +4,66 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
 const CurrentSchema = 58
+
+// ReadableFloor is the oldest schema version whose binary can still read and
+// write a store at CurrentSchema (ADR 0089 D8). An expand-only migration,
+// which only adds what older releases ignore, leaves it alone. A contract
+// migration, which removes, renames or changes the meaning of anything an
+// older release reads, raises it to its own version. Binaries from before
+// the floor existed refuse every newer schema, so it starts here.
+const ReadableFloor = 58
+
+// floorSQL creates the one-row table holding the floor of the store's
+// schema. It lives outside the versioned migrations so a binary can read it
+// on a schema newer than its own.
+const floorSQL = `CREATE TABLE IF NOT EXISTS schema_floor (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  floor INTEGER NOT NULL
+)`
+
+// querier is what the schema checks need from a *sql.DB or *sql.Tx.
+type querier interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// checkNewerSchema decides whether this binary may serve a store at ver,
+// newer than CurrentSchema: only when the store's floor is at most
+// CurrentSchema and no upgrade is in progress. A store without a floor was
+// written by a binary that predates it and is refused, as before.
+func checkNewerSchema(q querier, ver int) error {
+	var floor int
+	err := q.QueryRow(`SELECT floor FROM schema_floor WHERE id=1`).Scan(&floor)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && floor > CurrentSchema {
+		return fmt.Errorf("store: schema version %d is newer than this binary (%d) and needs schema %d or later; restore the pre-upgrade copy or use a matching rusui", ver, CurrentSchema, max(floor, ver))
+	}
+	if err != nil {
+		return err
+	}
+	var target int
+	err = q.QueryRow(`SELECT target FROM schema_upgrade_lock WHERE id=1`).Scan(&target)
+	if err == nil {
+		return fmt.Errorf("store: an upgrade toward schema %d is in progress or was interrupted; this binary (%d) will not serve it", target, CurrentSchema)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	return nil
+}
+
+// writeFloor records ReadableFloor for a store this binary has brought to
+// CurrentSchema.
+func writeFloor(q querier) error {
+	_, err := q.Exec(`INSERT INTO schema_floor (id, floor) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET floor = excluded.floor`, ReadableFloor)
+	return err
+}
 
 // V1SchemaSQL is the implicit schema rusui used before versioned
 // migrations. Existing operator databases match this text.
@@ -152,6 +206,9 @@ func (s *Store) migrate() error {
 )`); err != nil {
 		return err
 	}
+	if _, err := s.DB.Exec(floorSQL); err != nil {
+		return err
+	}
 	ver, err := currentVersion(s.DB)
 	if err != nil {
 		return err
@@ -178,7 +235,9 @@ func (s *Store) migrate() error {
 		ver = 1
 	}
 	if ver > CurrentSchema {
-		return fmt.Errorf("store: schema version %d is newer than this binary (%d); restore the pre-upgrade copy or use a matching rusui", ver, CurrentSchema)
+		// A newer release migrated this store; serve it untouched if its
+		// floor allows (rolling upgrade or rollback, ADR 0089 D8).
+		return checkNewerSchema(s.DB, ver)
 	}
 	if err := recoverUpgradeLock(s.DB, ver); err != nil {
 		return err
@@ -671,6 +730,9 @@ func (s *Store) migrate() error {
 		if err := stamp(s.DB, 58); err != nil {
 			return err
 		}
+	}
+	if err := writeFloor(s.DB); err != nil {
+		return err
 	}
 	if upgrading {
 		if err := clearUpgradeLock(s.DB); err != nil {
@@ -1843,14 +1905,19 @@ func SchemaVersion(s *Store) (int, error) {
 	return currentVersion(s.DB)
 }
 
-// StampSchemaVersion records version as applied without running it. The
-// compat suite uses it to fake a database written by a newer binary.
-func StampSchemaVersion(s *Store, version int) error {
-	return stamp(s.DB, version)
+// StampSchemaVersion records version as applied with the given floor,
+// without running anything. The compat suite uses it to fake a database
+// written by a newer binary.
+func StampSchemaVersion(s *Store, version, floor int) error {
+	if err := stamp(s.DB, version); err != nil {
+		return err
+	}
+	_, err := s.DB.Exec(`UPDATE schema_floor SET floor=? WHERE id=1`, floor)
+	return err
 }
 
 func stamp(db *sql.DB, version int) error {
-	_, err := db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)`,
+	_, err := db.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?) ON CONFLICT DO NOTHING`,
 		version, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }

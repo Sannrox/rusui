@@ -49,8 +49,10 @@ Slack `resume [project]` does the same.
    release guests and rotate the plane id, keep receipts and approval
    **records**), then start on that file and `rusui resume`.
 
-A schema newer than this binary, or an interrupted upgrade
-(`schema_upgrade_lock`), fails closed. Restore the copy; do not retry
+A schema newer than this binary's readable floor allows, or an
+interrupted upgrade (`schema_upgrade_lock`), fails closed. A newer
+schema within the floor opens unchanged, so rolling back one release
+before a contract step needs no restore. Restore the copy; do not retry
 start on the half-upgraded file. Versions and checks:
 [compatibility.md](compatibility.md).
 
