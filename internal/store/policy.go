@@ -25,6 +25,14 @@ func LatestPolicyRevision(s *Store) (id int64, hash string, ok bool, err error) 
 	return id, hash, err == nil, err
 }
 
+// SetTurnPolicyRevisionTx binds turnID to the newest recorded revision with
+// policy hash, the policy the claim ran under. The binding is NULL when no
+// revision with that hash was recorded.
+func SetTurnPolicyRevisionTx(tx *sql.Tx, turnID int64, hash string) error {
+	_, err := tx.Exec(`UPDATE turns SET policy_revision_id=(SELECT MAX(id) FROM policy_revisions WHERE hash=?) WHERE id=?`, hash, turnID)
+	return err
+}
+
 // RecordPolicyRevisionTx appends a loaded policy revision.
 func RecordPolicyRevisionTx(tx *sql.Tx, hash, payload string) error {
 	_, err := tx.Exec(`INSERT INTO policy_revisions(hash,payload) VALUES(?,?)`, hash, payload)

@@ -1,6 +1,9 @@
 # ADR 0086: Freeze the supported 1.0 core contract
 
-- Status: Accepted
+- Status: Accepted; amended by 0090
+- Amended by: [ADR 0090](0090-receipt-evidence-and-policy-binding.md)
+  (receipt evidence classes, `evidence_summary`, and the claim-time policy
+  revision).
 - Date: 2026-10-30
 - Amends: [ADR 0046](0046-workspace-first-sequence.md) (M6 freeze content),
   [ADR 0085](0085-freeze-on-author-validated-journey.md) (the freeze now
@@ -150,8 +153,9 @@ SQLite is the source of truth. Optional `records/` JSON and Markdown
 files are regenerated exports, not recovery inputs.
 
 Portable fields on a turn receipt: session id, turn id, lease generation,
-claimed revision, policy revision id, outcome, evidence class
-(`server_verified` or `model_assertion`), action type, source git pin,
+claimed revision, policy revision id (the claim's; ADR 0090), outcome,
+evidence classes (`server_verified`, `plane_observed` or
+`model_assertion`, counted per class; ADR 0090), action type, source git pin,
 guest identity, and the guest ACP session id when present. Action rows
 record `fs/*`, `terminal/*`, permission decisions, `write.propose` /
 `write.apply`, and `core.draft`.

@@ -16,7 +16,7 @@ import (
 func TestReceiptMainWritesMarkdownAndFiles(t *testing.T) {
 	exp := receipt.Export{
 		SchemaVersion: 1, SessionID: 9, TurnID: 3, ReviewRevisionID: 12,
-		Verdict: "keep", EvidenceClass: "model_assertion",
+		Verdict: "keep", EvidenceSummary: receipt.EvidenceSummary{ModelAssertion: 1},
 		GitHubAction: receipt.GitHubAction{Status: "none", Detail: "No GitHub action occurred."},
 		Actions:      []receipt.Action{},
 	}

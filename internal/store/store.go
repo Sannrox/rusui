@@ -637,6 +637,10 @@ type ReviewRevision struct {
 	ItemHash        string
 	MainSHA         string
 	Payload         string
+	// PolicyRevisionID and PolicyRevision name the policy the review ran
+	// under; zero and empty for reviews stored before schema 57.
+	PolicyRevisionID int64
+	PolicyRevision   string
 }
 
 // LatestReviewForSession returns the latest immutable review for a session.
@@ -648,8 +652,8 @@ func LatestReviewForSession(s *Store, sessionID int64) (revisionID int64, payloa
 // LatestReviewRecord returns the latest immutable review row for a session.
 func LatestReviewRecord(s *Store, sessionID int64) (ReviewRevision, bool, error) {
 	var r ReviewRevision
-	err := s.DB.QueryRow(`SELECT r.id, r.job_id, r.claimed_revision, r.item_hash, r.main_sha, r.payload FROM review_revisions r JOIN turns t ON t.id=r.job_id WHERE t.session_id=? ORDER BY r.id DESC LIMIT 1`, sessionID).Scan(
-		&r.ID, &r.JobID, &r.ClaimedRevision, &r.ItemHash, &r.MainSHA, &r.Payload)
+	err := s.DB.QueryRow(`SELECT r.id, r.job_id, r.claimed_revision, r.item_hash, r.main_sha, r.payload, COALESCE(p.id, 0), COALESCE(p.hash, '') FROM review_revisions r JOIN turns t ON t.id=r.job_id LEFT JOIN policy_revisions p ON p.id=r.policy_revision_id WHERE t.session_id=? ORDER BY r.id DESC LIMIT 1`, sessionID).Scan(
+		&r.ID, &r.JobID, &r.ClaimedRevision, &r.ItemHash, &r.MainSHA, &r.Payload, &r.PolicyRevisionID, &r.PolicyRevision)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ReviewRevision{}, false, nil
 	}

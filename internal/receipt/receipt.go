@@ -32,28 +32,39 @@ var (
 
 // Export is a versioned copy of one stored review and its action rows.
 type Export struct {
-	SchemaVersion    int          `json:"schema_version"`
-	RecoveryInput    bool         `json:"recovery_input"`
-	Signed           bool         `json:"signed"`
-	SessionID        int64        `json:"session_id"`
-	TurnID           int64        `json:"turn_id"`
-	ReviewRevisionID int64        `json:"review_revision_id"`
-	LeaseGeneration  int          `json:"lease_generation"`
-	ClaimedRevision  int          `json:"claimed_revision"`
-	PolicyRevisionID int64        `json:"policy_revision_id,omitempty"`
-	PolicyRevision   string       `json:"policy_revision,omitempty"`
-	Repo             string       `json:"repo"`
-	Item             int          `json:"item"`
-	ItemKind         string       `json:"item_kind"`
-	SourceGitPin     string       `json:"source_git_pin"`
-	GuestName        string       `json:"guest_name,omitempty"`
-	GuestPin         string       `json:"guest_pin,omitempty"`
-	GuestSessionID   string       `json:"guest_session_id,omitempty"`
-	Verdict          string       `json:"verdict"`
-	EvidenceClass    string       `json:"evidence_class"`
-	Usage            *Usage       `json:"usage,omitempty"`
-	GitHubAction     GitHubAction `json:"github_action"`
-	Actions          []Action     `json:"actions"`
+	SchemaVersion    int             `json:"schema_version"`
+	RecoveryInput    bool            `json:"recovery_input"`
+	Signed           bool            `json:"signed"`
+	SessionID        int64           `json:"session_id"`
+	TurnID           int64           `json:"turn_id"`
+	ReviewRevisionID int64           `json:"review_revision_id"`
+	LeaseGeneration  int             `json:"lease_generation"`
+	ClaimedRevision  int             `json:"claimed_revision"`
+	PolicyRevisionID int64           `json:"policy_revision_id,omitempty"`
+	PolicyRevision   string          `json:"policy_revision,omitempty"`
+	Repo             string          `json:"repo"`
+	Item             int             `json:"item"`
+	ItemKind         string          `json:"item_kind"`
+	SourceGitPin     string          `json:"source_git_pin"`
+	GuestName        string          `json:"guest_name,omitempty"`
+	GuestPin         string          `json:"guest_pin,omitempty"`
+	GuestSessionID   string          `json:"guest_session_id,omitempty"`
+	Verdict          string          `json:"verdict"`
+	EvidenceSummary  EvidenceSummary `json:"evidence_summary"`
+	Usage            *Usage          `json:"usage,omitempty"`
+	GitHubAction     GitHubAction    `json:"github_action"`
+	Actions          []Action        `json:"actions"`
+}
+
+// EvidenceSummary counts the review's bound action rows by the class the
+// plane recorded. The guest's own evidence labels are not counted: a guest
+// cannot mark its claim server_verified. It replaces a single strongest
+// class, which let one server-verified action label a review that rests
+// mostly on model assertions (#661).
+type EvidenceSummary struct {
+	ServerVerified int `json:"server_verified"`
+	PlaneObserved  int `json:"plane_observed"`
+	ModelAssertion int `json:"model_assertion"`
 }
 
 // Usage is reported token counts when the stored artifact includes them.
@@ -79,28 +90,18 @@ type Action struct {
 }
 
 type artifact struct {
-	SchemaVersion   int              `json:"schema_version"`
-	Repo            string           `json:"repo"`
-	Item            int              `json:"item"`
-	ItemKind        string           `json:"item_kind"`
-	ClaimedRevision int              `json:"claimed_revision"`
-	SnapshotHash    string           `json:"snapshot_hash"`
-	MainSHA         string           `json:"main_sha"`
-	HeadSHA         string           `json:"head_sha"`
-	Verdict         string           `json:"verdict"`
-	ProposedActions []proposedAction `json:"proposed_actions"`
-	InputTokens     *int             `json:"input_tokens,omitempty"`
-	OutputTokens    *int             `json:"output_tokens,omitempty"`
-	GuestSessionID  string           `json:"guest_session_id,omitempty"`
-}
-
-type proposedAction struct {
-	Type     string     `json:"type"`
-	Evidence []evidence `json:"evidence"`
-}
-
-type evidence struct {
-	Class string `json:"class"`
+	SchemaVersion   int    `json:"schema_version"`
+	Repo            string `json:"repo"`
+	Item            int    `json:"item"`
+	ItemKind        string `json:"item_kind"`
+	ClaimedRevision int    `json:"claimed_revision"`
+	SnapshotHash    string `json:"snapshot_hash"`
+	MainSHA         string `json:"main_sha"`
+	HeadSHA         string `json:"head_sha"`
+	Verdict         string `json:"verdict"`
+	InputTokens     *int   `json:"input_tokens,omitempty"`
+	OutputTokens    *int   `json:"output_tokens,omitempty"`
+	GuestSessionID  string `json:"guest_session_id,omitempty"`
 }
 
 // FromStore builds an export from the latest immutable review of sessionID.
@@ -151,14 +152,10 @@ func FromStore(s *store.Store, sessionID int64, secrets []string) (Export, error
 		Verdict:          art.Verdict,
 		Actions:          boundActions(actions, rev.ID),
 	}
-	if polID, hash, ok, err := store.LatestPolicyRevision(s); err != nil {
-		return Export{}, err
-	} else if ok {
-		exp.PolicyRevisionID = polID
-		exp.PolicyRevision = hash
-	}
+	exp.PolicyRevisionID = rev.PolicyRevisionID
+	exp.PolicyRevision = rev.PolicyRevision
 	exp.SourceGitPin = sourceGitPin(s, sess, rev, art)
-	exp.EvidenceClass = evidenceClass(art, exp.Actions)
+	exp.EvidenceSummary = evidenceSummary(exp.Actions)
 	exp.GitHubAction = githubAction(exp.Actions)
 	if art.InputTokens != nil || art.OutputTokens != nil {
 		exp.Usage = &Usage{InputTokens: art.InputTokens, OutputTokens: art.OutputTokens}
@@ -196,39 +193,19 @@ func boundActions(actions []store.Action, revisionID int64) []Action {
 	return out
 }
 
-func evidenceClass(art artifact, actions []Action) string {
-	class := ""
+func evidenceSummary(actions []Action) EvidenceSummary {
+	var sum EvidenceSummary
 	for _, a := range actions {
-		class = strongerEvidence(class, a.EvidenceClass)
-	}
-	for _, a := range art.ProposedActions {
-		for _, e := range a.Evidence {
-			class = strongerEvidence(class, e.Class)
-		}
-	}
-	if class == "" {
-		return "model_assertion"
-	}
-	return class
-}
-
-func strongerEvidence(cur, next string) string {
-	rank := func(c string) int {
-		switch c {
+		switch a.EvidenceClass {
 		case "server_verified":
-			return 3
+			sum.ServerVerified++
 		case "plane_observed":
-			return 2
+			sum.PlaneObserved++
 		case "model_assertion":
-			return 1
-		default:
-			return 0
+			sum.ModelAssertion++
 		}
 	}
-	if rank(next) > rank(cur) {
-		return next
-	}
-	return cur
+	return sum
 }
 
 func githubAction(actions []Action) GitHubAction {
@@ -277,7 +254,6 @@ func redactExport(exp Export, secrets []string) Export {
 	exp.GuestPin = redact(exp.GuestPin, secrets)
 	exp.GuestSessionID = redact(exp.GuestSessionID, secrets)
 	exp.Verdict = redact(exp.Verdict, secrets)
-	exp.EvidenceClass = redact(exp.EvidenceClass, secrets)
 	exp.GitHubAction.Status = redact(exp.GitHubAction.Status, secrets)
 	exp.GitHubAction.Detail = redact(exp.GitHubAction.Detail, secrets)
 	for i := range exp.Actions {
@@ -321,7 +297,8 @@ func (e Export) Markdown() string {
 		fmt.Fprintf(&b, "- Item: %s#%d (%s)\n", e.Repo, e.Item, e.ItemKind)
 	}
 	fmt.Fprintf(&b, "- Verdict: %s\n", emptyDash(e.Verdict))
-	fmt.Fprintf(&b, "- Evidence: %s\n", evidenceLabel(e.EvidenceClass))
+	fmt.Fprintf(&b, "- Evidence: %d server_verified, %d plane_observed, %d model_assertion\n",
+		e.EvidenceSummary.ServerVerified, e.EvidenceSummary.PlaneObserved, e.EvidenceSummary.ModelAssertion)
 	if e.PolicyRevision != "" {
 		fmt.Fprintf(&b, "- Policy revision: %s (id %d)\n", e.PolicyRevision, e.PolicyRevisionID)
 	}
@@ -334,7 +311,8 @@ func (e Export) Markdown() string {
 	}
 	fmt.Fprintf(&b, "- GitHub action: %s\n", e.GitHubAction.Detail)
 	b.WriteString("\n## Evidence classes\n\n")
-	b.WriteString("- `server_verified`: recorded by the plane from GitHub or its own observation.\n")
+	b.WriteString("- `server_verified`: checked by the plane against GitHub before it was recorded.\n")
+	b.WriteString("- `plane_observed`: a guest request the plane saw and recorded; proof the request happened, not of its claim.\n")
 	b.WriteString("- `model_assertion`: claimed by the guest; stored, never treated as proof.\n")
 	if len(e.Actions) > 0 {
 		b.WriteString("\n## Actions\n\n")
