@@ -206,6 +206,11 @@ func main() {
 	} else {
 		eng.PreCloneHooks, eng.PreSetupHooks = pre, setup
 	}
+	if admit, err := engine.ReadAdmitHooks(filepath.Join(filepath.Dir(*pol), "hooks")); err != nil {
+		log.Fatal(err)
+	} else {
+		eng.AdmitHooks = admit
+	}
 	// Plane publication (ADR 0044) needs the App: implement guests hold no
 	// GitHub credential, so the plane is the only publisher.
 	var repoTokens *gh.InstallationTokens

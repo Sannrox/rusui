@@ -65,7 +65,10 @@ func (e *Engine) StepSchedules(now time.Time, fence store.PlaneLease) error {
 		}
 		bucket := now.Unix() / int64(sc.EverySeconds)
 		idem := fmt.Sprintf("sched/%d/%d", sc.ID, bucket)
-		if _, err := e.StartScheduled(sc, idem, fence); err != nil && !errors.Is(err, errPaused) && !errors.Is(err, errHalted) {
+		// A refused fire is recorded as admit.refuse; like a paused one, it
+		// is not a scheduler fault.
+		var refused *AdmitRefusedError
+		if _, err := e.StartScheduled(sc, idem, fence); err != nil && !errors.Is(err, errPaused) && !errors.Is(err, errHalted) && !errors.As(err, &refused) {
 			errs = append(errs, fmt.Errorf("schedule %d: %w", sc.ID, err))
 		}
 	}
@@ -80,90 +83,98 @@ func (e *Engine) StartScheduled(sc store.Schedule, idem string, fence store.Plan
 	repo, sha := e.operatorSessionPin(p)
 	var sessionID int64
 	already := false
-	err := e.Store.Tx(func(tx *store.Tx) error {
-		sessionID, already = 0, false // Tx may rerun this callback
-		// A stale scheduler (paused past its lease) must not start a session.
-		if err := fence.Check(tx); err != nil {
-			return err
-		}
-		paused, err := store.Paused(tx, sc.Project)
-		if err != nil {
-			return err
-		}
-		if paused {
-			return errPaused
-		}
-		halted, err := store.Halted(tx, sessionTenant(p), sc.Project, sessionTenant(p))
-		if err != nil {
-			return err
-		}
-		if halted {
-			return errHalted
-		}
-		if idem != "" {
-			id, ok, err := store.LookupIdempotencyTx(tx, idem)
+	err := e.admitStart(AdmitRequest{Project: sc.Project, Kind: store.SessionKindScheduled, Repo: repo, BaseSHA: sha, Actor: sessionTenant(p), PromptSHA256: promptDigest(sc.Prompt)}, idem, func(g *admitGate) error {
+		return e.Store.Tx(func(tx *store.Tx) error {
+			sessionID, already = 0, false // Tx may rerun this callback
+			// A stale scheduler (paused past its lease) must not start a session.
+			if err := fence.Check(tx); err != nil {
+				return err
+			}
+			paused, err := store.Paused(tx, sc.Project)
 			if err != nil {
 				return err
 			}
-			if ok {
-				sessionID = id
-				already = true
-				return nil
+			if paused {
+				return errPaused
 			}
-		}
-		if sc.SessionID != 0 {
-			project, archived, err := store.SessionProjectArchivedTx(tx, sc.SessionID)
+			halted, err := store.Halted(tx, sessionTenant(p), sc.Project, sessionTenant(p))
 			if err != nil {
 				return err
 			}
-			if project != sc.Project {
-				return fmt.Errorf("schedule session project mismatch")
-			}
-			if archived {
-				already = true
+			if halted {
+				return errHalted
 			}
 			if idem != "" {
-				if err := store.PutIdempotencyTx(tx, idem, sc.SessionID); err != nil {
+				id, ok, err := store.LookupIdempotencyTx(tx, idem)
+				if err != nil {
+					return err
+				}
+				if ok {
+					sessionID = id
+					already = true
+					return nil
+				}
+			}
+			if sc.SessionID != 0 {
+				project, archived, err := store.SessionProjectArchivedTx(tx, sc.SessionID)
+				if err != nil {
+					return err
+				}
+				if project != sc.Project {
+					return fmt.Errorf("schedule session project mismatch")
+				}
+				if archived {
+					already = true
+				}
+				if idem != "" {
+					if err := store.PutIdempotencyTx(tx, idem, sc.SessionID); err != nil {
+						return err
+					}
+				}
+				sessionID = sc.SessionID
+				return nil
+			}
+			live, err := store.ScheduleHasLiveSession(tx, sc.ID)
+			if err != nil {
+				return err
+			}
+			if live {
+				return nil
+			}
+			if err := g.ready(); err != nil {
+				return err
+			}
+			sid, item, err := store.InsertScheduledSessionTx(tx, sc.Project, repo, sc.Prompt, sc.ID)
+			if err != nil {
+				return err
+			}
+			if err := g.recordTx(tx, sid); err != nil {
+				return err
+			}
+			if err := store.SetSessionTenantTx(tx, sid, sessionTenant(p)); err != nil {
+				return err
+			}
+			if err := store.SetSessionExecutionTx(tx, sid, store.ExecutionSpace, ""); err != nil {
+				return err
+			}
+			if err := e.applyDefaultRetentionTx(tx, sid); err != nil {
+				return err
+			}
+			it := snapshot.Item{
+				Repo: repo, Item: item, ItemKind: "scheduled", State: "open",
+				Title: "scheduled:" + sc.Name, Body: sc.Prompt, DefaultBranch: "main", MainSHA: sha,
+			}
+			if err := store.SaveSnapshotTx(tx, repo, item, 1, it); err != nil {
+				return err
+			}
+			if idem != "" {
+				if err := store.PutIdempotencyTx(tx, idem, sid); err != nil {
 					return err
 				}
 			}
-			sessionID = sc.SessionID
+			sessionID = sid
 			return nil
-		}
-		live, err := store.ScheduleHasLiveSession(tx, sc.ID)
-		if err != nil {
-			return err
-		}
-		if live {
-			return nil
-		}
-		sid, item, err := store.InsertScheduledSessionTx(tx, sc.Project, repo, sc.Prompt, sc.ID)
-		if err != nil {
-			return err
-		}
-		if err := store.SetSessionTenantTx(tx, sid, sessionTenant(p)); err != nil {
-			return err
-		}
-		if err := store.SetSessionExecutionTx(tx, sid, store.ExecutionSpace, ""); err != nil {
-			return err
-		}
-		if err := e.applyDefaultRetentionTx(tx, sid); err != nil {
-			return err
-		}
-		it := snapshot.Item{
-			Repo: repo, Item: item, ItemKind: "scheduled", State: "open",
-			Title: "scheduled:" + sc.Name, Body: sc.Prompt, DefaultBranch: "main", MainSHA: sha,
-		}
-		if err := store.SaveSnapshotTx(tx, repo, item, 1, it); err != nil {
-			return err
-		}
-		if idem != "" {
-			if err := store.PutIdempotencyTx(tx, idem, sid); err != nil {
-				return err
-			}
-		}
-		sessionID = sid
-		return nil
+		})
 	})
 	if err != nil || already || sc.SessionID == 0 {
 		return sessionID, err

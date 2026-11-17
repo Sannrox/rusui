@@ -50,94 +50,102 @@ func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode
 	}
 	repo, sha := e.operatorSessionPin(p)
 	var sessionID int64
-	err := e.Store.Tx(func(tx *store.Tx) error {
-		paused, err := store.Paused(tx, project)
-		if err != nil {
-			return err
-		}
-		if paused {
-			return errPaused
-		}
-		wantAct := strings.TrimSpace(act)
-		if wantAct == "" {
-			wantAct = strings.TrimSpace(createdBy)
-		}
-		if wantAct == "" {
-			wantAct = sessionTenant(p)
-		}
-		halted, err := store.Halted(tx, sessionTenant(p), project, wantAct)
-		if err != nil {
-			return err
-		}
-		if halted {
-			return errHalted
-		}
-		if idem != "" {
-			id, ok, err := store.LookupIdempotencyTx(tx, idem)
+	err := e.admitStart(AdmitRequest{Project: project, Kind: store.SessionKindRun, Repo: repo, BaseSHA: sha, Actor: admitActor(act, createdBy, sessionTenant(p)), PromptSHA256: promptDigest(prompt)}, "", func(g *admitGate) error {
+		return e.Store.Tx(func(tx *store.Tx) error {
+			paused, err := store.Paused(tx, project)
 			if err != nil {
 				return err
 			}
-			if ok {
-				sess, err := store.GetSessionTx(tx, id)
+			if paused {
+				return errPaused
+			}
+			wantAct := strings.TrimSpace(act)
+			if wantAct == "" {
+				wantAct = strings.TrimSpace(createdBy)
+			}
+			if wantAct == "" {
+				wantAct = sessionTenant(p)
+			}
+			halted, err := store.Halted(tx, sessionTenant(p), project, wantAct)
+			if err != nil {
+				return err
+			}
+			if halted {
+				return errHalted
+			}
+			if idem != "" {
+				id, ok, err := store.LookupIdempotencyTx(tx, idem)
 				if err != nil {
 					return err
 				}
-				wantMode := store.NormalizeExecutionMode(execMode)
-				if sess.Project != project ||
-					store.NormalizeTenantID(sess.TenantID) != sessionTenant(p) ||
-					store.NormalizeExecutionMode(sess.ExecutionMode) != wantMode ||
-					store.NormalizeActor(sess.Act) != store.NormalizeActor(wantAct) {
-					return fmt.Errorf("idempotency")
+				if ok {
+					sess, err := store.GetSessionTx(tx, id)
+					if err != nil {
+						return err
+					}
+					wantMode := store.NormalizeExecutionMode(execMode)
+					if sess.Project != project ||
+						store.NormalizeTenantID(sess.TenantID) != sessionTenant(p) ||
+						store.NormalizeExecutionMode(sess.ExecutionMode) != wantMode ||
+						store.NormalizeActor(sess.Act) != store.NormalizeActor(wantAct) {
+						return fmt.Errorf("idempotency")
+					}
+					sessionID = id
+					return nil
 				}
-				sessionID = id
-				return nil
 			}
-		}
-		sid, item, err := store.InsertRunSessionTx(tx, project, repo, prompt)
-		if err != nil {
-			return err
-		}
-		if err := store.SetSessionTenantTx(tx, sid, sessionTenant(p)); err != nil {
-			return err
-		}
-		if err := store.SetSessionCreatorTx(tx, sid, createdBy); err != nil {
-			return err
-		}
-		if err := store.SetSessionExecutionTx(tx, sid, execMode, act); err != nil {
-			return err
-		}
-		if err := e.applyDefaultRetentionTx(tx, sid); err != nil {
-			return err
-		}
-		if _, _, err := e.bindSessionGuestTx(tx, sid, project, guest, pol); err != nil {
-			return err
-		}
-		resolved := size
-		if resolved == "" {
-			resolved = p.Size
-		}
-		if err := store.SetSessionSizeTx(tx, sid, NormalizeSize(resolved)); err != nil {
-			return err
-		}
-		if mode != "" {
-			if err := store.SetSessionModeTx(tx, sid, mode); err != nil {
+			if err := g.ready(); err != nil {
 				return err
 			}
-		}
-		it := snapshot.Item{
-			Repo: repo, Item: item, ItemKind: "run", State: "open",
-			Title: "run", Body: prompt, DefaultBranch: "main", MainSHA: sha,
-		}
-		if err := store.SaveSnapshotTx(tx, repo, item, 1, it); err != nil {
-			return err
-		}
-		if idem != "" {
-			if err := store.PutIdempotencyTx(tx, idem, sid); err != nil {
+			sid, item, err := store.InsertRunSessionTx(tx, project, repo, prompt)
+			if err != nil {
 				return err
 			}
-		}
-		sessionID = sid
-		return nil
+			if err := g.recordTx(tx, sid); err != nil {
+				return err
+			}
+			if err := store.SetSessionTenantTx(tx, sid, sessionTenant(p)); err != nil {
+				return err
+			}
+			if err := store.SetSessionCreatorTx(tx, sid, createdBy); err != nil {
+				return err
+			}
+			if err := store.SetSessionExecutionTx(tx, sid, execMode, act); err != nil {
+				return err
+			}
+			if err := e.applyDefaultRetentionTx(tx, sid); err != nil {
+				return err
+			}
+			if _, _, err := e.bindSessionGuestTx(tx, sid, project, guest, pol); err != nil {
+				return err
+			}
+			resolved := size
+			if resolved == "" {
+				resolved = p.Size
+			}
+			if err := store.SetSessionSizeTx(tx, sid, NormalizeSize(resolved)); err != nil {
+				return err
+			}
+			if mode != "" {
+				if err := store.SetSessionModeTx(tx, sid, mode); err != nil {
+					return err
+				}
+			}
+			it := snapshot.Item{
+				Repo: repo, Item: item, ItemKind: "run", State: "open",
+				Title: "run", Body: prompt, DefaultBranch: "main", MainSHA: sha,
+			}
+			if err := store.SaveSnapshotTx(tx, repo, item, 1, it); err != nil {
+				return err
+			}
+			if idem != "" {
+				if err := store.PutIdempotencyTx(tx, idem, sid); err != nil {
+					return err
+				}
+			}
+			sessionID = sid
+			return nil
+		})
 	})
 	return sessionID, err
 }

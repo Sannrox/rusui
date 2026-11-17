@@ -118,90 +118,98 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 	}
 	hash := specHash(spec, pol.Hash)
 	var out *store.Task
-	err = e.Store.Tx(func(tx *store.Tx) error {
-		paused, err := store.Paused(tx, project)
-		if err != nil {
-			return err
-		}
-		if paused {
-			return errPaused
-		}
-		halted, err := store.Halted(tx, sessionTenant(p), project, sessionTenant(p))
-		if err != nil {
-			return err
-		}
-		if halted {
-			return errHalted
-		}
-		if existing, ok, err := store.LookupTaskBySpecHashTx(tx, hash); err != nil {
-			return err
-		} else if ok && taskStillBound(existing.State) {
-			out = existing
-			return nil
-		}
-		latest, ok, err := store.LatestTaskTx(tx, spec.EffortKey)
-		if err != nil {
-			return err
-		}
-		// An effort names one implement session until the operator
-		// abandons or cancels it. A different prompt or pin returns
-		// that session instead of starting another.
-		if ok && taskStillBound(latest.State) {
-			out = latest
-			return nil
-		}
-		rev := 1
-		if ok {
-			if err := store.ReleaseTaskSpecTx(tx, latest.ID); err != nil {
+	err = e.admitStart(AdmitRequest{Project: project, Kind: "task", Repo: spec.Repo, BaseSHA: spec.BaseSHA, Actor: sessionTenant(p), PromptSHA256: promptDigest(spec.Prompt)}, "", func(g *admitGate) error {
+		return e.Store.Tx(func(tx *store.Tx) error {
+			paused, err := store.Paused(tx, project)
+			if err != nil {
 				return err
 			}
-			if err := store.SupersedeTaskTx(tx, latest.ID); err != nil {
+			if paused {
+				return errPaused
+			}
+			halted, err := store.Halted(tx, sessionTenant(p), project, sessionTenant(p))
+			if err != nil {
 				return err
 			}
-			rev = latest.Revision + 1
-		}
-		sid, item, err := store.InsertRunSessionTx(tx, project, spec.Repo, spec.Prompt)
-		if err != nil {
-			return err
-		}
-		if err := store.SetSessionTenantTx(tx, sid, sessionTenant(p)); err != nil {
-			return err
-		}
-		if err := store.SetSessionExecutionTx(tx, sid, store.ExecutionSpace, ""); err != nil {
-			return err
-		}
-		if err := e.applyDefaultRetentionTx(tx, sid); err != nil {
-			return err
-		}
-		if _, err := store.GrantSessionToolTx(tx, sid, store.ToolWrite, "plane"); err != nil {
-			return err
-		}
-		if _, _, err := e.bindSessionGuestTx(tx, sid, project, spec.Guest, pol); err != nil {
-			return err
-		}
-		it := snapshot.Item{
-			Repo: spec.Repo, Item: item, ItemKind: "run", State: "open",
-			Title: "run", Body: spec.Prompt, DefaultBranch: spec.Ref, MainSHA: spec.BaseSHA,
-		}
-		if err := store.SaveSnapshotTx(tx, spec.Repo, item, 1, it); err != nil {
-			return err
-		}
-		id, err := store.InsertTaskTx(tx, store.Task{
-			EffortKey: spec.EffortKey, Revision: rev, SpecHash: hash,
-			SessionID: sid, Repo: spec.Repo, Ref: spec.Ref, BaseSHA: spec.BaseSHA,
-			PolicyHash: pol.Hash, AllowedPaths: string(paths), ContextRefs: string(ctxs),
-			Prompt: spec.Prompt, BudgetRepairs: spec.BudgetRepairs, State: "open",
+			if halted {
+				return errHalted
+			}
+			if existing, ok, err := store.LookupTaskBySpecHashTx(tx, hash); err != nil {
+				return err
+			} else if ok && taskStillBound(existing.State) {
+				out = existing
+				return nil
+			}
+			latest, ok, err := store.LatestTaskTx(tx, spec.EffortKey)
+			if err != nil {
+				return err
+			}
+			// An effort names one implement session until the operator
+			// abandons or cancels it. A different prompt or pin returns
+			// that session instead of starting another.
+			if ok && taskStillBound(latest.State) {
+				out = latest
+				return nil
+			}
+			rev := 1
+			if ok {
+				if err := store.ReleaseTaskSpecTx(tx, latest.ID); err != nil {
+					return err
+				}
+				if err := store.SupersedeTaskTx(tx, latest.ID); err != nil {
+					return err
+				}
+				rev = latest.Revision + 1
+			}
+			if err := g.ready(); err != nil {
+				return err
+			}
+			sid, item, err := store.InsertRunSessionTx(tx, project, spec.Repo, spec.Prompt)
+			if err != nil {
+				return err
+			}
+			if err := g.recordTx(tx, sid); err != nil {
+				return err
+			}
+			if err := store.SetSessionTenantTx(tx, sid, sessionTenant(p)); err != nil {
+				return err
+			}
+			if err := store.SetSessionExecutionTx(tx, sid, store.ExecutionSpace, ""); err != nil {
+				return err
+			}
+			if err := e.applyDefaultRetentionTx(tx, sid); err != nil {
+				return err
+			}
+			if _, err := store.GrantSessionToolTx(tx, sid, store.ToolWrite, "plane"); err != nil {
+				return err
+			}
+			if _, _, err := e.bindSessionGuestTx(tx, sid, project, spec.Guest, pol); err != nil {
+				return err
+			}
+			it := snapshot.Item{
+				Repo: spec.Repo, Item: item, ItemKind: "run", State: "open",
+				Title: "run", Body: spec.Prompt, DefaultBranch: spec.Ref, MainSHA: spec.BaseSHA,
+			}
+			if err := store.SaveSnapshotTx(tx, spec.Repo, item, 1, it); err != nil {
+				return err
+			}
+			id, err := store.InsertTaskTx(tx, store.Task{
+				EffortKey: spec.EffortKey, Revision: rev, SpecHash: hash,
+				SessionID: sid, Repo: spec.Repo, Ref: spec.Ref, BaseSHA: spec.BaseSHA,
+				PolicyHash: pol.Hash, AllowedPaths: string(paths), ContextRefs: string(ctxs),
+				Prompt: spec.Prompt, BudgetRepairs: spec.BudgetRepairs, State: "open",
+			})
+			if err != nil {
+				return err
+			}
+			out = &store.Task{
+				ID: id, EffortKey: spec.EffortKey, Revision: rev, SpecHash: hash,
+				SessionID: sid, Repo: spec.Repo, Ref: spec.Ref, BaseSHA: spec.BaseSHA,
+				PolicyHash: pol.Hash, AllowedPaths: string(paths), ContextRefs: string(ctxs),
+				Prompt: spec.Prompt, BudgetRepairs: spec.BudgetRepairs, State: "open",
+			}
+			return nil
 		})
-		if err != nil {
-			return err
-		}
-		out = &store.Task{
-			ID: id, EffortKey: spec.EffortKey, Revision: rev, SpecHash: hash,
-			SessionID: sid, Repo: spec.Repo, Ref: spec.Ref, BaseSHA: spec.BaseSHA,
-			PolicyHash: pol.Hash, AllowedPaths: string(paths), ContextRefs: string(ctxs),
-			Prompt: spec.Prompt, BudgetRepairs: spec.BudgetRepairs, State: "open",
-		}
-		return nil
 	})
 	if err != nil {
 		return nil, err

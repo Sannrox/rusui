@@ -107,6 +107,9 @@ type Engine struct {
 	// project slug (ADR 0067). Production loads them from hooks/<slug>/.
 	PreCloneHooks map[string]string
 	PreSetupHooks map[string]string
+	// AdmitHooks maps a project slug to the path of its admit hook
+	// (hooks/<slug>/admit), run on the plane before a session starts.
+	AdmitHooks map[string]string
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {

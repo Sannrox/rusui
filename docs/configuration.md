@@ -517,6 +517,17 @@ in `rusui envlog`. The hook environment does not receive
 both hooks and setup. Wake still runs `.agents/resume` only
 ([ADR 0067](decisions/0067-plane-stored-pre-hooks.md)).
 
+A project may also store an executable `hooks/<project-slug>/admit`. The
+plane runs it before every run, task, child, scheduled, or local session
+starts, with only `PATH` in its environment and one JSON object on stdin
+(`project`, `kind`, `repo`, `base_sha`, `actor`, `prompt_sha256`; never
+the prompt). Exit 0 admits and records the first stdout line as
+`admit.allow`. Exit 2 refuses with the first stdout line as the reason,
+recorded as `admit.refuse`; the start request fails with HTTP 409. Any
+other exit, a crash, or 10 seconds without an answer refuses. Review
+sessions are not gated
+([ADR 0092](decisions/0092-plane-admit-hook.md)).
+
 ```yaml
 projects:
   rusui:
