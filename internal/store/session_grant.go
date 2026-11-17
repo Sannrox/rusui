@@ -46,16 +46,12 @@ func GrantSessionAccess(s *Store, sessionID int64, grantee, createdBy string) (S
 		return SessionAccessGrant{}, ErrGrantSelf
 	}
 	now := time.Now().UTC()
-	res, err := s.DB.Exec(`INSERT INTO session_access_grants (session_id, grantee_tenant, created_by, created_at) VALUES (?,?,?,?)`,
-		sessionID, grantee, createdBy, now.Format(time.RFC3339Nano))
+	id, err := scanID(s.DB.QueryRow(`INSERT INTO session_access_grants (session_id, grantee_tenant, created_by, created_at) VALUES (?,?,?,?) RETURNING id`,
+		sessionID, grantee, createdBy, now.Format(time.RFC3339Nano)))
 	if err != nil {
 		if strings.Contains(strings.ToUpper(err.Error()), "UNIQUE") {
 			return SessionAccessGrant{}, ErrGrantExists
 		}
-		return SessionAccessGrant{}, err
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
 		return SessionAccessGrant{}, err
 	}
 	return SessionAccessGrant{ID: id, SessionID: sessionID, GranteeTenant: grantee, CreatedBy: createdBy, CreatedAt: now}, nil

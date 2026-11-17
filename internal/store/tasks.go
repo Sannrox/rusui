@@ -48,12 +48,12 @@ func LatestTaskTx(tx *sql.Tx, effortKey string) (*Task, bool, error) {
 
 func InsertTaskTx(tx *sql.Tx, t Task) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	res, err := tx.Exec(`INSERT INTO tasks (effort_key, revision, spec_hash, session_id, repo, ref, base_sha, policy_hash, allowed_paths, context_refs, prompt, budget_repairs, state, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		t.EffortKey, t.Revision, t.SpecHash, t.SessionID, t.Repo, t.Ref, t.BaseSHA, t.PolicyHash, t.AllowedPaths, t.ContextRefs, t.Prompt, t.BudgetRepairs, t.State, now)
+	newID, err := scanID(tx.QueryRow(`INSERT INTO tasks (effort_key, revision, spec_hash, session_id, repo, ref, base_sha, policy_hash, allowed_paths, context_refs, prompt, budget_repairs, state, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
+		t.EffortKey, t.Revision, t.SpecHash, t.SessionID, t.Repo, t.Ref, t.BaseSHA, t.PolicyHash, t.AllowedPaths, t.ContextRefs, t.Prompt, t.BudgetRepairs, t.State, now))
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return newID, nil
 }
 
 func SupersedeTaskTx(tx *sql.Tx, id int64) error {

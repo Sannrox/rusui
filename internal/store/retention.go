@@ -48,7 +48,7 @@ func DefaultRetentionExpiry(now time.Time) time.Time {
 
 func ensureSessionRetentionTx(tx *sql.Tx, sessionID int64, now time.Time) error {
 	exp := DefaultRetentionExpiry(now).Format(time.RFC3339Nano)
-	_, err := tx.Exec(`INSERT OR IGNORE INTO session_retention (session_id, class, expires_at) VALUES (?, ?, ?)`,
+	_, err := tx.Exec(`INSERT INTO session_retention (session_id, class, expires_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
 		sessionID, RetentionShort, exp)
 	return err
 }

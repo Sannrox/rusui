@@ -26,12 +26,12 @@ func InsertRepairDecisionTx(tx *sql.Tx, d RepairDecision) (int64, error) {
 	if d.CreatedAt == "" {
 		d.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
-	res, err := tx.Exec(`INSERT INTO repair_decisions (repo, item, item_hash, decision, reason, created_at) VALUES (?,?,?,?,?,?)`,
-		d.Repo, d.Item, d.ItemHash, d.Decision, d.Reason, d.CreatedAt)
+	newID, err := scanID(tx.QueryRow(`INSERT INTO repair_decisions (repo, item, item_hash, decision, reason, created_at) VALUES (?,?,?,?,?,?) RETURNING id`,
+		d.Repo, d.Item, d.ItemHash, d.Decision, d.Reason, d.CreatedAt))
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return newID, nil
 }
 
 func DeleteRepairDecisionTx(tx *sql.Tx, id int64) error {

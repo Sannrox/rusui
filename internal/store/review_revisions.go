@@ -11,13 +11,12 @@ import (
 // against claimedRevision and returns its id. The row keeps the policy
 // revision the turn was claimed under.
 func InsertReviewRevisionTx(tx *sql.Tx, jobID int64, claimedRevision int, itemHash, mainSHA, payload string) (int64, error) {
-	res, err := tx.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload, policy_revision_id) VALUES (?,?,?,?,?,(SELECT policy_revision_id FROM turns WHERE id=?))`,
-		jobID, claimedRevision, itemHash, mainSHA, payload, jobID)
+	newID, err := scanID(tx.QueryRow(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload, policy_revision_id) VALUES (?,?,?,?,?,(SELECT policy_revision_id FROM turns WHERE id=?)) RETURNING id`,
+		jobID, claimedRevision, itemHash, mainSHA, payload, jobID))
 	if err != nil {
 		return 0, err
 	}
-	id, _ := res.LastInsertId()
-	return id, nil
+	return newID, nil
 }
 
 // LatestReviewRevisionTx returns the id and payload of the newest review

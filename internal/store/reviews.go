@@ -17,12 +17,12 @@ type IndependentReview struct {
 }
 
 func InsertIndependentReview(s *Store, r IndependentReview) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO independent_reviews (proof_id, author_session_id, reviewer_session_id, candidate_sha, disposition, findings, created_at) VALUES (?,?,?,?,?,?,?)`,
-		r.ProofID, r.AuthorSessionID, r.ReviewerSessionID, r.CandidateSHA, r.Disposition, r.Findings, time.Now().UTC().Format(time.RFC3339Nano))
+	newID, err := scanID(s.DB.QueryRow(`INSERT INTO independent_reviews (proof_id, author_session_id, reviewer_session_id, candidate_sha, disposition, findings, created_at) VALUES (?,?,?,?,?,?,?) RETURNING id`,
+		r.ProofID, r.AuthorSessionID, r.ReviewerSessionID, r.CandidateSHA, r.Disposition, r.Findings, time.Now().UTC().Format(time.RFC3339Nano)))
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return newID, nil
 }
 
 func CountReviewsForProof(s *Store, proofID int64) (int, error) {
