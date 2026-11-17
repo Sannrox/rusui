@@ -982,13 +982,12 @@ func ListActionsForSession(s *Store, sessionID int64) ([]Action, error) {
 }
 
 // TranscriptEntry is one durable transcript action with its append
-// position. Seq is the actions rowid: SQLite has one writer at a time, so
-// rowids grow in commit order and a reader that resumes after Seq misses
-// no later entry. Actions are never deleted and Rusui never VACUUMs, so a
-// recorded Seq keeps naming the same entry. On PostgreSQL rowid is an
-// identity drawn at insert, not commit, so two concurrent writers can commit
-// out of order and a resuming reader can miss the lower Seq; the redundant
-// topology must close this before it serves followers (#700).
+// position. Seq is the actions rowid. Within one session it grows in commit
+// order: SQLite has one writer at a time, and on PostgreSQL, where rowid is
+// an identity drawn at insert, every insert of a session's action first
+// locks the session row (lockSessionTx). A reader that resumes after Seq
+// therefore misses no later entry. Actions are never deleted and Rusui
+// never VACUUMs, so a recorded Seq keeps naming the same entry.
 type TranscriptEntry struct {
 	Seq int64
 	Action
@@ -1011,6 +1010,15 @@ func ListTranscriptAfter(s *Store, sessionID, seq int64, limit int) ([]Transcrip
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// lockSessionTx holds the session row until tx ends. A session's action
+// inserts take it first, so a second writer draws its rowid only after the
+// first commits and the transcript Seq grows in commit order on PostgreSQL
+// too (#744). On SQLite the single writer already gives that order.
+func lockSessionTx(tx *sql.Tx, sessionID int64) error {
+	_, err := tx.Exec(`UPDATE sessions SET state=state WHERE id=?`, sessionID)
+	return err
 }
 
 // FollowToken summarizes everything that can change what a followed read
@@ -1377,6 +1385,11 @@ func InsertAction(s *Store, a Action) error {
 }
 
 func InsertActionTx(tx *sql.Tx, a Action) error {
+	if a.SessionID != nil {
+		if err := lockSessionTx(tx, *a.SessionID); err != nil {
+			return err
+		}
+	}
 	_, err := tx.Exec(`INSERT INTO actions (action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, a.SessionID, a.TurnID, a.ReviewRevisionID, a.Repo, a.Item, a.Type, a.ReasonCode, a.EvidenceClass, a.LimitSentence, a.Body)
 	return err

@@ -128,6 +128,11 @@ type ApplyAction struct {
 func InsertApplyActionTx(tx *sql.Tx, a ApplyAction) error {
 	var sid sql.NullInt64
 	_ = tx.QueryRow(`SELECT id FROM sessions WHERE kind=? AND repo=? AND item=?`, SessionKindReview, a.Repo, a.Item).Scan(&sid)
+	if sid.Valid {
+		if err := lockSessionTx(tx, sid.Int64); err != nil {
+			return err
+		}
+	}
 	_, err := tx.Exec(`INSERT INTO actions (action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
 		a.ActionID, nullableInt(sid), a.TurnID, a.ReviewRevisionID, a.Repo, a.Item, a.Type, a.ReasonCode, a.EvidenceClass, a.LimitSentence, a.Body)
 	return err
