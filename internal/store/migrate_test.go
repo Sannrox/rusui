@@ -493,18 +493,85 @@ INSERT INTO tasks (session_id, state) VALUES (1, 'open'), (2, 'abandoned'), (3, 
 	}
 }
 
-func TestNewerSchemaIsRejected(t *testing.T) {
+// The next release's expand-only migration (here a column this release does
+// not know) keeps the floor, so this release serves the migrated store beside
+// the next one during a rolling upgrade, and alone after a rollback, without
+// changing its schema (ADR 0089 D8).
+func TestPreviousReleaseServesAnExpandedSchema(t *testing.T) {
 	dsn := storetest.DSN(t)
-	st := openTestStoreAt(t, dsn)
-	if _, err := st.DB.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)`,
-		CurrentSchema+1, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+	next := openTestStoreAt(t, dsn)
+	if _, err := next.DB.Exec(`ALTER TABLE sessions ADD COLUMN next_release_note TEXT`); err != nil {
+		t.Fatal(err)
+	}
+	if err := StampSchemaVersion(next, CurrentSchema+1, ReadableFloor); err != nil {
+		t.Fatal(err)
+	}
+	prev := openTestStoreAt(t, dsn)
+	var sid int64
+	if err := prev.Tx(func(tx *sql.Tx) error {
+		var err error
+		sid, _, err = InsertRunSessionTx(tx, "test", "example/test-repo", "written by the previous release")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if sess, err := GetSession(next, sid); err != nil || sess.Prompt != "written by the previous release" {
+		t.Fatalf("session %+v %v", sess, err)
+	}
+	var floor int
+	if err := prev.DB.QueryRow(`SELECT floor FROM schema_floor`).Scan(&floor); err != nil || floor != ReadableFloor {
+		t.Fatalf("floor %d %v", floor, err)
+	}
+	if ver, err := SchemaVersion(prev); err != nil || ver != CurrentSchema+1 {
+		t.Fatalf("schema %d %v", ver, err)
+	}
+}
+
+// A contract migration raises the floor past this release, and a newer store
+// without a floor predates it; this release refuses both, as before.
+func TestNewerSchemaIsRejected(t *testing.T) {
+	for name, floor := range map[string]int{"contract step": CurrentSchema + 1, "no floor": 0} {
+		t.Run(name, func(t *testing.T) {
+			dsn := storetest.DSN(t)
+			st := openTestStoreAt(t, dsn)
+			if err := StampSchemaVersion(st, CurrentSchema+1, floor); err != nil {
+				t.Fatal(err)
+			}
+			if floor == 0 {
+				if _, err := st.DB.Exec(`DELETE FROM schema_floor`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := st.Close(); err != nil {
+				t.Fatal(err)
+			}
+			_, err := openTestDSN(dsn)
+			if err == nil || !strings.Contains(err.Error(), "newer than this binary") {
+				t.Fatalf("got %v", err)
+			}
+		})
+	}
+}
+
+// A newer release that is still migrating, or died doing so, leaves a schema
+// no release can vouch for; this release refuses it even under its floor.
+func TestNewerSchemaMidUpgradeIsRefused(t *testing.T) {
+	storetest.SQLiteOnly(t, "SQLite upgrade lock; PostgreSQL migrates in one transaction")
+	path := filepath.Join(t.TempDir(), "mid.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := StampSchemaVersion(st, CurrentSchema+1, ReadableFloor); err != nil {
+		t.Fatal(err)
+	}
+	if err := setUpgradeLock(st.DB, CurrentSchema+2); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Close(); err != nil {
 		t.Fatal(err)
 	}
-	_, err := openTestDSN(dsn)
-	if err == nil || !strings.Contains(err.Error(), "newer than this binary") {
+	if _, err := Open(path); err == nil || !strings.Contains(err.Error(), "in progress or was interrupted") {
 		t.Fatalf("got %v", err)
 	}
 }

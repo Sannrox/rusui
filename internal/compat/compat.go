@@ -158,7 +158,7 @@ func SelfCheck(dir string) (Report, error) {
 		if err != nil {
 			return err
 		}
-		if err := store.StampSchemaVersion(st, store.CurrentSchema+1); err != nil {
+		if err := store.StampSchemaVersion(st, store.CurrentSchema+1, store.CurrentSchema+1); err != nil {
 			_ = st.Close()
 			return err
 		}

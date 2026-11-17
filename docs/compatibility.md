@@ -16,7 +16,7 @@ and the plane returns 409 when they differ. Dev builds that report
 
 | Surface | 1.0 version | Unsupported input |
 | --- | --- | --- |
-| SQLite schema | current `schema_migrations` version (forward from implicit v1) | schema newer than the binary; interrupted upgrade |
+| SQLite schema | current `schema_migrations` version (forward from implicit v1); a newer schema whose floor this binary meets | schema newer than the binary's floor allows; interrupted upgrade |
 | Policy | v2; unknown fields fail closed | v1 files; unknown fields |
 | Operator HTTP+SSE | current handlers; omitted optional request fields keep working | new required fields are not added without a later ADR |
 | Runner protocol | hello / claim / heartbeat / complete / fail | runner commit != plane commit |
@@ -33,8 +33,21 @@ The supported window is any database this binary can open:
 - implicit v1 (jobs table, no `schema_migrations` row);
 - every stamped version through the binary's current schema.
 
-Upgrade is forward on start. There is no downgrade. Compatibility with
-every historical development build is not claimed.
+Upgrade is forward on start. Compatibility with every historical
+development build is not claimed.
+
+Each store records a readable floor in `schema_floor`: the oldest schema
+version whose binary can still read and write it. A binary opens a newer
+schema, without changing it, when its own version is at least that floor
+and no upgrade is in progress. Otherwise it fails closed. An expand-only
+migration, which only adds what older releases ignore, keeps the floor;
+a contract migration, which removes, renames or changes the meaning of
+anything an older release reads, raises it to its own version. So the
+previous release serves beside the next one during a rolling upgrade and
+alone after a rollback, until a contract step ships
+([ADR 0089](decisions/0089-redundant-plane.md) D8). There is no
+downgrade across a contract step. Releases from before the floor existed
+refuse every newer schema.
 
 Before replacing binaries: drain, stop, copy `rusui.db` and `-wal`/`-shm`.
 If start fails, restore that copy. An interrupted upgrade leaves
