@@ -477,12 +477,16 @@ the id, not the value.
 Project `mcp_servers` lists remote MCP tool servers (Streamable HTTP) the
 guest connects to: `name` (`^[a-z0-9][a-z0-9_-]{0,31}$`, not `gateway`)
 and an `http` or `https` `url` without userinfo. No plane credential is
-sent to them.
+sent to them. Every call to a listed server is a `tool` permission
+request: a rule decides it or it waits for an operator approval, and an
+allow covers that call's arguments only. The native Codex guest cannot ask
+per call, so it is never sent tool servers.
 
 Defaults `mcp_gateway` turns on gateway mode (off when omitted). Every
-session then sees one MCP server, `gateway`, at that URL, and the guest
-authenticates with its short-lived turn credential. Native guests reference
-it as `RUSUI_TURN_TOKEN` rather than receiving the value in argv or a file.
+session, except on the native Codex guest, then sees one MCP server,
+`gateway`, at that URL, and the guest authenticates with its short-lived
+turn credential. The native Claude guest references it as
+`RUSUI_TURN_TOKEN` rather than receiving the value in argv or a file.
 Third-party tool credentials stay in the gateway. A project that still
 names `mcp_servers` is a policy load error, and the runner refuses any
 assignment naming a direct server before the guest starts.
