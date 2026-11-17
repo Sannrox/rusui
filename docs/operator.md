@@ -132,10 +132,12 @@ and Anthropic dialects can serve both kinds of guest; the plane chooses the
 credential header from the request dialect. `model.proxy` receipts record
 a bounded aggregate of destination origin, path, and HTTP status, plus call
 counts and a status histogram. Model responses do not wait for a SQLite write.
-One aggregate per turn is committed with the terminal measurement, before the
-follow stream ends. Follow-ups and retries reuse the turn; each lease generation
-adds its counts to that same aggregate at termination, without accepting late
-responses from an older execution. Review revisions remain immutable. Counts are best-effort: a plane restart loses unfinished
+One aggregate per lease generation is committed with the terminal measurement,
+before the follow stream ends. Follow-ups and retries reuse the turn; each lease
+generation appends its own `model.proxy` row, so a turn total is the sum of its
+rows, and late responses from an older execution are not accepted. Action rows
+are append-only: the store refuses any rewrite except the retention prompt
+scrub. Review revisions remain immutable. Counts are best-effort: a plane restart loses unfinished
 summaries; at most 256 turn summaries are retained in memory, with terminal
 snapshots or expired grants reclaimed first. If every slot remains active, new-turn diagnostics
 are dropped and one warning is logged. Each summary retains at most 64 distinct origin/path/

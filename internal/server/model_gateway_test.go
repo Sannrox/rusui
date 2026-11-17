@@ -125,15 +125,18 @@ func TestGatewayBothDialectsUseOneOriginAndRecordDestination(t *testing.T) {
 	if err := e.CancelSession(sessionID); err != nil {
 		t.Fatal(err)
 	}
+	// The reused turn appends its own summary; the first row is unchanged.
+	first := actions[0].Body
 	actions, err = store.ListActions(e.Store, "example/test-repo", 8)
-	if err != nil || len(actions) != 1 {
-		t.Fatalf("reused turn grew receipts: %+v %v", actions, err)
+	if err != nil || len(actions) != 2 || actions[0].Body != first {
+		t.Fatalf("reused turn receipts: %+v %v", actions, err)
 	}
-	if err := json.Unmarshal([]byte(actions[0].Body), &receipt); err != nil {
+	receipt.StatusCounts, receipt.Calls = nil, nil
+	if err := json.Unmarshal([]byte(actions[1].Body), &receipt); err != nil {
 		t.Fatal(err)
 	}
-	if receipt.Count != 42 || receipt.StatusCounts[200] != 40 || receipt.StatusCounts[429] != 2 || len(receipt.Calls) != 3 || strings.Contains(actions[0].Body, "retry") {
-		t.Fatalf("reused turn lost model summaries: %s", actions[0].Body)
+	if receipt.Count != 2 || receipt.StatusCounts[429] != 2 || len(receipt.Calls) != 1 || strings.Contains(actions[1].Body, "retry") {
+		t.Fatalf("reused turn summary: %s", actions[1].Body)
 	}
 
 }
