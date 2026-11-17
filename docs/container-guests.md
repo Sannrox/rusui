@@ -3,8 +3,13 @@
 The first unattended topology is **one runner**, the **container** driver
 (Docker or Podman CLI), and Grok ACP over container stdio with plane
 proxies. Tests in this repository prove that path with `FakeRuntime` and a
-stubbed Docker CLI. They do **not** claim live Docker/Podman, IPv6, or
-cross-host combinations.
+stubbed Docker CLI. One live test,
+`TestLiveTrustedGuestReachesOnlyLinkTargets`, starts a real guest and
+checks from inside it that a public address, a public name, guest
+loopback on the plane port, the host gateway, the metadata address, IPv6,
+and `github.com` all fail while the plane answers through the link. CI
+runs it on Docker and fails when no runtime is present. Podman and
+cross-host combinations are not claimed.
 
 Container guests run with no network (`--network none`) and may reach
 only `rusui.plane` (git and model HTTPS proxies), through a guest link: a
