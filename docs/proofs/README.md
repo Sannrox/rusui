@@ -20,6 +20,7 @@
 | #498 guest-link hosts | [Predeclaration and results](498-guest-link-hosts.md) | Docker Desktop defer, Podman defer |
 | #603 transform authoring | [Walkthrough and results](603-transform-authoring.md) | Fails the bar: publish needs an ADR amending 0080; file feature issues |
 | #698 recovery objective | [Desk research and drill procedure](698-recovery-objective.md) | Proposed objective; drill not yet measured |
+| #700 plane takeover | [Drill procedure and results](700-plane-takeover.md) | Takeover bound 3m40s, measured worst 176s; no acknowledged write lost; four runs |
 
 The [development corpus replay](../../eval/results.md) is another historical
 result. The [corpus reference](../../eval/set.md) describes its inputs and
