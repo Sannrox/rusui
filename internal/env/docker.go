@@ -119,6 +119,29 @@ func (d DockerCLI) run(args ...string) ([]byte, error) {
 	return out, nil
 }
 
+// GuestPidsLimit caps processes and threads in one guest container, so one
+// guest cannot exhaust host process IDs for every other session. It is set
+// well above what a race-enabled test run of a large repository needs.
+const GuestPidsLimit = 4096
+
+// HardeningRunArgs are the Docker/Podman flags every guest container starts
+// with (#680): all capabilities dropped except the ones the guest needs to
+// work in a workspace that docker cp placed with the plane's file owner,
+// privilege gain through setuid binaries refused, and a process cap. The
+// runtime's default seccomp profile stays on because nothing disables it.
+func HardeningRunArgs() []string {
+	return []string{
+		"--cap-drop", "ALL",
+		// The workspace keeps the plane user's uid (PlaceTree uses docker cp),
+		// so the root guest needs these to write, create and chmod in it.
+		"--cap-add", "CHOWN",
+		"--cap-add", "DAC_OVERRIDE",
+		"--cap-add", "FOWNER",
+		"--security-opt", "no-new-privileges",
+		"--pids-limit", strconv.Itoa(GuestPidsLimit),
+	}
+}
+
 func (d DockerCLI) CreateAndStart(spec Spec) (string, error) {
 	if spec.Image == "" {
 		return "", fmt.Errorf("env: guest image required")
@@ -136,6 +159,7 @@ func (d DockerCLI) CreateAndStart(spec Spec) (string, error) {
 	}
 	args := []string{"run", "-d"}
 	args = append(args, TrustedRunArgs(spec)...)
+	args = append(args, HardeningRunArgs()...)
 	// PID 1 must stay this keepalive: KillGuest signals every other
 	// process, so --init or another entrypoint would stop the container
 	// on cancel (#441).

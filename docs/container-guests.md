@@ -31,6 +31,14 @@ part of the guest image identity (`source_hash`) or mount it with
 `RUSUI_PLANE_CA`. An untrusted endpoint never receives the grant: TLS
 handshake fails before the bearer is sent.
 
+Every guest container also starts hardened: all Linux capabilities
+dropped except `CHOWN`, `DAC_OVERRIDE`, and `FOWNER` (the workspace keeps
+the plane user's file owner, so the root guest needs them to write in it),
+`--security-opt no-new-privileges` so a setuid binary cannot raise
+privileges, and `--pids-limit 4096`. The runtime's default seccomp profile
+stays on. These are fixed defaults with no opt-out; containers created
+before the change keep their old flags until they are recreated.
+
 `.agents/setup` runs once per image and git pin. When it exits zero, the
 plane copies `/workspace` (`.git` included) into the snapshot cache, and
 every later environment for that image and pin, including one created
