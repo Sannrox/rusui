@@ -28,7 +28,8 @@ func PutGrant(s *Store, g Grant) error {
 	if g.CanPush {
 		push = 1
 	}
-	_, err := s.DB.Exec(`INSERT OR REPLACE INTO credential_grants (token_hash, kind, session_id, turn_id, repo, can_push, expires_at) VALUES (?,?,?,?,?,?,?)`,
+	_, err := s.DB.Exec(`INSERT INTO credential_grants (token_hash, kind, session_id, turn_id, repo, can_push, expires_at) VALUES (?,?,?,?,?,?,?)
+ON CONFLICT (token_hash) DO UPDATE SET kind=excluded.kind, session_id=excluded.session_id, turn_id=excluded.turn_id, repo=excluded.repo, can_push=excluded.can_push, expires_at=excluded.expires_at`,
 		g.TokenHash, g.Kind, g.SessionID, g.TurnID, g.Repo, push, g.ExpiresAt.UTC().Format(time.RFC3339Nano))
 	return err
 }

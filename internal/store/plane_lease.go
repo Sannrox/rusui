@@ -34,7 +34,7 @@ func ClaimPlaneLease(s *Store, name, holder string, ttl time.Duration) (PlaneLea
 	l := PlaneLease{Name: name, Holder: holder}
 	ok := false
 	err := s.Tx(func(tx *sql.Tx) error {
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO plane_job_leases(name, holder, generation, expires_at) VALUES (?, '', 0, 0)`, name); err != nil {
+		if _, err := tx.Exec(`INSERT INTO plane_job_leases(name, holder, generation, expires_at) VALUES (?, '', 0, 0) ON CONFLICT DO NOTHING`, name); err != nil {
 			return err
 		}
 		res, err := tx.Exec(`UPDATE plane_job_leases SET

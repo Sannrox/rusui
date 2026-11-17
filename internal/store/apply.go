@@ -51,7 +51,7 @@ func CompletePendingCommentTx(tx *sql.Tx, actionID string, commentID int64) erro
 
 // PlanApplyAttemptTx records actionID as planned unless it already exists.
 func PlanApplyAttemptTx(tx *sql.Tx, actionID string, reviewRevisionID int64, repo string, item int) error {
-	_, err := tx.Exec(`INSERT OR IGNORE INTO apply_attempts (action_id, review_revision_id, repo, item, state) VALUES (?,?,?,?, 'planned')`,
+	_, err := tx.Exec(`INSERT INTO apply_attempts (action_id, review_revision_id, repo, item, state) VALUES (?,?,?,?, 'planned') ON CONFLICT DO NOTHING`,
 		actionID, reviewRevisionID, repo, item)
 	return err
 }
@@ -90,7 +90,7 @@ func CancelRevisionApplyAttemptsTx(tx *sql.Tx, reviewRevisionID int64) error {
 
 // InvalidateEvidenceTx records that actionID's evidence no longer holds.
 func InvalidateEvidenceTx(tx *sql.Tx, reviewRevisionID int64, actionID string) error {
-	_, err := tx.Exec(`INSERT OR IGNORE INTO evidence_invalidations (review_revision_id, action_id, consumed) VALUES (?,?,0)`, reviewRevisionID, actionID)
+	_, err := tx.Exec(`INSERT INTO evidence_invalidations (review_revision_id, action_id, consumed) VALUES (?,?,0) ON CONFLICT DO NOTHING`, reviewRevisionID, actionID)
 	return err
 }
 
@@ -128,7 +128,7 @@ type ApplyAction struct {
 func InsertApplyActionTx(tx *sql.Tx, a ApplyAction) error {
 	var sid sql.NullInt64
 	_ = tx.QueryRow(`SELECT id FROM sessions WHERE kind=? AND repo=? AND item=?`, SessionKindReview, a.Repo, a.Item).Scan(&sid)
-	_, err := tx.Exec(`INSERT OR IGNORE INTO actions (action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := tx.Exec(`INSERT INTO actions (action_id, session_id, turn_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
 		a.ActionID, nullableInt(sid), a.TurnID, a.ReviewRevisionID, a.Repo, a.Item, a.Type, a.ReasonCode, a.EvidenceClass, a.LimitSentence, a.Body)
 	return err
 }

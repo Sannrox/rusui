@@ -15,12 +15,12 @@ type ProofRow struct {
 }
 
 func InsertProof(s *Store, p ProofRow) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO proofs (candidate_sha, source_hash, log_digest, command, exit_code, outcome, created_at) VALUES (?,?,?,?,?,?,?)`,
-		p.CandidateSHA, p.SourceHash, p.LogDigest, p.Command, p.ExitCode, p.Outcome, time.Now().UTC().Format(time.RFC3339Nano))
+	newID, err := scanID(s.DB.QueryRow(`INSERT INTO proofs (candidate_sha, source_hash, log_digest, command, exit_code, outcome, created_at) VALUES (?,?,?,?,?,?,?) RETURNING id`,
+		p.CandidateSHA, p.SourceHash, p.LogDigest, p.Command, p.ExitCode, p.Outcome, time.Now().UTC().Format(time.RFC3339Nano)))
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return newID, nil
 }
 
 func GetProof(s *Store, id int64) (*ProofRow, error) {

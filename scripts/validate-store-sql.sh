@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # This script checks that internal/store is the only SQL boundary
-# (ADR 0089 D2). Non-test Go code outside internal/store must not import
+# (ADR 0089 D2), and that store queries avoid SQLite-only forms. Non-test Go code outside internal/store must not import
 # database/sql, reach through Store.DB, or call Exec/Query/QueryRow/Prepare
 # on a transaction or database handle. Tests may keep SQL.
 #
@@ -44,5 +44,18 @@ check 'SQL literal passed to Exec/Query/QueryRow/Prepare outside internal/store'
 
 if [[ "${failed}" -ne 0 ]]; then
     echo "Move the statement into a named function in internal/store." >&2
+    exit 1
+fi
+
+# Store queries use SQL both store backends accept (#734). Migrations are
+# per dialect and exempt. The remaining SQLite-only points are rowid
+# ordering on actions and receipts, group_concat in FollowToken, and the
+# store clock in plane_lease.go; the second backend handles them (#727).
+store_hits="$(find internal/store -type f -name '*.go' ! -name '*_test.go' ! -name 'migrate.go' -print0 |
+    xargs -0 grep -nE 'INSERT[[:space:]]+OR[[:space:]]+(IGNORE|REPLACE)|LastInsertId\(|datetime\(|julianday\(' || true)"
+if [[ -n "${store_hits}" ]]; then
+    echo "SQLite-only SQL in internal/store:" >&2
+    echo "${store_hits}" >&2
+    echo "Use ON CONFLICT ... DO NOTHING / DO UPDATE, INSERT ... RETURNING id, and times passed in from Go." >&2
     exit 1
 fi

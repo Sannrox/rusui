@@ -18,11 +18,11 @@ func EnqueueSteerTx(tx *sql.Tx, sessionID, turnID int64, generation int, prompt 
 	if err != nil {
 		return 0, err
 	}
-	res, err := tx.Exec(`INSERT INTO turn_steers (session_id, turn_id, lease_generation, prompt, followup_seq) VALUES (?,?,?,?,?)`, sessionID, turnID, generation, prompt, seq)
+	newID, err := scanID(tx.QueryRow(`INSERT INTO turn_steers (session_id, turn_id, lease_generation, prompt, followup_seq) VALUES (?,?,?,?,?) RETURNING id`, sessionID, turnID, generation, prompt, seq))
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return newID, nil
 }
 
 func NextSteerTx(tx *sql.Tx, turnID int64, generation int) (*Steer, error) {

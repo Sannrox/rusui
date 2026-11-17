@@ -101,8 +101,9 @@ func ReplaceEnvironmentCaptures(s *Store, envID int64, kind string, rows []Captu
 				}
 				continue
 			}
-			if _, err := tx.Exec(`INSERT OR REPLACE INTO environment_captures
-(environment_id, kind, name, output, truncated, failed, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			if _, err := tx.Exec(`INSERT INTO environment_captures
+(environment_id, kind, name, output, truncated, failed, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (environment_id, kind, name) DO UPDATE SET output=excluded.output, truncated=excluded.truncated, failed=excluded.failed, recorded_at=excluded.recorded_at`,
 				envID, kind, r.Name, out, r.Truncated, r.Failed, at); err != nil {
 				return err
 			}

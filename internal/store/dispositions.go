@@ -65,14 +65,12 @@ func RecordDisposition(s *Store, d Disposition) (Disposition, error) {
 		return Disposition{}, err
 	}
 	d.RecordedAt = time.Now().UTC()
-	res, err := s.DB.Exec(`INSERT INTO result_dispositions (review_revision_id, disposition, wrong_finding, note, recorded_at, decided_by, delegated_by) VALUES (?,?,?,?,?,?,?)`,
-		d.ReviewRevisionID, d.Value, d.WrongFinding, d.Note, d.RecordedAt.Format(time.RFC3339Nano), nullable(d.By.Actor), nullable(d.By.Delegate))
+	newID, err := scanID(s.DB.QueryRow(`INSERT INTO result_dispositions (review_revision_id, disposition, wrong_finding, note, recorded_at, decided_by, delegated_by) VALUES (?,?,?,?,?,?,?) RETURNING id`,
+		d.ReviewRevisionID, d.Value, d.WrongFinding, d.Note, d.RecordedAt.Format(time.RFC3339Nano), nullable(d.By.Actor), nullable(d.By.Delegate)))
 	if err != nil {
 		return Disposition{}, err
 	}
-	if d.ID, err = res.LastInsertId(); err != nil {
-		return Disposition{}, err
-	}
+	d.ID = newID
 	return d, nil
 }
 

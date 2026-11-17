@@ -47,16 +47,12 @@ func GrantSessionToolTx(tx *sql.Tx, sessionID int64, tool, createdBy string) (Se
 		createdBy = DefaultTenantID
 	}
 	now := time.Now().UTC()
-	res, err := tx.Exec(`INSERT INTO session_tool_grants (session_id, tool, created_by, created_at) VALUES (?,?,?,?)`,
-		sessionID, tool, createdBy, now.Format(time.RFC3339Nano))
+	id, err := scanID(tx.QueryRow(`INSERT INTO session_tool_grants (session_id, tool, created_by, created_at) VALUES (?,?,?,?) RETURNING id`,
+		sessionID, tool, createdBy, now.Format(time.RFC3339Nano)))
 	if err != nil {
 		if strings.Contains(strings.ToUpper(err.Error()), "UNIQUE") {
 			return SessionToolGrant{}, ErrToolGrantExists
 		}
-		return SessionToolGrant{}, err
-	}
-	id, err := res.LastInsertId()
-	if err != nil {
 		return SessionToolGrant{}, err
 	}
 	return SessionToolGrant{ID: id, SessionID: sessionID, Tool: tool, CreatedBy: createdBy, CreatedAt: now}, nil

@@ -18,7 +18,7 @@ func GetSessionWebhook(s *Store, sessionID int64) (string, bool, error) {
 }
 
 func PutSessionWebhook(s *Store, sessionID int64, secret string, now time.Time) error {
-	_, err := s.DB.Exec(`INSERT OR IGNORE INTO session_webhooks(session_id, secret, created_at) VALUES(?,?,?)`,
+	_, err := s.DB.Exec(`INSERT INTO session_webhooks(session_id, secret, created_at) VALUES(?,?,?) ON CONFLICT DO NOTHING`,
 		sessionID, secret, now.UTC().Format(time.RFC3339Nano))
 	return err
 }
@@ -28,7 +28,7 @@ func InsertWebhookDelivery(s *Store, sessionID int64, deliveryID string, accepte
 	if accepted {
 		flag = 1
 	}
-	res, err := s.DB.Exec(`INSERT OR IGNORE INTO session_webhook_deliveries(session_id, delivery_id, accepted, detail, created_at) VALUES(?,?,?,?,?)`,
+	res, err := s.DB.Exec(`INSERT INTO session_webhook_deliveries(session_id, delivery_id, accepted, detail, created_at) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`,
 		sessionID, deliveryID, flag, detail, now.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return false, err

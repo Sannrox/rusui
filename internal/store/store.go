@@ -176,13 +176,13 @@ func InsertJobTx(tx *sql.Tx, j *Job) error {
 	if err != nil {
 		return err
 	}
-	res, err := tx.Exec(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state) VALUES (?,?,?,?,?,?,?)`,
-		sid, j.Lane, j.PendingRevision, j.ClaimedRevision, j.LeaseGeneration, j.RetryCount, j.State)
+	newID, err := scanID(tx.QueryRow(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state) VALUES (?,?,?,?,?,?,?) RETURNING id`,
+		sid, j.Lane, j.PendingRevision, j.ClaimedRevision, j.LeaseGeneration, j.RetryCount, j.State))
 	if err != nil {
 		return err
 	}
-	j.ID, err = res.LastInsertId()
-	return err
+	j.ID = newID
+	return nil
 }
 
 func ensureReviewSessionTx(tx *sql.Tx, repo string, item int, kind string) (int64, error) {
@@ -196,24 +196,17 @@ func ensureReviewSessionTx(tx *sql.Tx, repo string, item int, kind string) (int6
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	name := fmt.Sprintf("review-%s-%d", strings.ReplaceAll(repo, "/", "-"), item)
-	envRes, err := tx.Exec(`INSERT INTO environments (name, driver, state, created_at) VALUES (?,?,?,?)`,
-		name, "process", EnvReady, now)
+	envID, err := scanID(tx.QueryRow(`INSERT INTO environments (name, driver, state, created_at) VALUES (?,?,?,?) RETURNING id`,
+		name, "process", EnvReady, now))
 	if err != nil {
 		return 0, err
 	}
-	envID, err := envRes.LastInsertId()
+	newID, err := scanID(tx.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (?,?,?,?,?,?,?) RETURNING id`,
+		envID, SessionKindReview, repo, item, kind, "open", now))
 	if err != nil {
 		return 0, err
 	}
-	res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (?,?,?,?,?,?,?)`,
-		envID, SessionKindReview, repo, item, kind, "open", now)
-	if err != nil {
-		return 0, err
-	}
-	id, err = res.LastInsertId()
-	if err != nil {
-		return 0, err
-	}
+	id = newID
 	if err := ensureSessionRetentionTx(tx, id, time.Now().UTC()); err != nil {
 		return 0, err
 	}
@@ -273,24 +266,17 @@ func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt strin
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	name := fmt.Sprintf("%s-%s-%d", kind, strings.NewReplacer("/", "-", ":", "_").Replace(repo), item)
-	envRes, err := tx.Exec(`INSERT INTO environments (name, driver, state, created_at) VALUES (?,?,?,?)`,
-		name, "process", EnvReady, now)
+	envID, err := scanID(tx.QueryRow(`INSERT INTO environments (name, driver, state, created_at) VALUES (?,?,?,?) RETURNING id`,
+		name, "process", EnvReady, now))
 	if err != nil {
 		return 0, 0, err
 	}
-	envID, err := envRes.LastInsertId()
+	newID, err := scanID(tx.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, prompt, schedule_id, size, parent_session_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
+		envID, kind, repo, item, kind, "open", project, prompt, scheduleID, "", parentSessionID, now))
 	if err != nil {
 		return 0, 0, err
 	}
-	res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, prompt, schedule_id, size, parent_session_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-		envID, kind, repo, item, kind, "open", project, prompt, scheduleID, "", parentSessionID, now)
-	if err != nil {
-		return 0, 0, err
-	}
-	sessionID, err = res.LastInsertId()
-	if err != nil {
-		return 0, 0, err
-	}
+	sessionID = newID
 	if err := ensureSessionRetentionTx(tx, sessionID, time.Now().UTC()); err != nil {
 		return 0, 0, err
 	}
@@ -300,21 +286,21 @@ func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt strin
 }
 
 func InsertSchedule(s *Store, project, name string, everySeconds int, prompt string, sessionID int64) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO schedules(project, name, every_seconds, prompt, session_id, created_at) VALUES(?,?,?,?,?,?)`,
-		project, name, everySeconds, prompt, sessionID, time.Now().UTC().Format(time.RFC3339Nano))
+	newID, err := scanID(s.DB.QueryRow(`INSERT INTO schedules(project, name, every_seconds, prompt, session_id, created_at) VALUES(?,?,?,?,?,?) RETURNING id`,
+		project, name, everySeconds, prompt, sessionID, time.Now().UTC().Format(time.RFC3339Nano)))
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return newID, nil
 }
 
 func InsertScheduleTx(tx *sql.Tx, project, name string, everySeconds int, prompt string, sessionID int64, now time.Time) (int64, error) {
-	res, err := tx.Exec(`INSERT INTO schedules(project, name, every_seconds, prompt, session_id, created_at) VALUES(?,?,?,?,?,?)`,
-		project, name, everySeconds, prompt, sessionID, now.UTC().Format(time.RFC3339Nano))
+	newID, err := scanID(tx.QueryRow(`INSERT INTO schedules(project, name, every_seconds, prompt, session_id, created_at) VALUES(?,?,?,?,?,?) RETURNING id`,
+		project, name, everySeconds, prompt, sessionID, now.UTC().Format(time.RFC3339Nano)))
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return newID, nil
 }
 
 func ScheduleByNameTx(tx *sql.Tx, project, name string) (*Schedule, error) {
@@ -553,7 +539,7 @@ func boolToInt(b bool) int {
 }
 
 func InsertDeliveryTx(tx *sql.Tx, id, repo string, item int, kind string, at time.Time) (inserted bool, err error) {
-	res, err := tx.Exec(`INSERT OR IGNORE INTO deliveries (delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?)`,
+	res, err := tx.Exec(`INSERT INTO deliveries (delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING`,
 		id, repo, item, kind, at.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return false, err
@@ -566,7 +552,7 @@ func InsertDeliveryTx(tx *sql.Tx, id, repo string, item int, kind string, at tim
 		if sid.Valid {
 			session = sid.Int64
 		}
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO events (session_id, source, delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?,?,?)`,
+		if _, err := tx.Exec(`INSERT INTO events (session_id, source, delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
 			session, "github", id, repo, item, kind, at.UTC().Format(time.RFC3339Nano)); err != nil {
 			return false, err
 		}
@@ -578,7 +564,7 @@ func InsertEventTx(tx *sql.Tx, id, source, repo string, item int, kind string, a
 	if source == "" {
 		source = "generic"
 	}
-	res, err := tx.Exec(`INSERT OR IGNORE INTO deliveries (delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?)`,
+	res, err := tx.Exec(`INSERT INTO deliveries (delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING`,
 		id, repo, item, kind, at.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return false, err
@@ -591,7 +577,7 @@ func InsertEventTx(tx *sql.Tx, id, source, repo string, item int, kind string, a
 		if sid.Valid {
 			session = sid.Int64
 		}
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO events (session_id, source, delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?,?,?)`,
+		if _, err := tx.Exec(`INSERT INTO events (session_id, source, delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
 			session, source, id, repo, item, kind, at.UTC().Format(time.RFC3339Nano)); err != nil {
 			return false, err
 		}
@@ -762,7 +748,8 @@ func SplitRepo(name string) (owner, repo string, err error) {
 }
 
 func PutTurnCredential(s *Store, turnID int64, gen int, tokenHash, expiresAt string) error {
-	_, err := s.DB.Exec(`INSERT OR REPLACE INTO turn_credentials (turn_id, lease_generation, token_hash, expires_at) VALUES (?,?,?,?)`,
+	_, err := s.DB.Exec(`INSERT INTO turn_credentials (turn_id, lease_generation, token_hash, expires_at) VALUES (?,?,?,?)
+ON CONFLICT (turn_id, lease_generation) DO UPDATE SET token_hash=excluded.token_hash, expires_at=excluded.expires_at`,
 		turnID, gen, tokenHash, expiresAt)
 	return err
 }
@@ -1157,12 +1144,12 @@ func InsertEnvironment(s *Store, e Environment) (int64, error) {
 	if e.SleptAt != nil {
 		slept = e.SleptAt.UTC().Format(time.RFC3339Nano)
 	}
-	res, err := s.DB.Exec(`INSERT INTO environments (name, driver, state, handle, source_hash, expires_at, slept_at, cpu_millis, memory_bytes, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		e.Name, e.Driver, e.State, e.Handle, e.SourceHash, exp, slept, e.CPUMillis, e.MemoryBytes, e.CreatedAt.UTC().Format(time.RFC3339Nano))
+	newID, err := scanID(s.DB.QueryRow(`INSERT INTO environments (name, driver, state, handle, source_hash, expires_at, slept_at, cpu_millis, memory_bytes, created_at) VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING id`,
+		e.Name, e.Driver, e.State, e.Handle, e.SourceHash, exp, slept, e.CPUMillis, e.MemoryBytes, e.CreatedAt.UTC().Format(time.RFC3339Nano)))
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return newID, nil
 }
 
 func UpdateEnvironment(s *Store, e Environment) error {
@@ -1370,4 +1357,13 @@ func SessionGuestTx(tx *sql.Tx, sessionID int64) (name, pin, config string, err 
 func SetSessionGuestTx(tx *sql.Tx, sessionID int64, name, pin, config string) error {
 	_, err := tx.Exec(`UPDATE sessions SET guest_name=?, guest_pin=?, guest_config=? WHERE id=?`, name, pin, config, sessionID)
 	return err
+}
+
+// scanID reads the id an `INSERT ... RETURNING id` statement produced. Both
+// store backends return the new row id this way; LastInsertId is
+// SQLite-only.
+func scanID(row *sql.Row) (int64, error) {
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }

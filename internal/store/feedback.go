@@ -56,12 +56,12 @@ func GetFeedback(s *Store, effortKey string, seq int) (*EffortFeedback, error) {
 }
 
 func InsertFeedback(s *Store, f EffortFeedback) (int64, error) {
-	res, err := s.DB.Exec(`INSERT INTO effort_feedback (effort_key, seq, task_id, candidate_sha, prompt_hash, prompt, created_at) VALUES (?,?,?,?,?,?,?)`,
-		f.EffortKey, f.Seq, f.TaskID, f.CandidateSHA, f.PromptHash, f.Prompt, time.Now().UTC().Format(time.RFC3339Nano))
+	newID, err := scanID(s.DB.QueryRow(`INSERT INTO effort_feedback (effort_key, seq, task_id, candidate_sha, prompt_hash, prompt, created_at) VALUES (?,?,?,?,?,?,?) RETURNING id`,
+		f.EffortKey, f.Seq, f.TaskID, f.CandidateSHA, f.PromptHash, f.Prompt, time.Now().UTC().Format(time.RFC3339Nano)))
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	return newID, nil
 }
 
 func InvalidateProofs(s *Store, sha string) error {

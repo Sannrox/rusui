@@ -129,15 +129,12 @@ func StartSumikaProcess(s *Store, sessionID int64, identityHash string, now time
 		if err := tx.QueryRow(`SELECT COALESCE(MAX(generation), 0) + 1 FROM session_processes WHERE session_id=?`, sessionID).Scan(&generation); err != nil {
 			return err
 		}
-		res, err := tx.Exec(`INSERT INTO session_processes (session_id, generation, runtime, name, identity_hash, state, revision, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, 1, ?)`, sessionID, generation, ProcessRuntimeSumika, fmt.Sprintf("rusui-%d", sessionID), identityHash, ProcessStarting, formatRuntimeTime(now))
+		newID, err := scanID(tx.QueryRow(`INSERT INTO session_processes (session_id, generation, runtime, name, identity_hash, state, revision, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, 1, ?) RETURNING id`, sessionID, generation, ProcessRuntimeSumika, fmt.Sprintf("rusui-%d", sessionID), identityHash, ProcessStarting, formatRuntimeTime(now)))
 		if err != nil {
 			return err
 		}
-		processID, err = res.LastInsertId()
-		if err != nil {
-			return err
-		}
+		processID = newID
 		return processReceiptTx(tx, processID, "start", ProcessStarting, formatRuntimeTime(now))
 	})
 	if err != nil {
@@ -322,15 +319,12 @@ func BeginSumikaAttach(s *Store, processID, processGeneration int64, now time.Ti
 		if err := tx.QueryRow(`SELECT COALESCE(MAX(generation), 0) + 1 FROM process_attaches WHERE process_id=?`, processID).Scan(&generation); err != nil {
 			return err
 		}
-		res, err := tx.Exec(`INSERT INTO process_attaches (process_id, process_generation, generation, revision, state, created_at)
-			VALUES (?, ?, ?, 1, ?, ?)`, processID, processGeneration, generation, AttachAttached, at)
+		newID, err := scanID(tx.QueryRow(`INSERT INTO process_attaches (process_id, process_generation, generation, revision, state, created_at)
+			VALUES (?, ?, ?, 1, ?, ?) RETURNING id`, processID, processGeneration, generation, AttachAttached, at))
 		if err != nil {
 			return err
 		}
-		attachID, err = res.LastInsertId()
-		if err != nil {
-			return err
-		}
+		attachID = newID
 		return attachReceiptsTx(tx, "attach", AttachAttached, at, `a.id=?`, attachID)
 	})
 	if err != nil {
@@ -427,12 +421,8 @@ func InsertLocalSessionTx(tx *sql.Tx, project string, now time.Time) (int64, err
 	if err := tx.QueryRow(`SELECT COALESCE(MIN(item), 0) - 1 FROM sessions WHERE kind=? AND repo=''`, SessionKindLocal).Scan(&item); err != nil {
 		return 0, err
 	}
-	res, err := tx.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, created_at)
-		VALUES (?, ?, '', ?, 'local', 'open', ?, ?)`, DefaultEnvironmentID, SessionKindLocal, item, project, formatRuntimeTime(now))
-	if err != nil {
-		return 0, err
-	}
-	id, err := res.LastInsertId()
+	id, err := scanID(tx.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, created_at)
+		VALUES (?, ?, '', ?, 'local', 'open', ?, ?) RETURNING id`, DefaultEnvironmentID, SessionKindLocal, item, project, formatRuntimeTime(now)))
 	if err != nil {
 		return 0, err
 	}

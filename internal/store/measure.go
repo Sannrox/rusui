@@ -44,7 +44,7 @@ func BeginMeasurementTx(tx *sql.Tx, turnID int64, started time.Time) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(`INSERT OR IGNORE INTO turn_measurements (turn_id, session_id, project, started_at) VALUES (?,?,?,?)`,
+	_, err = tx.Exec(`INSERT INTO turn_measurements (turn_id, session_id, project, started_at) VALUES (?,?,?,?) ON CONFLICT DO NOTHING`,
 		turnID, sessionID, project, started.UTC().Format(time.RFC3339Nano))
 	return err
 }
