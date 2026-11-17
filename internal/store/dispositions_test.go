@@ -3,18 +3,16 @@ package store
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
 	"testing"
 )
 
 // shadowResult inserts a review result; comment adds its dry-run comment.
 func shadowResult(t *testing.T, s *Store, item int, comment bool) int64 {
 	t.Helper()
-	res, err := s.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', '{}')`, item)
+	id, err := insertID(s.DB, `INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', '{}') RETURNING id`, item)
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, _ := res.LastInsertId()
 	if comment {
 		if _, err := s.DB.Exec(`INSERT INTO actions (action_id, review_revision_id, repo, item, action_type, reason_code, evidence_class, limit_sentence, body) VALUES (?, ?, 'o/r', ?, 'comment', 'r', 'e', 'l', 'b')`,
 			fmt.Sprintf("a%d", id), id, item); err != nil {
@@ -32,10 +30,7 @@ func dispose(t *testing.T, s *Store, id int64, v string, wrong bool) {
 }
 
 func TestRecordDispositionRefusesUnknownResultAndValue(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "db"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := openTestStore(t)
 	id := shadowResult(t, s, 1, true)
 	if _, err := RecordDisposition(s, Disposition{ReviewRevisionID: id + 1, Value: DispositionUseful}); !errors.Is(err, ErrUnknownResult) {
 		t.Fatalf("unknown result: %v", err)
@@ -46,10 +41,7 @@ func TestRecordDispositionRefusesUnknownResultAndValue(t *testing.T) {
 }
 
 func TestCommentGateCountsLatestDispositionOfShadowResults(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "db"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := openTestStore(t)
 	// A result without a dry-run comment is not a shadow result.
 	dispose(t, s, shadowResult(t, s, 100, false), DispositionHarmful, true)
 	// The first result is superseded by a newer revision of the same item;

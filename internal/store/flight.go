@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/sannrox/rusui/internal/flight"
 )
 
@@ -19,7 +21,7 @@ func InsertFlightRecordTx(tx *sql.Tx, rec flight.Record, now time.Time) error {
 	_, err = tx.Exec(`INSERT INTO flight_records (session_id, turn_id, receipt_id, body, created_at) VALUES (?,?,?,?,?)`,
 		rec.SessionID, rec.TurnID, rec.ReceiptID, string(body), now.UTC().Format(time.RFC3339Nano))
 	if err != nil {
-		if isUnique(err) {
+		if IsUniqueViolation(err) {
 			return flight.ErrOverwrite
 		}
 		return err
@@ -81,9 +83,14 @@ func ListActionsForTurnTx(tx *sql.Tx, turnID int64) ([]Action, error) {
 	return out, rows.Err()
 }
 
-func isUnique(err error) bool {
+// IsUniqueViolation reports whether err is a unique-constraint failure on
+// either backend.
+func IsUniqueViolation(err error) bool {
 	if err == nil {
 		return false
+	}
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return pgErr.Code == "23505"
 	}
 	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }

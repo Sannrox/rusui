@@ -59,6 +59,23 @@ a successful upgrade. Live grants do not. Schema v50 defaults existing
 sessions to short-lived retention (72h from `created_at`); expiry
 removes prompt data and records `retention.expire`.
 
+## PostgreSQL store
+
+SQLite remains the single-host default. PostgreSQL backs the redundant
+topology only ([ADR 0089](decisions/0089-redundant-plane.md)), which stays
+outside the 1.0 core until
+[#700](https://github.com/Sannrox/rusui/issues/700).
+
+Set `RUSUI_STORE_URL=postgres://...` to use it. An empty database gets the
+current schema on first start; a database at another schema version fails
+closed. Prompt attachments stay as files beside `-db`.
+
+The server must commit each write synchronously to storage that survives
+the loss of any one host before it acknowledges. Run with
+`synchronous_commit=on` and at least one synchronous standby
+(`synchronous_standby_names`). An asynchronous replica can lose an
+acknowledged write or a lease generation and is not supported.
+
 ## Diagnostics
 
 ```bash

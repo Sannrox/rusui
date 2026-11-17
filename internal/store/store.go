@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	mathrand "math/rand/v2"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "modernc.org/sqlite"
 
 	"github.com/sannrox/rusui/internal/snapshot"
@@ -23,24 +25,57 @@ type Tx = sql.Tx
 // ErrNoRows reports that a single-row read found nothing.
 var ErrNoRows = sql.ErrNoRows
 
+// Store is the plane's database. SQLite (one file, one connection) is the
+// default; PostgreSQL backs the redundant topology (ADR 0089 D2, D3).
 type Store struct {
-	DB  *sql.DB
+	DB *sql.DB
+	// Dir holds files kept beside the database, such as prompt attachments.
 	Dir string
+	pg  bool
 }
 
-func Open(path string) (*Store, error) {
+// Open opens the store at dsn and migrates it. A postgres:// or
+// postgresql:// URL opens PostgreSQL; anything else is a SQLite file path.
+func Open(dsn string) (*Store, error) {
+	if IsPostgresURL(dsn) {
+		return openPostgres(dsn)
+	}
 	// Transactions take the write lock at BEGIN so a second handle on the same
 	// file (local attach beside the server) waits in busy_timeout. A deferred
 	// read-then-write would get SQLITE_BUSY on lock upgrade without waiting.
-	dsn := path + "?_pragma=busy_timeout(5000)&_txlock=immediate"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("sqlite", dsn+"?_pragma=busy_timeout(5000)&_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{DB: db, Dir: filepath.Dir(path)}
+	s := &Store{DB: db, Dir: filepath.Dir(dsn)}
 	if err := s.migrate(); err != nil {
 		db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+// IsPostgresURL reports whether Open treats dsn as a PostgreSQL URL.
+func IsPostgresURL(dsn string) bool {
+	return strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://")
+}
+
+// pgPoolSize bounds PostgreSQL connections per plane instance.
+const pgPoolSize = 8
+
+// openPostgres opens a PostgreSQL store. Dir is empty; the caller sets it
+// to the directory that holds attachment files.
+func openPostgres(url string) (*Store, error) {
+	db, err := sql.Open(pgDriverName, url)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(pgPoolSize)
+	db.SetMaxIdleConns(pgPoolSize)
+	s := &Store{DB: db, pg: true}
+	if err := s.migratePostgres(); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
 	return s, nil
@@ -51,8 +86,31 @@ func (s *Store) Close() error { return s.DB.Close() }
 // Ping reports whether the database answers; /readyz uses it.
 func (s *Store) Ping(ctx context.Context) error { return s.DB.PingContext(ctx) }
 
+// txAttempts bounds how often Tx runs a callback whose transaction
+// PostgreSQL aborted for serialization or deadlock.
+const txAttempts = 5
+
+// Tx runs fn in one transaction and commits when it returns nil. On
+// PostgreSQL the transaction is serializable, and a serialization failure
+// or deadlock reruns fn from the start (ADR 0089 D2). fn may therefore run
+// more than once: it must not have effects outside the transaction, and
+// must reset any outer variables it assigns.
 func (s *Store) Tx(fn func(*sql.Tx) error) error {
-	tx, err := s.DB.Begin()
+	if !s.pg {
+		return s.tx(nil, fn)
+	}
+	opts := &sql.TxOptions{Isolation: sql.LevelSerializable}
+	for attempt := 1; ; attempt++ {
+		err := s.tx(opts, fn)
+		if attempt == txAttempts || !retryableTx(err) {
+			return err
+		}
+		time.Sleep(time.Duration(attempt)*time.Millisecond + time.Duration(mathrand.Int64N(int64(4*time.Millisecond))))
+	}
+}
+
+func (s *Store) tx(opts *sql.TxOptions, fn func(*sql.Tx) error) error {
+	tx, err := s.DB.BeginTx(context.Background(), opts)
 	if err != nil {
 		return err
 	}
@@ -61,6 +119,13 @@ func (s *Store) Tx(fn func(*sql.Tx) error) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// retryableTx reports a PostgreSQL serialization failure (40001) or
+// deadlock (40P01).
+func retryableTx(err error) bool {
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	return ok && (pgErr.Code == "40001" || pgErr.Code == "40P01")
 }
 
 type Job struct {
@@ -405,7 +470,7 @@ func PlaneID(s *Store) (string, error) {
 // GitHub updated_at of its latest snapshot. Catch-up skips an item whose
 // listing is no newer: it already has work for that content (ADR 0038 D5).
 func ReviewedUpdatedAt(s *Store, repo string) (map[int]string, error) {
-	rows, err := s.DB.Query(`SELECT s.item, IFNULL(json_extract(s.payload, '$.updated_at'), '')
+	rows, err := s.DB.Query(`SELECT s.item, COALESCE(json_extract(s.payload, '$.updated_at'), '')
 FROM snapshots s
 WHERE s.repo=? AND s.revision=(SELECT MAX(x.revision) FROM snapshots x WHERE x.repo=s.repo AND x.item=s.item)
   AND EXISTS (SELECT 1 FROM jobs j WHERE j.repo=s.repo AND j.item=s.item AND j.lane='review')`, repo)
@@ -489,7 +554,7 @@ func CountReviewsToday(tx *sql.Tx, repo, day string) (int, error) {
 }
 
 func IncrReviewsToday(tx *sql.Tx, repo, day string) error {
-	_, err := tx.Exec(`INSERT INTO daily_review_counts(repo,day,count) VALUES(?,?,1) ON CONFLICT(repo,day) DO UPDATE SET count=count+1`, repo, day)
+	_, err := tx.Exec(`INSERT INTO daily_review_counts(repo,day,count) VALUES(?,?,1) ON CONFLICT(repo,day) DO UPDATE SET count=daily_review_counts.count+1`, repo, day)
 	return err
 }
 
@@ -524,10 +589,10 @@ func EnsureRefreshQueuedTx(tx *sql.Tx, repo string, item int, kind string, force
 		return err
 	}
 	if owner != 0 {
-		_, err = tx.Exec(`UPDATE refresh_requests SET needs_another=1, force=CASE WHEN ? THEN 1 ELSE force END, state='queued' WHERE repo=? AND item=?`, boolToInt(force), repo, item)
+		_, err = tx.Exec(`UPDATE refresh_requests SET needs_another=1, force=CASE WHEN ?=1 THEN 1 ELSE force END, state='queued' WHERE repo=? AND item=?`, boolToInt(force), repo, item)
 		return err
 	}
-	_, err = tx.Exec(`UPDATE refresh_requests SET state='queued', force=CASE WHEN ? THEN 1 ELSE force END WHERE repo=? AND item=?`, boolToInt(force), repo, item)
+	_, err = tx.Exec(`UPDATE refresh_requests SET state='queued', force=CASE WHEN ?=1 THEN 1 ELSE force END WHERE repo=? AND item=?`, boolToInt(force), repo, item)
 	return err
 }
 
@@ -920,7 +985,10 @@ func ListActionsForSession(s *Store, sessionID int64) ([]Action, error) {
 // position. Seq is the actions rowid: SQLite has one writer at a time, so
 // rowids grow in commit order and a reader that resumes after Seq misses
 // no later entry. Actions are never deleted and Rusui never VACUUMs, so a
-// recorded Seq keeps naming the same entry.
+// recorded Seq keeps naming the same entry. On PostgreSQL rowid is an
+// identity drawn at insert, not commit, so two concurrent writers can commit
+// out of order and a resuming reader can miss the lower Seq; the redundant
+// topology must close this before it serves followers (#700).
 type TranscriptEntry struct {
 	Seq int64
 	Action
@@ -1316,7 +1384,7 @@ func InsertActionTx(tx *sql.Tx, a Action) error {
 
 // TurnActionUsageTx counts rows and stored body bytes for one turn.
 func TurnActionUsageTx(tx *sql.Tx, turnID int64) (rows int, bytes int64, err error) {
-	err = tx.QueryRow(`SELECT COUNT(*), COALESCE(SUM(LENGTH(CAST(body AS BLOB))), 0) FROM actions WHERE turn_id=?`, turnID).Scan(&rows, &bytes)
+	err = tx.QueryRow(`SELECT COUNT(*), COALESCE(SUM(octet_length(body)), 0) FROM actions WHERE turn_id=?`, turnID).Scan(&rows, &bytes)
 	return
 }
 

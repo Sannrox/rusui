@@ -49,6 +49,7 @@ func ReserveIdleEnvironmentSleep(s *Store, id int64, now time.Time, ttl, idle ti
 func reserveEnvironmentSleep(s *Store, id int64, now time.Time, ttl, idle time.Duration) (bool, error) {
 	reserved := false
 	err := s.Tx(func(tx *sql.Tx) error {
+		reserved = false // Tx may rerun this callback
 		var state, driver, name string
 		var expiresAt sql.NullString
 		if err := tx.QueryRow(`SELECT state, driver, name, expires_at FROM environments WHERE id=?`, id).Scan(&state, &driver, &name, &expiresAt); err != nil {

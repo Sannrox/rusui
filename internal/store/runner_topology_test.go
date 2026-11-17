@@ -1,17 +1,12 @@
 package store
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestSupportedRunnerTopologyIsOneLocalHost(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "runner.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 	var n int
 	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM runners`).Scan(&n); err != nil {
 		t.Fatal(err)

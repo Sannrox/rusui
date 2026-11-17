@@ -104,7 +104,7 @@ func releaseRestoredGuests(s *Store, now time.Time) (int, error) {
 	}
 	var released int
 	err := s.Tx(func(tx *sql.Tx) error {
-		rows, err := tx.Query(`SELECT id FROM environments WHERE name!=? AND IFNULL(handle,'')!=''`, LocalEnvironmentName)
+		rows, err := tx.Query(`SELECT id FROM environments WHERE name!=? AND COALESCE(handle,'')!=''`, LocalEnvironmentName)
 		if err != nil {
 			return err
 		}

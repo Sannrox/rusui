@@ -11,7 +11,7 @@ type ReceiptKind struct {
 // ListTenantEnvironments returns up to 50 environments used by tenant's
 // sessions, newest first. Only ID, Name, Driver, State and SourceHash are set.
 func ListTenantEnvironments(s *Store, tenant string) ([]Environment, error) {
-	rows, err := s.DB.Query(`SELECT DISTINCT e.id, e.name, e.driver, e.state, IFNULL(e.source_hash,'') FROM environments e JOIN sessions s ON s.environment_id=e.id WHERE COALESCE(s.tenant_id,'default')=? ORDER BY e.id DESC LIMIT 50`, tenant)
+	rows, err := s.DB.Query(`SELECT DISTINCT e.id, e.name, e.driver, e.state, COALESCE(e.source_hash,'') FROM environments e JOIN sessions s ON s.environment_id=e.id WHERE COALESCE(s.tenant_id,'default')=? ORDER BY e.id DESC LIMIT 50`, tenant)
 	if err != nil {
 		return nil, err
 	}

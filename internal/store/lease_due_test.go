@@ -2,17 +2,12 @@ package store
 
 import (
 	"database/sql"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestListDueLeasedJobsTxSkipsLiveDeadlines(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "due.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 	now := time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
 	live := now.Add(time.Hour)
 	due := now.Add(-time.Minute)

@@ -4,29 +4,20 @@ import (
 	"database/sql"
 	"errors"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestMigratedSessionsDefaultToShortRetention(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-	var n int
-	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_retention'`).Scan(&n); err != nil || n != 1 {
-		t.Fatalf("session_retention missing: %d %v", n, err)
+	st := openTestStore(t)
+	if cols := tableColumns(t, st, "session_retention"); !cols["session_id"] || !cols["class"] {
+		t.Fatalf("session_retention missing: %v", cols)
 	}
 }
 
 func TestSetAndExpireRetention(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
+	var err error
 	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	var sid int64
 	err = st.Tx(func(tx *sql.Tx) error {
@@ -65,11 +56,8 @@ func TestSetAndExpireRetention(t *testing.T) {
 }
 
 func TestWriteOverrideRequiresIndefinite(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
+	var err error
 	var sid int64
 	err = st.Tx(func(tx *sql.Tx) error {
 		var inner error
@@ -107,11 +95,8 @@ func TestWriteOverrideRequiresIndefinite(t *testing.T) {
 }
 
 func TestClassChangeClearsWriteOverride(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
+	var err error
 	var sid int64
 	err = st.Tx(func(tx *sql.Tx) error {
 		var inner error
@@ -151,11 +136,8 @@ func TestClassChangeClearsWriteOverride(t *testing.T) {
 }
 
 func TestExpiredRetentionCannotChangeClass(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
+	var err error
 	var sid int64
 	err = st.Tx(func(tx *sql.Tx) error {
 		var inner error
@@ -177,11 +159,8 @@ func TestExpiredRetentionCannotChangeClass(t *testing.T) {
 }
 
 func TestClearSessionDataRemovesQueuedPromptAndAttachmentFile(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
+	var err error
 	var sid int64
 	var digest string
 	err = st.Tx(func(tx *sql.Tx) error {

@@ -2,16 +2,11 @@ package store
 
 import (
 	"database/sql"
-	"path/filepath"
 	"testing"
 )
 
 func TestReviewSessionGetsOwnEnvironment(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
+	s := openTestStore(t)
 
 	var a, a2, b int64
 	if err := s.Tx(func(tx *sql.Tx) error {

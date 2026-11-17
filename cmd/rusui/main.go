@@ -142,7 +142,7 @@ func main() {
 		}
 	}
 	addr := flag.String("addr", "127.0.0.1:8080", "listen")
-	db := flag.String("db", "rusui.db", "sqlite path")
+	db := flag.String("db", "rusui.db", "sqlite path; RUSUI_STORE_URL overrides it")
 	pol := flag.String("policy", "policy.yaml", "policy file")
 	envIdleSleep := flag.Duration("env-idle-sleep", 5*time.Minute, "sleep managed container environments after this idle period (0 disables)")
 	printVersion := flag.Bool("version", false, "print version and exit")
@@ -159,7 +159,7 @@ func main() {
 	if *allowInsecure && len(missing) > 0 {
 		log.Printf("WARNING: insecure start; unset %s", strings.Join(missing, ", "))
 	}
-	st, err := store.Open(*db)
+	st, err := openPlaneStore(*db, os.Getenv("RUSUI_STORE_URL"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -467,4 +467,21 @@ func missingRequiredSecrets(getenv func(string) string) []string {
 		}
 	}
 	return miss
+}
+
+// openPlaneStore opens RUSUI_STORE_URL when set (PostgreSQL, ADR 0089 D2),
+// else the SQLite file at dbPath. Attachment files stay beside dbPath.
+func openPlaneStore(dbPath, storeURL string) (*store.Store, error) {
+	if storeURL == "" {
+		return store.Open(dbPath)
+	}
+	if !store.IsPostgresURL(storeURL) {
+		return nil, fmt.Errorf("RUSUI_STORE_URL must be a postgres:// or postgresql:// URL")
+	}
+	st, err := store.Open(storeURL)
+	if err != nil {
+		return nil, err
+	}
+	st.Dir = filepath.Dir(dbPath)
+	return st, nil
 }

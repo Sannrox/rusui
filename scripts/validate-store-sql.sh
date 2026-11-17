@@ -48,9 +48,9 @@ if [[ "${failed}" -ne 0 ]]; then
 fi
 
 # Store queries use SQL both store backends accept (#734). Migrations are
-# per dialect and exempt. The remaining SQLite-only points are rowid
-# ordering on actions and receipts, group_concat in FollowToken, and the
-# store clock in plane_lease.go; the second backend handles them (#727).
+# per dialect and exempt. The PostgreSQL baseline supplies rowid on actions
+# and receipts, and unixepoch, group_concat, json_extract and
+# json_array_length (#727).
 store_hits="$(find internal/store -type f -name '*.go' ! -name '*_test.go' ! -name 'migrate.go' -print0 |
     xargs -0 grep -nE 'INSERT[[:space:]]+OR[[:space:]]+(IGNORE|REPLACE)|LastInsertId\(|datetime\(|julianday\(' || true)"
 if [[ -n "${store_hits}" ]]; then

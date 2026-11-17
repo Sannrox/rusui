@@ -2,16 +2,11 @@ package store
 
 import (
 	"database/sql"
-	"path/filepath"
 	"testing"
 )
 
 func TestHaltOverlaySkipsOtherAgents(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "halt.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 	rec := HaltRecord{Reason: "freeze", Operator: "op", Source: HaltSourcePlane}
 	if err := st.Tx(func(tx *sql.Tx) error {
 		return SetHaltTx(tx, HaltScopeAgent, "alice", rec)
@@ -39,6 +34,7 @@ func TestHaltOverlaySkipsOtherAgents(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := st.Tx(func(tx *sql.Tx) error {
+		var err error
 		alice, err = Halted(tx, DefaultTenantID, "test", "alice")
 		return err
 	}); err != nil {

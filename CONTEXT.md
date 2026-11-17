@@ -78,7 +78,7 @@ _Avoid_: fleet, Kubernetes, additional placement hosts
 **Plane store**:
 By default one SQLite file on the plane host, one writer. Recovery is copy and
 `store.Restore`; live leases and grants do not survive. The redundant plane
-uses a shared transactional store instead, with plane-wide jobs under one
+uses a shared PostgreSQL store instead, with plane-wide jobs under one
 fenced `scheduler` lease ([ADR 0089](docs/decisions/0089-redundant-plane.md), not yet implemented).
 _Avoid_: leader, active-active, SQLite shared between plane processes
 

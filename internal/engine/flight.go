@@ -23,11 +23,21 @@ func (e *Engine) NoteRead(turnID int64, o flight.Object) {
 	e.flightReads[turnID] = append(e.flightReads[turnID], o)
 }
 
-func (e *Engine) takeReads(turnID int64) []flight.Object {
+// readsTx returns the reads noted for turnID and drops them once tx
+// commits, so a retried or rolled-back attempt keeps them.
+func (e *Engine) readsTx(tx *store.Tx, turnID int64) []flight.Object {
 	e.flightMu.Lock()
-	defer e.flightMu.Unlock()
-	objs := e.flightReads[turnID]
-	delete(e.flightReads, turnID)
+	objs := append([]flight.Object(nil), e.flightReads[turnID]...)
+	e.flightMu.Unlock()
+	e.onCommit(tx, func() {
+		e.flightMu.Lock()
+		defer e.flightMu.Unlock()
+		if cur := e.flightReads[turnID]; len(cur) > len(objs) {
+			e.flightReads[turnID] = cur[len(objs):]
+		} else {
+			delete(e.flightReads, turnID)
+		}
+	})
 	return objs
 }
 
@@ -51,7 +61,7 @@ func (e *Engine) recordFlightTx(tx *store.Tx, turnID int64, receiptID string) er
 		Prompt:    sess.Prompt,
 		Model:     flight.Model{Name: sess.GuestName, Settings: sess.GuestConfig},
 		Tools:     toolsFromActions(acts),
-		Snapshot:  flight.Snapshot{Objects: e.takeReads(turnID)},
+		Snapshot:  flight.Snapshot{Objects: e.readsTx(tx, turnID)},
 	})
 	return store.InsertFlightRecordTx(tx, rec, e.now())
 }

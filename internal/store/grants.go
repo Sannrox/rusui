@@ -52,7 +52,7 @@ func LookupGrant(s *Store, tokenHash string, now time.Time) (*Grant, bool, error
 	var push int
 	var exp, turnState string
 	err := s.DB.QueryRow(`
-SELECT g.token_hash, g.kind, g.session_id, g.turn_id, g.repo, g.can_push, g.expires_at, IFNULL(t.state,''), IFNULL(t.lease_generation,0)
+SELECT g.token_hash, g.kind, g.session_id, g.turn_id, g.repo, g.can_push, g.expires_at, COALESCE(t.state,''), COALESCE(t.lease_generation,0)
 FROM credential_grants g
 LEFT JOIN turns t ON t.id=g.turn_id
 WHERE g.token_hash=?`, tokenHash).Scan(&g.TokenHash, &g.Kind, &g.SessionID, &g.TurnID, &g.Repo, &push, &exp, &turnState, &g.LeaseGeneration)

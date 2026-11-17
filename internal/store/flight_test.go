@@ -3,7 +3,6 @@ package store
 import (
 	"database/sql"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,20 +10,12 @@ import (
 )
 
 func TestFlightRecordAppendOnlyAndRetentionWipe(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 	now := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	if _, err := st.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'run','o/r',1,'issue','open',?)`, now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
-	res, err := st.DB.Exec(`INSERT INTO turns (session_id, lane, state) VALUES (1,'run','completed')`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	turnID, err := res.LastInsertId()
+	turnID, err := insertID(st.DB, `INSERT INTO turns (session_id, lane, state) VALUES (1,'run','completed') RETURNING id`)
 	if err != nil {
 		t.Fatal(err)
 	}

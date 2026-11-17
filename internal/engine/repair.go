@@ -152,6 +152,7 @@ func (e *Engine) maybeAdmitRepair(it snapshot.Item) {
 	blocked := ""
 	var selectedID int64
 	err := e.Store.Tx(func(tx *store.Tx) error {
+		blocked, selectedID = "", 0 // Tx may rerun this callback
 		paused, err := e.repoPaused(tx, it.Repo)
 		if err != nil {
 			return err

@@ -31,7 +31,7 @@ func enqueueFollowUpTx(tx *sql.Tx, sessionID int64, prompt string, queued bool) 
 
 func nextFollowUpSeqTx(tx *sql.Tx, sessionID int64) (int, error) {
 	var seq int
-	err := tx.QueryRow(`SELECT IFNULL(MAX(seq), 0) FROM (
+	err := tx.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM (
   SELECT seq FROM followup_queue WHERE session_id=?
   UNION ALL
   SELECT followup_seq AS seq FROM turn_steers WHERE session_id=? AND followup_seq>0

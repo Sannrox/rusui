@@ -2,17 +2,12 @@ package store
 
 import (
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestSpaceToolGrantAndRevoke(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := st.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'run','o/r',1,'issue','open',?)`, now); err != nil {
 		t.Fatal(err)
@@ -45,11 +40,7 @@ func TestSpaceToolGrantAndRevoke(t *testing.T) {
 }
 
 func TestUserModeRejectsToolGrant(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "u.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
+	st := openTestStore(t)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := st.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1,'run','o/r',1,'issue','open',?)`, now); err != nil {
 		t.Fatal(err)
