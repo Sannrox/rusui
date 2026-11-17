@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sannrox/rusui/internal/clock"
 	"github.com/sannrox/rusui/internal/core"
 	"github.com/sannrox/rusui/internal/engine"
 	envpkg "github.com/sannrox/rusui/internal/env"
@@ -195,7 +194,12 @@ func main() {
 	if u := os.Getenv("RUSUI_GITHUB_API"); u != "" {
 		api.BaseURL = u
 	}
-	eng := engine.New(st, p, api, clock.Real{})
+	// Lease and deadline times sit on the store's clock (ADR 0089 D4).
+	clk := engine.NewStoreClock(st)
+	if err := clk.Sync(); err != nil {
+		log.Fatal("store clock: ", err)
+	}
+	eng := engine.New(st, p, api, clk)
 	eng.Secrets = engine.SecretsFromEnv(os.Environ())
 	if pre, setup, err := engine.ReadPlaneHooks(filepath.Join(filepath.Dir(*pol), "hooks")); err != nil {
 		log.Fatal(err)
@@ -362,7 +366,7 @@ func main() {
 			log.Fatal(http.ListenAndServe(previewAddr, previewHandler))
 		}()
 	}
-	go runScheduler(eng)
+	go runScheduler(eng, clk)
 	log.Printf("rusui %s listen %s api=%s reconcile=%s catch-up=%s apply=%s", Version, *addr, api.BaseURL, engine.ReconcileEvery, engine.CatchUpEvery, engine.ApplyRetryEvery)
 	if srv.GuestHTTPSOnly {
 		log.Fatal(http.ListenAndServeTLS(*addr, tlsCert, tlsKey, srv.Handler()))
@@ -377,11 +381,26 @@ func main() {
 // files whose rows retention removed, possibly on another instance.
 const attachmentCacheEvery = 10 * time.Minute
 
-func runScheduler(eng *engine.Engine) {
+func runScheduler(eng *engine.Engine, clk *engine.StoreClock) {
 	lease := engine.NewSchedulerLease(eng.Store)
-	if err := lease.Renew(); err != nil {
-		eng.Notify("scheduler lease: " + err.Error())
+	// renewLease resyncs the store clock and renews the lease. Gaining the lease
+	// retries apply attempts at once, so a new holder reconciles writes a
+	// stopped instance left in flight.
+	renewLease := func() {
+		if err := clk.Sync(); err != nil {
+			eng.Notify("store clock: " + err.Error())
+		}
+		_, had := lease.Held()
+		if err := lease.Renew(); err != nil {
+			eng.Notify("scheduler lease: " + err.Error())
+		}
+		if fence, held := lease.Held(); held && !had {
+			if err := eng.RetryApplyAttempts(fence); err != nil {
+				eng.Notify("apply retry: " + err.Error())
+			}
+		}
 	}
+	renewLease()
 	renew := time.NewTicker(engine.SchedulerRenewEvery)
 	defer renew.Stop()
 	refresh := time.NewTicker(engine.RefreshTick)
@@ -406,9 +425,7 @@ func runScheduler(eng *engine.Engine) {
 		var tick <-chan time.Time
 		select {
 		case <-renew.C:
-			if err := lease.Renew(); err != nil {
-				eng.Notify("scheduler lease: " + err.Error())
-			}
+			renewLease()
 			continue
 		case <-attachCache.C:
 			if err := store.SyncAttachmentCache(eng.Store); err != nil {
@@ -453,7 +470,7 @@ func runScheduler(eng *engine.Engine) {
 				eng.Notify("catch-up: " + err.Error())
 			}
 		case apply.C:
-			if err := eng.RetryApplyAttempts(); err != nil {
+			if err := eng.RetryApplyAttempts(fence); err != nil {
 				eng.Notify("apply retry: " + err.Error())
 			}
 		case sched.C:

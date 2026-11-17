@@ -545,8 +545,8 @@ admitted (closed state is a content change).
 
 Duplicate `delivery_id` is a committed no-op.
 
-The process runs these paths at startup (`Engine.Recover`) and on a
-cadence: refresh reaper and `StepRefresh` every second, delivery
+The process runs these paths at startup (`Engine.Recover`, apart from
+apply retry) and on a cadence: refresh reaper and `StepRefresh` every second, delivery
 reconcile every 5 minutes, open-item and locally-tracked catch-up every
 15 minutes, and apply-attempt retry every minute. When
 `RUSUI_GITHUB_HOOK_IDS` is unset, reconcile is skipped with a log
@@ -556,8 +556,16 @@ These timers, schedule fires, idle sleep, retention expiry and runtime
 reconcile run only while the process holds the `scheduler` row in
 `plane_job_leases` (ADR 0089 D6). The holder renews it every 40 seconds
 for 2 minutes, compared against the store's clock. A claim takes only an
-expired row and increments its generation, and a schedule fire commits
-only under the current generation. Restore expires the row.
+expired row and increments its generation. A schedule fire commits only
+under the current generation, and an apply retry, which writes to
+GitHub, checks it before each item. Apply retry is not part of startup
+recovery: the holder runs it as soon as it gains the lease, so a new
+holder reconciles attempts a stopped instance left in flight. Restore
+expires the row.
+
+Each instance anchors its engine clock to the store's clock at start and
+on every renewal, so the lease and deadline times it writes and compares
+sit on one timeline (ADR 0089 D4).
 
 ### Admission
 
