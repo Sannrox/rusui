@@ -213,8 +213,8 @@ start unless `machine_profile` is ready, and it never falls back to
 Before acceptance, a time-boxed spike, not merged, attaches to #694: a
 backend program for one existing virtual machine service implements D2;
 two environments boot from the guest image and pass the D4 checks, and
-one runs a guest over ACP through the guest link, sleeps, and wakes,
-with the measured wake time.
+one runs a guest turn over its stdio protocol through the guest link,
+sleeps, and wakes, with the measured wake time.
 
 After the driver lands: the #683 adversarial suite passes against
 `machine`; `machine_profile` is not ready against a backend that returns
