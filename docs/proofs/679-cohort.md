@@ -16,7 +16,7 @@ the results record.
 | Candidate | `main` at the commit that merged this file. Plane, runner, and guest image are built from it once; no rebuild between or during runs |
 | Repository | `Sannrox/rusui-bench`, a public mirror of this repository's `main` at the candidate. Public so the runner's checks fetch heads without a credential. Its default branch is never rewritten, Actions are off, task pull requests stay there, and nothing merges |
 | Corpus | [`eval/corpus/679-tasks.json`](../../eval/corpus/679-tasks.json), sha256 `4a13d7bebec8c29793d6d267aca2376517558038c6276141e0115f48d95e2697` |
-| Policy | [679-cohort-policy.yaml](679-cohort-policy.yaml), sha256 `a0c4a76fb8346c0b51647b0e9fefeeede14582ce19a1a51749802790b66af6a1`: only `run` sessions in project `bench`, `task_base: ancestor`, `implement: true`, `land: false`, egress class `full`; `read`, `search`, `edit`, `think`, and `execute` allowed, anything else waits for an operator approval |
+| Policy | [679-cohort-policy.yaml](679-cohort-policy.yaml), sha256 `02b770e8863f6b9f16836796a9bf7364a9af6d43981be124bdf489660a06671f`: only `run` sessions in project `bench`, `task_base: ancestor`, `implement: true`, `land: false`, egress class `full`; `read`, `search`, `edit`, `think`, `execute`, and `fetch` allowed, `switch_mode` and `other` rejected; the Claude guest sends no other kind, so no request waits for an operator |
 | Runtime | native Linux Docker, container driver, guest link; `rusui diagnose` all ready, including `guest_link` and `model_guest`, before attempt 1 |
 | Guest | `claude`, reference image built from the candidate; image digest recorded in the results record |
 | Model | `RUSUI_GUEST_MODEL=claude-sonnet-5-5` through the operator's loopback model proxy |
@@ -115,9 +115,18 @@ Per run: verified success (count of `verified`), interventions,
 regressions, tokens per verified success, and wall clock per verified
 success. Approval wait, from the plane's approval records: for each
 approval, the time from the pending action to its decision, and the
-approvals that timed out against the turn deadline.
+approvals that timed out against the turn deadline. The policy answers
+every kind the Claude guest sends, so any approval record is reported as a defect of
+this profile.
 
 ## Runs and stop conditions
+
+The first start of run 1, on the original policy, was stopped during
+its second task. Under that policy a `fetch` request waited for an
+operator approval, and no operator answers in this protocol, so the
+first task's turn sat until the 45-minute run deadline. The policy now
+answers every kind the Claude guest sends. Nothing from that start counts. Its stores
+are kept, and the results record lists its tokens against the ceiling.
 
 - Two full runs on the candidate, each with all 30 tasks in corpus
   order, one attempt per task per run.

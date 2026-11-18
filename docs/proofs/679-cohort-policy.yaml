@@ -17,12 +17,20 @@ projects:
     task_base: ancestor
     # The guest must fetch Go modules to build and test its change.
     egress: full
+    # The Claude guest classes every tool as one of these kinds (unknown
+    # tools are other), so no turn waits on an operator.
+    # fetch adds nothing that execute under egress full cannot already do.
     permissions:
       - kind: read
       - kind: search
       - kind: edit
       - kind: think
       - kind: execute
+      - kind: fetch
+      - kind: switch_mode
+        action: reject
+      - kind: other
+        action: reject
     repos:
       Sannrox/rusui-bench:
         visibility: public
