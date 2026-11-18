@@ -108,7 +108,10 @@ type Assignment struct {
 	// EgressAllow are the custom egress class's destinations (host:port)
 	// the guest link forwards for the turn, in addition to the plane.
 	EgressAllow []string `json:"egress_allow,omitempty"`
-	MCPGateway  string   `json:"mcp_gateway,omitempty"`
+	// Egress is set to "full" when the guest link also serves the egress
+	// proxy (ADR 0093). An older plane omits it: plane only.
+	Egress     string `json:"egress,omitempty"`
+	MCPGateway string `json:"mcp_gateway,omitempty"`
 	// Attachments are prompt files stored outside the workspace (#508).
 	Attachments   []PromptAttachment `json:"attachments,omitempty"`
 	steerReceipts *steerReceiptState
@@ -524,6 +527,9 @@ func DriverEnv(a *Assignment, home, path string) []string {
 		if a.ModelBaseURL != "" {
 			env = append(env, "GROK_XAI_API_BASE_URL="+a.ModelBaseURL)
 		}
+	}
+	if a.proxiedEgress() {
+		env = append(env, rusuienv.GuestProxyEnv()...)
 	}
 	if a.ResultPath != "" {
 		env = append(env, "RUSUI_RESULT="+a.ResultPath)

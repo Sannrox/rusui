@@ -542,9 +542,17 @@ link forwards each turn. `none` and `trusted` forward only the plane.
 reaches it by that name; the container still has no network. An IP
 literal, a wildcard, a `localhost` name, a single label, `rusui.plane`, a
 duplicate, or a port outside 1 to 65535 is a policy load error, as is
-`egress_allow` under another class and `custom` with an empty list.
-`full` is a load error until [#751](https://github.com/Sannrox/rusui/issues/751)
+`egress_allow` under another class and `custom` with an empty list
 ([ADR 0091](decisions/0091-egress-classes.md)).
+
+`full` grants a container guest HTTPS (port 443) and plain HTTP to any
+public address through a per-turn proxy on its guest link; the guest gets
+`HTTPS_PROXY` and `HTTP_PROXY`, and still has no network. After resolving
+each name, the proxy refuses loopback, private, link-local (cloud
+metadata included), and other non-public ranges, and every address of the
+runner's host. SSH, UDP, and clients that ignore proxy settings have no
+route. Process guests get nothing beyond the plane
+([ADR 0093](decisions/0093-egress-full-proxy.md)).
 
 ```yaml
 projects:

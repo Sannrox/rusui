@@ -1,6 +1,6 @@
 # ADR 0047: Container guests reach the plane only through a stdio guest link
 
-- Status: Accepted; amended by 0050, 0062
+- Status: Accepted; amended by 0050, 0062, 0093
 - Date: 2026-10-02
 - Amends: [ADR 0022](0022-public-repo-isolation.md) (public-repository
   egress), [ADR 0027](0027-guest-reachability-ask.md) D1 and D2 (how the
@@ -18,6 +18,9 @@
   destinations.
   [ADR 0062](0062-guest-link-desktop-podman-deferred.md) keeps Docker
   Desktop and Podman unverified; both deferred on the #498 run.
+  [ADR 0093](0093-egress-full-proxy.md) adds, for egress class `full`
+  only, a link target served by an HTTP and CONNECT proxy that refuses
+  the host and private ranges; the guest keeps no network.
 - Discussion: none. Merging with this status changed to Accepted is the
   acceptance act.
 

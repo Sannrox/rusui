@@ -379,6 +379,19 @@ func TestDriverEnvIncludesAssignedSecrets(t *testing.T) {
 	}
 }
 
+// Only a container guest of class full is pointed at the egress proxy; a
+// process guest would reach the host's network directly (#751).
+func TestDriverEnvProxiesFullEgressContainersOnly(t *testing.T) {
+	a := &runner.Assignment{GuestGrant: "tok", Egress: "full", Driver: "container", Handle: "c1"}
+	if joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n"); !strings.Contains(joined, "HTTPS_PROXY=http://127.0.0.5:3128") || !strings.Contains(joined, "NO_PROXY=rusui.plane,") {
+		t.Fatal(joined)
+	}
+	a.Driver = "process"
+	if joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n"); strings.Contains(joined, "PROXY") {
+		t.Fatal(joined)
+	}
+}
+
 func TestDriverEnvCarriesExecutionPrincipal(t *testing.T) {
 	a := &runner.Assignment{TurnID: 9, TurnToken: "runner-tok", GuestGrant: "tok", ExecutionMode: "user", Act: "alice"}
 	joined := strings.Join(runner.DriverEnv(a, "/tmp/home", "/bin"), "\n")

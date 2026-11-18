@@ -60,7 +60,7 @@ is stale.
 | [0044](0044-plane-publishes-from-turn-result.md) | The plane publishes from the turn result | Accepted; amended by 0080 |
 | [0045](0045-local-unattended-promotion-deferred.md) | Local unattended promotion is deferred | Accepted; amended by 0086 |
 | [0046](0046-workspace-first-sequence.md) | Terminal-first remote workspace sequence | Accepted; amended by 0085, 0086 |
-| [0047](0047-guest-link.md) | Container guests reach the plane only through a stdio guest link | Accepted; amended by 0050, 0062 |
+| [0047](0047-guest-link.md) | Container guests reach the plane only through a stdio guest link | Accepted; amended by 0050, 0062, 0093 |
 | [0048](0048-pinless-run-session.md) | A project without a repository runs pinless sessions claimed by project key | Accepted |
 | [0049](0049-idle-environment-expiry-retained.md) | Idle environment expiry remains 72 hours | Superseded by 0063 |
 | [0050](0050-guest-toolchain-in-image.md) | Bake guest toolchain into the image; add no destinations | Accepted; amended by 0091 |
@@ -104,8 +104,9 @@ is stale.
 | [0088](0088-issuer-vouched-subjects.md) | A configured issuer vouches for several subjects | Proposed |
 | [0089](0089-redundant-plane.md) | The plane survives the loss of its host | Accepted |
 | [0090](0090-receipt-evidence-and-policy-binding.md) | Review receipts count evidence by class and cite the claim-time policy | Accepted |
-| [0091](0091-egress-classes.md) | Enforce egress classes none, trusted and custom | Accepted |
+| [0091](0091-egress-classes.md) | Enforce egress classes none, trusted and custom | Accepted; amended by 0093 |
 | [0092](0092-plane-admit-hook.md) | Plane-stored admit hook | Accepted |
+| [0093](0093-egress-full-proxy.md) | Egress class full forwards HTTP(S) through a link proxy | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR

@@ -14,7 +14,7 @@ import (
 // guest has no network, and its plane URLs reach the plane listener the
 // runner itself uses. An implement turn that talks to GitHub itself (ADR
 // 0015) also reaches GitHub, and a custom egress class adds its listed
-// destinations (#681). The returned context ends when the link
+// destinations (#681), and class full adds the egress proxy (#751). The returned context ends when the link
 // does, so a lost link fails the turn instead of waiting for its deadline.
 func startTurnLink(ctx context.Context, c *Client, a *Assignment) (context.Context, func(), error) {
 	noop := func() {}
@@ -40,8 +40,18 @@ func startTurnLink(ctx context.Context, c *Client, a *Assignment) (context.Conte
 		return ctx, noop, fmt.Errorf("guest link: %w", err)
 	}
 	targets := append(env.PlaneLinkTargets(planeDial, guestPort, a.GitHubToken != ""), egress...)
+	stopProxy := noop
+	if a.proxiedEgress() {
+		proxy, err := env.StartEgressProxy()
+		if err != nil {
+			return ctx, noop, fmt.Errorf("guest link: %w", err)
+		}
+		stopProxy = proxy.Close
+		targets = append(targets, env.LinkTarget{GuestIP: env.GuestProxyIP, Port: env.GuestProxyPort, Dial: proxy.Addr()})
+	}
 	link, err := env.StartLink(x, a.Handle, targets)
 	if err != nil {
+		stopProxy()
 		return ctx, noop, err
 	}
 	linkCtx, cancel := context.WithCancelCause(ctx)
@@ -52,7 +62,13 @@ func startTurnLink(ctx context.Context, c *Client, a *Assignment) (context.Conte
 		case <-linkCtx.Done():
 		}
 	}()
-	return linkCtx, func() { cancel(nil); link.Close() }, nil
+	return linkCtx, func() { cancel(nil); link.Close(); stopProxy() }, nil
+}
+
+// proxiedEgress reports whether the turn's guest link serves the egress
+// proxy: class full, container guests only (ADR 0093).
+func (a *Assignment) proxiedEgress() bool {
+	return a.Egress == "full" && a.Driver == "container" && a.Handle != ""
 }
 
 func hostPort(raw string) (string, error) {

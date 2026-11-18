@@ -498,10 +498,8 @@ func validTaskBase(slug, v string) (string, error) {
 
 func validEgress(slug, egress string) error {
 	switch egress {
-	case EgressNone, EgressTrusted, EgressCustom:
+	case EgressNone, EgressTrusted, EgressCustom, EgressFull:
 		return nil
-	case EgressFull:
-		return fmt.Errorf("policy: %s egress full is not available yet (#751)", slug)
 	default:
 		return fmt.Errorf("policy: %s invalid egress %q", slug, egress)
 	}
