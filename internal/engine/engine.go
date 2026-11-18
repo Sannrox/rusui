@@ -86,12 +86,16 @@ type Engine struct {
 	modelMu              sync.Mutex
 	modelSummaries       map[int64]*modelProxySummary
 	modelSummaryOverflow bool
-	completeMu           sync.Mutex
-	completing           map[int64]*completeLock
-	writeMu              sync.Mutex
-	writing              map[int64]*completeLock
-	flightMu             sync.Mutex
-	flightReads          map[int64][]flight.Object
+	// modelUsageLostAt is when the plane last lost model usage it had not
+	// recorded: its start, or a dropped summary. A turn started before
+	// it may miss usage.
+	modelUsageLostAt time.Time
+	completeMu       sync.Mutex
+	completing       map[int64]*completeLock
+	writeMu          sync.Mutex
+	writing          map[int64]*completeLock
+	flightMu         sync.Mutex
+	flightReads      map[int64][]flight.Object
 	// afterCommit maps a live transaction from e.tx to the work it runs
 	// once that transaction commits.
 	afterCommit sync.Map
@@ -115,6 +119,7 @@ type Engine struct {
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {
 	e := &Engine{Store: st, policy: pol, GitHub: g, Clock: clk, Log: log.New(os.Stderr, "rusui: ", 0), FetchTimeout: FetchTimeout, OwnerTTL: OwnerTTL}
 	e.Notify = func(msg string) { e.Log.Println(msg) }
+	e.modelUsageLostAt = e.now()
 	return e
 }
 

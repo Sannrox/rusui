@@ -32,3 +32,21 @@ func ActionExistsTx(tx *sql.Tx, id string) (bool, error) {
 	err := tx.QueryRow(`SELECT COUNT(*) FROM actions WHERE action_id=?`, id).Scan(&n)
 	return n > 0, err
 }
+
+// TurnActionBodiesTx returns the body of every typ action on turnID.
+func TurnActionBodiesTx(tx *sql.Tx, turnID int64, typ string) ([]string, error) {
+	rows, err := tx.Query(`SELECT body FROM actions WHERE turn_id=? AND action_type=?`, turnID, typ)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var bodies []string
+	for rows.Next() {
+		var b string
+		if err := rows.Scan(&b); err != nil {
+			return nil, err
+		}
+		bodies = append(bodies, b)
+	}
+	return bodies, rows.Err()
+}

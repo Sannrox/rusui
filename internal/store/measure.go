@@ -89,7 +89,20 @@ func NoteProvider(s *Store, turnID int64, provider, version string) error {
 	return err
 }
 
-func FinishMeasurementTx(tx *sql.Tx, turnID int64, terminal string, ended time.Time, publication string, tokensIn, tokensOut *int) error {
+// MeasurementStartedTx is when turnID was first claimed; zero when unknown.
+func MeasurementStartedTx(tx *sql.Tx, turnID int64) (time.Time, error) {
+	var raw sql.NullString
+	err := tx.QueryRow(`SELECT started_at FROM turn_measurements WHERE turn_id=?`, turnID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && !raw.Valid {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Parse(time.RFC3339Nano, raw.String)
+}
+
+func FinishMeasurementTx(tx *sql.Tx, turnID int64, terminal string, ended time.Time, publication string, tokensIn, tokensOut *int64) error {
 	var started sql.NullString
 	err := tx.QueryRow(`SELECT started_at FROM turn_measurements WHERE turn_id=?`, turnID).Scan(&started)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -99,7 +112,7 @@ func FinishMeasurementTx(tx *sql.Tx, turnID int64, terminal string, ended time.T
 			return err
 		}
 		_, err = tx.Exec(`INSERT INTO turn_measurements (turn_id, session_id, project, terminal_state, ended_at, publication, tokens_in, tokens_out) VALUES (?,?,?,?,?,?,?,?)`,
-			turnID, sessionID, project, terminal, ended.UTC().Format(time.RFC3339Nano), publication, intPtr(tokensIn), intPtr(tokensOut))
+			turnID, sessionID, project, terminal, ended.UTC().Format(time.RFC3339Nano), publication, int64Ptr(tokensIn), int64Ptr(tokensOut))
 		return err
 	}
 	if err != nil {
@@ -112,7 +125,7 @@ func FinishMeasurementTx(tx *sql.Tx, turnID int64, terminal string, ended time.T
 		}
 	}
 	_, err = tx.Exec(`UPDATE turn_measurements SET terminal_state=?, ended_at=?, duration_ms=?, publication=?, tokens_in=?, tokens_out=?, exported=0 WHERE turn_id=?`,
-		terminal, ended.UTC().Format(time.RFC3339Nano), duration, publication, intPtr(tokensIn), intPtr(tokensOut), turnID)
+		terminal, ended.UTC().Format(time.RFC3339Nano), duration, publication, int64Ptr(tokensIn), int64Ptr(tokensOut), turnID)
 	return err
 }
 
@@ -209,7 +222,7 @@ func nullInt(n sql.NullInt64) *int64 {
 	return &v
 }
 
-func intPtr(p *int) any {
+func int64Ptr(p *int64) any {
 	if p == nil {
 		return nil
 	}

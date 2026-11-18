@@ -131,7 +131,13 @@ All guests use the same `RUSUI_MODEL_UPSTREAM`. A gateway serving both OpenAI
 and Anthropic dialects can serve both kinds of guest; the plane chooses the
 credential header from the request dialect. `model.proxy` receipts record
 a bounded aggregate of destination origin, path, and HTTP status, plus call
-counts and a status histogram. Model responses do not wait for a SQLite write.
+counts, a status histogram, and `usage`: the input, cache-write,
+cache-read, and output tokens the forwarded responses reported.
+`usage_unknown` marks a row that may miss some
+([Turn measurements](review-results.md#turn-measurements)). The plane
+reads usage as the bytes pass; it does not buffer an event stream or
+change the response. It drops the guest's `Accept-Encoding`, so the plane
+negotiates compression itself and reads the decoded response. Model responses do not wait for a SQLite write.
 One aggregate per lease generation is committed with the terminal measurement,
 before the follow stream ends. Follow-ups and retries reuse the turn; each lease
 generation appends its own `model.proxy` row, so a turn total is the sum of its
