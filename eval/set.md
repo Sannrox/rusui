@@ -79,8 +79,12 @@ go run ./eval/taskrun -corpus FILE -policy FILE -revision REV \
 ```
 
 It admits pinned runs with the worker secret (`RUSUI_WORKER_SECRET`) and
-reads turns with the operator token (`RUSUI_OPERATOR_TOKEN`). Tasks run
-one at a time. A rerun with the same inputs resumes the same sessions
+reads turns with the operator token (`RUSUI_OPERATOR_TOKEN`). When a
+task's turns end, it applies the session's proposed write with the
+operator token, as an operator would
+([ADR 0080](../docs/decisions/0080-turns-propose-writes-go-through-actions.md)),
+so a plane that publishes (`RUSUI_PUBLICATION=plane`) opens the pull
+request before the head is scored. Tasks run one at a time. A rerun with the same inputs resumes the same sessions
 instead of admitting tasks again.
 
 A task corpus holds `version` (1), `project`, `repo`, `ref`, an optional
@@ -94,8 +98,11 @@ A task corpus holds `version` (1), `project`, `repo`, `ref`, an optional
 | `test_patch` | held-back tests, applied outside the guest before checks |
 | `checks` | commands (argv lists) that must fail on the base and pass on the head |
 
-Unknown fields fail to load. Checks and the test patch never enter the
-prompt, the guest workspace, or the guest's grant. They run in fresh
+Unknown fields fail to load. Before the test patch is applied to a
+head, every file it touches is reset to its content at the task's base,
+so the held-back tests replace the agent's own edits to those files
+instead of failing to apply over them. Checks and the test patch never
+enter the prompt, the guest workspace, or the guest's grant. They run in fresh
 checkouts on the operator's machine with an empty `HOME` and `TMPDIR`
 and only `PATH` and `LANG` from the caller's environment. That keeps
 plane tokens and the caller's credential files out of reach, but it is
@@ -107,7 +114,9 @@ head, and the gate passes on the unpatched head), `failed` (a check or
 the gate fails on the head), `invalid` (a check already passes on the
 base), or `not_verified` (no published head: blocked, unconfirmed, no
 pull request, or timeout). A gate failure is also counted as a
-regression. Per task the report records interventions (operator
+regression. A failed task names the failing check or gate command and
+the tail of its output, so a scoring fault is told apart from the
+head. Per task the report records interventions (operator
 permission decisions and turns after the first), tokens, and wall clock.
 Totals add tokens per verified success. A task with unreported usage
 counts in `unknown_tokens` instead of the token sum.

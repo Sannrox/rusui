@@ -1,0 +1,33 @@
+# Eval-plane policy for the #679 benchmark (docs/proofs/679-cohort.md).
+# Not the operator profile; the repository's policy.yaml is unchanged.
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+  session_kinds: [run]
+  egress: trusted
+  review: false
+  comments: false
+  close: false
+  implement: false
+  land: false
+projects:
+  bench:
+    session_kinds: [run]
+    task_base: ancestor
+    # The guest must fetch Go modules to build and test its change.
+    egress: full
+    permissions:
+      - kind: read
+      - kind: search
+      - kind: edit
+      - kind: think
+      - kind: execute
+    repos:
+      Sannrox/rusui-bench:
+        visibility: public
+        review: false
+        comments: false
+        close: false
+        implement: true
+        land: false

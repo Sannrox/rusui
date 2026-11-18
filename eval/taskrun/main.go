@@ -162,6 +162,9 @@ func (r runner) task(ctx context.Context, c *Corpus, t Task, rep Report) (TaskRe
 		return res, err
 	}
 	res.Interventions, res.Tokens = measures(turns)
+	if err := r.plane.applyWrite(ctx, session); err != nil {
+		return res, err
+	}
 	pub, err := r.plane.published(ctx, session)
 	if err != nil {
 		return res, err
@@ -181,6 +184,7 @@ func (r runner) task(ctx context.Context, c *Corpus, t Task, rep Report) (TaskRe
 		res.Checks = "pass"
 	}
 	res.Regression = v.headPass && !v.gatePass
+	res.Failure = v.failure
 	switch {
 	case !v.headPass || res.Regression:
 		res.Status = StatusFailed

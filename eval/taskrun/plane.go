@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,8 +13,9 @@ import (
 )
 
 // plane is the slice of the plane API the runner uses: admit a pinned
-// run (worker secret), read its turn measurements, and read the
-// publication the plane observed (operator token).
+// run (worker secret), read its turn measurements, apply the session's
+// proposed write, and read the publication the plane observed (operator
+// token).
 type plane struct {
 	url, worker, operator string
 	http                  *http.Client
@@ -107,6 +109,21 @@ func (p *plane) busy(ctx context.Context, session int64) (bool, error) {
 	return false, nil
 }
 
+// applyWrite asks the plane to publish the session's latest proposed
+// write (ADR 0080), as the operator would. Applying is idempotent, so a
+// resumed run applies again safely. A session without a proposal, or a
+// plane that does not publish, answers 409 and is left to score as not
+// verified.
+func (p *plane) applyWrite(ctx context.Context, session int64) error {
+	var out struct{}
+	err := p.do(ctx, p.operator, http.MethodPost, fmt.Sprintf("/sessions/%d/write-actions", session), nil, &out)
+	var se *statusError
+	if errors.As(err, &se) && se.code == http.StatusConflict {
+		return nil
+	}
+	return err
+}
+
 // published is the head the plane confirmed on GitHub, if any. A blocked
 // or unconfirmed turn has none.
 func (p *plane) published(ctx context.Context, session int64) (*publication, error) {
@@ -144,7 +161,15 @@ func (p *plane) do(ctx context.Context, token, method, path string, in, out any)
 		return err
 	}
 	if res.StatusCode >= 300 {
-		return fmt.Errorf("%s %s: %s %s", method, path, res.Status, bytes.TrimSpace(b))
+		return &statusError{code: res.StatusCode, msg: fmt.Sprintf("%s %s: %s %s", method, path, res.Status, bytes.TrimSpace(b))}
 	}
 	return json.Unmarshal(b, out)
 }
+
+// statusError is a plane answer outside 2xx.
+type statusError struct {
+	code int
+	msg  string
+}
+
+func (e *statusError) Error() string { return e.msg }
