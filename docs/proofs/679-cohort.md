@@ -121,12 +121,21 @@ this profile.
 
 ## Runs and stop conditions
 
-The first start of run 1, on the original policy, was stopped during
-its second task. Under that policy a `fetch` request waited for an
-operator approval, and no operator answers in this protocol, so the
-first task's turn sat until the 45-minute run deadline. The policy now
-answers every kind the Claude guest sends. Nothing from that start counts. Its stores
-are kept, and the results record lists its tokens against the ceiling.
+Three starts of run 1 are void, and nothing from them counts:
+
+- the first stopped at once, because the task runner's operator token
+  was refused;
+- the second was stopped during its second task. Under the original policy
+  a `fetch` request waited for an operator approval. No operator answers
+  in this protocol, so the first task's turn sat until the 45-minute run
+  deadline. The policy now answers every kind the Claude guest sends;
+- the third finished its first task, but no turn recorded token usage, so
+  the ceiling could not be kept. The plane now records usage from its
+  model proxy (#767), and the candidate includes that change.
+
+Their stores are kept. Their token use is unknown: each task a void start
+admitted counts against the ceiling under the unknown-usage rule below,
+and the results record lists them.
 
 - Two full runs on the candidate, each with all 30 tasks in corpus
   order, one attempt per task per run.
@@ -139,8 +148,14 @@ are kept, and the results record lists its tokens against the ceiling.
   report `failure` shows the scorer failed before the head was tested:
   a module download, toolchain, or checkout error. The results record
   lists each rescore with both failures. The rescore's verdict stands.
-- Token ceiling: 60M tokens across both runs, counting reported tokens.
-  Reaching it stops the campaign; the result is at best **narrow**.
+- Token ceiling: 60M tokens across both runs. A turn counts `tokens_in`
+  plus `tokens_out` from the plane's measurements: uncached input, cache
+  writes, and output. Cache reads do not count; the results record reports
+  them from the plane's `model.proxy` rows. A task whose usage is unknown
+  counts at the highest per-task count measured anywhere in the
+  campaign, rechecked after every task, so its charge rises when a higher
+  count appears. The results record lists it. Reaching the ceiling stops the campaign; the result is
+  at best **narrow**.
 - The campaign stops immediately on a GitHub write outside the mirror,
   a credential in any public artifact, or two pull requests for one
   task in one run. Any of these is **fail**.
