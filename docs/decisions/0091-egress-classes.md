@@ -1,6 +1,6 @@
 # ADR 0091: Enforce egress classes none, trusted and custom
 
-- Status: Accepted
+- Status: Accepted; amended by 0093
 - Date: 2026-11-17
 - Resolves: [#681](https://github.com/Sannrox/rusui/issues/681)
 - Amends: [ADR 0001](0001-environment-plane.md) D5 (egress classes are

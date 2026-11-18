@@ -60,3 +60,23 @@ func TestCustomEgressAssignsListedDestinations(t *testing.T) {
 		t.Fatalf("egress_allow %v", a.EgressAllow)
 	}
 }
+
+// A full egress project's class reaches the runner on the assignment, which
+// is what makes its guest link serve the egress proxy (#751).
+func TestFullEgressAssignsTheClass(t *testing.T) {
+	t.Parallel()
+	st := openStore(t, filepath.Join(t.TempDir(), "t.db"))
+	p, err := policy.Parse([]byte(strings.Replace(slackPol, "  test:\n", "  test:\n    egress: full\n", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := engine.New(st, p, gh.NewFake(), &clock.Fake{T: time.Unix(1_700_000_000, 0).UTC()})
+	e.Env = env.Process{Root: t.TempDir()}
+	e.ReloadPolicy(p)
+	hs := httptest.NewServer((&Server{Eng: e, WorkerSec: "wsec"}).Handler())
+	t.Cleanup(hs.Close)
+
+	if a := claim(t, hs, e, false); a.Egress != policy.EgressFull || a.EgressAllow != nil {
+		t.Fatalf("egress %q allow %v", a.Egress, a.EgressAllow)
+	}
+}

@@ -497,7 +497,7 @@ func TestEgressAllow(t *testing.T) {
 		"    egress: custom\n    egress_allow: [example.com, 'example.com:443']\n",
 		"    egress: custom\n",
 		"    egress: trusted\n    egress_allow: [example.com]\n",
-		"    egress: full\n",
+		"    egress: full\n    egress_allow: [example.com]\n",
 	} {
 		_, err := Parse([]byte(doc(bad)))
 		if err == nil || !strings.Contains(err.Error(), "rusui") {

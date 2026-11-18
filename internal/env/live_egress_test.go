@@ -191,3 +191,87 @@ func TestLiveCustomGuestReachesListedDestinationOnly(t *testing.T) {
 		t.Fatalf("guest egress\n got %s\nwant %s", got, want)
 	}
 }
+
+// egressProxyProbeJS sends each argv request ("label=METHOD target") to
+// the egress proxy and prints "label=<status>", then tries 1.1.1.1:443
+// directly ("direct=open|blocked").
+const egressProxyProbeJS = `const net=require("net");
+const ask=(label,method,target)=>new Promise(res=>{const s=net.connect({host:"` + GuestProxyIP + `",port:` + "3128" + `});let b="";
+const done=v=>{s.destroy();res(label+"="+v);};s.setTimeout(15000,()=>done("timeout"));s.on("error",()=>done("error"));
+s.on("connect",()=>{const h=method==="CONNECT"?target:new URL(target).host;s.write(method+" "+target+" HTTP/1.1\r\nHost: "+h+"\r\nConnection: close\r\n\r\n");});
+s.on("data",d=>{b+=d;const m=b.match(/^HTTP\/1\.1 (\d+)/);if(m)done(m[1]);});});
+const direct=()=>new Promise(res=>{const s=net.connect({host:"1.1.1.1",port:443});const done=v=>{s.destroy();res("direct="+v);};
+s.setTimeout(3000,()=>done("blocked"));s.on("connect",()=>done("open"));s.on("error",()=>done("blocked"));});
+(async()=>{const out=[];for(const a of process.argv.slice(1)){const [label,rest]=a.split("=");const [m,t]=rest.split(" ");out.push(await ask(label,m,t));}
+out.push(await direct());console.log(out.join(" "));})()`
+
+// A full-class guest reaches a public destination through the egress
+// proxy on its guest link, and still not the host's services, its bridge
+// gateway, cloud metadata, or any address directly (#751). Needs internet.
+func TestLiveFullGuestReachesPublicThroughProxyOnly(t *testing.T) {
+	unavailable := t.Skipf
+	if os.Getenv("CI") != "" {
+		unavailable = t.Fatalf
+	}
+	rt, err := LookRuntime()
+	if err != nil {
+		unavailable("container runtime required for live egress proof: %v", err)
+		return
+	}
+	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(host.Close)
+	_, hostPort, _ := net.SplitHostPort(host.Listener.Addr().String())
+	if err := exec.Command(rt.(DockerCLI).bin(), "pull", "-q", egressProbeImage).Run(); err != nil {
+		unavailable("cannot pull %s: %v", egressProbeImage, err)
+		return
+	}
+	gwOut, err := exec.Command(rt.(DockerCLI).bin(), "network", "inspect", "bridge",
+		"--format", "{{range .IPAM.Config}}{{.Gateway}} {{end}}").Output()
+	if err != nil || len(strings.Fields(string(gwOut))) == 0 {
+		t.Fatalf("bridge gateway: %v %q", err, gwOut)
+	}
+	gw := strings.Fields(string(gwOut))[0]
+	d := Container{RT: rt, Image: egressProbeImage}
+	id, err := d.Create(fmt.Sprintf("egress-full-%d", time.Now().UnixNano()%1_000_000_000))
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+			unavailable("container runtime unavailable: %v", err)
+			return
+		}
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Destroy(id) })
+	proxy, err := StartEgressProxy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proxy.Close)
+	link, err := StartLink(d, id, []LinkTarget{{GuestIP: GuestProxyIP, Port: GuestProxyPort, Dial: proxy.Addr()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(link.Close)
+
+	argv := []string{"node", "-e", egressProxyProbeJS,
+		"public_tls=CONNECT example.com:443",
+		"public_http=GET http://example.com/",
+		// Host targets use port 443, so the address guard, not the port
+		// check, is what refuses them; plain HTTP reaches the live listener.
+		"host_loopback=CONNECT 127.0.0.1:443",
+		"host_name=CONNECT localhost:443",
+		"host_gateway=CONNECT " + net.JoinHostPort(gw, "443"),
+		"host_http=GET http://127.0.0.1:" + hostPort + "/",
+		"metadata=GET http://169.254.169.254/",
+	}
+	out, _, err := rt.(DockerCLI).ExecOutput(id, argv)
+	if err != nil {
+		t.Fatalf("probe: %v %s", err, out)
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	got := strings.Join(strings.Fields(lines[len(lines)-1]), " ")
+	if want := "public_tls=200 public_http=200 host_loopback=403 host_name=403 host_gateway=403 host_http=403 metadata=403 direct=blocked"; got != want {
+		t.Fatalf("guest egress\n got %s\nwant %s", got, want)
+	}
+}
