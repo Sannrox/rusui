@@ -10,7 +10,7 @@ import (
 
 // scorerVersion changes whenever scoring rules change, so evidence from
 // an older scorer is stale.
-const scorerVersion = 1
+const scorerVersion = 2
 
 // Task statuses. Only verified counts as a success.
 const (
@@ -37,12 +37,14 @@ type Report struct {
 
 // TaskResult is one task's outcome and the plane's measures for it.
 type TaskResult struct {
-	ID            string `json:"id"`
-	Status        string `json:"status"`
-	Reason        string `json:"reason,omitempty"`
-	Head          string `json:"head,omitempty"`
-	Checks        string `json:"checks,omitempty"` // pass or fail on the head
-	Regression    bool   `json:"regression"`
+	ID         string `json:"id"`
+	Status     string `json:"status"`
+	Reason     string `json:"reason,omitempty"`
+	Head       string `json:"head,omitempty"`
+	Checks     string `json:"checks,omitempty"` // pass or fail on the head
+	Regression bool   `json:"regression"`
+	// Failure is the failing check or gate command and its output tail.
+	Failure       string `json:"failure,omitempty"`
 	Interventions int    `json:"interventions"`
 	Tokens        *int64 `json:"tokens"` // nil when any turn's usage is unknown
 	WallClockMS   int64  `json:"wall_clock_ms"`

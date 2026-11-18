@@ -47,13 +47,16 @@ projects:
       example/test-repo:
         visibility: public
         review: true
+        implement: true
 `
 
 // source is a real repository: a base, a later default tip, and two
-// candidate heads on the base, one right and one wrong.
+// candidate heads on the base, one right and one wrong. rightTested is
+// the right head plus the agent's own check.sh, a file the held-back test
+// patch also creates.
 type source struct {
-	dir                     string
-	base, tip, right, wrong string
+	dir                                  string
+	base, tip, right, wrong, rightTested string
 }
 
 func newSource(t *testing.T) source {
@@ -84,6 +87,7 @@ func newSource(t *testing.T) source {
 	s.tip = commit("later", "unrelated\n")
 	git("checkout", "-q", "--detach", s.base)
 	s.right = commit("answer", "42\n")
+	s.rightTested = commit("check.sh", "true # the agent's own check\n")
 	git("checkout", "-q", "--detach", s.base)
 	s.wrong = commit("answer", "41\n")
 	return s
@@ -96,7 +100,7 @@ type guest struct {
 	claims [][]byte
 }
 
-func (g *guest) serve(ctx context.Context, t *testing.T, e *engine.Engine, heads map[string]int) {
+func (g *guest) serve(ctx context.Context, t *testing.T, e *engine.Engine, proposals map[string]string) {
 	for ctx.Err() == nil {
 		c, err := e.Claim("example/test-repo")
 		if err != nil || c == nil {
@@ -108,13 +112,16 @@ func (g *guest) serve(ctx context.Context, t *testing.T, e *engine.Engine, heads
 		g.claims = append(g.claims, raw)
 		g.mu.Unlock()
 		r := &engine.TaskResult{SchemaVersion: engine.ResultSchema, SourceHash: c.ItemHash}
-		if pr, ok := heads[c.Snapshot.Body]; ok {
-			pull, err := e.GitHub.GetItem("example/test-repo", pr, "pull")
+		if sha, ok := proposals[c.Snapshot.Body]; ok {
+			// A live guest holds no GitHub credential: it proposes the
+			// write and the plane publishes it once the write is applied.
+			turn, err := store.GetTurn(e.Store, c.Job.ID)
 			if err != nil {
 				t.Error(err)
 				return
 			}
-			r.PullRequest, r.CandidateSHA = pr, pull.HeadSHA
+			r.CandidateSHA = sha
+			r.Publish = &engine.PublishRequest{Branch: fmt.Sprintf("rusui/%d", turn.SessionID), Title: "set the answer"}
 		} else {
 			r.BlockedReason = "cannot reproduce"
 		}
@@ -166,6 +173,7 @@ func TestCorpusRunScoresHeadsWithHeldBackChecks(t *testing.T) {
 	f.Put(snapshot.Item{Repo: "example/test-repo", Item: 12, ItemKind: "pull", State: "open", HeadSHA: src.wrong})
 	e := engine.New(st, pol, f, &clock.Fake{T: time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)})
 	e.Log = log.New(io.Discard, "", 0)
+	e.Publisher = publisher{}
 	e.ReloadPolicy(pol)
 	hs := httptest.NewServer((&server.Server{Eng: e, WorkerSec: "wsec", OperatorTok: "op", Guest: "claude"}).Handler())
 	t.Cleanup(hs.Close)
@@ -173,7 +181,7 @@ func TestCorpusRunScoresHeadsWithHeldBackChecks(t *testing.T) {
 	var g guest
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		g.serve(ctx, t, e, map[string]int{"set the answer": 11, "set the answer too": 12})
+		g.serve(ctx, t, e, map[string]string{"set the answer": src.right, "set the answer too": src.wrong})
 	})
 	t.Cleanup(func() { cancel(); wg.Wait() })
 
@@ -203,6 +211,10 @@ func TestCorpusRunScoresHeadsWithHeldBackChecks(t *testing.T) {
 	got := map[string]string{}
 	for _, r := range rep.Tasks {
 		got[r.ID] = r.Status
+		// Only a failed head names the command that failed it.
+		if failed := r.Status == StatusFailed; failed != strings.HasPrefix(r.Failure, "sh check.sh: exit status") {
+			t.Fatalf("task %s failure %q", r.ID, r.Failure)
+		}
 	}
 	want := map[string]string{"right": StatusVerified, "wrong": StatusFailed, "blocked": StatusNotVerified}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
@@ -296,6 +308,23 @@ func dumpStore(t *testing.T, db *sql.DB) string {
 // One check that already passes on the base invalidates the task, and no
 // check sees the operator's plane credentials or home directory (checks
 // run agent code).
+// A head that edits a file the test patch touches still scores on the
+// held-back version of that file: the patch replaces the agent's edit
+// instead of failing to apply.
+func TestScoreReplacesAgentEditsToHeldBackFiles(t *testing.T) {
+	src := newSource(t)
+	k := checker{remote: src.dir, workDir: t.TempDir(), timeout: time.Minute}
+	patch := "diff --git a/check.sh b/check.sh\nnew file mode 100644\n--- /dev/null\n+++ b/check.sh\n@@ -0,0 +1 @@\n+grep -qx 42 answer\n"
+	task := Task{ID: "t", BaseSHA: src.base, TestPatch: patch, Checks: [][]string{{"sh", "check.sh"}}}
+	v, err := k.score(context.Background(), &Corpus{Repo: "example/test-repo"}, task, src.rightTested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.headPass || v.basePass {
+		t.Fatalf("verdict %+v: held-back check did not replace the agent's file", v)
+	}
+}
+
 func TestScoreInvalidatesBasePassAndHidesOperatorSecrets(t *testing.T) {
 	t.Setenv("RUSUI_OPERATOR_TOKEN", "op-secret")
 	operatorHome := t.TempDir()
@@ -365,3 +394,10 @@ func TestRemoveDeletesReadOnlyTrees(t *testing.T) {
 		t.Fatalf("left behind %v", left)
 	}
 }
+
+// publisher stands in for the plane's App publisher: the proposed head
+// becomes pull request 11.
+type publisher struct{}
+
+func (publisher) PublishPull(string, gh.PullSpec) (int, error) { return 11, nil }
+func (publisher) PushBase(string, string, string) error        { return nil }

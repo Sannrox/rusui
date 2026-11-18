@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,9 +22,13 @@ type checker struct {
 }
 
 // checkout fetches one commit into a new directory and applies patch.
-// patched is false when the patch does not apply; the caller removes dir.
-// An error means no directory is left behind.
-func (k checker) checkout(ctx context.Context, repo, sha, patch string) (dir string, patched bool, err error) {
+// When base is another commit, every file the patch touches is first
+// reset to its base content (or removed when the base lacks it), so the
+// held-back tests replace the agent's own edits to those files instead
+// of conflicting with them. patched is false when the patch does not
+// apply; the caller removes dir. An error means no directory is left
+// behind.
+func (k checker) checkout(ctx context.Context, repo, sha, base, patch string) (dir string, patched bool, err error) {
 	dir, err = os.MkdirTemp(k.workDir, "taskrun-")
 	if err != nil {
 		return "", false, err
@@ -38,6 +44,12 @@ func (k checker) checkout(ctx context.Context, repo, sha, patch string) (dir str
 			return "", false, fmt.Errorf("%s %s: %w: %s", argv[0], argv[1], err, out)
 		}
 	}
+	if patch != "" && base != "" && base != sha {
+		if err := k.resetToBase(ctx, dir, src, base, patch); err != nil {
+			k.remove(dir)
+			return "", false, err
+		}
+	}
 	if patch != "" {
 		if _, err := k.run(ctx, dir, patch, []string{"git", "apply", "-"}); err != nil {
 			return dir, false, nil
@@ -46,14 +58,60 @@ func (k checker) checkout(ctx context.Context, repo, sha, patch string) (dir str
 	return dir, true, nil
 }
 
-// passes reports whether every command exits zero in dir.
-func (k checker) passes(ctx context.Context, dir string, cmds [][]string) bool {
-	for _, argv := range cmds {
-		if _, err := k.run(ctx, dir, "", argv); err != nil {
-			return false
+// resetToBase restores each path patch touches to its content at base.
+func (k checker) resetToBase(ctx context.Context, dir, src, base, patch string) error {
+	if out, err := k.run(ctx, dir, "", []string{"git", "fetch", "-q", "--depth=1", src, base}); err != nil {
+		return fmt.Errorf("git fetch base: %w: %s", err, out)
+	}
+	for _, p := range patchPaths(patch) {
+		if _, err := k.run(ctx, dir, "", []string{"git", "cat-file", "-e", base + ":" + p}); err != nil {
+			if err := os.Remove(filepath.Join(dir, p)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			continue
+		}
+		if out, err := k.run(ctx, dir, "", []string{"git", "checkout", "-q", base, "--", p}); err != nil {
+			return fmt.Errorf("reset %s: %w: %s", p, err, out)
 		}
 	}
-	return true
+	return nil
+}
+
+// patchPaths lists the old and new paths of every file in a Git patch.
+func patchPaths(patch string) []string {
+	var out []string
+	for line := range strings.Lines(patch) {
+		rest, ok := strings.CutPrefix(strings.TrimRight(line, "\n"), "diff --git a/")
+		if !ok {
+			continue
+		}
+		a, b, ok := strings.Cut(rest, " b/")
+		if !ok {
+			continue
+		}
+		out = append(out, a)
+		if b != a {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// failureTail bounds the command output a report keeps for a failure.
+const failureTail = 4 << 10
+
+// passes reports whether every command exits zero in dir. On failure,
+// failure names the first failing command and the tail of its output.
+func (k checker) passes(ctx context.Context, dir string, cmds [][]string) (ok bool, failure string) {
+	for _, argv := range cmds {
+		if out, err := k.run(ctx, dir, "", argv); err != nil {
+			if len(out) > failureTail {
+				out = out[len(out)-failureTail:]
+			}
+			return false, fmt.Sprintf("%s: %v\n%s", strings.Join(argv, " "), err, out)
+		}
+	}
+	return true, ""
 }
 
 func (k checker) run(ctx context.Context, dir, stdin string, argv []string) (string, error) {
@@ -107,8 +165,11 @@ func checkEnv(dir string) []string {
 }
 
 // verdict holds what the checks showed for one published head.
+// failure explains a failed head check or gate, so a report can tell an
+// agent's failure from a scoring fault.
 type verdict struct {
 	headPass, basePass, gatePass bool
+	failure                      string
 }
 
 // score checks one task: the head with the test patch, the base with it
@@ -118,19 +179,21 @@ type verdict struct {
 // error.
 func (k checker) score(ctx context.Context, c *Corpus, t Task, head string) (verdict, error) {
 	var v verdict
-	ok, err := k.inCheckout(ctx, c.Repo, head, t.TestPatch, t.Checks)
+	ok, failure, err := k.inCheckout(ctx, c.Repo, head, t.BaseSHA, t.TestPatch, t.Checks)
 	if err != nil || !ok {
+		v.failure = failure
 		return v, err
 	}
 	v.headPass = true
-	dir, applied, err := k.checkout(ctx, c.Repo, t.BaseSHA, t.TestPatch)
+	dir, applied, err := k.checkout(ctx, c.Repo, t.BaseSHA, t.BaseSHA, t.TestPatch)
 	if err != nil {
 		return v, err
 	}
 	if applied {
 		// Each check must fail on the base; one that passes proves nothing.
 		for _, argv := range t.Checks {
-			v.basePass = v.basePass || k.passes(ctx, dir, [][]string{argv})
+			ok, _ := k.passes(ctx, dir, [][]string{argv})
+			v.basePass = v.basePass || ok
 		}
 	}
 	k.remove(dir)
@@ -141,19 +204,23 @@ func (k checker) score(ctx context.Context, c *Corpus, t Task, head string) (ver
 		v.gatePass = true
 		return v, nil
 	}
-	v.gatePass, err = k.inCheckout(ctx, c.Repo, head, "", [][]string{c.Gate})
+	v.gatePass, v.failure, err = k.inCheckout(ctx, c.Repo, head, "", "", [][]string{c.Gate})
 	return v, err
 }
 
 // inCheckout runs cmds in a fresh checkout of sha with patch applied and
-// reports whether all of them passed.
-func (k checker) inCheckout(ctx context.Context, repo, sha, patch string, cmds [][]string) (bool, error) {
-	dir, applied, err := k.checkout(ctx, repo, sha, patch)
+// reports whether all of them passed, and why not when they did not.
+func (k checker) inCheckout(ctx context.Context, repo, sha, base, patch string, cmds [][]string) (ok bool, failure string, err error) {
+	dir, applied, err := k.checkout(ctx, repo, sha, base, patch)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	defer k.remove(dir)
-	return applied && k.passes(ctx, dir, cmds), nil
+	if !applied {
+		return false, "test patch does not apply", nil
+	}
+	ok, failure = k.passes(ctx, dir, cmds)
+	return ok, failure, nil
 }
 
 // remove deletes a checkout and its scratch environment.
