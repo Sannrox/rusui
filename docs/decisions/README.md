@@ -107,6 +107,7 @@ is stale.
 | [0091](0091-egress-classes.md) | Enforce egress classes none, trusted and custom | Accepted; amended by 0093 |
 | [0092](0092-plane-admit-hook.md) | Plane-stored admit hook | Accepted |
 | [0093](0093-egress-full-proxy.md) | Egress class full forwards HTTP(S) through a link proxy | Accepted |
+| [0094](0094-guest-kernel-isolation-profile.md) | A verified operator backend gives each environment its own guest kernel | Proposed |
 <!-- adr-index:end -->
 
 ## When to write an ADR
