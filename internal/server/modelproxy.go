@@ -166,6 +166,9 @@ func (s *Server) modelProxy(w http.ResponseWriter, r *http.Request) {
 		// The guest's grant never goes upstream.
 		req.Header.Del("Authorization")
 		req.Header.Del("X-Api-Key")
+		// An uncompressed response lets the plane read its usage; the
+		// transport still negotiates and decodes compression upstream.
+		req.Header.Del("Accept-Encoding")
 		if s.ModelKey != "" {
 			if strings.HasSuffix(r.URL.Path, "/messages") || (s.modelProvider() == ProviderAnthropic && !strings.HasSuffix(r.URL.Path, "/chat/completions") && !strings.HasSuffix(r.URL.Path, "/responses")) {
 				req.Header.Set("X-Api-Key", s.ModelKey)
@@ -179,9 +182,11 @@ func (s *Server) modelProxy(w http.ResponseWriter, r *http.Request) {
 		}
 		req.URL.Path = path
 	}
-	recordResponse := s.Eng.ModelResponseRecorder(*g, upstream.Scheme+"://"+upstream.Host, strings.TrimPrefix(r.URL.Path, "/model-proxy"))
+	path := strings.TrimPrefix(r.URL.Path, "/model-proxy")
+	status, usage := s.Eng.ModelResponseRecorder(*g, upstream.Scheme+"://"+upstream.Host, path)
 	proxy.ModifyResponse = func(res *http.Response) error {
-		recordResponse(res.StatusCode)
+		status(res.StatusCode)
+		meterModelResponse(res, path, usage)
 		return nil
 	}
 

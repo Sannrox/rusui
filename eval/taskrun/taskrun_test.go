@@ -125,11 +125,17 @@ func (g *guest) serve(ctx context.Context, t *testing.T, e *engine.Engine, propo
 		} else {
 			r.BlockedReason = "cannot reproduce"
 		}
-		in, out := 100, 20
+		// One model call through the plane's proxy: 120 tokens count, the
+		// cache read does not. Usage the guest reports itself is ignored.
+		grant := store.Grant{TurnID: c.Job.ID, LeaseGeneration: c.Job.LeaseGeneration, ExpiresAt: time.Now().Add(time.Hour)}
+		status, usage := e.ModelResponseRecorder(grant, "https://model.invalid", "/v1/messages")
+		status(200)
+		usage(engine.ModelUsage{Input: 90, CacheWrite: 10, CacheRead: 500, Output: 20}, true)
+		self := 1_000_000
 		a := engine.Artifact{
 			SchemaVersion: 1, Repo: c.Job.Repo, Item: c.Job.Item, ItemKind: c.Job.ItemKind,
 			ClaimedRevision: c.Job.ClaimedRevision, SnapshotHash: c.ItemHash, MainSHA: c.Snapshot.MainSHA,
-			Verdict: "keep", Confidence: "high", InputTokens: &in, OutputTokens: &out, Result: r,
+			Verdict: "keep", Confidence: "high", InputTokens: &self, OutputTokens: &self, Result: r,
 		}
 		if _, err := e.Complete(c.Job.ID, c.Job.LeaseGeneration, c.Job.ClaimedRevision, a); err != nil {
 			t.Error(err)

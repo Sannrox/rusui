@@ -22,13 +22,13 @@ func TestModelSummaryBoundsDetailAndRetainsStatusCounts(t *testing.T) {
 		if i%2 != 0 {
 			status = 429
 		}
-		e.ModelResponseRecorder(store.Grant{TurnID: 1, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", fmt.Sprintf("/v1/%d", i))(status)
+		respond(e, store.Grant{TurnID: 1, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", fmt.Sprintf("/v1/%d", i), status)
 	}
 	summary := e.modelSummaries[1]
 	if summary.Count != 80 || summary.StatusCounts[200] != 40 || summary.StatusCounts[429] != 40 || len(summary.Calls) != 64 || summary.OtherCalls != 16 {
 		t.Fatalf("bounded summary %+v", summary)
 	}
-	e.ModelResponseRecorder(store.Grant{TurnID: 2, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", strings.Repeat("x", 2048))(200)
+	respond(e, store.Grant{TurnID: 2, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", strings.Repeat("x", 2048), 200)
 	call := e.modelSummaries[2].Calls[0]
 	if len(call.Path) != 1024 || !call.PathTruncated {
 		t.Fatalf("unbounded path: %d bytes, truncated=%v", len(call.Path), call.PathTruncated)
@@ -47,9 +47,9 @@ func TestModelSummarySurvivesRollbackAndReclaimsFinishedCapacity(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := range 256 {
-		e.ModelResponseRecorder(store.Grant{TurnID: tid + int64(i), LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")(200)
+		respond(e, store.Grant{TurnID: tid + int64(i), LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions", 200)
 	}
-	e.ModelResponseRecorder(store.Grant{TurnID: tid + 256, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")(200)
+	respond(e, store.Grant{TurnID: tid + 256, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions", 200)
 	if len(e.modelSummaries) != 256 || e.modelSummaries[tid+256] != nil {
 		t.Fatal("active turn capacity is not bounded")
 	}
@@ -80,7 +80,7 @@ func TestModelSummarySurvivesRollbackAndReclaimsFinishedCapacity(t *testing.T) {
 	if err := json.Unmarshal([]byte(actions[0].Body), &receipt); err != nil || receipt.Count != 1 {
 		t.Fatalf("lost rollback summary: %+v %v", receipt, err)
 	}
-	e.ModelResponseRecorder(store.Grant{TurnID: tid + 256, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")(200)
+	respond(e, store.Grant{TurnID: tid + 256, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions", 200)
 	if len(e.modelSummaries) != 256 || e.modelSummaries[tid+256] == nil {
 		t.Fatal("finished summary did not release capacity")
 	}
@@ -92,8 +92,10 @@ func TestLateModelResponsesCannotExhaustTurnCapacity(t *testing.T) {
 	late := make([]func(int), 0, 512)
 	for i := range 512 {
 		id := int64(i + 1)
-		record := e.ModelResponseRecorder(store.Grant{TurnID: id, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
-		// A cancelled turn has no observed responses when it finalizes.
+		record, usage := e.ModelResponseRecorder(store.Grant{TurnID: id, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
+		// A cancelled turn has no observed responses when it finalizes;
+		// its call closed without billing.
+		usage(ModelUsage{}, true)
 		if err := e.recordModelSummaryTx(nil, id); err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +104,7 @@ func TestLateModelResponsesCannotExhaustTurnCapacity(t *testing.T) {
 	for _, record := range late {
 		record(200)
 	}
-	next := e.ModelResponseRecorder(store.Grant{TurnID: 513, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
+	next, _ := e.ModelResponseRecorder(store.Grant{TurnID: 513, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
 	next(200)
 	summary := e.modelSummaries[513]
 	if len(e.modelSummaries) > 256 || summary == nil || summary.Count != 1 {
@@ -116,15 +118,18 @@ func TestLateModelResponsesCannotExhaustTurnCapacity(t *testing.T) {
 }
 
 func TestModelRecorderRejectsPriorLeaseResponsesAfterReactivation(t *testing.T) {
-	e := New(nil, nil, nil, clock.Real{})
-	old := e.ModelResponseRecorder(store.Grant{TurnID: 1, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
-	if err := e.recordModelSummaryTx(nil, 1); err != nil {
+	st := OpenTestStore(t)
+	e := New(st, nil, nil, clock.Real{})
+	modelTurn(t, st)
+	old, _ := e.ModelResponseRecorder(store.Grant{TurnID: 1, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
+	// The old call is still in flight when its generation finishes.
+	if err := st.Tx(func(tx *sql.Tx) error { return e.recordModelSummaryTx(tx, 1) }); err != nil {
 		t.Fatal(err)
 	}
-	current := e.ModelResponseRecorder(store.Grant{TurnID: 1, LeaseGeneration: 2, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
+	current, _ := e.ModelResponseRecorder(store.Grant{TurnID: 1, LeaseGeneration: 2, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
 	old(200)
 	current(429)
-	stale := e.ModelResponseRecorder(store.Grant{TurnID: 1, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
+	stale, _ := e.ModelResponseRecorder(store.Grant{TurnID: 1, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
 	stale(200)
 	summary := e.modelSummaries[1]
 	if summary.Generation != 2 || summary.Count != 1 || summary.StatusCounts[429] != 1 || summary.StatusCounts[200] != 0 {
@@ -134,9 +139,9 @@ func TestModelRecorderRejectsPriorLeaseResponsesAfterReactivation(t *testing.T) 
 
 func TestModelRecorderCarriesUnfinishedAttemptCounts(t *testing.T) {
 	e := New(nil, nil, nil, clock.Real{})
-	old := e.ModelResponseRecorder(store.Grant{TurnID: 1, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
+	old, _ := e.ModelResponseRecorder(store.Grant{TurnID: 1, LeaseGeneration: 1, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
 	old(200)
-	current := e.ModelResponseRecorder(store.Grant{TurnID: 1, LeaseGeneration: 2, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
+	current, _ := e.ModelResponseRecorder(store.Grant{TurnID: 1, LeaseGeneration: 2, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")
 	current(429)
 	old(503)
 	summary := e.modelSummaries[1]
@@ -160,7 +165,7 @@ func TestModelSummaryAppendsOneRowPerGeneration(t *testing.T) {
 	}
 	finish := func(gen, status int) {
 		t.Helper()
-		e.ModelResponseRecorder(store.Grant{TurnID: tid, LeaseGeneration: gen, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions")(status)
+		respond(e, store.Grant{TurnID: tid, LeaseGeneration: gen, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/chat/completions", status)
 		if err := st.Tx(func(tx *sql.Tx) error { return e.recordModelSummaryTx(tx, tid) }); err != nil {
 			t.Fatal(err)
 		}
@@ -179,4 +184,80 @@ func TestModelSummaryAppendsOneRowPerGeneration(t *testing.T) {
 	if err := json.Unmarshal([]byte(next[0].Body), &second); err != nil || second.Generation != 2 || second.Count != 1 || second.StatusCounts[429] != 1 {
 		t.Fatalf("second generation summary %+v %v", second, err)
 	}
+}
+
+// A follow-up turn's tokens sum its lease generations. A call still open
+// when a generation finishes, even one with no response yet, makes the
+// turn unknown, and usage reported after that changes nothing.
+func TestTurnTokensSumGenerationsAndRefuseOpenUsage(t *testing.T) {
+	st := OpenTestStore(t)
+	e := New(st, nil, nil, clock.Real{})
+	e.Log = log.New(io.Discard, "", 0)
+	var sid, tid int64
+	if err := st.DB.QueryRow(`INSERT INTO sessions (environment_id,kind,repo,item,item_kind,state,created_at) VALUES (1,'run','example/repo',1,'issue','open','2026-11-18T00:00:00Z') RETURNING id`).Scan(&sid); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DB.QueryRow(`INSERT INTO turns(session_id,lane,state) VALUES (?,'run','leased') RETURNING id`, sid).Scan(&tid); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Tx(func(tx *sql.Tx) error { return store.BeginMeasurementTx(tx, tid, e.now()) }); err != nil {
+		t.Fatal(err)
+	}
+	call := func(gen int) (func(int), func(ModelUsage, bool)) {
+		return e.ModelResponseRecorder(store.Grant{TurnID: tid, LeaseGeneration: gen, ExpiresAt: e.now().Add(GrantTTL)}, "http://127.0.0.1", "/v1/messages")
+	}
+	answered := func(gen int, u ModelUsage) {
+		status, usage := call(gen)
+		status(200)
+		usage(u, true)
+	}
+	finish := func() (in, out *int64) {
+		t.Helper()
+		if err := st.Tx(func(tx *sql.Tx) error {
+			if err := e.recordModelSummaryTx(tx, tid); err != nil {
+				return err
+			}
+			var err error
+			in, out, err = e.turnTokensTx(tx, tid)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return in, out
+	}
+	answered(1, ModelUsage{Input: 10, CacheWrite: 2, CacheRead: 50, Output: 3})
+	finish()
+	answered(2, ModelUsage{Input: 1, Output: 4})
+	if in, out := finish(); in == nil || *in != 13 || *out != 7 {
+		t.Fatalf("generations not summed: in %v out %v", in, out)
+	}
+	// A call still waiting for its response is open too.
+	_, late := call(3)
+	if in, out := finish(); in != nil || out != nil {
+		t.Fatalf("open usage counted: in %v out %v", *in, *out)
+	}
+	late(ModelUsage{Output: 1}, true)
+	if in, _ := finish(); in != nil {
+		t.Fatal("late usage revived the turn's tokens")
+	}
+}
+
+// respond records one response status for a call whose usage is never
+// reported.
+func respond(e *Engine, g store.Grant, origin, path string, status int) {
+	record, _ := e.ModelResponseRecorder(g, origin, path)
+	record(status)
+}
+
+// modelTurn inserts a leased turn on a session of its own and returns its id.
+func modelTurn(t *testing.T, st *store.Store) int64 {
+	t.Helper()
+	var sid, id int64
+	if err := st.DB.QueryRow(`INSERT INTO sessions (environment_id,kind,repo,item,item_kind,state,created_at) VALUES (1,'review','example/repo',(SELECT COUNT(*)+1 FROM sessions),'issue','open','2026-10-08T00:00:00Z') RETURNING id`).Scan(&sid); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DB.QueryRow(`INSERT INTO turns(session_id,lane,state) VALUES (?,'review','leased') RETURNING id`, sid).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

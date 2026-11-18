@@ -14,6 +14,24 @@ names the session id. It does not include the prompt, tool arguments,
 diffs, terminal bytes, file contents, or credentials. Export stays off
 unless `RUSUI_OTEL_ENDPOINT` points at a collector you run.
 
+A Turn's `tokens_in` and `tokens_out` come only from the model responses
+the plane's model proxy forwarded, summed over the Turn's lease
+generations. `tokens_in` is uncached input plus cache writes; `tokens_out`
+is output. Cache reads are not in either; the Turn's `model.proxy` rows
+record them with the other totals ([operator guide](operator.md)). Usage a
+runner or guest reports is never counted. Both stay null, never a partial
+count, when the Turn made no proxied model call or the plane may have
+missed some of its usage:
+
+- a billed response (messages, chat completions, responses) ended without
+  reporting usage, an event stream ended without its final event, the body
+  used a compression the plane cannot read, or it ran past the size bound
+  (16 MiB of JSON, or a 1 MiB event-stream line);
+- a model call was still open when the Turn finished, including one still
+  waiting for its response or one that got none;
+- the Turn started before the plane did, or a summary was dropped at
+  capacity while it ran.
+
 ## Review inbox
 
 `rusui inbox` (`GET /inbox`) lists the review results that still need a

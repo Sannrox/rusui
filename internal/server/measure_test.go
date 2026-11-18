@@ -178,8 +178,8 @@ func TestTurnMeasurementHTTP(t *testing.T) {
 }
 
 type claimedTurn struct {
-	turnID, repo, kind, hash string
-	item, gen, rev           int
+	turnID, repo, kind, hash, grant string
+	item, gen, rev                  int
 }
 
 func claimTurn(t *testing.T, base string) claimedTurn {
@@ -193,13 +193,14 @@ func claimTurn(t *testing.T, base string) claimedTurn {
 		Item            int    `json:"item"`
 		ItemKind        string `json:"item_kind"`
 		ItemHash        string `json:"item_hash"`
+		GuestGrant      string `json:"guest_grant"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil || raw.TurnID == 0 {
 		t.Fatalf("claim %s %v", body, err)
 	}
 	return claimedTurn{
 		turnID: jsonNumber(raw.TurnID), repo: raw.Repo, kind: raw.ItemKind, hash: raw.ItemHash,
-		item: raw.Item, gen: raw.LeaseGeneration, rev: raw.ClaimedRevision,
+		item: raw.Item, gen: raw.LeaseGeneration, rev: raw.ClaimedRevision, grant: raw.GuestGrant,
 	}
 }
 
