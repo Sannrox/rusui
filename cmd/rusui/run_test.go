@@ -36,6 +36,39 @@ func TestRunMainPrintsJSONWithoutHandleWhenStderrIsRedirected(t *testing.T) {
 	}
 }
 
+func TestRunMainPrintsSnapshotHitOrMissOnTerminalStderr(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{"hit", `{"session_id":42,"kind":"run","snapshot_hit":true,"source_hash":"abc"}`, "session 42 snapshot hit"},
+		{"miss", `{"session_id":42,"kind":"run","snapshot_hit":false,"source_hash":"abc"}`, "session 42 snapshot miss"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hs := startRunCreateServer(t, tc.body)
+			var out, errw bytes.Buffer
+			code := runMain([]string{"-url", hs.URL, "-project", "demo", "-token", "tok", "do the thing"}, strings.NewReader(""), &out, &errw, true, true)
+			if code != 0 {
+				t.Fatalf("code %d stderr %q", code, errw.String())
+			}
+			var created struct {
+				SessionID int64 `json:"session_id"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &created); err != nil || created.SessionID != 42 {
+				t.Fatalf("stdout %q", out.String())
+			}
+			if !strings.Contains(errw.String(), tc.want) {
+				t.Fatalf("stderr %q, want %q", errw.String(), tc.want)
+			}
+			if !strings.Contains(errw.String(), "rusui read -follow 42") || !strings.Contains(errw.String(), "rusui attach 42") {
+				t.Fatalf("handle lines missing %q", errw.String())
+			}
+		})
+	}
+}
+
 func TestRunMainPrintsFollowableHandleOnTerminalStderr(t *testing.T) {
 	hs := startRunCreateServer(t, `{"session_id":42,"kind":"run"}`)
 	t.Setenv("RUSUI_SESSION_URL", "https://example.test/console/sessions/{session}")

@@ -60,71 +60,100 @@ func snapshotStamp(hash string) []byte {
 	return []byte("prepared " + hash + "\n")
 }
 
+// snapshotHit is true when prepareWorkspace will place a complete
+// snapshot and skip plane hooks and setup. A hash-only stamp is not a
+// hit (#512).
+func (e *Engine) snapshotHit(repo, pin, hash string) bool {
+	if e.Tree == nil || repo == "" || pin == "" || hash == "" || policy.IsProjectKey(repo) {
+		return false
+	}
+	return snapshotComplete(filepath.Join(e.snapshotRoot(), hash), hash)
+}
+
+// SnapshotReport is the source hash a workspace prepare will use and
+// whether that prepare is a snapshot hit. Create JSON and rusui run
+// print this; the later claim still runs prepareWorkspace. Empty repo
+// and pin use the project's operator pin.
+func (e *Engine) SnapshotReport(project, guest, repo, pin string) (sourceHash string, hit bool) {
+	pol := e.PolicySnapshot()
+	if repo == "" && pin == "" {
+		if p, ok := pol.Project(project); ok {
+			repo, pin = e.operatorSessionPin(p)
+		}
+	}
+	image := e.imageIdentity()
+	if _, entry, err := e.chooseGuest(project, guest, pol); err == nil && entry.Image != "" {
+		image = entry.Image
+	}
+	sourceHash = SourceHash(image, pin, nil)
+	return sourceHash, e.snapshotHit(repo, pin, sourceHash)
+}
+
 // prepareWorkspace fills a new environment's workspace. A snapshot hit
 // places the prepared tree and skips plane hooks and setup. A miss runs
 // pre-clone, places the git pin, runs pre-setup, then `.agents/setup`,
 // and stores the workspace after setup as the snapshot for hash
 // (ADR 0007, ADR 0067). Without a pin there is no snapshot, so those
 // steps run on every new environment. setup is nil when setup was not
-// attempted.
-func (e *Engine) prepareWorkspace(d env.Driver, handle, repo, pin, hash string) (setup *env.Capture, hooks []env.Capture, err error) {
+// attempted. hit is true only on the snapshotComplete path.
+func (e *Engine) prepareWorkspace(d env.Driver, handle, repo, pin, hash string) (setup *env.Capture, hooks []env.Capture, hit bool, err error) {
 	if policy.IsProjectKey(repo) {
 		// Empty workspace, no .git, no setup (ADR 0048).
-		return nil, nil, nil
+		return nil, nil, false, nil
 	}
 	root := e.snapshotRoot()
 	dir := filepath.Join(root, hash)
-	if e.Tree != nil && repo != "" && pin != "" && hash != "" && snapshotComplete(dir, hash) {
-		return nil, nil, placeTree(d, handle, dir)
+	if e.snapshotHit(repo, pin, hash) {
+		return nil, nil, true, placeTree(d, handle, dir)
 	}
 	slug := e.projectSlug(repo)
 	if err := e.runNamedHook(d, handle, slug, env.CapturePreClone, &hooks); err != nil {
-		return nil, hooks, err
+		return nil, hooks, false, err
 	}
 	if e.Tree == nil || repo == "" || pin == "" || hash == "" {
 		if err := e.runNamedHook(d, handle, slug, env.CapturePreSetup, &hooks); err != nil {
-			return nil, hooks, err
+			return nil, hooks, false, err
 		}
 		setup, err = runSetup(d, handle, hash)
-		return setup, hooks, err
+		return setup, hooks, false, err
 	}
 	if err := os.MkdirAll(root, 0o700); err != nil {
-		return nil, hooks, err
+		return nil, hooks, false, err
 	}
 	staging, err := os.MkdirTemp(root, "prep-")
 	if err != nil {
-		return nil, hooks, err
+		return nil, hooks, false, err
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
 	if err := e.Tree.Fetch(repo, pin, staging); err != nil {
-		return nil, hooks, err
+		return nil, hooks, false, err
 	}
 	if err := placeTree(d, handle, staging); err != nil {
-		return nil, hooks, err
+		return nil, hooks, false, err
 	}
 	if err := e.runNamedHook(d, handle, slug, env.CapturePreSetup, &hooks); err != nil {
-		return nil, hooks, err
+		return nil, hooks, false, err
 	}
 	c, err := runSetup(d, handle, hash)
 	if err != nil {
-		return c, hooks, err
+		return c, hooks, false, err
 	}
 	tree := staging
 	if c != nil && c.Ran {
 		capturer, ok := d.(env.TreeCapturer)
 		if !ok {
 			e.exception("snapshot " + hash + ": driver cannot capture tree; setup will run again")
-			return c, hooks, nil
+			return c, hooks, false, nil
 		}
 		tree, err = os.MkdirTemp(root, "capture-")
 		if err != nil {
 			e.exception("snapshot " + hash + ": " + err.Error())
-			return c, hooks, nil
+			return c, hooks, false, nil
 		}
 		defer func() { _ = os.RemoveAll(tree) }()
 		if err := capturer.CaptureTree(handle, tree); err != nil {
 			e.exception("snapshot " + hash + ": capture: " + err.Error())
-			return c, hooks, nil
+			return c, hooks, false, nil
 		}
 	}
 	// This environment is already prepared; a snapshot that cannot be
@@ -132,7 +161,7 @@ func (e *Engine) prepareWorkspace(d env.Driver, handle, repo, pin, hash string) 
 	if err := e.storeSnapshot(dir, hash, tree); err != nil {
 		e.exception("snapshot " + hash + ": store: " + err.Error())
 	}
-	return c, hooks, nil
+	return c, hooks, false, nil
 }
 
 func (e *Engine) projectSlug(repo string) string {
