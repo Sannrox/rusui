@@ -156,6 +156,21 @@ session's `owner/repo`. When the pull request head moved after the plane
 observed it, sync fetches the current head and prints a `note:` line
 with both SHAs. A second sync with nothing new says `already up to date`.
 
+Apply the environment's current git HEAD plus uncommitted files onto the
+same checkout with `-workspace`. The environment keeps running. The
+command does not take the terminal write lease, start a turn, or mutate
+the guest tree. It uses your git remote and credentials; the
+implement-session credential never reaches the laptop. A sleeping
+container is woken only when the runtime cannot copy the workspace as it
+is. A second run with nothing new says `already up to date`. It exits
+non-zero and changes no local files when the session is unknown, was
+cancelled, is archived, has no git workspace, or the local checkout is
+dirty.
+
+```bash
+rusui sync [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] [-remote origin] [-dir .] -workspace SESSION_ID
+```
+
 Copy a local file into a live session workspace. The path is relative to the
 workspace. The cap is 32 MiB. The file is stored as bytes; the console does
 not render it as HTML. `rusui get` copies one workspace-relative file out

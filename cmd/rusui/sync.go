@@ -9,15 +9,22 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/sannrox/rusui/internal/env"
 )
 
 // syncMaxCommits bounds the landed-commit list printed by rusui sync.
 const syncMaxCommits = 50
 
 type syncSessionView struct {
-	Cancelled   bool `json:"cancelled"`
+	Cancelled bool `json:"cancelled"`
+	Session   *struct {
+		Repo     string `json:"repo"`
+		Archived bool   `json:"archived"`
+	} `json:"session"`
 	Publication *struct {
 		Repo        string `json:"repo"`
 		PullRequest int    `json:"pull_request"`
@@ -30,8 +37,9 @@ func syncCLI(args []string) {
 }
 
 // syncMain fetches a session's published pull request head into a local
-// checkout with the operator's own git remote and credentials. It reads
-// the plane and never touches the environment or the working tree.
+// checkout with the operator's own git remote and credentials. With
+// -workspace it applies the environment HEAD and uncommitted files
+// instead. It does not take the terminal write lease or start a turn.
 func syncMain(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -39,6 +47,7 @@ func syncMain(args []string, stdout, stderr io.Writer) int {
 	token := fs.String("token", os.Getenv("RUSUI_OPERATOR_TOKEN"), "operator token")
 	remote := fs.String("remote", "origin", "git remote of the session's repository")
 	dir := fs.String("dir", ".", "local git checkout")
+	workspace := fs.Bool("workspace", false, "apply the environment working tree instead of the published pull request")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -47,7 +56,7 @@ func syncMain(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: rusui sync [-url URL] [-token TOKEN] [-remote NAME] [-dir DIR] SESSION_ID")
+		_, _ = fmt.Fprintln(stderr, "usage: rusui sync [-url URL] [-token TOKEN] [-remote NAME] [-dir DIR] [-workspace] SESSION_ID")
 		return 2
 	}
 	id := fs.Arg(0)
@@ -55,7 +64,13 @@ func syncMain(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "sync: invalid session id")
 		return 2
 	}
-	if err := runSync(*url, *token, *remote, *dir, id, stdout); err != nil {
+	var err error
+	if *workspace {
+		err = runWorkspaceSync(*url, *token, *remote, *dir, id, stdout)
+	} else {
+		err = runSync(*url, *token, *remote, *dir, id, stdout)
+	}
+	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "sync: %v\n", err)
 		return 1
 	}
@@ -63,21 +78,9 @@ func syncMain(args []string, stdout, stderr io.Writer) int {
 }
 
 func runSync(planeURL, token, remote, dir, id string, stdout io.Writer) error {
-	res, err := planeClient(planeURL, token, "/sessions/"+id)
+	view, err := loadSyncSession(planeURL, token, id)
 	if err != nil {
 		return err
-	}
-	defer func() { _ = res.Body.Close() }()
-	b, _ := io.ReadAll(res.Body)
-	if res.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("session %s not found", id)
-	}
-	if res.StatusCode >= 300 {
-		return fmt.Errorf("%s %s", res.Status, bytesTrim(b))
-	}
-	var view syncSessionView
-	if err := json.Unmarshal(b, &view); err != nil {
-		return fmt.Errorf("response")
 	}
 	if view.Cancelled {
 		return fmt.Errorf("session %s was cancelled", id)
@@ -151,6 +154,228 @@ func runSync(planeURL, token, remote, dir, id string, stdout io.Writer) error {
 			break
 		}
 		_, _ = fmt.Fprintf(stdout, "  %s\n", visibleText(c))
+	}
+	return nil
+}
+
+func runWorkspaceSync(planeURL, token, remote, dir, id string, stdout io.Writer) error {
+	view, err := loadSyncSession(planeURL, token, id)
+	if err != nil {
+		return err
+	}
+	if view.Session != nil && view.Session.Archived {
+		return fmt.Errorf("session %s is archived", id)
+	}
+	if view.Cancelled {
+		return fmt.Errorf("session %s was cancelled", id)
+	}
+	repo := ""
+	if view.Session != nil {
+		repo = view.Session.Repo
+	}
+	if repo == "" {
+		return fmt.Errorf("session %s has no repository", id)
+	}
+	if _, err := git(dir, "rev-parse", "--git-dir"); err != nil {
+		return fmt.Errorf("%s is not a git checkout", dir)
+	}
+	remoteURL, err := git(dir, "remote", "get-url", remote)
+	if err != nil {
+		return fmt.Errorf("no git remote %q", remote)
+	}
+	if !remoteNamesRepo(remoteURL, repo) {
+		return fmt.Errorf("remote %q does not name %s; pass -remote", remote, repo)
+	}
+
+	res, err := planeClient(planeURL, token, "/sessions/"+id+"/workspace/export")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = res.Body.Close() }()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("session %s not found", id)
+	}
+	if res.StatusCode >= 300 {
+		msg := bytesTrim(body)
+		switch {
+		case strings.Contains(msg, "cancelled"):
+			return fmt.Errorf("session %s was cancelled", id)
+		case strings.Contains(msg, "archived"):
+			return fmt.Errorf("session %s is archived", id)
+		case strings.Contains(msg, "unpublished"):
+			return fmt.Errorf("session %s has no git workspace", id)
+		}
+		return fmt.Errorf("%s %s", res.Status, msg)
+	}
+	head, bundle, files, err := env.ReadWorkspaceExport(bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+
+	if workspaceMatches(dir, head, files) {
+		_, _ = fmt.Fprintf(stdout, "session %s workspace %s already up to date\n", id, head)
+		return nil
+	}
+	if dirty, err := git(dir, "status", "--porcelain"); err != nil {
+		return err
+	} else if dirty != "" {
+		return fmt.Errorf("local checkout is dirty")
+	}
+
+	tmp, err := os.MkdirTemp("", fmt.Sprintf("rusui-sync-%d-*", os.Getpid()))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(tmp) }()
+	bundlePath := filepath.Join(tmp, "bundle")
+	if err := os.WriteFile(bundlePath, bundle, 0o600); err != nil {
+		return err
+	}
+	if _, err := git(dir, "fetch", "--no-tags", bundlePath, "+HEAD:refs/rusui/workspace/"+id); err != nil {
+		return fmt.Errorf("fetch workspace: %w", err)
+	}
+	if _, err := git(dir, "checkout", "-q", "--detach", head); err != nil {
+		return err
+	}
+	if err := applyExportTree(dir, files); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(stdout, "session %s workspace %s\n", id, head)
+	return nil
+}
+
+func loadSyncSession(planeURL, token, id string) (syncSessionView, error) {
+	var view syncSessionView
+	res, err := planeClient(planeURL, token, "/sessions/"+id)
+	if err != nil {
+		return view, err
+	}
+	defer func() { _ = res.Body.Close() }()
+	b, _ := io.ReadAll(res.Body)
+	if res.StatusCode == http.StatusNotFound {
+		return view, fmt.Errorf("session %s not found", id)
+	}
+	if res.StatusCode >= 300 {
+		return view, fmt.Errorf("%s %s", res.Status, bytesTrim(b))
+	}
+	if err := json.Unmarshal(b, &view); err != nil {
+		return view, fmt.Errorf("response")
+	}
+	return view, nil
+}
+
+func workspaceMatches(dir, head string, files map[string]env.ExportEntry) bool {
+	got, err := git(dir, "rev-parse", "HEAD")
+	if err != nil || got != head {
+		return false
+	}
+	for rel, ent := range files {
+		if !exportEntryMatches(dir, rel, ent) {
+			return false
+		}
+	}
+	tracked, err := git(dir, "ls-tree", "-r", "--name-only", "HEAD")
+	if err != nil {
+		return false
+	}
+	if tracked != "" {
+		for rel := range strings.SplitSeq(tracked, "\n") {
+			if _, ok := files[rel]; ok {
+				continue
+			}
+			if _, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(rel))); err == nil {
+				return false
+			}
+		}
+	}
+	status, err := git(dir, "status", "--porcelain=v1", "--untracked-files=all")
+	if err != nil || status == "" {
+		return err == nil
+	}
+	for line := range strings.SplitSeq(status, "\n") {
+		rel, ok := porcelainPath(line)
+		if !ok {
+			continue
+		}
+		if _, inExport := files[rel]; inExport {
+			continue
+		}
+		if len(line) >= 2 && (line[0] == 'D' || line[1] == 'D') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func porcelainPath(line string) (string, bool) {
+	if len(line) < 4 {
+		return "", false
+	}
+	path := line[3:]
+	if i := strings.Index(path, " -> "); i >= 0 {
+		path = path[i+4:]
+	}
+	path = strings.TrimSpace(path)
+	return path, path != ""
+}
+
+func exportEntryMatches(dir, rel string, ent env.ExportEntry) bool {
+	path := filepath.Join(dir, filepath.FromSlash(rel))
+	info, err := os.Lstat(path)
+	if err != nil {
+		return false
+	}
+	if ent.Link != "" {
+		target, err := os.Readlink(path)
+		return err == nil && target == ent.Link
+	}
+	if !info.Mode().IsRegular() {
+		return false
+	}
+	body, err := os.ReadFile(path)
+	return err == nil && bytes.Equal(body, ent.Body)
+}
+
+func applyExportTree(dir string, files map[string]env.ExportEntry) error {
+	tracked, err := git(dir, "ls-tree", "-r", "--name-only", "HEAD")
+	if err != nil {
+		return err
+	}
+	if tracked != "" {
+		for rel := range strings.SplitSeq(tracked, "\n") {
+			if _, ok := files[rel]; ok {
+				continue
+			}
+			_ = os.Remove(filepath.Join(dir, filepath.FromSlash(rel)))
+		}
+	}
+	for rel, ent := range files {
+		if !filepath.IsLocal(filepath.FromSlash(rel)) || strings.Contains("/"+rel+"/", "/.git/") {
+			return fmt.Errorf("export path")
+		}
+		path := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return err
+		}
+		_ = os.Remove(path)
+		if ent.Link != "" {
+			if err := os.Symlink(ent.Link, path); err != nil {
+				return err
+			}
+			continue
+		}
+		mode := ent.Mode
+		if mode == 0 {
+			mode = 0o600
+		}
+		if err := os.WriteFile(path, ent.Body, mode); err != nil {
+			return err
+		}
 	}
 	return nil
 }

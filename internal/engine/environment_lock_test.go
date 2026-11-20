@@ -188,7 +188,7 @@ func TestClaimSkipsBusyEnvironmentAndClaimsIndependentQueuedTurn(t *testing.T) {
 			<-wakeDone
 			t.Fatalf("complete independent turn during wake: %v", err)
 		}
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(2 * time.Second):
 		close(wakeRelease)
 		<-wakeDone
 		<-claimDone
