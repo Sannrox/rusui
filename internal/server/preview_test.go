@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net"
@@ -620,6 +622,133 @@ func TestPreviewCommentPostsFollowUp(t *testing.T) {
 	}
 	if after, _ := store.GetSession(e.Store, sid); strings.Contains(after.Prompt, "nope") {
 		t.Fatalf("refused comment reached session: %q", after.Prompt)
+	}
+}
+
+func TestPreviewHTMLCommentControlFollowsUp(t *testing.T) {
+	t.Parallel()
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := "<!doctype html><html><body><p>app</p></body></html>"
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if r.URL.Path == "/gzip" {
+			w.Header().Set("Content-Encoding", "gzip")
+			gz := gzip.NewWriter(w)
+			_, _ = io.WriteString(gz, body)
+			_ = gz.Close()
+			return
+		}
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(backend.Close)
+	_, bport, err := net.SplitHostPort(backend.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, hs, e := consoleEnv(t)
+	prev := httptest.NewServer(s.PreviewHandler())
+	t.Cleanup(prev.Close)
+	s.PreviewBase = prev.URL
+	sid, grant := mintPreviewGrant(t, s, hs, e, bport)
+
+	res, err := http.Get(prev.URL + "/settings?g=" + grant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("proxy %d %s", res.StatusCode, page)
+	}
+	html := string(page)
+	if !strings.Contains(html, `id="rusui-preview-comment"`) {
+		t.Fatal("missing comment control")
+	}
+	if !strings.Contains(html, `name="text"`) || !strings.Contains(html, `name="url"`) || !strings.Contains(html, `name="selector"`) {
+		t.Fatalf("form fields %s", html)
+	}
+	if !strings.Contains(html, "/comment?g="+grant) {
+		t.Fatalf("form action %s", html)
+	}
+	if !strings.Contains(html, `value="/settings"`) {
+		t.Fatalf("url field %s", html)
+	}
+	if !strings.Contains(html, "<p>app</p>") {
+		t.Fatalf("guest html lost %s", html)
+	}
+
+	gzRes, err := http.Get(prev.URL + "/gzip?g=" + grant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gzPage, _ := io.ReadAll(gzRes.Body)
+	_ = gzRes.Body.Close()
+	if gzRes.StatusCode != 200 || !strings.Contains(string(gzPage), `id="rusui-preview-comment"`) || !bytes.Contains(gzPage, []byte("<p>app</p>")) {
+		t.Fatalf("gzip html %d %s", gzRes.StatusCode, gzPage)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, prev.URL+"/comment?g="+grant, strings.NewReader(url.Values{
+		"text": {"looks off"}, "url": {"/settings"}, "selector": {"p"},
+	}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", prev.URL)
+	posted, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = posted.Body.Close()
+	if posted.StatusCode != http.StatusNoContent {
+		t.Fatalf("comment %d", posted.StatusCode)
+	}
+	sess, err := store.GetSession(e.Store, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sess.Prompt, "preview comment") || !strings.Contains(sess.Prompt, "looks off") || !strings.Contains(sess.Prompt, "url: /settings") {
+		t.Fatalf("follow-up %q", sess.Prompt)
+	}
+}
+
+func TestPreviewNonHTMLHasNoCommentControl(t *testing.T) {
+	t.Parallel()
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/plain":
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = io.WriteString(w, "hello")
+		case "/json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"ok":true}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(backend.Close)
+	_, bport, err := net.SplitHostPort(backend.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, hs, e := consoleEnv(t)
+	prev := httptest.NewServer(s.PreviewHandler())
+	t.Cleanup(prev.Close)
+	s.PreviewBase = prev.URL
+	_, grant := mintPreviewGrant(t, s, hs, e, bport)
+
+	for _, path := range []string{"/plain", "/json"} {
+		res, err := http.Get(prev.URL + path + "?g=" + grant)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		_ = res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("%s %d %s", path, res.StatusCode, body)
+		}
+		if strings.Contains(string(body), "rusui-preview-comment") {
+			t.Fatalf("%s injected: %s", path, body)
+		}
 	}
 }
 

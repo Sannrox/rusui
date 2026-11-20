@@ -1,11 +1,15 @@
 package server
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
+	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -22,6 +26,19 @@ import (
 const previewTTL = engine.GrantTTL
 
 const previewCommentCap = 8 << 10
+
+// previewHTMLCap is how much of a text/html response the proxy will buffer
+// to attach comment chrome. Larger pages pass through unchanged.
+const previewHTMLCap = 2 << 20
+
+var previewCommentChromeTmpl = template.Must(template.New("preview-comment").Parse(`<iframe name="rusui-preview-comment-out" hidden title="Comment result"></iframe>
+<form id="rusui-preview-comment" method="post" action="{{.Action}}" target="rusui-preview-comment-out" style="position:fixed;bottom:0;left:0;right:0;z-index:2147483647;margin:0;padding:.5rem;background:#000;color:#fff;font:14px/1.3 system-ui,sans-serif;display:flex;gap:.5rem;align-items:end">
+<input type="hidden" name="url" value="{{.URL}}">
+<label>Comment <textarea name="text" required rows="2"></textarea></label>
+<label>selector <input name="selector" placeholder="optional"></label>
+<button type="submit">Comment</button>
+</form>
+`))
 
 func (s *Server) PreviewHandler() http.Handler {
 	mux := http.NewServeMux()
@@ -335,12 +352,114 @@ func (s *Server) previewProxy(w http.ResponseWriter, r *http.Request) {
 		r.Header.Del("Authorization")
 	}
 	scrubRefererGrant(r.Header)
+	// Drop Accept-Encoding so the proxy transport can decode gzip and
+	// the plane can attach comment chrome to the HTML.
+	r.Header.Del("Accept-Encoding")
+	page := r.URL.RequestURI()
+	if page == "" {
+		page = "/"
+	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		http.Error(w, "unavailable", http.StatusBadGateway)
 	}
+	proxy.ModifyResponse = func(res *http.Response) error {
+		return injectPreviewCommentChrome(res, grantTok, page)
+	}
 	r.Host = target.Host
 	proxy.ServeHTTP(w, r)
+}
+
+// injectPreviewCommentChrome appends plane-owned comment chrome to a
+// text/html preview response. Non-HTML, compressed, attachment, and
+// oversized bodies are left unchanged. The form POSTs /comment with the
+// grant query; it does not use the operator cookie.
+func injectPreviewCommentChrome(res *http.Response, grant, page string) error {
+	if grant == "" || res == nil || res.Body == nil {
+		return nil
+	}
+	if res.StatusCode == http.StatusNoContent || res.StatusCode == http.StatusNotModified {
+		return nil
+	}
+	if strings.Contains(strings.ToLower(res.Header.Get("Content-Disposition")), "attachment") {
+		return nil
+	}
+	enc := strings.ToLower(strings.TrimSpace(res.Header.Get("Content-Encoding")))
+	if enc != "" && enc != "identity" {
+		return nil
+	}
+	media, params, err := mime.ParseMediaType(res.Header.Get("Content-Type"))
+	if err != nil || !strings.EqualFold(media, "text/html") {
+		return nil
+	}
+	if cs := params["charset"]; cs != "" && !strings.EqualFold(cs, "utf-8") {
+		return nil
+	}
+	if res.ContentLength > previewHTMLCap {
+		return nil
+	}
+
+	body, err := io.ReadAll(io.LimitReader(res.Body, previewHTMLCap+1))
+	if err != nil {
+		_ = res.Body.Close()
+		return err
+	}
+	if len(body) > previewHTMLCap {
+		res.Body = struct {
+			io.Reader
+			io.Closer
+		}{io.MultiReader(bytes.NewReader(body), res.Body), res.Body}
+		return nil
+	}
+	if err := res.Body.Close(); err != nil {
+		return err
+	}
+
+	snippet, err := renderPreviewCommentChrome(grant, page)
+	if err != nil {
+		res.Body = io.NopCloser(bytes.NewReader(body))
+		return nil
+	}
+	out := insertBeforeCloseBody(body, snippet)
+	res.Body = io.NopCloser(bytes.NewReader(out))
+	res.ContentLength = int64(len(out))
+	res.Header.Set("Content-Length", strconv.Itoa(len(out)))
+	res.Header.Del("Transfer-Encoding")
+	return nil
+}
+
+func renderPreviewCommentChrome(grant, page string) ([]byte, error) {
+	if page == "" {
+		page = "/"
+	}
+	var b bytes.Buffer
+	err := previewCommentChromeTmpl.Execute(&b, struct {
+		Action template.URL
+		URL    string
+	}{
+		Action: template.URL("/comment?" + url.Values{"g": {grant}}.Encode()),
+		URL:    page,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+func insertBeforeCloseBody(html, snippet []byte) []byte {
+	lower := bytes.ToLower(html)
+	for _, tag := range [][]byte{[]byte("</body>"), []byte("</html>")} {
+		if i := bytes.LastIndex(lower, tag); i >= 0 {
+			out := make([]byte, 0, len(html)+len(snippet))
+			out = append(out, html[:i]...)
+			out = append(out, snippet...)
+			out = append(out, html[i:]...)
+			return out
+		}
+	}
+	out := make([]byte, 0, len(html)+len(snippet))
+	out = append(out, html...)
+	return append(out, snippet...)
 }
 
 // scrubRefererGrant removes the grant query from a browser Referer, which
