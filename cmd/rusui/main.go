@@ -84,6 +84,9 @@ func main() {
 		case "put":
 			putCLI(os.Args[2:])
 			return
+		case "get":
+			getCLI(os.Args[2:])
+			return
 		case "ls":
 			lsCLI(os.Args[2:])
 			return

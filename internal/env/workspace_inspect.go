@@ -38,11 +38,15 @@ var (
 	// ErrWorkspacePath is a workspace-relative path that escapes the
 	// workspace or is otherwise refused.
 	ErrWorkspacePath = errors.New("env: path")
-	// ErrWorkspaceMissing is a list target that does not exist.
+	// ErrWorkspaceMissing is a list or read target that does not exist.
 	ErrWorkspaceMissing = errors.New("env: missing")
 	// ErrWorkspaceNotDir is a list target that is not a real directory
 	// (a file or any symlink).
 	ErrWorkspaceNotDir = errors.New("env: not a directory")
+	// ErrWorkspaceNotFile is a read target that is not a regular file.
+	ErrWorkspaceNotFile = errors.New("env: not a file")
+	// ErrWorkspaceOversized is a read larger than the cap.
+	ErrWorkspaceOversized = errors.New("env: oversized")
 )
 
 // workspaceRoot enters /workspace and refuses (exit 13) unless it is the
@@ -82,10 +86,41 @@ for f in * .[!.]* ..?*; do
   printf '%s\0' "$f"
 done`
 
-// readWorkspaceScript prints one top-level workspace file. The name is
-// $1 and the size cap $2, never part of the script text. The read is
-// bounded even if the guest swaps the file after the checks.
-const readWorkspaceScript = `cd -P /workspace 2>/dev/null && [ "$(pwd -P)" = /workspace ] || exit 13; f="$1"; [ -L "$f" ] && exit 10; [ -e "$f" ] || exit 11; [ -f "$f" ] || exit 10; [ "$(wc -c < "$f")" -gt "$2" ] && exit 12; head -c "$(($2 + 1))" -- "$f"`
+// readWorkspaceScript prints one workspace file. $1 is a relative path
+// or a top-level name; $2 is the size cap. Intermediate components must
+// be real directories, not symlinks. A symlink anywhere is 14; a
+// missing target is 11; a non-file is 10; oversized is 12. The path is
+// never interpolated into the script. The read is bounded even if the
+// guest swaps the file after the checks.
+const readWorkspaceScript = `cd -P /workspace 2>/dev/null && [ "$(pwd -P)" = /workspace ] || exit 13
+rest=$1
+limit=$2
+[ -z "$rest" ] && exit 10
+while [ -n "$rest" ]; do
+  part=${rest%%/*}
+  if [ "$part" = "$rest" ]; then
+    rest=
+    last=1
+  else
+    rest=${rest#*/}
+    last=0
+  fi
+  if [ -z "$part" ] || [ "$part" = "." ]; then
+    continue
+  fi
+  [ "$part" = ".." ] && exit 14
+  [ -L "$part" ] && exit 14
+  if [ "$last" = 1 ]; then
+    [ -e "$part" ] || exit 11
+    [ -f "$part" ] || exit 10
+    [ "$(wc -c < "$part")" -gt "$limit" ] && exit 12
+    head -c "$(($limit + 1))" -- "$part"
+    exit 0
+  fi
+  [ -d "$part" ] || { [ -e "$part" ] && exit 10; exit 11; }
+  cd -- "$part" || exit 10
+done
+exit 11`
 
 // WorkspaceNames lists the top-level non-directory entries of a guest's
 // workspace (#440).
@@ -228,6 +263,8 @@ func (d DockerCLI) WorkspaceFile(id, name string, limit int64) ([]byte, string, 
 			return nil, FileOversized, nil
 		case 13:
 			return nil, FileRootReplaced, nil
+		case 14:
+			return nil, FileIrregular, nil
 		}
 	}
 	if err != nil {

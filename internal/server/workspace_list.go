@@ -48,7 +48,22 @@ func (s *Server) listWorkspaceFiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "environment not ready", http.StatusConflict)
 		return
 	}
-	names, err := s.listWorkspace(envRow, r.URL.Query().Get("path"))
+	rel := r.URL.Query().Get("path")
+	if rel != "" {
+		data, err := s.readWorkspace(envRow, rel)
+		if err == nil {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+			_, _ = w.Write(data)
+			return
+		}
+		if !errors.Is(err, env.ErrWorkspaceNotFile) {
+			msg, code := listWorkspaceStatus(err)
+			http.Error(w, msg, code)
+			return
+		}
+	}
+	names, err := s.listWorkspace(envRow, rel)
 	if err != nil {
 		msg, code := listWorkspaceStatus(err)
 		http.Error(w, msg, code)
@@ -84,6 +99,24 @@ func (s *Server) listWorkspace(envRow *store.Environment, rel string) ([]string,
 	}
 }
 
+func (s *Server) readWorkspace(envRow *store.Environment, rel string) ([]byte, error) {
+	var rd env.WorkspaceReader
+	if envRow.Driver == env.KindContainer {
+		c, ok := s.Eng.Container.(env.Container)
+		if !ok {
+			return nil, fmt.Errorf("container driver required")
+		}
+		rd = c
+	} else {
+		p, ok := s.Eng.Env.(env.Process)
+		if !ok {
+			return nil, fmt.Errorf("process driver required")
+		}
+		rd = p
+	}
+	return rd.ReadFile(envRow.Handle, rel, env.WorkspaceUploadCap)
+}
+
 func listWorkspaceStatus(err error) (string, int) {
 	switch {
 	case errors.Is(err, env.ErrWorkspaceReplaced):
@@ -94,6 +127,10 @@ func listWorkspaceStatus(err error) (string, int) {
 		return "missing", http.StatusBadRequest
 	case errors.Is(err, env.ErrWorkspaceNotDir):
 		return "not a directory", http.StatusBadRequest
+	case errors.Is(err, env.ErrWorkspaceNotFile):
+		return "not a file", http.StatusBadRequest
+	case errors.Is(err, env.ErrWorkspaceOversized):
+		return "oversized", http.StatusBadRequest
 	}
 	msg := err.Error()
 	switch {
