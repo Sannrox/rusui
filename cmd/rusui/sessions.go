@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -13,7 +14,11 @@ import (
 )
 
 func planeClient(url, token, path string) (*http.Response, error) {
-	req, err := http.NewRequest(http.MethodGet, strings.TrimRight(url, "/")+path, nil)
+	return planeClientContext(context.Background(), url, token, path)
+}
+
+func planeClientContext(ctx context.Context, url, token, path string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(url, "/")+path, nil)
 	if err != nil {
 		return nil, err
 	}
