@@ -198,7 +198,7 @@ Attach to either runtime with the same operator command:
 
 ```bash
 export RUSUI_OPERATOR_TOKEN=...   # generated in rusui.env by rusui setup
-rusui attach [-url http://127.0.0.1:8080] [-db rusui.db] SESSION_ID
+rusui attach [-url http://127.0.0.1:8080] [-db rusui.db] [-write] SESSION_ID
 ```
 
 The CLI reports the Session, Environment, runtime, current Process, and Turn
@@ -207,10 +207,12 @@ OS user and point `-db` at the server's SQLite database if it is not
 `rusui.db`. Rusui checks that the local Session and Process match the
 authenticated session detail before opening the PTY, and refuses a mismatch.
 It attaches directly to Sumika; `Ctrl+]` detaches and terminal resizes follow
-the local terminal. For a managed Session, input remains
-line-oriented and the CLI acquires an audited write lease when available. If a
-browser or another CLI already holds that lease, this CLI connects read-only.
-It releases only the lease generation it acquired. Detach leaves the
+the local terminal. For a managed Session, input remains line-oriented.
+`rusui attach SESSION_ID` connects read-only and does not acquire the write
+lease. `rusui attach -write SESSION_ID` acquires an audited write lease when it
+is free. Stderr reports which mode connected. If a browser or another CLI
+already holds that lease, `-write` connects read-only under the one-writer
+rule. It releases only the lease generation it acquired. Detach leaves the
 environment shell running; the guest can read that same session's output.
 Typing renews the lease; after an idle period longer than the lease TTL,
 input fails with `no write lease` and the command must be run again.

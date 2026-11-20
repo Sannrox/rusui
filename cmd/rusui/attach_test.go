@@ -93,7 +93,7 @@ func TestRunAttachManagedUsesOperatorLeaseAndAudit(t *testing.T) {
 	var stderr bytes.Buffer
 	done := make(chan error, 1)
 	go func() {
-		done <- runAttach(attachOptions{URL: hs.URL, Token: "op-token", DB: dbPath}, sid, stdin, stdout, &stderr)
+		done <- runAttach(attachOptions{URL: hs.URL, Token: "op-token", DB: dbPath, Write: true}, sid, stdin, stdout, &stderr)
 	}()
 	waitForAttachSignal(t, stdout.ready, done, &stderr)
 	_, _ = io.WriteString(sendInput, "echo hello\n")
@@ -106,6 +106,9 @@ func TestRunAttachManagedUsesOperatorLeaseAndAudit(t *testing.T) {
 	}
 	if got := input.String(); got != "echo hello\n" {
 		t.Fatalf("managed input %q", got)
+	}
+	if !strings.Contains(stderr.String(), "Managed terminal write lease generation ") || !strings.Contains(stderr.String(), " acquired.") {
+		t.Fatalf("write attach did not print the lease generation: %s", stderr.String())
 	}
 	for _, action := range []string{"acquire", "input", "revoke"} {
 		count, err := store.CountTerminalAccess(st, envRow.ID, action)
@@ -208,7 +211,7 @@ func TestRunAttachManagedAfterWakeReusesSessionEnvironmentAndTranscript(t *testi
 	stderr := &signalBuffer{signal: "existing transcript entry", ready: make(chan struct{})}
 	done := make(chan error, 1)
 	go func() {
-		done <- runAttach(attachOptions{URL: hs.URL, Token: "op-token", DB: dbPath}, sessionID, stdin, stdout, stderr)
+		done <- runAttach(attachOptions{URL: hs.URL, Token: "op-token", DB: dbPath, Write: true}, sessionID, stdin, stdout, stderr)
 	}()
 	waitForAttachSignal(t, stdout.ready, done, &bytes.Buffer{})
 	waitForAttachSignal(t, stderr.ready, done, &bytes.Buffer{})
@@ -293,7 +296,7 @@ func TestRunAttachManagedDisconnectCancelsTerminalAndReleasesLease(t *testing.T)
 	stderr := &signalBuffer{signal: "Session transcript stream disconnected", ready: make(chan struct{})}
 	done := make(chan error, 1)
 	go func() {
-		done <- runAttach(attachOptions{URL: hs.URL, Token: "op-token"}, sessionID, stdin, &stdout, stderr)
+		done <- runAttach(attachOptions{URL: hs.URL, Token: "op-token", Write: true}, sessionID, stdin, &stdout, stderr)
 	}()
 	waitForAttachSignal(t, stderr.ready, done, &bytes.Buffer{})
 	if err := <-done; err == nil || !strings.Contains(err.Error(), "session transcript") {
@@ -301,6 +304,81 @@ func TestRunAttachManagedDisconnectCancelsTerminalAndReleasesLease(t *testing.T)
 	}
 	if count, err := store.CountTerminalAccess(st, envRow.ID, "revoke"); err != nil || count != 1 {
 		t.Fatalf("terminal lease not released after detach: count=%d err=%v", count, err)
+	}
+}
+
+func TestRunAttachManagedObservesWithoutWrite(t *testing.T) {
+	st, planeURL, dbPath, sessionID, envID, input := managedAttachFixture(t, "observe", "ctr-observe")
+	before, beforeFound, err := store.GetTerminalLease(st, envID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdin, sendInput := io.Pipe()
+	stderr := &signalBuffer{signal: "Connected as observer (no write lease).", ready: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() {
+		done <- runAttach(attachOptions{URL: planeURL, Token: "op-token", DB: dbPath}, sessionID, stdin, io.Discard, stderr)
+	}()
+	waitForAttachSignal(t, stderr.ready, done, &bytes.Buffer{})
+	_, _ = io.WriteString(sendInput, "echo hello\n")
+	_ = sendInput.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("runAttach: %v (stderr: %s)", err, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "acquired") {
+		t.Fatalf("observe attach acquired a write lease: %s", stderr.String())
+	}
+	if got := input.String(); got != "" {
+		t.Fatalf("observe attach forwarded input %q", got)
+	}
+	if n, err := store.CountTerminalAccess(st, envID, "acquire"); err != nil || n != 0 {
+		t.Fatalf("observe attach acquired a lease: count=%d err=%v", n, err)
+	}
+	after, afterFound, err := store.GetTerminalLease(st, envID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if beforeFound != afterFound {
+		t.Fatalf("observe attach changed lease presence: before=%v after=%v", beforeFound, afterFound)
+	}
+	if beforeFound && after.Generation != before.Generation {
+		t.Fatalf("observe attach changed lease generation: before=%d after=%d", before.Generation, after.Generation)
+	}
+}
+
+func TestRunAttachManagedWriteDoesNotStealHeldLease(t *testing.T) {
+	st, planeURL, dbPath, sessionID, envID, input := managedAttachFixture(t, "held", "ctr-held")
+	heldGen := 4
+	if err := store.PutTerminalLease(st, store.TerminalLease{
+		EnvironmentID: envID, SessionID: sessionID, Generation: heldGen,
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stdin, sendInput := io.Pipe()
+	stderr := &signalBuffer{signal: "write lease is held", ready: make(chan struct{})}
+	done := make(chan error, 1)
+	go func() {
+		done <- runAttach(attachOptions{URL: planeURL, Token: "op-token", DB: dbPath, Write: true}, sessionID, stdin, io.Discard, stderr)
+	}()
+	waitForAttachSignal(t, stderr.ready, done, &bytes.Buffer{})
+	_, _ = io.WriteString(sendInput, "echo steal\n")
+	_ = sendInput.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("runAttach: %v (stderr: %s)", err, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "acquired") {
+		t.Fatalf("-write stole a held lease: %s", stderr.String())
+	}
+	if got := input.String(); got != "" {
+		t.Fatalf("-write forwarded input while the lease was held: %q", got)
+	}
+	lease, found, err := store.GetTerminalLease(st, envID)
+	if err != nil || !found || lease.Generation != heldGen {
+		t.Fatalf("held lease generation changed: %+v found=%v err=%v", lease, found, err)
+	}
+	if n, err := store.CountTerminalAccess(st, envID, "acquire"); err != nil || n != 0 {
+		t.Fatalf("-write acquired over a held lease: count=%d err=%v", n, err)
 	}
 }
 
@@ -643,6 +721,49 @@ func startFakeSumika(t *testing.T, path string, input chan<- string) (stop func(
 		}
 	}()
 	return func() { _ = listener.Close() }
+}
+
+// managedAttachFixture starts a ready managed Session with a fake guest
+// terminal. Concurrent tests use distinct temp databases and ephemeral ports.
+func managedAttachFixture(t *testing.T, name, handle string) (st *store.Store, planeURL, dbPath string, sessionID, envID int64, input *lockedBuffer) {
+	t.Helper()
+	dbPath = filepath.Join(t.TempDir(), name+".db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	pol, err := policy.Parse([]byte(attachPolicy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := engine.New(st, pol, gh.NewFake(), clock.Real{})
+	e.ReloadPolicy(pol)
+	input = &lockedBuffer{}
+	rt := &env.FakeRuntime{}
+	rt.StdioHook = func(string, []string, []string) (io.WriteCloser, io.ReadCloser, func(), error) {
+		return input, io.NopCloser(strings.NewReader("managed-ready\n")), func() {}, nil
+	}
+	e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	sessionID, err = e.StartRun("test", "term", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(st, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow, err := store.GetEnvironment(st, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow.Driver, envRow.Handle, envRow.State = env.KindContainer, handle, store.EnvReady
+	if err := store.UpdateEnvironment(st, *envRow); err != nil {
+		t.Fatal(err)
+	}
+	hs := httptest.NewServer((&server.Server{Eng: e, WorkerSec: "worker-token", OperatorTok: "op-token"}).Handler())
+	t.Cleanup(hs.Close)
+	return st, hs.URL, dbPath, sessionID, envRow.ID, input
 }
 
 // localAttachFixture starts a local Session on a fake Sumika daemon and a
