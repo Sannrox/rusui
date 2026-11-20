@@ -16,6 +16,7 @@ func (e *Engine) CancelSession(sessionID int64) error {
 	if err := e.cancelOneSession(sessionID); err != nil {
 		return err
 	}
+	e.notifyRunTerminal(sessionID)
 	for _, id := range children {
 		if err := e.CancelSession(id); err != nil {
 			e.exception(fmt.Sprintf("cancel session=%d: child %d: %v", sessionID, id, err))

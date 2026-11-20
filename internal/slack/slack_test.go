@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -89,5 +90,50 @@ func TestPoster(t *testing.T) {
 	}
 	if got.Get("channel") != "C1" || got.Get("text") != "retry_limit exhausted" {
 		t.Fatalf("%v", got)
+	}
+}
+
+func TestPosterRunLifecycle(t *testing.T) {
+	var posts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got, _ := url.ParseQuery(string(b))
+		posts = append(posts, got.Get("text"))
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(srv.Close)
+	p := &Poster{Token: "bot", Channel: "C1", API: srv.URL, HTTP: srv.Client()}
+	if err := p.RunStarted(12, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	if len(posts) != 1 || !strings.Contains(posts[0], "session=12") || !strings.Contains(posts[0], "project=acme") || !strings.Contains(posts[0], "rusui read -follow 12") {
+		t.Fatalf("start %v", posts)
+	}
+	if err := p.RunEnded(12, "completed"); err != nil {
+		t.Fatal(err)
+	}
+	if len(posts) != 2 || posts[1] != "run session=12 completed" {
+		t.Fatalf("end %v", posts)
+	}
+}
+
+func TestPosterUnsetIsNoop(t *testing.T) {
+	hit := false
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		hit = true
+	}))
+	t.Cleanup(srv.Close)
+	p := &Poster{API: srv.URL, HTTP: srv.Client()}
+	if err := p.RunStarted(1, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.RunEnded(1, "failed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Exception("retry_limit exhausted"); err != nil {
+		t.Fatal(err)
+	}
+	if hit {
+		t.Fatal("posted without token")
 	}
 }

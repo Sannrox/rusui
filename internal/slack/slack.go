@@ -140,6 +140,20 @@ type Poster struct {
 }
 
 func (p *Poster) Exception(msg string) error {
+	return p.post(msg)
+}
+
+// RunStarted posts that a run session began. Unset token or channel is a no-op.
+func (p *Poster) RunStarted(sessionID int64, project string) error {
+	return p.post(fmt.Sprintf("run started session=%d project=%s\nrusui read -follow %d", sessionID, project, sessionID))
+}
+
+// RunEnded posts the terminal follow state of a run session.
+func (p *Poster) RunEnded(sessionID int64, state string) error {
+	return p.post(fmt.Sprintf("run session=%d %s", sessionID, state))
+}
+
+func (p *Poster) post(msg string) error {
 	if p == nil || p.Token == "" || p.Channel == "" {
 		return nil
 	}

@@ -127,8 +127,8 @@ reported and exits successfully.
 | `RUSUI_GITHUB_API` | no | Default `https://api.github.com` |
 | `RUSUI_GITHUB_HOOK_IDS` | for reconcile | `owner/repo=hookid`, comma-separated |
 | `RUSUI_SLACK_USERS` | for inbound Slack | Empty allowlist → 403 |
-| `RUSUI_SLACK_BOT_TOKEN` | optional outbound | Exception `chat.postMessage` |
-| `RUSUI_SLACK_CHANNEL` | optional outbound | Exception channel |
+| `RUSUI_SLACK_BOT_TOKEN` | optional outbound | Exception and run-session `chat.postMessage` |
+| `RUSUI_SLACK_CHANNEL` | optional outbound | Exception and run-session channel |
 | `RUSUI_TLS_CERT` / `RUSUI_TLS_KEY` | container guests | Plane TLS identity. Unset disables the container driver. |
 | `RUSUI_PLANE_CA` | container guests | CA file mounted at `/usr/local/share/ca-certificates/rusui-plane.crt`. |
 | `RUSUI_GUEST_IMAGE` | container guests | Guest image identity. Empty fails closed. |

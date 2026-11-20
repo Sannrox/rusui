@@ -50,8 +50,10 @@ func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode
 	}
 	repo, sha := e.operatorSessionPin(p)
 	var sessionID int64
+	created := false
 	err := e.admitStart(AdmitRequest{Project: project, Kind: store.SessionKindRun, Repo: repo, BaseSHA: sha, Actor: admitActor(act, createdBy, sessionTenant(p)), PromptSHA256: promptDigest(prompt)}, "", func(g *admitGate) error {
 		return e.Store.Tx(func(tx *store.Tx) error {
+			created = false
 			paused, err := store.Paused(tx, project)
 			if err != nil {
 				return err
@@ -144,9 +146,13 @@ func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode
 				}
 			}
 			sessionID = sid
+			created = true
 			return nil
 		})
 	})
+	if err == nil && created {
+		e.notifyRunStarted(sessionID, project)
+	}
 	return sessionID, err
 }
 
@@ -164,4 +170,64 @@ func (e *Engine) operatorSessionPin(p policy.Project) (repo, sha string) {
 		sha, _ = d.DefaultSHA(repo)
 	}
 	return repo, sha
+}
+
+func (e *Engine) notifyRunStarted(sessionID int64, project string) {
+	if e.NotifyRunStart == nil || sessionID == 0 {
+		return
+	}
+	e.NotifyRunStart(sessionID, project)
+}
+
+func (e *Engine) notifyRunTerminalTx(tx *store.Tx, sessionID int64) {
+	e.onCommit(tx, func() { e.notifyRunTerminal(sessionID) })
+}
+
+func (e *Engine) notifyRunTerminal(sessionID int64) {
+	if e.NotifyRunEnd == nil {
+		return
+	}
+	state, ok := e.runFollowTerminal(sessionID)
+	if !ok {
+		return
+	}
+	e.NotifyRunEnd(sessionID, state)
+}
+
+// runFollowTerminal is the followed-read terminal state of a top-level
+// run session: completed, failed, or cancelled. A queued, leased, or
+// waiting session, a child, and any other kind are not terminal here.
+func (e *Engine) runFollowTerminal(sessionID int64) (string, bool) {
+	sess, err := store.GetSession(e.Store, sessionID)
+	if err != nil || sess == nil || sess.Kind != store.SessionKindRun || sess.ParentSessionID != 0 {
+		return "", false
+	}
+	cancelled, err := store.SessionCancelled(e.Store, sessionID)
+	if err != nil {
+		return "", false
+	}
+	if cancelled {
+		return "cancelled", true
+	}
+	pending, err := store.CountPendingApprovals(e.Store, sessionID)
+	if err != nil || pending > 0 {
+		return "", false
+	}
+	turns, err := store.ListTurnsForSession(e.Store, sessionID)
+	if err != nil || len(turns) == 0 {
+		return "", false
+	}
+	for _, t := range turns {
+		if t.State == "queued" || t.State == "leased" {
+			return "", false
+		}
+	}
+	switch turns[len(turns)-1].State {
+	case "failed":
+		return "failed", true
+	case "completed":
+		return "completed", true
+	default:
+		return "", false
+	}
 }

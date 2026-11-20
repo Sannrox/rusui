@@ -294,6 +294,16 @@ func main() {
 			log.Printf("slack exception: %v", err)
 		}
 	}
+	eng.NotifyRunStart = func(id int64, project string) {
+		if err := poster.RunStarted(id, project); err != nil {
+			log.Printf("slack run start: %v", err)
+		}
+	}
+	eng.NotifyRunEnd = func(id int64, state string) {
+		if err := poster.RunEnded(id, state); err != nil {
+			log.Printf("slack run end: %v", err)
+		}
+	}
 	model, err := server.ModelConfigFromEnv(server.PolicyModelEnv(os.Getenv, p))
 	if err != nil {
 		log.Fatal(err)
