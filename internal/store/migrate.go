@@ -10,7 +10,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 58
+const CurrentSchema = 59
 
 // ReadableFloor is the oldest schema version whose binary can still read and
 // write a store at CurrentSchema (ADR 0089 D8). An expand-only migration,
@@ -731,6 +731,14 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 59 {
+		if err := migrateV59(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 59); err != nil {
+			return err
+		}
+	}
 	if err := writeFloor(s.DB); err != nil {
 		return err
 	}
@@ -742,11 +750,32 @@ func (s *Store) migrate() error {
 	return nil
 }
 
-// migrateV57 binds each review to the policy revision its turn was
-// claimed under (#661). turns.policy_revision_id is set at claim;
-// review_revisions.policy_revision_id copies it when the review is stored.
-// Both are nullable: rows from before the migration have no known revision
-// and their receipts omit it.
+// migrateV59 stores a nullable service name on preview grants and replaces
+// per-environment service state on each start (#776, ADR 0032). Existing
+// grants keep a NULL name. Expand-only: ReadableFloor stays 58.
+func migrateV59(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('preview_grants') WHERE name='service_name'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := db.Exec(`ALTER TABLE preview_grants ADD COLUMN service_name TEXT`); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS environment_services (
+  environment_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  port INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL,
+  error TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (environment_id, name)
+);
+`)
+	return err
+}
+
 // migrateV58 makes action rows append-only (#682). The store refuses every
 // UPDATE of an action row except retention's prompt scrub (ADR 0081): an
 // operator.steer row may only have its prompt blanked, and an
@@ -784,6 +813,11 @@ END;
 	return err
 }
 
+// migrateV57 binds each review to the policy revision its turn was
+// claimed under (#661). turns.policy_revision_id is set at claim;
+// review_revisions.policy_revision_id copies it when the review is stored.
+// Both are nullable: rows from before the migration have no known revision
+// and their receipts omit it.
 func migrateV57(db *sql.DB) error {
 	for _, table := range []string{"turns", "review_revisions"} {
 		var n int

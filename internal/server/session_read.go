@@ -15,13 +15,15 @@ import (
 var errNoDurableTranscript = errors.New("local session has no durable transcript")
 
 type sessionRead struct {
-	SessionID       int64              `json:"session_id"`
-	Kind            string             `json:"kind"`
-	Prompt          string             `json:"prompt"`
-	Transcript      []sessionReadEntry `json:"transcript"`
-	TranscriptState string             `json:"transcript_state,omitempty"`
-	Diff            string             `json:"diff"`
-	DiffState       string             `json:"diff_state,omitempty"`
+	SessionID       int64                      `json:"session_id"`
+	Kind            string                     `json:"kind"`
+	Prompt          string                     `json:"prompt"`
+	Transcript      []sessionReadEntry         `json:"transcript"`
+	TranscriptState string                     `json:"transcript_state,omitempty"`
+	Diff            string                     `json:"diff"`
+	DiffState       string                     `json:"diff_state,omitempty"`
+	Services        []store.EnvironmentService `json:"services"`
+	ServicesError   string                     `json:"services_error,omitempty"`
 }
 
 type sessionReadEntry struct {
@@ -69,6 +71,11 @@ func (s *Server) sessionRead(r *http.Request, id int64) (sessionRead, error) {
 		Kind:       page.Sess.Kind,
 		Prompt:     page.Sess.Prompt,
 		Transcript: []sessionReadEntry{},
+		Services:   []store.EnvironmentService{},
+	}
+	if svcSet, err := store.ListSessionServices(s.Eng.Store, id); err == nil {
+		out.Services = svcSet.Services
+		out.ServicesError = svcSet.ParseError
 	}
 	if page.HistoryUnavailable {
 		out.TranscriptState = "unavailable"

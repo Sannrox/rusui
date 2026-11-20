@@ -51,7 +51,37 @@ func TestPreviewMainUsage(t *testing.T) {
 	if code := previewMain([]string{"-port", "3000", "nope"}, &out, &errw); code != 2 {
 		t.Fatalf("session %d %s", code, errw.String())
 	}
+	if code := previewMain([]string{"-service", "web", "-port", "3000", "7"}, &out, &errw); code != 2 {
+		t.Fatalf("both flags %d %s", code, errw.String())
+	}
 	if out.Len() != 0 {
+		t.Fatalf("stdout %q", out.String())
+	}
+}
+
+func TestPreviewMainNamedService(t *testing.T) {
+	t.Parallel()
+	var sawBody string
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		sawBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"url":"http://127.0.0.1:8090/?g=previewtok"}`))
+	}))
+	t.Cleanup(hs.Close)
+	var out, errw bytes.Buffer
+	code := previewMain([]string{"-url", hs.URL, "-token", "op-tok", "-service", "web", "7"}, &out, &errw)
+	if code != 0 {
+		t.Fatalf("code %d %s", code, errw.String())
+	}
+	var posted struct {
+		Service string `json:"service"`
+		Port    int    `json:"port"`
+	}
+	if err := json.Unmarshal([]byte(sawBody), &posted); err != nil || posted.Service != "web" || posted.Port != 0 {
+		t.Fatalf("body %q", sawBody)
+	}
+	if out.String() != "http://127.0.0.1:8090/?g=previewtok\n" {
 		t.Fatalf("stdout %q", out.String())
 	}
 }

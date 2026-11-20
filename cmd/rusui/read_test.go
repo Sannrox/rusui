@@ -36,6 +36,23 @@ func TestFormatSessionReadEscapesTerminalControls(t *testing.T) {
 	}
 }
 
+func TestFormatSessionReadListsServices(t *testing.T) {
+	out := formatSessionRead(sessionReadView{
+		SessionID: 1, Kind: "run", Prompt: "ok",
+		Services: []sessionServiceV{{Name: "web", Port: 3000, State: "healthy"}},
+	})
+	if !strings.Contains(out, "web 3000 healthy") {
+		t.Fatalf("%q", out)
+	}
+	out = formatSessionRead(sessionReadView{
+		SessionID: 1, Kind: "run", Prompt: "ok",
+		ServicesError: "env: services.yaml: field portal not found",
+	})
+	if !strings.Contains(out, "services: env: services.yaml: field portal not found") {
+		t.Fatalf("%q", out)
+	}
+}
+
 func TestReadCLIMatchesPlaneAndDoesNotAttach(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {

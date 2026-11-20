@@ -20,6 +20,14 @@ type sessionReadView struct {
 	TranscriptState string              `json:"transcript_state"`
 	Diff            string              `json:"diff"`
 	DiffState       string              `json:"diff_state"`
+	Services        []sessionServiceV   `json:"services"`
+	ServicesError   string              `json:"services_error"`
+}
+
+type sessionServiceV struct {
+	Name  string `json:"name"`
+	Port  int    `json:"port"`
+	State string `json:"state"`
 }
 
 type sessionReadEntryV struct {
@@ -98,6 +106,20 @@ func formatSessionRead(view sessionReadView) string {
 		b.WriteString(diff)
 		if !strings.HasSuffix(diff, "\n") {
 			b.WriteByte('\n')
+		}
+	}
+	if view.ServicesError != "" {
+		fmt.Fprintf(&b, "services: %s\n", visibleText(view.ServicesError))
+	} else if len(view.Services) == 0 {
+		b.WriteString("services: none\n")
+	} else {
+		b.WriteString("services:\n")
+		for _, svc := range view.Services {
+			if svc.Port != 0 {
+				fmt.Fprintf(&b, "%s %d %s\n", visibleText(svc.Name), svc.Port, visibleText(svc.State))
+			} else {
+				fmt.Fprintf(&b, "%s %s\n", visibleText(svc.Name), visibleText(svc.State))
+			}
 		}
 	}
 	return b.String()

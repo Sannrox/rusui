@@ -55,10 +55,14 @@ The owned directory is removed unless `-keep`. Walkthrough:
 claims, and lists leased turns. `rusui resume [-project P]` POSTs `/resume`
 (worker auth) and lifts that pause. `rusui archive SESSION` sleeps that
 session's environment and refuses prompts until `rusui unarchive SESSION`.
-`rusui preview SESSION_ID -port PORT` mints a preview-origin URL (`?g=` grant)
-for that environment port. It uses the static operator token. Unset preview
-origin, unknown session, environment not ready after wake, and port out of
-range are explicit errors and mint nothing.
+`rusui preview SESSION_ID -service NAME` mints a preview-origin URL (`?g=` grant)
+for a declared service when it is healthy. `-port PORT` is the operator-only
+raw mint and records no service name. The flags are mutually exclusive. Unset
+preview origin, unknown session, environment not ready after wake, undeclared
+or portless or unhealthy service, and port out of range are explicit errors
+and mint nothing. `.rusui/services.yaml` may declare `port` (1024–65535) and
+`health` (an absolute HTTP path). Unknown keys fail closed. A missing file is
+an empty list.
 `rusui restore -db PATH` restores a copied
 database offline and prints its inventory. On PostgreSQL, set
 `RUSUI_STORE_URL` instead of `-db`; setting both fails. Do not open `rusui.db` while the
@@ -276,8 +280,8 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/auth/oidc` | public OIDC client metadata; 404 when disabled |
 | `GET` | `/auth/oidc/session` | validate operator bearer; 204 when accepted, 401 when refused |
 | `POST` | `/projects/{slug}/sessions` | operator or worker token; JSON `kind` `run` (prompt) or `local`; optional `attachments` `[{name, content}]` as base64 on `run`, same kinds and caps as follow-up turns; optional `Idempotency-Key`; 201 `{session_id, kind}` for `local`, `{session_id, kind, snapshot_hit, source_hash}` for `run` (`snapshot_hit` is whether workspace prepare reused a snapshot); unknown `kind` is 400 |
-| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, `execution_mode`, `act`, `tools` (active ACP kinds), and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, revoked grant, or another member's user-mode session |
-| `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
+| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, `execution_mode`, `act`, `tools` (active ACP kinds), `services` (name, port, starting/healthy/unhealthy/exited), `services_error` when `.rusui/services.yaml` is invalid, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, revoked grant, or another member's user-mode session |
+| `GET` | `/sessions/{id}/read` | operator token; durable transcript, console file diff, and declared services; no terminal |
 | `GET` | `/sessions/{id}/read/follow` | operator token; SSE of the transcript then live `entry` / `state` / `turn` until completed, failed, or cancelled; query `after=<seq>` resumes without a gap or a repeat; worker token is 401 |
 | `GET` | `/sessions/{id}/logs` | operator or worker token; action receipts for the session |
 | `GET` | `/sessions/{id}/turns/{tid}/flight` | operator or worker token; flight record for that turn with snapshot parts the caller cannot read omitted (`rusui replay` uses the replay route) |
@@ -287,7 +291,7 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/sessions/{id}/receipt` | operator or worker token; versioned JSON review receipt (`rusui receipt`); Markdown when `Accept: text/markdown` or `?format=md`; 404 unknown session or no completed review |
 | `POST` | `/sessions/{id}/workspace` | operator token; multipart `file` plus `path` query; 32 MiB cap; workspace-relative only |
 | `GET` | `/sessions/{id}/workspace` | operator token; JSON `{names}` for one workspace directory (`rusui ls`); file bytes (`application/octet-stream`, 32 MiB cap) when `path` is a regular file (`rusui get`); optional `path` query; omitted `path` is the top level; path escape is 400; replaced `/workspace` and a missing environment are 409 |
-| `POST` | `/sessions/{id}/preview` | operator token; JSON `port` (1024-65535); wakes the environment; 200 `{url}` on the preview origin with `?g=` (`rusui preview`); 404 unknown session; 409 not ready or preview origin unset/not isolated |
+| `POST` | `/sessions/{id}/preview` | operator token; JSON `service` (declared name) or `port` (1024-65535), mutually exclusive; wakes the environment; named mint requires a healthy declared port; raw `-port` records no service name; 200 `{url}` on the preview origin with `?g=` (`rusui preview`); 404 unknown session; 409 not ready, undeclared/portless/unhealthy service, or preview origin unset/not isolated |
 | `GET` | `/sessions/{id}?include=receipts[&receipt_after_id={id}][&process_receipt_after_id={id}]` | operator or worker token; up to 100 environment and 100 local process receipts in ID order; follow `environment_receipts_next_after_id` and `process_receipts_next_after_id` when present |
 | `GET` | `/sessions/{id}?view=review-status&turn_id={turn}` | operator or worker token; compact turn state and revisions for polling |
 | `POST` | `/reviews` | operator or worker token; request one bound pull-request review (`rusui review`); tenant operators only for repositories of their tenant |

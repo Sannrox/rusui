@@ -170,14 +170,19 @@ rusui ls [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_I
 
 `rusui ls` prints workspace-relative names under PATH (the top level when PATH is omitted). One directory per call. Path escape, a replaced `/workspace`, and a missing environment are explicit errors. The environment is not written. put copies a file in; get copies one file out.
 
-Mint a preview grant for a ready environment port. The command prints a
-preview-origin URL that already carries the grant (`?g=`). The operator
-token stays on the plane; the CLI does not print the grant except as that
-query. Unset `RUSUI_PREVIEW_BASE`, an unknown session, an environment that
-is not ready after wake, and a port outside 1024-65535 are explicit errors
-and mint nothing.
+Mint a preview grant for a declared service or a raw environment port. The
+command prints a preview-origin URL that already carries the grant (`?g=`).
+The operator token stays on the plane; the CLI does not print the grant
+except as that query. `-service NAME` reads `port` from `.rusui/services.yaml`
+and requires the service to be healthy. `-port PORT` is operator-only and
+records no service name. Unset `RUSUI_PREVIEW_BASE`, an unknown session, an
+environment that is not ready after wake, an undeclared, portless, or
+unhealthy service, and a port outside 1024-65535 are explicit errors and
+mint nothing. Unknown keys in `.rusui/services.yaml` fail closed; a missing
+file is an empty list.
 
 ```bash
+rusui preview [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -service web SESSION_ID
 rusui preview [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -port 3000 SESSION_ID
 ```
 

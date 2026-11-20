@@ -85,6 +85,8 @@ nav a{margin-right:1rem}
 {{if .Notice}}<p role="status">{{.Notice}}</p>{{end}}
 {{if .ProcessReceipts}}<h2>Local process activity</h2><ul>{{range .ProcessReceipts}}<li>{{.CreatedAt.Format "2006-01-02 15:04:05 MST"}}{{if .ProcessGeneration}} process {{.ProcessGeneration}}{{end}}{{if .AttachGeneration}} attach {{.AttachGeneration}}{{end}} {{.Kind}} {{.State}}</li>{{end}}</ul>{{end}}
 {{if .EnvironmentReceipts}}<h2>Environment activity</h2><ul>{{range .EnvironmentReceipts}}<li>{{.CreatedAt.Format "2006-01-02 15:04:05 MST"}} {{.Kind}} {{.State}}{{if .Detail}} — {{.Detail}}{{end}}</li>{{end}}</ul>{{end}}
+<h2>Services</h2>
+{{if .ServicesError}}<p role="alert">{{.ServicesError}}</p>{{else if not .Services}}<p class="muted">No declared services.</p>{{else}}<ul>{{range .Services}}<li>{{.Name}}{{if .Port}} :{{.Port}}{{end}} {{.State}}</li>{{end}}</ul>{{end}}
 <h2>Environment output</h2>
 {{if not .Captures}}<p class="muted">No setup, resume, or service output.</p>{{end}}
 {{range .Captures}}<h3>{{.Kind}}{{if .Name}} {{.Name}}{{end}}</h3>
@@ -224,6 +226,8 @@ type consolePage struct {
 	EnvironmentReceipts []store.EnvironmentReceipt
 	ProcessReceipts     []store.ProcessReceipt
 	Captures            []store.EnvironmentCapture
+	Services            []store.EnvironmentService
+	ServicesError       string
 	TurnState           string
 	Reason              string
 	Artifact            string
@@ -509,6 +513,10 @@ func (s *Server) sessionPage(r *http.Request, id int64) (consolePage, error) {
 	page.Captures, err = store.ListSessionCaptures(s.Eng.Store, id, store.CaptureListFilter{OmitBody: true})
 	if err != nil {
 		page.HistoryUnavailable = true
+	}
+	if svcSet, err := store.ListSessionServices(s.Eng.Store, id); err == nil {
+		page.Services = svcSet.Services
+		page.ServicesError = svcSet.ParseError
 	}
 	turns, err := store.ListTurnsForSession(s.Eng.Store, id)
 	if err != nil {

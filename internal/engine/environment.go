@@ -34,6 +34,7 @@ type EnvSpec struct {
 	Pin         string
 	CPUMillis   int
 	MemoryBytes int64
+	SessionID   int64
 }
 
 func (e *Engine) envDriver() env.Driver {
@@ -96,8 +97,10 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 		}
 		return nil, &ProvisionError{Err: err, captures: caps}
 	}
-	caps.services, caps.started, err = startServices(d, handle)
-	if err != nil {
+	caps.services, caps.status, caps.started, err = startServices(d, handle, spec.SessionID)
+	if env.AsParseError(err) != nil {
+		caps.parseErr = err
+	} else if err != nil {
 		_ = d.Destroy(handle)
 		return nil, &ProvisionError{Err: err, captures: caps}
 	}
@@ -119,6 +122,7 @@ func (e *Engine) ProvisionEnvironment(spec EnvSpec) (*store.Environment, error) 
 		return nil, err
 	}
 	e.recordProvision(id, caps)
+	e.recordServiceState(id, caps.status, caps.parseErr)
 	return store.GetEnvironment(e.Store, id)
 }
 
@@ -136,6 +140,8 @@ type provisionCaptures struct {
 	setup    *env.Capture
 	hooks    []env.Capture
 	services []env.Capture
+	status   []env.ServiceStatus
+	parseErr error
 	started  bool
 }
 
@@ -180,11 +186,39 @@ func (e *Engine) resumeAndStart(d env.Driver, envID int64, handle string) error 
 }
 
 func (e *Engine) startServicesFor(d env.Driver, envID int64, handle string) error {
-	caps, started, err := startServices(d, handle)
-	if started {
-		e.recordCaptures(envID, env.CaptureService, caps)
+	sessionID := int64(0)
+	if sess, err := store.GetSessionByEnvironment(e.Store, envID); err == nil {
+		sessionID = sess.ID
 	}
-	return err
+	caps, status, started, err := startServices(d, handle, sessionID)
+	if !started {
+		return err
+	}
+	e.recordCaptures(envID, env.CaptureService, caps)
+	if env.AsParseError(err) != nil {
+		e.recordServiceState(envID, nil, err)
+		return nil
+	}
+	if err != nil {
+		e.recordServiceState(envID, nil, nil)
+		return err
+	}
+	e.recordServiceState(envID, status, nil)
+	return nil
+}
+
+func (e *Engine) recordServiceState(envID int64, status []env.ServiceStatus, parseErr error) {
+	set := store.EnvironmentServiceSet{Services: make([]store.EnvironmentService, 0, len(status))}
+	if pe := env.AsParseError(parseErr); pe != nil {
+		set.ParseError = pe.Error()
+	} else {
+		for _, st := range status {
+			set.Services = append(set.Services, store.EnvironmentService{Name: st.Name, Port: st.Port, State: st.State})
+		}
+	}
+	if err := store.ReplaceEnvironmentServices(e.Store, envID, set); err != nil {
+		e.exception(fmt.Sprintf("env %d: store service state: %v", envID, err))
+	}
 }
 
 func (e *Engine) SleepEnvironment(id int64) (*store.Environment, error) {
@@ -610,6 +644,7 @@ func (e *Engine) applySessionSize(spec *EnvSpec, sess *store.Session) {
 // replaceSessionEnvironment provisions spec as a new environment and moves
 // the session to it, recording the replacement on old.
 func (e *Engine) replaceSessionEnvironment(sessionID int64, old *store.Environment, spec EnvSpec) error {
+	spec.SessionID = sessionID
 	created, err := e.ProvisionEnvironment(spec)
 	if err != nil {
 		// The session still names the old environment; keep the
@@ -646,13 +681,13 @@ func replacementName(name string, id int64) string {
 }
 
 // startServices reports started=false when the driver has no services.
-func startServices(d env.Driver, handle string) (caps []env.Capture, started bool, err error) {
+func startServices(d env.Driver, handle string, sessionID int64) (caps []env.Capture, status []env.ServiceStatus, started bool, err error) {
 	s, ok := d.(env.ServiceCtl)
 	if !ok {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
-	caps, err = s.StartServices(handle)
-	return caps, true, err
+	got, err := s.StartServices(handle, sessionID)
+	return got.Captures, got.Status, true, err
 }
 
 func stopServices(d env.Driver, handle string) error {

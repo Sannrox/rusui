@@ -315,7 +315,16 @@ CREATE TABLE preview_grants (
   handle TEXT NOT NULL,
   port BIGINT NOT NULL,
   expires_at TEXT NOT NULL,
-  revoked BIGINT NOT NULL DEFAULT 0
+  revoked BIGINT NOT NULL DEFAULT 0,
+  service_name TEXT
+);
+CREATE TABLE environment_services (
+  environment_id BIGINT NOT NULL,
+  name TEXT NOT NULL,
+  port BIGINT NOT NULL DEFAULT 0,
+  state TEXT NOT NULL,
+  error TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (environment_id, name)
 );
 CREATE TABLE publication_attempts (
   action_id TEXT PRIMARY KEY,
