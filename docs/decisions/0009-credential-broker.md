@@ -1,13 +1,15 @@
 # ADR 0009: P1 credential broker
 
-- Status: Accepted; amended by 0053, 0066, 0075, 0084
+- Status: Accepted; amended by 0053, 0066, 0075, 0084, 0097
 - Status notes: [ADR 0015](0015-agent-publication.md) records the
   implemented `implement` publication path; [ADR 0020](0020-turn-scoped-github-publication.md)
   accepts its future target. The model proxy and read-only grants stand.
   [ADR 0027](0027-guest-reachability-ask.md) does not move that grant
   into the guest image. [ADR 0033](0033-third-party-identity-deferred.md)
-  defers a plane-minted third-party identity; the brokered guest holds
-  no credential beyond the grant.
+  deferred a plane-minted third-party identity; superseded by
+  [ADR 0097](0097-package-registry-guest-identity.md) for one
+  package-registry audience. Git and model proxies are unchanged. The
+  guest still holds no durable third-party secret.
   [ADR 0053](0053-wake-secret-injection-refused.md) retained that
   refusal; superseded by [ADR 0066](0066-inject-secret-at-wake.md),
   which injects allowed secret ids at wake and removes them on sleep.

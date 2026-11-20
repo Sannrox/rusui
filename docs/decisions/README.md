@@ -22,7 +22,7 @@ is stale.
 | [0006](0006-session-start.md) | How review, run, and schedule sessions start | Accepted; amended by 0069, 0071, 0072 |
 | [0007](0007-environment-snapshot.md) | P1 environment snapshot identity | Accepted; amended by 0048, 0049, 0054, 0063, 0067 |
 | [0008](0008-p1-isolation-split.md) | P1 isolation split | Accepted |
-| [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066, 0075, 0084 |
+| [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066, 0075, 0084, 0097 |
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
 | [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077, 0088, 0096 |
@@ -46,7 +46,7 @@ is stale.
 | [0030](0030-schedule-new-session.md) | A schedule fire starts a new session | Accepted; amended by 0056, 0069 |
 | [0031](0031-cli-command-tree.md) | The rusui CLI stays a flat verb list | Accepted |
 | [0032](0032-named-services.md) | Named services declare a port and a health path | Accepted |
-| [0033](0033-third-party-identity-deferred.md) | Plane-minted third-party identity is deferred | Accepted |
+| [0033](0033-third-party-identity-deferred.md) | Plane-minted third-party identity is deferred | Superseded by 0097 |
 | [0034](0034-operator-host-location-deferred.md) | A registered operator host is not a session location yet | Accepted |
 | [0035](0035-live-environment-fork-deferred.md) | Live environment fork is deferred | Accepted |
 | [0036](0036-environment-desktop-deferred.md) | A graphical desktop in the environment is deferred | Accepted |
@@ -110,6 +110,7 @@ is stale.
 | [0094](0094-guest-kernel-isolation-profile.md) | A verified operator backend gives each environment its own guest kernel | Proposed |
 | [0095](0095-drop-1.0-freeze-as-product-goal.md) | Drop the 1.0 freeze as the product goal | Accepted |
 | [0096](0096-operator-invited-viewer-preview.md) | Operator-invited viewer preview grants | Accepted |
+| [0097](0097-package-registry-guest-identity.md) | Plane-minted package-registry identity for one guest audience | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR
