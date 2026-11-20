@@ -499,6 +499,13 @@ func (e *Engine) imageIdentity() string {
 }
 
 func (e *Engine) EnsureSessionEnvironment(turnID int64, item snapshot.Item) error {
+	if err := e.ensureSessionEnvironment(turnID, item); err != nil {
+		return err
+	}
+	return e.mintPackageRegistryForTurn(turnID)
+}
+
+func (e *Engine) ensureSessionEnvironment(turnID int64, item snapshot.Item) error {
 	if !e.canProvision() {
 		return nil
 	}

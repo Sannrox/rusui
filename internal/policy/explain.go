@@ -44,7 +44,7 @@ func (e *Effective) ExplainRepo(name string) (RepoExplanation, bool, error) {
 	}
 	sources["never_release"] = "enforced by v2 parser"
 	sources["never_leak_private_to_public"] = "enforced by v2 parser"
-	for _, field := range []string{"session_kinds", "egress", "size", "ship", "share"} {
+	for _, field := range []string{"session_kinds", "egress", "size", "ship", "share", "package_registry"} {
 		sources[field] = projectSource(field, project, defaults)
 	}
 	budgets := mappingValue(project, "budgets")
@@ -99,7 +99,7 @@ func effectiveSetting(node *yaml.Node, field string, repoOverride bool) bool {
 	switch field {
 	case "session_kinds", "secrets":
 		return node.Kind == yaml.SequenceNode && len(node.Content) > 0
-	case "egress", "visibility":
+	case "egress", "visibility", "package_registry":
 		return node.Value != ""
 	case "max_reviews_per_repo_per_utc_day":
 		return repoOverride || node.Value != "0"

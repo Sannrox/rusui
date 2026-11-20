@@ -148,8 +148,12 @@ Named container CPU and memory: `small` (1 CPU, 2 GiB), `medium` (2 CPU, 4 GiB),
 _Avoid_: hypervisor, second host
 
 **Per-turn grant**:
-The only credential in a P1 guest (ADR 0080): D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets. The plane mints no third-party identity beside it ([ADR 0033](docs/decisions/0033-third-party-identity-deferred.md)).
-_Avoid_: PAT, installation token, `auth.json`, xAI API key, registry or cloud key (in the guest)
+The only credential in a P1 guest (ADR 0080): D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets. Git and model proxies still redeem it. One optional package-registry identity may be minted beside it ([ADR 0097](docs/decisions/0097-package-registry-guest-identity.md)).
+_Avoid_: PAT, installation token, `auth.json`, xAI API key, durable registry or cloud key (in the guest)
+
+**Package-registry identity**:
+A short-lived token the plane mints at turn start for one policy-named package-registry host already in the egress grant ([ADR 0097](docs/decisions/0097-package-registry-guest-identity.md)). Project `package_registry` (default empty, off). Overlay cannot enable it and may only remove it. The durable issuer credential stays on the plane (`RUSUI_PACKAGE_REGISTRY_TOKEN`). Sleep strips the guest value. The receipt names audience, subject (session and project), expiry, and turn, never the token. Issuer unavailable fails the turn closed.
+_Avoid_: durable key in the image, setup, resume, or `services.yaml`; minting during setup; a plane registry proxy; substituting this for git or model proxies
 
 **Share grant**:
 An operator-invited, read-only preview grant for one declared service ([ADR 0096](docs/decisions/0096-operator-invited-viewer-preview.md)). Distinct class from the operator preview grant. Project `share` (default off). TTL `1h`, `4h`, or `24h`. Overlay cannot enable it. Guest, worker, and turn never mint it.
@@ -157,7 +161,7 @@ _Avoid_: forwarding the operator grant, unauthenticated URL, viewer writes, gues
 
 **Wake secret**:
 A project `secrets` allowlist of plane ids. At wake the plane injects values from `RUSUI_SECRET_<ID>` at `/run/rusui/secrets/<id>` and as uppercase env. On sleep they are gone. The receipt names the id, session, and turn, not the value ([ADR 0066](docs/decisions/0066-inject-secret-at-wake.md)).
-_Avoid_: long-lived token in the image, OIDC (ADR 0033)
+_Avoid_: long-lived token in the image; treating a stored secret as a minted identity
 
 **Plane hook**:
 A project script stored next to `policy.yaml` at `hooks/<slug>/pre-clone` and `hooks/<slug>/pre-setup`. Pre-clone runs before the git pin is placed. Pre-setup runs immediately before `.agents/setup`. A non-zero exit leaves no environment. Output is in `rusui envlog`. The hook environment does not receive the operator token or a provider key. Wake still runs `.agents/resume` only ([ADR 0067](docs/decisions/0067-plane-stored-pre-hooks.md)).

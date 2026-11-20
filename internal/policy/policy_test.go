@@ -52,7 +52,7 @@ projects:
 		t.Fatalf("repo %+v ok=%v", r, ok)
 	}
 	p, ok := e.Project("rusui")
-	if !ok || p.Egress != EgressTrusted || !p.AllowsKind(KindReview) || p.Share {
+	if !ok || p.Egress != EgressTrusted || !p.AllowsKind(KindReview) || p.Share || p.PackageRegistry != "" {
 		t.Fatalf("project %+v", p)
 	}
 	if p.MaxConcurrentLeases() != 1 {
@@ -212,6 +212,10 @@ projects:
 		strings.Replace(good, "rusui:\n", "rusui:\n    tenant: Acme\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    task_base: branch\n", 1),
 		strings.Replace(good, "never_release: true\n", "never_release: true\n  share: true\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    package_registry: registry.example.com\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    egress: none\n    package_registry: registry.example.com\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    egress: custom\n    egress_allow: [other.example.com]\n    package_registry: registry.example.com\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    package_registry: 10.0.0.1\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    gitlab:\n      group/project:\n        project_id: 1\n        comment: true\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    gitlab:\n      group/project: {}\n", 1),
 	}
@@ -219,6 +223,50 @@ projects:
 		if _, err := Parse([]byte(c)); err == nil {
 			t.Fatalf("case %d accepted", i)
 		}
+	}
+}
+
+func TestParseProjectPackageRegistry(t *testing.T) {
+	custom, err := Parse([]byte(`
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+projects:
+  rusui:
+    egress: custom
+    egress_allow: [registry.example.com]
+    package_registry: Registry.Example.com
+    repos:
+      Sannrox/rusui:
+        visibility: public
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := custom.Project("rusui")
+	if !ok || p.PackageRegistry != "registry.example.com" {
+		t.Fatalf("custom %+v ok=%v", p, ok)
+	}
+	full, err := Parse([]byte(`
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+projects:
+  rusui:
+    egress: full
+    package_registry: registry.example.com
+    repos:
+      Sannrox/rusui:
+        visibility: public
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok = full.Project("rusui")
+	if !ok || p.PackageRegistry != "registry.example.com" {
+		t.Fatalf("full %+v ok=%v", p, ok)
 	}
 }
 

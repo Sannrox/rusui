@@ -102,6 +102,10 @@ type ProjectYAML struct {
 	// Share enables operator-invited viewer preview grants (ADR 0096).
 	// Default off. Overlay cannot enable it.
 	Share bool `yaml:"share"`
+	// PackageRegistry is the one package-registry host this project may
+	// receive a plane-minted identity for (ADR 0097). Empty is off.
+	// Overlay cannot add or enable it.
+	PackageRegistry string `yaml:"package_registry"`
 }
 
 // MCPServer is a remote MCP tool server reached over Streamable HTTP.
@@ -191,6 +195,9 @@ type Project struct {
 	MCPServers []MCPServer
 	// Share is the project opt-in for share preview grants (ADR 0096).
 	Share bool
+	// PackageRegistry is the one package-registry host a turn may present
+	// a plane-minted identity to. Empty is off (ADR 0097).
+	PackageRegistry string
 }
 
 type LocalRuntime struct {
@@ -314,22 +321,27 @@ func Parse(raw []byte) (*Effective, error) {
 		if err := validMCPServers(slug, y.MCPServers, out.MCPGateway); err != nil {
 			return nil, err
 		}
+		packageRegistry, err := validPackageRegistry(slug, egress, y.PackageRegistry, egressAllow)
+		if err != nil {
+			return nil, err
+		}
 		p := Project{
-			Guests:       y.Guests,
-			Slug:         slug,
-			SessionKinds: kinds,
-			LocalRuntime: localRuntime,
-			Egress:       egress,
-			EgressAllow:  egressAllow,
-			Size:         size,
-			Budgets:      budgets,
-			Permissions:  y.Permissions,
-			Secrets:      secrets,
-			Ship:         ship,
-			TaskBase:     taskBase,
-			Tenant:       y.Tenant,
-			MCPServers:   y.MCPServers,
-			Share:        y.Share,
+			Guests:          y.Guests,
+			Slug:            slug,
+			SessionKinds:    kinds,
+			LocalRuntime:    localRuntime,
+			Egress:          egress,
+			EgressAllow:     egressAllow,
+			Size:            size,
+			Budgets:         budgets,
+			Permissions:     y.Permissions,
+			Secrets:         secrets,
+			Ship:            ship,
+			TaskBase:        taskBase,
+			Tenant:          y.Tenant,
+			MCPServers:      y.MCPServers,
+			Share:           y.Share,
+			PackageRegistry: packageRegistry,
 		}
 		for name, ry := range y.Repos {
 			if err := validGitHubRepoName(name); err != nil {
@@ -623,6 +635,48 @@ func validEgressAllow(slug, egress string, entries []string) ([]string, error) {
 		out = append(out, d)
 	}
 	return out, nil
+}
+
+func egressAllowHasHost(allow []string, host string) bool {
+	for _, d := range allow {
+		h, _, err := net.SplitHostPort(d)
+		if err != nil {
+			h = d
+		}
+		if h == host {
+			return true
+		}
+	}
+	return false
+}
+
+// validPackageRegistry accepts one outside DNS name already granted by
+// egress. Empty is off. trusted and none have no guest route.
+func validPackageRegistry(slug, egress, host string, allow []string) (string, error) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return "", nil
+	}
+	if strings.Contains(host, ":") || net.ParseIP(host) != nil || !egressHost.MatchString(host) {
+		return "", fmt.Errorf("policy: %s package_registry %q must be an outside DNS name", slug, host)
+	}
+	labels := strings.Split(host, ".")
+	if strings.Trim(labels[len(labels)-1], "0123456789") == "" || labels[len(labels)-1] == "localhost" || host == env.PlaneHost {
+		return "", fmt.Errorf("policy: %s package_registry %q must be an outside DNS name", slug, host)
+	}
+	switch egress {
+	case EgressCustom:
+		if !egressAllowHasHost(allow, host) {
+			return "", fmt.Errorf("policy: %s package_registry %q is not in egress_allow", slug, host)
+		}
+	case EgressFull:
+		// Public HTTPS is already granted; the project still names the host.
+	case EgressTrusted, EgressNone:
+		return "", fmt.Errorf("policy: %s package_registry needs egress custom or full", slug)
+	default:
+		return "", fmt.Errorf("policy: %s invalid egress %q", slug, egress)
+	}
+	return host, nil
 }
 
 // MCPGatewayName is the server name a session sees for the gateway.

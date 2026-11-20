@@ -267,6 +267,12 @@ value in `RUSUI_SECRET_<ID>` on the plane (`RUSUI_SECRET_NPM_TOKEN` for
 as `$NPM_TOKEN` during the wake. Sleep removes it. The receipt names the
 id, not the value.
 
+Project `package_registry:` names one already-granted package-registry
+host. At turn start the plane mints a short-lived token from
+`RUSUI_PACKAGE_REGISTRY_TOKEN` and injects it at
+`/run/rusui/secrets/package_registry`. Sleep removes it. The receipt
+names the audience, not the token. Overlay cannot enable it.
+
 ## 3. Run (loopback)
 
 ```bash

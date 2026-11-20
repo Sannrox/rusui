@@ -121,6 +121,9 @@ type Engine struct {
 	// AdmitHooks maps a project slug to the path of its admit hook
 	// (hooks/<slug>/admit), run on the plane before a session starts.
 	AdmitHooks map[string]string
+	// PackageRegistryIssuer mints the one guest package-registry identity
+	// (ADR 0097). Nil with a named audience fails the turn closed.
+	PackageRegistryIssuer PackageRegistryIssuer
 }
 
 func New(st *store.Store, pol *policy.Effective, g gh.Client, clk clock.Clock) *Engine {
@@ -1136,7 +1139,14 @@ func (e *Engine) HeartbeatSteerReceived(jobID int64, gen, claimed int, receivedS
 		next = &Steer{ID: steer.ID, Prompt: steer.Prompt}
 		return nil
 	})
-	return next, err
+	if err != nil {
+		return next, err
+	}
+	if mintErr := e.mintPackageRegistryForTurn(jobID); mintErr != nil {
+		_, failErr := e.Fail(jobID, gen, claimed)
+		return nil, errors.Join(mintErr, failErr)
+	}
+	return next, nil
 }
 
 var errReject = fmt.Errorf("reject")

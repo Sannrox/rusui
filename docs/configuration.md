@@ -160,6 +160,7 @@ reported and exits successfully.
 | `RUSUI_PUBLICATION` | no | `plane` is required for GitHub writes ([ADR 0044](decisions/0044-plane-publishes-from-turn-result.md), [ADR 0080](decisions/0080-turns-propose-writes-go-through-actions.md)). It needs GitHub App credentials or the plane exits. Implement guests hold no credential; Complete records `write.propose`; `POST /sessions/{id}/write-actions` applies it as the App. `agent` records proposals that cannot be applied. |
 | `RUSUI_CORE_URL` | no | Core HTTP/JSON base URL for definition drafts ([ADR 0084](decisions/0084-core-draft-actions.md)). Draft RPCs are experimental on core (`SEKAI_EXPERIMENTAL_RPCS`). Unset: Complete still records `core.draft`; apply refuses. The guest never receives this URL. |
 | `RUSUI_CORE_TOKEN` | with `RUSUI_CORE_URL` | Plane-held bearer for `RUSUI_CORE_URL`. Required when the URL is set. Never injected into the guest. |
+| `RUSUI_PACKAGE_REGISTRY_TOKEN` | when `package_registry` is named | Plane-held durable issuer credential ([ADR 0097](decisions/0097-package-registry-guest-identity.md)). The guest receives only a minted token. Unset fails the turn closed if the audience is named. Never injected into the guest. |
 | `RUSUI_DISABLE_COAUTHOR_TRAILER` | no | `1` drops `Co-authored-by: rusui <noreply@rusui.invalid>` from agent commits. |
 | `RUSUI_DISABLE_SESSION_TRAILER` | no | `1` drops `Rusui-Session: <session id>` from agent commits. |
 | `RUSUI_SESSION_URL` | no | Template that makes the `Rusui-Session` trailer a link: an absolute `https` URL with exactly one `{session}` in its path, replaced by the session id, for example `https://<plane origin>/console/sessions/{session}`. Userinfo, a query or a fragment fail startup. Unset, the trailer is the session id. Attribution only; the URL grants no access. |
@@ -531,6 +532,21 @@ allowlist is refused before the turn starts. Durable values stay on the
 plane ([ADR 0009](decisions/0009-credential-broker.md),
 [ADR 0066](decisions/0066-inject-secret-at-wake.md)). The receipt names
 the id, not the value.
+
+Project `package_registry` names one package-registry host for a
+plane-minted guest identity ([ADR 0097](decisions/0097-package-registry-guest-identity.md)).
+Empty (the default) is off. Overlay cannot enable it and may only
+remove it (`overlay` key `package_registry:<project>` value `0`).
+`custom` requires that host in `egress_allow`; `full` already grants
+public HTTPS and still requires the host to be named; `trusted` and
+`none` that name the audience are a load error. Mint is at turn start,
+renewed on heartbeat with the per-turn grant, and stripped on sleep.
+The durable issuer credential is `RUSUI_PACKAGE_REGISTRY_TOKEN` on the
+plane. The guest sees only the minted token at
+`/run/rusui/secrets/package_registry`. The receipt names audience,
+subject, expiry, and turn, never the token. If the registry cannot
+issue a shorter-lived token, or the issuer is unavailable, the turn
+fails closed. Git and model proxies are unchanged.
 
 Project `mcp_servers` lists remote MCP tool servers (Streamable HTTP) the
 guest connects to: `name` (`^[a-z0-9][a-z0-9_-]{0,31}$`, not `gateway`)
