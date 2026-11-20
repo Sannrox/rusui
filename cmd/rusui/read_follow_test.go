@@ -84,6 +84,17 @@ func (p *followPlane) finish(state string) {
 	}
 }
 
+func (p *followPlane) services(svcs ...store.EnvironmentService) {
+	p.t.Helper()
+	sess, err := store.GetSession(p.st, p.sid)
+	if err != nil {
+		p.t.Fatal(err)
+	}
+	if err := store.ReplaceEnvironmentServices(p.st, sess.EnvironmentID, store.EnvironmentServiceSet{Services: svcs}); err != nil {
+		p.t.Error(err)
+	}
+}
+
 // cutWriter passes the stream through until the first transcript entry
 // has reached the client, then runs onCut and ends the response, as a
 // dropped tunnel or proxy would.
@@ -147,7 +158,7 @@ func TestReadFollowPrintsHistoryThenLiveEventsAndCompletion(t *testing.T) {
 		}
 		at += i + len(want)
 	}
-	if strings.Contains(got, "diff:") || strings.Count(got, "history one") != 1 {
+	if strings.Contains(got, "diff:") || strings.Count(got, "history one") != 1 || strings.Contains(got, "service:") {
 		t.Fatalf("follow output\n%s", got)
 	}
 }
@@ -445,3 +456,46 @@ func (c *turnCutWriter) Write(b []byte) (int, error) {
 }
 
 func (c *turnCutWriter) Flush() { c.ResponseWriter.(http.Flusher).Flush() }
+
+// Follow prints a declared service's name and health once per change,
+// without a preview URL (#790).
+func TestReadFollowPrintsServiceHealth(t *testing.T) {
+	p := newFollowPlane(t)
+	hs := httptest.NewServer(p.h)
+	t.Cleanup(hs.Close)
+	out := &lockedBuffer{}
+	go func() {
+		deadline := time.Now().Add(5 * time.Second)
+		for !strings.Contains(out.String(), "state: queued") && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+		p.services(store.EnvironmentService{Name: "web", Port: 3000, State: "healthy"})
+		deadline = time.Now().Add(5 * time.Second)
+		for !strings.Contains(out.String(), "service: web healthy") && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+		p.services(store.EnvironmentService{Name: "web", Port: 3000, State: "healthy"})
+		p.services(store.EnvironmentService{Name: "web", Port: 3000, State: "unhealthy"})
+		deadline = time.Now().Add(5 * time.Second)
+		for !strings.Contains(out.String(), "service: web unhealthy") && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+		p.services(store.EnvironmentService{Name: "web", Port: 3000, State: "exited"})
+		deadline = time.Now().Add(5 * time.Second)
+		for !strings.Contains(out.String(), "service: web exited") && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+		p.finish("completed")
+	}()
+	var errOut bytes.Buffer
+	if code := readMain([]string{"-follow", "-url", hs.URL, "-token", "op-tok", p.id}, out, &errOut); code != 0 {
+		t.Fatalf("follow %d %s", code, errOut.String())
+	}
+	got := out.String()
+	if strings.Count(got, "service: web healthy") != 1 || strings.Count(got, "service: web unhealthy") != 1 || strings.Count(got, "service: web exited") != 1 {
+		t.Fatalf("stdout\n%s", got)
+	}
+	if strings.Contains(got, "http") || strings.Contains(got, "preview") || strings.Contains(got, "3000") {
+		t.Fatalf("preview or port in follow record\n%s", got)
+	}
+}

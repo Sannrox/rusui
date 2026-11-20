@@ -79,14 +79,23 @@ type followTurn struct {
 	ApprovalSeq int64  `json:"approval_seq,omitempty"`
 }
 
+// followService is one declared service's health on a followed read. It
+// carries the name and state only: a preview URL is a grant, not this
+// record (#790).
+type followService struct {
+	Name  string `json:"name"`
+	State string `json:"state"`
+}
+
 func (f followStatus) done() bool {
 	return f.State == followCompleted || f.State == followFailed || f.State == followCancelled
 }
 
 // followSessionRead streams what a plain read shows of the transcript and
 // then keeps streaming: every entry appended after the after cursor, in
-// append order, the session state when it changes, and after it the turn
-// record when that changes (followTurnRecord). A client that
+// append order, the session state when it changes, after it the turn
+// record when that changes (followTurnRecord), and a service record when
+// a declared service's health changes. A client that
 // reconnects with the seq of the last entry it received resumes without
 // a gap or a repeat. The stream ends after a completed, failed, or
 // cancelled state. It never carries terminal bytes or the workspace diff.
@@ -141,6 +150,7 @@ func (s *Server) followSessionRead(w http.ResponseWriter, r *http.Request) {
 
 	var last followStatus
 	var lastRecord followTurn
+	lastServices := map[string]string{}
 	lastWrite := time.Now()
 	lastToken := ""
 	wait := followPoll
@@ -213,6 +223,17 @@ func (s *Server) followSessionRead(w http.ResponseWriter, r *http.Request) {
 		if ok && record != lastRecord {
 			lastRecord = record
 			writeSSE(w, "turn", record)
+			fl.Flush()
+			lastWrite = time.Now()
+		}
+		services, err := s.followServiceChanges(id, lastServices)
+		if err != nil {
+			return
+		}
+		if len(services) > 0 {
+			for _, rec := range services {
+				writeSSE(w, "service", rec)
+			}
 			fl.Flush()
 			lastWrite = time.Now()
 		}
@@ -317,6 +338,26 @@ func (s *Server) followTurnRecord(sessionID int64, status followStatus) (followT
 		return out, true, nil
 	}
 	return followTurn{}, false, nil
+}
+
+// followServiceChanges is the service health records that changed since
+// last. last is updated in place so a name and state are sent once per
+// connection. A session with no services file, or only a parse error,
+// returns nothing.
+func (s *Server) followServiceChanges(sessionID int64, last map[string]string) ([]followService, error) {
+	set, err := store.ListSessionServices(s.Eng.Store, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	var out []followService
+	for _, svc := range set.Services {
+		if last[svc.Name] == svc.State {
+			continue
+		}
+		last[svc.Name] = svc.State
+		out = append(out, followService{Name: svc.Name, State: svc.State})
+	}
+	return out, nil
 }
 
 // artifactBlocked reads a turn's result outcome when it has one: a run

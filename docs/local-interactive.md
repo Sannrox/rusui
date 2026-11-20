@@ -95,6 +95,14 @@ session has no turn record. The record describes the session now: the
 plane resends it after a reconnect and the command prints it once, but an
 approval answered while the command was disconnected is not printed.
 
+When a declared service's health changes, the command prints one line
+`service: NAME STATE` (`starting`, `healthy`, `unhealthy`, `exited`).
+The stream carries it as an `event: service` with the JSON fields `name`
+and `state`. A session with no services file prints nothing extra. The
+record is the service now: the plane resends it after a reconnect and the
+command prints it once per name and state. It does not include a preview
+URL.
+
 When standard output is a terminal, `-follow` also reports the session
 state to the terminal as a program status sequence (OSC 7501), so a tab in
 the background can show that a session waits for you. `queued` and

@@ -1023,16 +1023,19 @@ func lockSessionTx(tx *sql.Tx, sessionID int64) error {
 
 // FollowToken summarizes everything that can change what a followed read
 // shows: the newest transcript entry, each turn's state and revision, the
-// session state, and the approval decisions on the session's requests.
-// It is one indexed query, so an idle follower can poll it cheaply and
-// read the rest only when it changes (#439).
+// session state, the approval decisions on the session's requests, and
+// each declared service's name and health. It is one indexed query, so
+// an idle follower can poll it cheaply and read the rest only when it
+// changes (#439). Service health is name and state, not row identity:
+// rewriting the same health must not wake the follower.
 func FollowToken(s *Store, sessionID int64) (string, error) {
 	var token string
 	err := s.DB.QueryRow(`SELECT
   COALESCE((SELECT MAX(rowid) FROM actions WHERE session_id=?1), 0) || '|' ||
   COALESCE((SELECT group_concat(id || ':' || state || ':' || pending_revision || ':' || claimed_revision, ',') FROM (SELECT id, state, pending_revision, claimed_revision FROM turns WHERE session_id=?1 ORDER BY id)), '') || '|' ||
   COALESCE((SELECT state FROM sessions WHERE id=?1), '') || '|' ||
-  (SELECT COUNT(*) FROM actions a JOIN approval_decisions d ON d.action_id=a.action_id WHERE a.session_id=?1 AND a.action_type='acp.approval')`, sessionID).Scan(&token)
+  (SELECT COUNT(*) FROM actions a JOIN approval_decisions d ON d.action_id=a.action_id WHERE a.session_id=?1 AND a.action_type='acp.approval') || '|' ||
+  COALESCE((SELECT group_concat(name || ':' || state, ',') FROM (SELECT es.name, es.state FROM environment_services es JOIN sessions sess ON sess.environment_id=es.environment_id WHERE sess.id=?1 AND es.name!='' ORDER BY es.name)), '')`, sessionID).Scan(&token)
 	return token, err
 }
 
