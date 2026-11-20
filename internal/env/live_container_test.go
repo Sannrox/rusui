@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+func runtimeUnavailable(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "cannot connect") || strings.Contains(message, "failed to connect")
+}
+
 func TestLiveContainerProcessIdentity(t *testing.T) {
 	if _, err := exec.LookPath("docker"); err != nil {
 		if _, err2 := exec.LookPath("podman"); err2 != nil {
@@ -26,8 +31,7 @@ func TestLiveContainerProcessIdentity(t *testing.T) {
 	name := fmt.Sprintf("proof-%d", time.Now().UnixNano()%1_000_000_000)
 	id, err := d.Create(name)
 	if err != nil {
-		message := strings.ToLower(err.Error())
-		if strings.Contains(message, "cannot connect to the docker daemon") || strings.Contains(message, "cannot connect to podman") {
+		if runtimeUnavailable(err) {
 			t.Skipf("container runtime is installed but unavailable: %v", err)
 		}
 		t.Fatal(err)
@@ -82,7 +86,7 @@ func TestLiveKillGuestStopsExecProcessesOnly(t *testing.T) {
 	d := Container{RT: rt, Image: "alpine:3.20"}
 	id, err := d.Create(fmt.Sprintf("kill-%d", time.Now().UnixNano()%1_000_000_000))
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+		if runtimeUnavailable(err) {
 			t.Skipf("container runtime unavailable: %v", err)
 		}
 		t.Fatal(err)
@@ -140,7 +144,7 @@ func TestLiveKillGuestEndsGraceWhenProcessesExit(t *testing.T) {
 	d := Container{RT: rt, Image: "alpine:3.20"}
 	id, err := d.Create(fmt.Sprintf("killfast-%d", time.Now().UnixNano()%1_000_000_000))
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+		if runtimeUnavailable(err) {
 			t.Skipf("container runtime unavailable: %v", err)
 		}
 		t.Fatal(err)
@@ -187,7 +191,7 @@ func TestLiveWorkspaceInspection(t *testing.T) {
 	d := Container{RT: rt, Image: "alpine:3.20"}
 	id, err := d.Create(fmt.Sprintf("inspect-%d", time.Now().UnixNano()%1_000_000_000))
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+		if runtimeUnavailable(err) {
 			t.Skipf("container runtime unavailable: %v", err)
 		}
 		t.Fatal(err)
@@ -246,7 +250,7 @@ func TestLiveWorkspaceInspectionRefusesReplacedRoot(t *testing.T) {
 	d := Container{RT: rt, Image: "alpine:3.20"}
 	id, err := d.Create(fmt.Sprintf("root-%d", time.Now().UnixNano()%1_000_000_000))
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+		if runtimeUnavailable(err) {
 			t.Skipf("container runtime unavailable: %v", err)
 		}
 		t.Fatal(err)
@@ -277,7 +281,7 @@ func TestLiveWorkspaceSnapshot(t *testing.T) {
 	d := Container{RT: rt, Image: "alpine:3.20"}
 	id, err := d.Create(fmt.Sprintf("snap-%d", time.Now().UnixNano()%1_000_000_000))
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+		if runtimeUnavailable(err) {
 			t.Skipf("container runtime unavailable: %v", err)
 		}
 		t.Fatal(err)
@@ -341,7 +345,7 @@ func TestLiveCaptureTreeRoundTrip(t *testing.T) {
 	create := func(prefix string) string {
 		id, err := d.Create(fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()%1_000_000_000))
 		if err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+			if runtimeUnavailable(err) {
 				t.Skipf("container runtime unavailable: %v", err)
 			}
 			t.Fatal(err)
@@ -389,7 +393,7 @@ func TestLiveGuestHardening(t *testing.T) {
 	d := Container{RT: rt, Image: "alpine:3.20"}
 	id, err := d.Create(fmt.Sprintf("harden-%d", time.Now().UnixNano()%1_000_000_000))
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "cannot connect") {
+		if runtimeUnavailable(err) {
 			t.Skipf("container runtime unavailable: %v", err)
 		}
 		t.Fatal(err)

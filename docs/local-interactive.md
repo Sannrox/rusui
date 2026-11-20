@@ -59,9 +59,10 @@ console session page lists them under Local process activity.
 
 Read a session without opening its terminal. The command prints the same
 durable transcript the console shows, including recorded tool-call events,
-and the current workspace diff. An empty diff and an unavailable workspace
-are stated. A local session with no stored transcript is an error. Closing
-the command leaves the session running.
+and the workspace git status and a bounded diff against the snapshot pin.
+A clean tree, a missing pin, and an unavailable or sleeping workspace are
+stated; a sleeping environment is not woken. A local session with no stored
+transcript is an error. Closing the command leaves the session running.
 
 ```bash
 rusui read [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_ID

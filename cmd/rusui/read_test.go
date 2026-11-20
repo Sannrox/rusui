@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -80,6 +81,18 @@ func TestReadCLIMatchesPlaneAndDoesNotAttach(t *testing.T) {
 	sid := created.SessionID
 	id := strconv.FormatInt(sid, 10)
 	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("hello\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"-c", "init.defaultBranch=main", "init", "-q"},
+		{"add", "-A"},
+		{"-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "pin"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
 	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("hello\n\x1b[2J"), 0o600); err != nil {
 		t.Fatal(err)
 	}

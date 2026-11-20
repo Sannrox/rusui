@@ -1,14 +1,10 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/store"
@@ -84,80 +80,53 @@ func (s *Server) sessionRead(r *http.Request, id int64) (sessionRead, error) {
 	if page.Sess.Kind == store.SessionKindLocal && out.TranscriptState == "" && len(out.Transcript) == 0 {
 		return sessionRead{}, errNoDurableTranscript
 	}
-	handle, envState := "", ""
+	handle := ""
 	envRow, err := store.GetEnvironment(s.Eng.Store, page.Sess.EnvironmentID)
 	if err == nil {
-		handle, envState = envRow.Handle, envRow.State
+		handle = envRow.Handle
 	} else {
 		envRow = nil
 	}
-	out.Diff, out.DiffState = s.workspaceDiff(page, envRow, handle, envState)
+	out.Diff, out.DiffState = s.workspaceDiff(page, envRow, handle)
 	return out, nil
 }
 
-// workspaceDiff is the console file diff for each top-level workspace file:
-// the file text as a unified patch from an empty baseline. It is not a git
-// diff. No files is an empty diff. A workspace the console cannot list is
-// the console's unavailable state.
-// sessionDiffCap bounds the bodies one container session read carries.
+// workspaceDiff is git status and a bounded git diff against the workspace
+// pin (HEAD). A clean tree, a missing pin, and a workspace the console
+// cannot list are stated. Sleeping guests are not woken.
+// sessionDiffCap bounds the git output one session read carries.
 const sessionDiffCap = 4 << 20
 
-func (s *Server) workspaceDiff(page consolePage, envRow *store.Environment, handle, envState string) (string, string) {
+func (s *Server) workspaceDiff(page consolePage, envRow *store.Environment, handle string) (string, string) {
 	if page.FilesErr != "" {
 		return "", page.FilesErr
 	}
 	if envRow != nil && envRow.Driver == env.KindContainer {
 		return s.containerDiff(envRow)
 	}
-	if len(page.Files) == 0 {
-		return "", "empty"
+	body, state, err := env.GitDiff(handle, sessionDiffCap)
+	if err != nil {
+		return "", "workspace unavailable"
 	}
-	var b strings.Builder
-	for _, file := range page.Files {
-		body, state := s.inspectFile(envRow, handle, envState, file.Name, true)
-		if b.Len() > 0 {
-			b.WriteByte('\n')
-		}
-		if state != "" {
-			fmt.Fprintf(&b, "# %s\n%s\n", file.Name, state)
-			continue
-		}
-		b.WriteString(body)
-	}
-	return b.String(), ""
+	return string(body), state
 }
 
-// containerDiff is the workspace diff of a ready container from one
-// runtime exec, not one per file (#449).
+// containerDiff is the workspace git dirt of a ready container from one
+// runtime exec (#449, #792).
 func (s *Server) containerDiff(envRow *store.Environment) (string, string) {
+	if envRow.State != store.EnvReady {
+		return "", "workspace " + envRow.State
+	}
 	in, ok := s.containerInspector()
 	if !ok {
 		return "", "workspace unavailable"
 	}
-	entries, err := in.WorkspaceSnapshot(envRow.Handle, consoleFileCap, sessionDiffCap)
+	body, state, err := in.WorkspaceGitDiff(envRow.Handle, sessionDiffCap)
 	if errors.Is(err, env.ErrWorkspaceReplaced) {
 		return "", env.FileRootReplaced
 	}
 	if err != nil {
 		return "", "workspace unavailable"
 	}
-	if len(entries) == 0 {
-		return "", "empty"
-	}
-	var b strings.Builder
-	for _, e := range entries {
-		if b.Len() > 0 {
-			b.WriteByte('\n')
-		}
-		state := e.State
-		if state == "" && (bytes.IndexByte(e.Body, 0) >= 0 || !utf8.Valid(e.Body)) {
-			state = "binary"
-		}
-		if state != "" {
-			fmt.Fprintf(&b, "# %s\n%s\n", e.Name, state)
-			continue
-		}
-		b.WriteString(unifiedFromEmpty(e.Name, string(e.Body)))
-	}
-	return b.String(), ""
+	return string(body), state
 }
