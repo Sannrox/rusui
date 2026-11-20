@@ -41,6 +41,7 @@ type attachOptions struct {
 	URL   string
 	Token string
 	DB    string
+	Write bool
 }
 
 type attachDetail struct {
@@ -61,9 +62,10 @@ func attachCLI(args []string) {
 	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
 	token := fs.String("token", os.Getenv("RUSUI_OPERATOR_TOKEN"), "operator token")
 	db := fs.String("db", "rusui.db", "Rusui SQLite database (must match the server for local sessions); RUSUI_STORE_URL overrides it")
+	write := fs.Bool("write", false, "acquire the managed terminal write lease")
 	_ = fs.Parse(args)
 	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(os.Stderr, "usage: rusui attach [-url URL] [-token TOKEN] [-db PATH] SESSION_ID")
+		_, _ = fmt.Fprintln(os.Stderr, "usage: rusui attach [-url URL] [-token TOKEN] [-db PATH] [-write] SESSION_ID")
 		os.Exit(2)
 	}
 	sessionID, err := strconv.ParseInt(fs.Arg(0), 10, 64)
@@ -71,7 +73,7 @@ func attachCLI(args []string) {
 		_, _ = fmt.Fprintln(os.Stderr, "attach: invalid session id")
 		os.Exit(2)
 	}
-	err = runAttach(attachOptions{URL: *url, Token: *token, DB: *db}, sessionID, os.Stdin, os.Stdout, os.Stderr)
+	err = runAttach(attachOptions{URL: *url, Token: *token, DB: *db, Write: *write}, sessionID, os.Stdin, os.Stdout, os.Stderr)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "attach: %v\n", err)
 		os.Exit(1)
@@ -112,13 +114,13 @@ func runAttach(opts attachOptions, sessionID int64, stdin io.Reader, stdout, std
 		if err != nil {
 			return err
 		}
-		return attachManagedSession(client, opts.URL, opts.Token, sessionID, page, stdin, stdout, stderr)
+		return attachManagedSession(client, opts.URL, opts.Token, sessionID, page, opts.Write, stdin, stdout, stderr)
 	default:
 		return fmt.Errorf("unsupported session runtime %q", detail.Session.Kind)
 	}
 }
 
-func attachManagedSession(client *http.Client, baseURL, token string, sessionID int64, page terminalPage, stdin io.Reader, stdout, stderr io.Writer) error {
+func attachManagedSession(client *http.Client, baseURL, token string, sessionID int64, page terminalPage, wantWrite bool, stdin io.Reader, stdout, stderr io.Writer) error {
 	stderr = &synchronizedWriter{writer: stderr}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -129,7 +131,7 @@ func attachManagedSession(client *http.Client, baseURL, token string, sessionID 
 	}
 	terminalDone := make(chan error, 1)
 	go func() {
-		terminalDone <- attachManaged(ctx, client, baseURL, token, sessionID, page, stdin, stdout, stderr)
+		terminalDone <- attachManaged(ctx, client, baseURL, token, sessionID, page, wantWrite, stdin, stdout, stderr)
 	}()
 	select {
 	case terminalErr := <-terminalDone:
@@ -537,14 +539,14 @@ func resizeLocalTerminal(client *sumika.SocketClient, name string, fd int) error
 	return nil
 }
 
-func attachManaged(parent context.Context, client *http.Client, baseURL, token string, sessionID int64, page terminalPage, stdin io.Reader, stdout, stderr io.Writer) (retErr error) {
+func attachManaged(parent context.Context, client *http.Client, baseURL, token string, sessionID int64, page terminalPage, wantWrite bool, stdin io.Reader, stdout, stderr io.Writer) (retErr error) {
 	if err := parent.Err(); err != nil {
 		return err
 	}
 	write := false
 	acquired := false
 	leaseGeneration := 0
-	if !page.leaseHeld {
+	if wantWrite && !page.leaseHeld {
 		res, body, err := acquireManagedLease(client, baseURL, token, sessionID, page.csrf)
 		if err != nil {
 			return err
@@ -588,12 +590,16 @@ func attachManaged(parent context.Context, client *http.Client, baseURL, token s
 			return fmt.Errorf("acquire terminal lease: %s %s", res.Status, body)
 		}
 	}
-	if !write {
+	if acquired {
+		if _, err := fmt.Fprintf(stderr, "Managed terminal write lease generation %d acquired.\n", leaseGeneration); err != nil {
+			return err
+		}
+	} else if page.leaseHeld {
 		if _, err := fmt.Fprintln(stderr, "Managed terminal write lease is held; connected read-only. Press Ctrl+D to detach."); err != nil {
 			return err
 		}
-	} else if acquired {
-		if _, err := fmt.Fprintf(stderr, "Managed terminal write lease generation %d acquired.\n", leaseGeneration); err != nil {
+	} else {
+		if _, err := fmt.Fprintln(stderr, "Connected as observer (no write lease). Press Ctrl+D to detach."); err != nil {
 			return err
 		}
 	}
