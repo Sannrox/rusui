@@ -97,6 +97,9 @@ func main() {
 		case "preview":
 			previewCLI(os.Args[2:])
 			return
+		case "share":
+			shareCLI(os.Args[2:])
+			return
 		case "approve":
 			approveCLI(os.Args[2:])
 			return
@@ -402,6 +405,9 @@ func main() {
 	}
 	if err := eng.Recover(); err != nil {
 		log.Printf("recover: %v", err)
+	}
+	if err := srv.FenceOperatorToken(); err != nil {
+		log.Fatal(err)
 	}
 	previewAddr, previewHandler, err := srv.PreviewListener()
 	if err != nil {

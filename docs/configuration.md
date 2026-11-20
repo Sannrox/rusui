@@ -67,6 +67,13 @@ or portless or unhealthy service, and port out of range are explicit errors
 and mint nothing. `.rusui/services.yaml` may declare `port` (1024–65535) and
 `health` (an absolute HTTP path). Unknown keys fail closed. A missing file is
 an empty list.
+`rusui share SESSION_ID -service NAME` mints an operator-invited share grant
+for one declared service when project `share` is true. `-ttl` is `1h` (default),
+`4h`, or `24h`. The command prints a preview-origin URL. `-list` prints live
+grants (token hash, service, port, expiry; secret omitted). `-revoke HASH`
+ends one live grant. Overlay cannot enable sharing. Guest, worker, and turn
+cannot mint. Raw `-port` stays operator-grant-only. Rotation of
+`RUSUI_OPERATOR_TOKEN` ends outstanding share grants.
 `rusui restore -db PATH` restores a copied
 database offline and prints its inventory. On PostgreSQL, set
 `RUSUI_STORE_URL` instead of `-db`; setting both fails. Do not open `rusui.db` while the
@@ -295,11 +302,14 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/sessions/{id}/turns/{tid}/replay` | operator or worker token; rebuild a Shikigami schema-v1 manifest and re-run the turn against the recorded snapshot (optional JSON `snapshot` override); external effects are denied; reports object-revision divergence |
 | `GET` | `/sessions/{id}/terminal` | operator, worker, or turn token; current environment terminal output; not the transcript |
 | `GET` | `/sessions/{id}/envlog` | operator token; last pre-clone, pre-setup, setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`pre-clone`/`pre-setup`/`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
-| `GET` | `/sessions/{id}/receipt` | operator or worker token; versioned JSON review receipt (`rusui receipt`); includes `workspace.put` and `preview.mint` session actions; Markdown when `Accept: text/markdown` or `?format=md`; 404 unknown session or no completed review |
+| `GET` | `/sessions/{id}/receipt` | operator or worker token; versioned JSON review receipt (`rusui receipt`); includes `workspace.put`, `preview.mint`, and `preview.share` session actions; Markdown when `Accept: text/markdown` or `?format=md`; 404 unknown session or no completed review |
 | `POST` | `/sessions/{id}/workspace` | operator token; multipart `file` plus `path` query; 32 MiB cap; workspace-relative only; appends a `workspace.put` action receipt with the destination path, not the file bytes |
 | `GET` | `/sessions/{id}/workspace` | operator token; JSON `{names}` for one workspace directory (`rusui ls`); file bytes (`application/octet-stream`, 32 MiB cap) when `path` is a regular file (`rusui get`); optional `path` query; omitted `path` is the top level; path escape is 400; replaced `/workspace` and a missing environment are 409 |
 | `GET` | `/sessions/{id}/workspace/export` | operator token; tar of environment git HEAD plus uncommitted files (`rusui sync -workspace`, and the same command with `-follow`); 404 unknown; 409 cancelled, archived, unpublished, or environment missing |
 | `POST` | `/sessions/{id}/preview` | operator token; JSON `service` (declared name) or `port` (1024-65535), mutually exclusive; wakes the environment; named mint requires a healthy declared port; raw `-port` records no service name; 200 `{url}` on the preview origin with `?g=` (`rusui preview`); appends a `preview.mint` action receipt with session, port or service, and expiry, not the grant token; 404 unknown session; 409 not ready, undeclared/portless/unhealthy service, or preview origin unset/not isolated |
+| `POST` | `/sessions/{id}/share` | operator token; project `share: true`; JSON `service` (declared name) and optional `ttl` (`1h`, `4h`, `24h`, default `1h`); wakes the environment; named mint requires a healthy declared port; raw `port` is operator-grant-only (400); 200 `{url}` on the preview origin with `?g=` (`rusui share`); appends a `preview.share` action receipt with session, service, port, class, and expiry, not the grant token; 404 unknown session; 409 sharing disabled, not ready, undeclared/portless/unhealthy service, or preview origin unset/not isolated |
+| `GET` | `/sessions/{id}/share` | operator token; live unexpired unrevoked share grants as JSON `[{token_hash,service,port,expires_at}]`; secret omitted |
+| `DELETE` | `/sessions/{id}/share/{hash}` | operator token; revoke one live share grant; 204; 404 unknown, already revoked, or operator-class hash |
 | `GET` | `/sessions/{id}?include=receipts[&receipt_after_id={id}][&process_receipt_after_id={id}]` | operator or worker token; up to 100 environment and 100 local process receipts in ID order; follow `environment_receipts_next_after_id` and `process_receipts_next_after_id` when present |
 | `GET` | `/sessions/{id}?view=review-status&turn_id={turn}` | operator or worker token; compact turn state and revisions for polling |
 | `POST` | `/reviews` | operator or worker token; request one bound pull-request review (`rusui review`); tenant operators only for repositories of their tenant |
@@ -384,12 +394,14 @@ or a tailnet; do not bind it off loopback.
 | Method | Path | Auth |
 | --- | --- | --- |
 | `*` | `/` | preview grant (`?g=` or `Authorization: Bearer`); reverse-proxies the granted environment port |
-| `POST` | `/comment` | preview grant (`?g=` or `Authorization: Bearer`) and `Origin` matching `RUSUI_PREVIEW_BASE`; 8 KiB form `text`, `url`, `selector` |
+| `POST` | `/comment` | operator preview grant (`?g=` or `Authorization: Bearer`) and `Origin` matching `RUSUI_PREVIEW_BASE`; 8 KiB form `text`, `url`, `selector`; share grant is 403 |
 
-A `text/html` response includes a plane-owned comment control that POSTs
-`/comment` with the grant query (`text`, `url`, `selector`). Non-HTML
-responses are unchanged. The operator cookie is not used on this origin.
-A guest Content-Security-Policy may hide the control.
+Every response sets `X-Robots-Tag: noindex` and `Referrer-Policy: no-referrer`.
+A `text/html` response for an operator grant includes a plane-owned comment
+control that POSTs `/comment` with the grant query (`text`, `url`, `selector`).
+Share grants are read-only: no comment control, no terminal, no plane routes.
+Non-HTML responses are unchanged. The operator cookie is not used on this
+origin. A guest Content-Security-Policy may hide the control.
 
 The grant is a separate secret from the operator cookie. An operator cookie
 on this origin is refused. Minting requires the origin to be set and
@@ -412,7 +424,10 @@ comment per durable result; it stays false in the starter. The
 requires the configured agent GitHub credential; it is off in the starter.
 `repair` is a category name or empty (off). `repair: docs` admits
 `rusui:repair` documentation issues through the same implement path;
-it also requires `implement: true`. Overlay cannot enable it. `land`
+it also requires `implement: true`. Overlay cannot enable it. Project
+`share` (default off) admits operator-invited viewer preview grants for
+one declared service (`rusui share`); TTL is `1h`, `4h`, or `24h`. Overlay
+cannot enable it. `land`
 remains unauthorized by the current contract and should stay false.
 The test fixture's comments/close settings are for dry-run coverage, not an
 operator profile. The `local` session kind is experimental, default-off, and
@@ -438,6 +453,7 @@ defaults:
   max_repairs_per_repo_per_utc_day: 1
 projects:
   rusui:
+    share: false
     repos:
       owner/name:
         visibility: public

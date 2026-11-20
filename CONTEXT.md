@@ -151,6 +151,10 @@ _Avoid_: hypervisor, second host
 The only credential in a P1 guest (ADR 0080): D3’s 32-byte token, ten-minute TTL, hashed at rest, renewed on heartbeat. Git HTTP auth and `XAI_API_KEY` in the guest are this grant, not GitHub or xAI secrets. The plane mints no third-party identity beside it ([ADR 0033](docs/decisions/0033-third-party-identity-deferred.md)).
 _Avoid_: PAT, installation token, `auth.json`, xAI API key, registry or cloud key (in the guest)
 
+**Share grant**:
+An operator-invited, read-only preview grant for one declared service ([ADR 0096](docs/decisions/0096-operator-invited-viewer-preview.md)). Distinct class from the operator preview grant. Project `share` (default off). TTL `1h`, `4h`, or `24h`. Overlay cannot enable it. Guest, worker, and turn never mint it.
+_Avoid_: forwarding the operator grant, unauthenticated URL, viewer writes, guest mint
+
 **Wake secret**:
 A project `secrets` allowlist of plane ids. At wake the plane injects values from `RUSUI_SECRET_<ID>` at `/run/rusui/secrets/<id>` and as uppercase env. On sleep they are gone. The receipt names the id, session, and turn, not the value ([ADR 0066](docs/decisions/0066-inject-secret-at-wake.md)).
 _Avoid_: long-lived token in the image, OIDC (ADR 0033)

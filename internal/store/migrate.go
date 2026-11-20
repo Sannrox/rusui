@@ -10,7 +10,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 61
+const CurrentSchema = 62
 
 // ReadableFloor is the oldest schema version whose binary can still read and
 // write a store at CurrentSchema (ADR 0089 D8). An expand-only migration,
@@ -18,7 +18,7 @@ const CurrentSchema = 61
 // migration, which removes, renames or changes the meaning of anything an
 // older release reads, raises it to its own version. Binaries from before
 // the floor existed refuse every newer schema, so it starts here.
-const ReadableFloor = 58
+const ReadableFloor = 62
 
 // floorSQL creates the one-row table holding the floor of the store's
 // schema. It lives outside the versioned migrations so a binary can read it
@@ -755,6 +755,14 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 62 {
+		if err := migrateV62(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 62); err != nil {
+			return err
+		}
+	}
 	if err := writeFloor(s.DB); err != nil {
 		return err
 	}
@@ -764,6 +772,40 @@ func (s *Store) migrate() error {
 		}
 	}
 	return nil
+}
+
+// migrateV62 stores preview grant class and the operator generation that
+// minted a share grant (#818, ADR 0096). Existing rows stay operator
+// class with generation 0. Contract: grant_class changes the meaning of
+// preview_grants rows an older GetPreviewGrant reads as operator grants,
+// so ReadableFloor is 62.
+func migrateV62(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('preview_grants') WHERE name='grant_class'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := db.Exec(`ALTER TABLE preview_grants ADD COLUMN grant_class TEXT NOT NULL DEFAULT 'operator'`); err != nil {
+			return err
+		}
+	}
+	n = 0
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('preview_grants') WHERE name='operator_generation'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := db.Exec(`ALTER TABLE preview_grants ADD COLUMN operator_generation INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS operator_generation (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  token_hash TEXT NOT NULL,
+  generation INTEGER NOT NULL
+);
+`)
+	return err
 }
 
 // migrateV61 records an operator pin on an environment so idle sleep

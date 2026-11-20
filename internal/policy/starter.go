@@ -4,6 +4,8 @@ const starterYAML = `# Operator default (policy v2, keyed by project). Copy to p
 # comments/close authorize v1 dry-run intended-actions, not live GitHub writes.
 # comment authorizes live GitHub comments (default off).
 # repair is a category name or empty (off). Overlay cannot enable it.
+# share is a project opt-in for operator-invited viewer preview grants
+# (ADR 0096). Default off. Overlay cannot enable it. TTL is 1h, 4h, or 24h.
 # Unknown fields fail closed.
 version: 2
 defaults:
@@ -85,6 +87,7 @@ guests:
 projects:
   rusui:
     size: medium
+    share: false
     # Optional guest choice; omit to retain RUSUI_GUEST fallback.
     # guests:
     #   default: shikigami

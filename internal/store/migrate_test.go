@@ -164,6 +164,18 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('environments') WHERE name='pinned'`).Scan(&pinnedCol); err != nil || pinnedCol != 1 {
 		t.Fatalf("environments.pinned missing after upgrade: %d %v", pinnedCol, err)
 	}
+	var grantClassCol int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('preview_grants') WHERE name='grant_class'`).Scan(&grantClassCol); err != nil || grantClassCol != 1 {
+		t.Fatalf("preview_grants.grant_class missing after upgrade: %d %v", grantClassCol, err)
+	}
+	var opGenCol int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('preview_grants') WHERE name='operator_generation'`).Scan(&opGenCol); err != nil || opGenCol != 1 {
+		t.Fatalf("preview_grants.operator_generation missing after upgrade: %d %v", opGenCol, err)
+	}
+	var opGenTable int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='operator_generation'`).Scan(&opGenTable); err != nil || opGenTable != 1 {
+		t.Fatalf("operator_generation missing after upgrade: %d %v", opGenTable, err)
+	}
 
 	j, err := JobState(s, "Sannrox/rusui", 42)
 	if err != nil {

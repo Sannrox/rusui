@@ -316,7 +316,14 @@ CREATE TABLE preview_grants (
   port BIGINT NOT NULL,
   expires_at TEXT NOT NULL,
   revoked BIGINT NOT NULL DEFAULT 0,
-  service_name TEXT
+  service_name TEXT,
+  grant_class TEXT NOT NULL DEFAULT 'operator',
+  operator_generation BIGINT NOT NULL DEFAULT 0
+);
+CREATE TABLE operator_generation (
+  id BIGINT PRIMARY KEY CHECK (id = 1),
+  token_hash TEXT NOT NULL,
+  generation BIGINT NOT NULL
 );
 CREATE TABLE environment_services (
   environment_id BIGINT NOT NULL,

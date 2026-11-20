@@ -221,7 +221,7 @@ func includeReceiptAction(a store.Action, revisionID int64) bool {
 		return *a.ReviewRevisionID == revisionID
 	}
 	switch a.Type {
-	case "preview.mint", "workspace.put":
+	case "preview.mint", "preview.share", "workspace.put":
 		return true
 	}
 	return false

@@ -52,7 +52,7 @@ projects:
 		t.Fatalf("repo %+v ok=%v", r, ok)
 	}
 	p, ok := e.Project("rusui")
-	if !ok || p.Egress != EgressTrusted || !p.AllowsKind(KindReview) {
+	if !ok || p.Egress != EgressTrusted || !p.AllowsKind(KindReview) || p.Share {
 		t.Fatalf("project %+v", p)
 	}
 	if p.MaxConcurrentLeases() != 1 {
@@ -85,6 +85,28 @@ projects:
 	r, ok := e.Repo("Sannrox/rusui")
 	if !ok || !r.Comments || !r.Comment {
 		t.Fatalf("live comment %+v ok=%v", r, ok)
+	}
+}
+
+func TestParseProjectShare(t *testing.T) {
+	e, err := Parse([]byte(`
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+projects:
+  rusui:
+    share: true
+    repos:
+      Sannrox/rusui:
+        visibility: public
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, ok := e.Project("rusui")
+	if !ok || !p.Share {
+		t.Fatalf("share %+v ok=%v", p, ok)
 	}
 }
 
@@ -189,6 +211,7 @@ projects:
 		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{command: npm, verdict: reject}]\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    tenant: Acme\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    task_base: branch\n", 1),
+		strings.Replace(good, "never_release: true\n", "never_release: true\n  share: true\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    gitlab:\n      group/project:\n        project_id: 1\n        comment: true\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    gitlab:\n      group/project: {}\n", 1),
 	}
