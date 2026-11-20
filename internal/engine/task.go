@@ -33,6 +33,7 @@ type TaskSpec struct {
 	ContextRefs      []string
 	InstructionPaths []string // repository-offered extra paths; cannot expand scope
 	BudgetRepairs    int
+	Files            []store.PromptFile
 }
 
 var fullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -79,7 +80,11 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 	if !ok || !p.AllowsKind(policy.KindRun) {
 		return nil, fmt.Errorf("policy")
 	}
-	if _, _, err := e.chooseGuest(project, spec.Guest, pol); err != nil {
+	_, entry, err := e.chooseGuest(project, spec.Guest, pol)
+	if err != nil {
+		return nil, err
+	}
+	if err := prepareCreatePromptFiles(spec.Prompt, spec.Files, entry); err != nil {
 		return nil, err
 	}
 	if spec.EffortKey == "" || spec.Prompt == "" || spec.Repo == "" || spec.Ref == "" || spec.BaseSHA == "" {
@@ -193,6 +198,9 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 				Title: "run", Body: spec.Prompt, DefaultBranch: spec.Ref, MainSHA: spec.BaseSHA,
 			}
 			if err := store.SaveSnapshotTx(tx, spec.Repo, item, 1, it); err != nil {
+				return err
+			}
+			if err := e.bindCreatePromptFilesTx(tx, sid, spec.Repo, item, spec.Files); err != nil {
 				return err
 			}
 			id, err := store.InsertTaskTx(tx, store.Task{

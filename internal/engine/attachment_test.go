@@ -179,6 +179,126 @@ func TestPromptAttachmentPDFAndUnsupported(t *testing.T) {
 	}
 }
 
+func TestCreateRunFilesReachClaim(t *testing.T) {
+	h := setup(t)
+	sid, err := h.e.StartRunFiles("test", "inspect", "", "", "", "", "", "", "", []store.PromptFile{{Name: "shot.png", Body: png1x1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest("POST", h.http.URL+"/jobs/claim", strings.NewReader(`{"repo":"example/test-repo"}`))
+	req.Header.Set("Authorization", "Bearer wsec")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("claim %d %s", res.StatusCode, b)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
+	listed, _ := out["attachments"].([]any)
+	if len(listed) != 1 {
+		t.Fatalf("claim attachments %v", out["attachments"])
+	}
+	row, _ := listed[0].(map[string]any)
+	sum := sha256.Sum256(png1x1)
+	digest := hex.EncodeToString(sum[:])
+	if row["name"] != "shot.png" || row["digest"] != digest {
+		t.Fatalf("claim attachment %v", row)
+	}
+	atts, err := store.ListPromptAttachments(h.st, sid, 1)
+	if err != nil || len(atts) != 1 || atts[0].Name != "shot.png" || atts[0].Digest != digest {
+		t.Fatalf("stored %+v %v", atts, err)
+	}
+}
+
+func TestCreateSessionAttachmentsHTTP(t *testing.T) {
+	h := setup(t)
+	payload, err := json.Marshal(map[string]any{
+		"kind":   "run",
+		"prompt": "inspect",
+		"attachments": []map[string]string{{
+			"name":    "shot.png",
+			"content": base64.StdEncoding.EncodeToString(png1x1),
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest("POST", h.http.URL+"/projects/test/sessions", bytes.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer wsec")
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("create %d %s", res.StatusCode, b)
+	}
+	var created struct {
+		SessionID int64 `json:"session_id"`
+	}
+	if err := json.Unmarshal(b, &created); err != nil || created.SessionID < 1 {
+		t.Fatalf("created %s", b)
+	}
+	atts, err := store.ListPromptAttachments(h.st, created.SessionID, 1)
+	if err != nil || len(atts) != 1 || atts[0].Name != "shot.png" {
+		t.Fatalf("stored %+v %v", atts, err)
+	}
+
+	bad := `{"kind":"run","prompt":"inspect","attachments":[{"name":"clip.wav","content":"` + base64.StdEncoding.EncodeToString([]byte("RIFF")) + `"}]}`
+	req, _ = http.NewRequest("POST", h.http.URL+"/projects/test/sessions", strings.NewReader(bad))
+	req.Header.Set("Authorization", "Bearer wsec")
+	req.Header.Set("Content-Type", "application/json")
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest || !strings.Contains(string(out), "unsupported") {
+		t.Fatalf("unsupported %d %s", res.StatusCode, out)
+	}
+}
+
+func TestCreateSessionNativeGuestRefusesAttachments(t *testing.T) {
+	h := setup(t)
+	h.e.DefaultGuest = "claude"
+	payload, err := json.Marshal(map[string]any{
+		"kind":   "run",
+		"prompt": "inspect",
+		"attachments": []map[string]string{{
+			"name":    "shot.png",
+			"content": base64.StdEncoding.EncodeToString(png1x1),
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest("POST", h.http.URL+"/projects/test/sessions", bytes.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer wsec")
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _ := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest || !strings.Contains(string(out), "native Claude attachments unsupported") {
+		t.Fatalf("claude %d %s", res.StatusCode, out)
+	}
+	var n int
+	if err := h.st.DB.QueryRow(`SELECT COUNT(*) FROM sessions WHERE kind='run'`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("run session stored %d %v", n, err)
+	}
+}
+
 func TestPromptAttachmentHTTP(t *testing.T) {
 	h := setup(t)
 	sid, err := h.e.StartRun("test", "first", "")

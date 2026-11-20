@@ -148,7 +148,7 @@ func TestReadCLIMatchesPlaneAndDoesNotAttach(t *testing.T) {
 		t.Fatalf("second read\n%s\n%s", first, out.String())
 	}
 
-	follow, err := newPromptRequest(hs.URL, "op-tok", id, "narrow the diff", false, false)
+	follow, err := newPromptRequest(hs.URL, "op-tok", id, "narrow the diff", false, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -26,12 +26,17 @@ func (e *Engine) StartRunGuest(project, prompt, idem, size, mode, guest string) 
 }
 
 func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode, act, createdBy string) (int64, error) {
+	return e.StartRunFiles(project, prompt, idem, size, mode, guest, execMode, act, createdBy, nil)
+}
+
+func (e *Engine) StartRunFiles(project, prompt, idem, size, mode, guest, execMode, act, createdBy string, files []store.PromptFile) (int64, error) {
 	pol := e.PolicySnapshot()
 	p, ok := pol.Project(project)
 	if !ok || !p.AllowsKind(policy.KindRun) {
 		return 0, fmt.Errorf("policy")
 	}
-	if _, _, err := e.chooseGuest(project, guest, pol); err != nil {
+	_, entry, err := e.chooseGuest(project, guest, pol)
+	if err != nil {
 		return 0, err
 	}
 	if size != "" {
@@ -48,10 +53,13 @@ func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode
 	if prompt == "" {
 		return 0, fmt.Errorf("prompt required")
 	}
+	if err := prepareCreatePromptFiles(prompt, files, entry); err != nil {
+		return 0, err
+	}
 	repo, sha := e.operatorSessionPin(p)
 	var sessionID int64
 	created := false
-	err := e.admitStart(AdmitRequest{Project: project, Kind: store.SessionKindRun, Repo: repo, BaseSHA: sha, Actor: admitActor(act, createdBy, sessionTenant(p)), PromptSHA256: promptDigest(prompt)}, "", func(g *admitGate) error {
+	err = e.admitStart(AdmitRequest{Project: project, Kind: store.SessionKindRun, Repo: repo, BaseSHA: sha, Actor: admitActor(act, createdBy, sessionTenant(p)), PromptSHA256: promptDigest(prompt)}, "", func(g *admitGate) error {
 		return e.Store.Tx(func(tx *store.Tx) error {
 			created = false
 			paused, err := store.Paused(tx, project)
@@ -138,6 +146,9 @@ func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode
 				Title: "run", Body: prompt, DefaultBranch: "main", MainSHA: sha,
 			}
 			if err := store.SaveSnapshotTx(tx, repo, item, 1, it); err != nil {
+				return err
+			}
+			if err := e.bindCreatePromptFilesTx(tx, sid, repo, item, files); err != nil {
 				return err
 			}
 			if idem != "" {

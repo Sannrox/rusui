@@ -5,9 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sannrox/rusui/internal/guest"
 	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
 )
+
+// createPromptAttachmentSeq is the attachment seq for the first turn.
+// Follow-up seqs start at 1, so 0 cannot collide with a later prompt.
+const createPromptAttachmentSeq = 0
 
 func (e *Engine) PromptFollowUp(sessionID int64, prompt string) (int64, int, error) {
 	return e.promptFollowUp(sessionID, prompt, nil)
@@ -251,6 +256,50 @@ func hasUnclaimedFollowUp(j *store.Job) bool {
 		return false
 	}
 	return j.ClaimedRevision != 0 || j.PendingRevision != 1
+}
+
+func refuseNativeAttachments(entry guest.Entry) error {
+	switch entry.Protocol {
+	case guest.ProtocolClaude:
+		return fmt.Errorf("native Claude attachments unsupported")
+	case guest.ProtocolCodex:
+		return fmt.Errorf("native Codex attachments unsupported")
+	default:
+		return nil
+	}
+}
+
+func prepareCreatePromptFiles(prompt string, files []store.PromptFile, entry guest.Entry) error {
+	if len(files) == 0 {
+		return nil
+	}
+	if err := validatePromptFiles(prompt, files); err != nil {
+		return err
+	}
+	return refuseNativeAttachments(entry)
+}
+
+func (e *Engine) bindCreatePromptFilesTx(tx *store.Tx, sessionID int64, repo string, item int, files []store.PromptFile) error {
+	if len(files) == 0 {
+		return nil
+	}
+	turns, err := store.ListTurnsForSessionTx(tx, sessionID)
+	if err != nil {
+		return err
+	}
+	if len(turns) == 0 {
+		return fmt.Errorf("no turns")
+	}
+	stored, err := store.InsertPromptAttachmentsTx(e.Store, tx, sessionID, createPromptAttachmentSeq, files, e.now())
+	if err != nil {
+		return err
+	}
+	if err := store.BindPromptAttachmentsTx(tx, sessionID, createPromptAttachmentSeq, 1); err != nil {
+		return err
+	}
+	sess := &store.Session{ID: sessionID, Repo: repo, Item: item}
+	j := &store.Job{ID: turns[0].ID, Repo: repo, Item: item}
+	return insertPromptFileReceiptsTx(tx, sess, j, stored)
 }
 
 func validatePromptFiles(prompt string, files []store.PromptFile) error {

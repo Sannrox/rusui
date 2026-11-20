@@ -275,7 +275,7 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/readyz` | none; JSON topology report, including a `store` check that fails when the store does not answer within 2s; 200 ready / 503 not ready |
 | `GET` | `/auth/oidc` | public OIDC client metadata; 404 when disabled |
 | `GET` | `/auth/oidc/session` | validate operator bearer; 204 when accepted, 401 when refused |
-| `POST` | `/projects/{slug}/sessions` | operator or worker token; JSON `kind` `run` (prompt) or `local`; optional `Idempotency-Key`; 201 `{session_id, kind}`; unknown `kind` is 400 |
+| `POST` | `/projects/{slug}/sessions` | operator or worker token; JSON `kind` `run` (prompt) or `local`; optional `attachments` `[{name, content}]` as base64 on `run`, same kinds and caps as follow-up turns; optional `Idempotency-Key`; 201 `{session_id, kind}`; unknown `kind` is 400 |
 | `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, `execution_mode`, `act`, `tools` (active ACP kinds), and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, revoked grant, or another member's user-mode session |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript and console file diff, no terminal |
 | `GET` | `/sessions/{id}/read/follow` | operator token; SSE of the transcript then live `entry` / `state` / `turn` until completed, failed, or cancelled; query `after=<seq>` resumes without a gap or a repeat; worker token is 401 |

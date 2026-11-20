@@ -16,23 +16,30 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, promptAttachmentBodyCap)
 	var req struct {
-		Kind          string   `json:"kind"`
-		Guest         string   `json:"guest"`
-		Prompt        string   `json:"prompt"`
-		Size          string   `json:"size"`
-		Mode          string   `json:"mode"`
-		ExecutionMode string   `json:"execution_mode"`
-		EffortKey     string   `json:"effort_key"`
-		Repo          string   `json:"repo"`
-		Ref           string   `json:"ref"`
-		BaseSHA       string   `json:"base_sha"`
-		AllowedPaths  []string `json:"allowed_paths"`
-		ContextRefs   []string `json:"context_refs"`
-		Argv          []string `json:"argv"`
-		Cwd           string   `json:"cwd"`
+		Kind          string             `json:"kind"`
+		Guest         string             `json:"guest"`
+		Prompt        string             `json:"prompt"`
+		Size          string             `json:"size"`
+		Mode          string             `json:"mode"`
+		ExecutionMode string             `json:"execution_mode"`
+		EffortKey     string             `json:"effort_key"`
+		Repo          string             `json:"repo"`
+		Ref           string             `json:"ref"`
+		BaseSHA       string             `json:"base_sha"`
+		AllowedPaths  []string           `json:"allowed_paths"`
+		ContextRefs   []string           `json:"context_refs"`
+		Argv          []string           `json:"argv"`
+		Cwd           string             `json:"cwd"`
+		Attachments   []promptAttachment `json:"attachments"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	files, err := decodePromptFiles(req.Attachments)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -56,7 +63,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "execution_mode", http.StatusConflict)
 			return
 		}
-		if req.Guest != "" || req.Prompt != "" || req.EffortKey != "" || req.Repo != "" || req.Ref != "" || req.BaseSHA != "" || len(req.AllowedPaths) > 0 || len(req.ContextRefs) > 0 {
+		if req.Guest != "" || req.Prompt != "" || req.EffortKey != "" || req.Repo != "" || req.Ref != "" || req.BaseSHA != "" || len(req.AllowedPaths) > 0 || len(req.ContextRefs) > 0 || len(files) > 0 {
 			http.Error(w, "local session uses its policy-configured runtime", http.StatusBadRequest)
 			return
 		}
@@ -98,9 +105,10 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		task, err := s.Eng.StartTask(r.PathValue("slug"), engine.TaskSpec{
 			EffortKey: req.EffortKey, Prompt: req.Prompt, Repo: req.Repo, Ref: req.Ref, Guest: req.Guest,
 			BaseSHA: req.BaseSHA, AllowedPaths: req.AllowedPaths, ContextRefs: req.ContextRefs,
+			Files: files,
 		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+			writePromptFileError(w, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -122,9 +130,9 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "execution_mode", http.StatusConflict)
 		return
 	}
-	id, err := s.Eng.StartRunExec(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size, req.Mode, req.Guest, req.ExecutionMode, act, createdBy)
+	id, err := s.Eng.StartRunFiles(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size, req.Mode, req.Guest, req.ExecutionMode, act, createdBy, files)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
+		writePromptFileError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
