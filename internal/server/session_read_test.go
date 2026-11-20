@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -24,8 +25,8 @@ func TestSessionReadMatchesConsoleTranscriptAndDiff(t *testing.T) {
 	t.Parallel()
 	_, hs, e := consoleEnv(t)
 	sid := createRunSession(t, hs, "first prompt")
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("hello\n"), 0o600); err != nil {
+	dir := pinnedGitWorkspace(t, map[string]string{"note.txt": "hello\n"})
+	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("hello-guest\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	pointWorkspace(t, e, sid, dir)
@@ -59,7 +60,10 @@ func TestSessionReadMatchesConsoleTranscriptAndDiff(t *testing.T) {
 	if !strings.Contains(diffPage, patch) || !strings.Contains(diffPage, "+hello") {
 		t.Fatalf("console diff %s", diffPage)
 	}
-	if !strings.Contains(view.Diff, patch) || !strings.Contains(view.Diff, "+hello") {
+	if strings.Contains(view.Diff, "--- /dev/null") {
+		t.Fatalf("read dumped files from empty: %s", view.Diff)
+	}
+	if !strings.Contains(view.Diff, "note.txt") || !strings.Contains(view.Diff, "-hello") || !strings.Contains(view.Diff, "+hello-guest") {
 		t.Fatalf("read diff %s", view.Diff)
 	}
 
@@ -123,9 +127,84 @@ func TestSessionReadDoesNotFollowWorkspaceSymlink(t *testing.T) {
 	if strings.Contains(read.body, "host-secret-value") {
 		t.Fatalf("symlink target leaked %s", read.body)
 	}
-	if !strings.Contains(read.body, "not a regular file") {
-		t.Fatalf("symlink state %s", read.body)
+	var view sessionRead
+	if err := json.Unmarshal([]byte(read.body), &view); err != nil {
+		t.Fatal(err)
 	}
+	if view.DiffState != env.FileNoGitPin {
+		t.Fatalf("symlink state %q %s", view.DiffState, read.body)
+	}
+}
+
+// A clean tree against the pin is not a dump of every file from empty, and
+// a pinless workspace states that instead of synthesizing patches (#792).
+func TestSessionReadCleanOrPinlessIsNotDumpFromEmpty(t *testing.T) {
+	t.Parallel()
+	_, hs, e := consoleEnv(t)
+
+	cleanID := createRunSession(t, hs, "clean tree")
+	pointWorkspace(t, e, cleanID, pinnedGitWorkspace(t, map[string]string{"note.txt": "hello\n"}))
+	clean := authedGet(t, hs, "/sessions/"+strconv.FormatInt(cleanID, 10)+"/read", "op-tok")
+	if clean.code != http.StatusOK {
+		t.Fatalf("clean %d %s", clean.code, clean.body)
+	}
+	var cleanView sessionRead
+	if err := json.Unmarshal([]byte(clean.body), &cleanView); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(cleanView.Diff, "--- /dev/null") {
+		t.Fatalf("clean dumped files from empty: %s", cleanView.Diff)
+	}
+	if cleanView.DiffState != env.FileClean || cleanView.Diff != "" {
+		t.Fatalf("clean diff %q state %q", cleanView.Diff, cleanView.DiffState)
+	}
+
+	pinlessID := createRunSession(t, hs, "pinless")
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("hello\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pointWorkspace(t, e, pinlessID, dir)
+	pinless := authedGet(t, hs, "/sessions/"+strconv.FormatInt(pinlessID, 10)+"/read", "op-tok")
+	if pinless.code != http.StatusOK {
+		t.Fatalf("pinless %d %s", pinless.code, pinless.body)
+	}
+	var pinlessView sessionRead
+	if err := json.Unmarshal([]byte(pinless.body), &pinlessView); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(pinlessView.Diff, "--- /dev/null") || strings.Contains(pinlessView.Diff, "note.txt") {
+		t.Fatalf("pinless dumped files: %s", pinless.body)
+	}
+	if pinlessView.DiffState != env.FileNoGitPin || pinlessView.Diff != "" {
+		t.Fatalf("pinless diff %q state %q", pinlessView.Diff, pinlessView.DiffState)
+	}
+}
+
+// pinnedGitWorkspace is a process workspace checked out at a git pin.
+func pinnedGitWorkspace(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, body := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmds := [][]string{
+		{"-c", "init.defaultBranch=main", "init", "-q"},
+		{"add", "-A"},
+		{"-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "pin"},
+	}
+	for _, args := range cmds {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	return dir
 }
 
 func createRunSession(t *testing.T, hs *httptest.Server, prompt string) int64 {
@@ -209,9 +288,9 @@ func consoleGet(t *testing.T, hs *httptest.Server, path string) string {
 	return string(b)
 }
 
-// A container session's read shows the workspace diff through the
-// runtime, and a sleeping environment states its condition without being
-// woken (#440).
+// A container session's read shows git dirt against the pin through one
+// runtime exec, a clean or pinless tree is stated, and a sleeping
+// environment is not woken (#440, #792).
 func TestSessionReadShowsContainerWorkspaceDiff(t *testing.T) {
 	t.Parallel()
 	_, hs, e := consoleEnv(t)
@@ -226,25 +305,44 @@ func TestSessionReadShowsContainerWorkspaceDiff(t *testing.T) {
 		t.Fatal(err)
 	}
 	rt.SetFileContent(box.Handle, "note.txt", []byte("hello\n"))
-	for i := range 20 {
-		rt.SetFileContent(box.Handle, "extra-"+strconv.Itoa(i)+".txt", []byte("x\n"))
-	}
+	const dirt = " M note.txt\n\ndiff --git a/note.txt b/note.txt\n--- a/note.txt\n+++ b/note.txt\n@@ -1 +1 @@\n-hello\n+hello-guest\n"
+	rt.SetGitDiff(box.Handle, dirt, "")
 	read := authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10)+"/read", "op-tok")
-	if rt.Snapshots != 1 || rt.FileReads != 0 {
-		t.Fatalf("read used %d snapshots and %d per-file reads for 21 files, want one snapshot (#449)", rt.Snapshots, rt.FileReads)
+	if rt.GitDiffs != 1 || rt.Snapshots != 0 || rt.FileReads != 0 {
+		t.Fatalf("read used %d git diffs, %d snapshots, %d per-file reads, want one git diff", rt.GitDiffs, rt.Snapshots, rt.FileReads)
 	}
 	var view sessionRead
 	if err := json.Unmarshal([]byte(read.body), &view); err != nil {
 		t.Fatal(read.body)
 	}
-	if view.DiffState != "" || !strings.Contains(view.Diff, "+++ b/note.txt") || !strings.Contains(view.Diff, "+hello") {
+	if view.DiffState != "" || strings.Contains(view.Diff, "--- /dev/null") || !strings.Contains(view.Diff, "note.txt") || !strings.Contains(view.Diff, "+hello-guest") {
 		t.Fatalf("diff %q state %q", view.Diff, view.DiffState)
 	}
+
+	rt.SetGitDiff(box.Handle, "", "")
+	read = authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10)+"/read", "op-tok")
+	if err := json.Unmarshal([]byte(read.body), &view); err != nil {
+		t.Fatal(read.body)
+	}
+	if view.DiffState != env.FileClean || view.Diff != "" {
+		t.Fatalf("clean diff %q state %q", view.Diff, view.DiffState)
+	}
+
+	rt.SetGitDiff(box.Handle, "", env.FileNoGitPin)
+	read = authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10)+"/read", "op-tok")
+	if err := json.Unmarshal([]byte(read.body), &view); err != nil {
+		t.Fatal(read.body)
+	}
+	if view.DiffState != env.FileNoGitPin || view.Diff != "" {
+		t.Fatalf("pinless diff %q state %q", view.Diff, view.DiffState)
+	}
+
 	box.State = store.EnvSleeping
 	if err := store.UpdateEnvironment(e.Store, *box); err != nil {
 		t.Fatal(err)
 	}
 	starts := len(rt.Started)
+	gitCalls := rt.GitDiffs
 	read = authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10)+"/read", "op-tok")
 	if err := json.Unmarshal([]byte(read.body), &view); err != nil {
 		t.Fatal(read.body)
@@ -254,5 +352,8 @@ func TestSessionReadShowsContainerWorkspaceDiff(t *testing.T) {
 	}
 	if len(rt.Started) != starts {
 		t.Fatal("read woke the environment")
+	}
+	if rt.GitDiffs != gitCalls {
+		t.Fatal("read ran git on a sleeping environment")
 	}
 }

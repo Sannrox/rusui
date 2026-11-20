@@ -21,6 +21,10 @@ const (
 	FileRootReplaced = "workspace replaced"
 	// FileSkipped is a file left out once a snapshot reached its total cap.
 	FileSkipped = "skipped: workspace diff too large"
+	// FileNoGitPin is a workspace with no git pin to diff against.
+	FileNoGitPin = "no git pin"
+	// FileClean is a git workspace whose tree matches HEAD (the pin).
+	FileClean = "clean"
 )
 
 // ErrWorkspaceReplaced is a /workspace that is no longer a real
@@ -96,6 +100,7 @@ type WorkspaceInspector interface {
 	WorkspaceNames(id string) ([]string, error)
 	WorkspaceFile(id, name string, limit int64) ([]byte, string, error)
 	WorkspaceSnapshot(id string, fileCap, totalCap int64) ([]WorkspaceEntry, error)
+	WorkspaceGitDiff(id string, cap int64) ([]byte, string, error)
 }
 
 // Inspector returns the container runtime's workspace inspector.

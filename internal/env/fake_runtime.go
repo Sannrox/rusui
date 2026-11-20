@@ -28,9 +28,12 @@ type FakeRuntime struct {
 	Removed         []string
 	Execs           [][]string
 	Stdio           []StdioCall
-	// Snapshots and FileReads count WorkspaceSnapshot and WorkspaceFile calls.
+	// Snapshots, FileReads, and GitDiffs count WorkspaceSnapshot,
+	// WorkspaceFile, and WorkspaceGitDiff calls.
 	Snapshots int
 	FileReads int
+	GitDiffs  int
+	gitDiff   map[string]gitDiffResult
 	// Links are guest-link starts (ADR 0047). The fake guest side binds
 	// nothing and reports ready, so a turn's link starts and stays up.
 	Links      []StdioCall
@@ -50,6 +53,11 @@ type StdioCall struct {
 	Handle string
 	Argv   []string
 	Env    []string
+}
+
+type gitDiffResult struct {
+	Body  string
+	State string
 }
 
 func (f *FakeRuntime) CreateAndStart(spec Spec) (string, error) {
@@ -395,6 +403,31 @@ func (f *FakeRuntime) WorkspaceSnapshot(id string, fileCap, totalCap int64) ([]W
 		}
 	}
 	return out, nil
+}
+
+// SetGitDiff is the fake container's git status/diff for a later read.
+func (f *FakeRuntime) SetGitDiff(id, body, state string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.gitDiff == nil {
+		f.gitDiff = map[string]gitDiffResult{}
+	}
+	f.gitDiff[id] = gitDiffResult{Body: body, State: state}
+}
+
+// WorkspaceGitDiff returns the fake git dirt, or no git pin when none was set.
+func (f *FakeRuntime) WorkspaceGitDiff(id string, cap int64) ([]byte, string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.GitDiffs++
+	g, ok := f.gitDiff[id]
+	if !ok {
+		return nil, FileNoGitPin, nil
+	}
+	if g.State != "" {
+		return nil, g.State, nil
+	}
+	return interpretGitDiff([]byte(g.Body), cap)
 }
 
 // fakeLinkGuest is a guest-link guest side with no listeners: it reports
