@@ -25,7 +25,7 @@ is stale.
 | [0009](0009-credential-broker.md) | P1 credential broker | Accepted; amended by 0053, 0066, 0075, 0084 |
 | [0010](0010-hybrid-roadmap-sequence.md) | Hybrid core-1.0 sequence and earlier gate mapping | Accepted; amended by 0046 |
 | [0011](0011-unattended-session-contract.md) | Recoverable unattended-session contract | Accepted |
-| [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077, 0088 |
+| [0012](0012-operator-access.md) | Single-operator access for terminal and preview | Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077, 0088, 0096 |
 | [0013](0013-publication-authority.md) | Exact-artifact verification and plane-owned publication | Superseded by 0015 |
 | [0014](0014-pilot-evaluation-deferred.md) | Ten-task pilot evaluation is deferred pending live plane-owned publication | Superseded by 0023 |
 | [0015](0015-agent-publication.md) | The agent publishes its own pull requests | Accepted; amended by 0055, 0068, 0080 |
@@ -50,7 +50,7 @@ is stale.
 | [0034](0034-operator-host-location-deferred.md) | A registered operator host is not a session location yet | Accepted |
 | [0035](0035-live-environment-fork-deferred.md) | Live environment fork is deferred | Accepted |
 | [0036](0036-environment-desktop-deferred.md) | A graphical desktop in the environment is deferred | Accepted |
-| [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Accepted |
+| [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Superseded by 0096 |
 | [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
 | [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted; amended by 0059, 0074, 0083, 0088 |
 | [0040](0040-child-session-delegation-deferred.md) | Child-session delegation is deferred | Superseded by 0071 |
@@ -109,6 +109,7 @@ is stale.
 | [0093](0093-egress-full-proxy.md) | Egress class full forwards HTTP(S) through a link proxy | Accepted |
 | [0094](0094-guest-kernel-isolation-profile.md) | A verified operator backend gives each environment its own guest kernel | Proposed |
 | [0095](0095-drop-1.0-freeze-as-product-goal.md) | Drop the 1.0 freeze as the product goal | Accepted |
+| [0096](0096-operator-invited-viewer-preview.md) | Operator-invited viewer preview grants | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR

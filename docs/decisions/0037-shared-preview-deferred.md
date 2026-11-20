@@ -1,6 +1,6 @@
 # ADR 0037: Sharing a preview without operator authentication is deferred
 
-- Status: Accepted
+- Status: Superseded by [ADR 0096](0096-operator-invited-viewer-preview.md)
 - Date: 2026-09-28
 - Amends: none. [ADR 0012](0012-operator-access.md) stands unchanged.
 - Resolves: [#328](https://github.com/Sannrox/rusui/issues/328)
