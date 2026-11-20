@@ -68,7 +68,7 @@ jobs:
       # scripts job still runs the tagged commit's validator and self-tests.
       - name: Set up Go for main's release checks
         if: inputs.tag != ''
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: main-tree/.go-version
           cache: false
@@ -144,7 +144,7 @@ jobs:
         env:
           SHA: ${{ needs.verify-tag.outputs.sha }}
         run: test "$(git rev-parse HEAD)" = "$SHA"
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .go-version
           cache: true
@@ -176,7 +176,7 @@ jobs:
           if [[ -n "$TAG" ]]; then
             test "$(git describe --tags --match='v*' --exact-match HEAD)" = "$TAG"
           fi
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: .go-version
           cache: true
