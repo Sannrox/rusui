@@ -7,7 +7,9 @@
   are not shared by grant).
 - Resolves: [#605](https://github.com/Sannrox/rusui/issues/605).
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
-  [sekai-chisei#1398](https://github.com/Sannrox/sekai-chisei/issues/1398).
+  [sekai-chisei#1398](https://github.com/Sannrox/sekai-chisei/issues/1398),
+  [ADR 0099](0099-two-attributed-humans-space-mode.md) (space-mode
+  attributed sharing; user-mode stays with `act`).
 - Discussion: none. Merging with this status is the acceptance act.
   Until merge this is a proposal, not implementation authority.
 

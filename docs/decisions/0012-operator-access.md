@@ -1,6 +1,6 @@
 # ADR 0012: Single-operator access for terminal and preview
 
-- Status: Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077, 0088, 0096
+- Status: Accepted; amended by 0032, 0036, 0039, 0059, 0074, 0075, 0076, 0077, 0088, 0096, 0099
 - Date: 2026-09-20
 - Amends: [ADR 0003](0003-operator-surface.md) reachability (credential
   classes, browser session, preview origin). The API-first, CLI-first,
@@ -27,6 +27,10 @@
   [ADR 0096](0096-operator-invited-viewer-preview.md) adds a share
   grant class for a human the operator invites to view one declared
   service; the viewer is not an operator.
+  [ADR 0099](0099-two-attributed-humans-space-mode.md) lets a granted
+  attributed actor read, prompt, and attach a space-mode session.
+  The write lease stays exclusive. User-mode stays with its creator.
+  Policy and setup stay the installing operator.
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
   Objects: operator credential, worker credential, turn grant, browser

@@ -11,7 +11,10 @@
 - Resolves: [#697](https://github.com/Sannrox/rusui/issues/697).
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0076](0076-tenant-isolation.md), [ADR 0077](0077-session-access-grants.md),
-  [ADR 0078](0078-session-execution-modes.md), [#128](https://github.com/Sannrox/rusui/issues/128)
+  [ADR 0078](0078-session-execution-modes.md),
+  [ADR 0099](0099-two-attributed-humans-space-mode.md) (vouched
+  subjects may share a granted space-mode session),
+  [#128](https://github.com/Sannrox/rusui/issues/128)
   (shared-operator governance stays closed).
 - Discussion: none. Merging with this status is the acceptance act.
   Until merge this is a proposal, not implementation authority.

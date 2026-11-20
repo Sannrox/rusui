@@ -1,6 +1,6 @@
 # ADR 0039: Shared-operator governance is deferred
 
-- Status: Accepted; amended by 0059, 0074, 0083, 0088
+- Status: Accepted; amended by 0059, 0074, 0083, 0088, 0099
 - Date: 2026-09-29
 - Amends: none. At acceptance, [ADR 0012](0012-operator-access.md) stood unchanged.
 - Amended by: [ADR 0059](0059-unattributed-operator-retained.md),
@@ -10,6 +10,12 @@
   [ADR 0088](0088-issuer-vouched-subjects.md) (vouched subjects are
   attributed operator calls scoped to one tenant and actor).
   A member id is not identity.
+  [ADR 0099](0099-two-attributed-humans-space-mode.md). 2026-11-20:
+  D1's "A Session is not jointly owned" and D4's "Session sharing
+  does not exist" are superseded for space-mode attributed read,
+  prompt, and attach. Full shared-operator governance, Slack as a
+  plane operator, and a second operator secret remain deferred.
+  This record stays Accepted.
 - Resolves: [#127](https://github.com/Sannrox/rusui/issues/127)
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0003](0003-operator-surface.md) (Slack is notify and approve;
