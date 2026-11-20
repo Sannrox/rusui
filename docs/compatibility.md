@@ -23,7 +23,7 @@ and the plane returns 409 when they differ. Dev builds that report
 | Diagnostics export | redacted `diagnostics.json` | using the bundle as recovery input |
 | Review receipt export | JSON+Markdown schema 1 (`rusui receipt`) | using the files as recovery input; signed bundles |
 | Signed portable session bundles | excluded | not defined |
-| Postgres / HA plane | deferred ([ADR 0089](decisions/0089-redundant-plane.md), [#700](https://github.com/Sannrox/rusui/issues/700)) | not the current store |
+| Postgres | not the current store | Postgres DSN |
 
 ## Migration window
 

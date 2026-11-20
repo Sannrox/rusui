@@ -66,8 +66,7 @@ completeness.
 **Deferred:** microVMs
 ([ADR 0028](docs/decisions/0028-container-isolation-profile.md)), runner
 fleet ([ADR 0029](docs/decisions/0029-single-host-runner.md)),
-HA/Postgres ([ADR 0089](docs/decisions/0089-redundant-plane.md),
-[#700](https://github.com/Sannrox/rusui/issues/700)), shared-operator
+shared-operator
 governance ([ADR 0039](docs/decisions/0039-shared-operator-governance-deferred.md),
 [ADR 0083](docs/decisions/0083-retain-single-operator-access.md)), live
 fork ([ADR 0035](docs/decisions/0035-live-environment-fork-deferred.md)),
