@@ -115,6 +115,9 @@ func TestConfigurationDocumentsPreviewOrigin(t *testing.T) {
 	if !strings.Contains(table, "`?g=`") {
 		t.Fatal("preview-origin table missing grant query ?g=")
 	}
+	if !strings.Contains(table, "text/html") || !strings.Contains(table, "comment control") {
+		t.Fatal("preview origin docs missing in-page HTML comment control")
+	}
 }
 
 func TestPlaneBinaryServesPreviewBeside(t *testing.T) {

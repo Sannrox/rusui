@@ -367,6 +367,11 @@ or a tailnet; do not bind it off loopback.
 | `*` | `/` | preview grant (`?g=` or `Authorization: Bearer`); reverse-proxies the granted environment port |
 | `POST` | `/comment` | preview grant (`?g=` or `Authorization: Bearer`) and `Origin` matching `RUSUI_PREVIEW_BASE`; 8 KiB form `text`, `url`, `selector` |
 
+A `text/html` response includes a plane-owned comment control that POSTs
+`/comment` with the grant query (`text`, `url`, `selector`). Non-HTML
+responses are unchanged. The operator cookie is not used on this origin.
+A guest Content-Security-Policy may hide the control.
+
 The grant is a separate secret from the operator cookie. An operator cookie
 on this origin is refused. Minting requires the origin to be set and
 isolated from the plane host; otherwise the console returns 409.
