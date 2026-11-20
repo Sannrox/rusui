@@ -145,6 +145,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /console/sessions/{id}/terminal/input", s.consoleTermInput)
 	mux.HandleFunc("GET /console/sessions/{id}/terminal/output", s.consoleTermOutput)
 	mux.HandleFunc("POST /console/sessions/{id}/preview", s.consoleMintPreview)
+	mux.HandleFunc("POST /sessions/{id}/preview", s.mintPreview)
 	mux.HandleFunc("POST /approvals/{id}", s.decideApproval)
 	mux.HandleFunc("POST /sessions/{id}/turns", s.followUpTurn)
 	mux.HandleFunc("POST /sessions/{id}/children", s.createChild)

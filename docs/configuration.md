@@ -55,6 +55,10 @@ The owned directory is removed unless `-keep`. Walkthrough:
 claims, and lists leased turns. `rusui resume [-project P]` POSTs `/resume`
 (worker auth) and lifts that pause. `rusui archive SESSION` sleeps that
 session's environment and refuses prompts until `rusui unarchive SESSION`.
+`rusui preview SESSION_ID -port PORT` mints a preview-origin URL (`?g=` grant)
+for that environment port. It uses the static operator token. Unset preview
+origin, unknown session, environment not ready after wake, and port out of
+range are explicit errors and mint nothing.
 `rusui restore -db PATH` restores a copied
 database offline and prints its inventory. On PostgreSQL, set
 `RUSUI_STORE_URL` instead of `-db`; setting both fails. Do not open `rusui.db` while the
@@ -282,6 +286,7 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/sessions/{id}/envlog` | operator token; last pre-clone, pre-setup, setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`pre-clone`/`pre-setup`/`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
 | `GET` | `/sessions/{id}/receipt` | operator or worker token; versioned JSON review receipt (`rusui receipt`); Markdown when `Accept: text/markdown` or `?format=md`; 404 unknown session or no completed review |
 | `POST` | `/sessions/{id}/workspace` | operator token; multipart `file` plus `path` query; 32 MiB cap; workspace-relative only |
+| `POST` | `/sessions/{id}/preview` | operator token; JSON `port` (1024-65535); wakes the environment; 200 `{url}` on the preview origin with `?g=` (`rusui preview`); 404 unknown session; 409 not ready or preview origin unset/not isolated |
 | `GET` | `/sessions/{id}?include=receipts[&receipt_after_id={id}][&process_receipt_after_id={id}]` | operator or worker token; up to 100 environment and 100 local process receipts in ID order; follow `environment_receipts_next_after_id` and `process_receipts_next_after_id` when present |
 | `GET` | `/sessions/{id}?view=review-status&turn_id={turn}` | operator or worker token; compact turn state and revisions for polling |
 | `POST` | `/reviews` | operator or worker token; request one bound pull-request review (`rusui review`); tenant operators only for repositories of their tenant |
