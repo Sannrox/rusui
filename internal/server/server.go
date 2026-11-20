@@ -157,6 +157,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /sessions/{id}/webhook", s.sessionWebhook)
 	mux.HandleFunc("POST /sessions/{id}/archive", s.archiveSession)
 	mux.HandleFunc("POST /sessions/{id}/unarchive", s.unarchiveSession)
+	mux.HandleFunc("POST /sessions/{id}/pin", s.pinSession)
+	mux.HandleFunc("POST /sessions/{id}/unpin", s.unpinSession)
 	mux.HandleFunc("GET /sessions/{id}/grants", s.listSessionGrants)
 	mux.HandleFunc("POST /sessions/{id}/grants", s.grantSessionAccess)
 	mux.HandleFunc("DELETE /sessions/{id}/grants/{tenant}", s.revokeSessionAccess)

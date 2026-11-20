@@ -10,7 +10,7 @@ and `internal/server`. Intent: [ARCHITECTURE.md](../ARCHITECTURE.md).
 | `-addr` | `127.0.0.1:8080` | Listen address. Not restricted to loopback. |
 | `-db` | `rusui.db` | SQLite path. `RUSUI_STORE_URL` overrides it. |
 | `-policy` | `policy.yaml` | Policy file. Reloaded by Slack `reload` or process restart. |
-| `-env-idle-sleep` | `5m` | Sleep managed container environments after this idle period; `0` disables automatic sleep. A live terminal write lease, preview grant, or queued turn keeps the environment awake. Opening the terminal, minting or using a preview, or sending a prompt wakes the same environment. |
+| `-env-idle-sleep` | `5m` | Sleep managed container environments after this idle period; `0` disables automatic sleep. A live terminal write lease, preview grant, queued turn, or operator pin (`rusui pin`) keeps the environment awake. Unpin restores idle sleep. Pin is a state on the same environment, not a second environment kind. Opening the terminal, minting or using a preview, or sending a prompt wakes the same environment. |
 | `-allow-insecure` | false | Start without webhook, worker, and Slack secrets (warns). |
 | `-version` | false | Print version and exit. |
 
@@ -57,7 +57,8 @@ claims, and lists leased turns. `rusui resume [-project P]` POSTs `/resume`
 state, declared size, and one live CPU and memory sample for ready managed
 container environments the operator can read. Sleeping, archived, and process
 environments show that state without a live sample. `rusui archive SESSION`
-sleeps that session's environment and refuses prompts until `rusui unarchive SESSION`.
+sleeps that session's environment, clears a pin, and refuses prompts until `rusui unarchive SESSION`.
+`rusui pin SESSION` keeps the same environment awake across idle sleep until `rusui unpin SESSION`; it is not a second environment kind.
 `rusui preview SESSION_ID -service NAME` mints a preview-origin URL (`?g=` grant)
 for a declared service when it is healthy. `-port PORT` is the operator-only
 raw mint and records no service name. The flags are mutually exclusive. Unset
@@ -284,7 +285,7 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/auth/oidc/session` | validate operator bearer; 204 when accepted, 401 when refused |
 | `POST` | `/projects/{slug}/sessions` | operator or worker token; JSON `kind` `run` (prompt) or `local`; optional `attachments` `[{name, content}]` as base64 on `run`, same kinds and caps as follow-up turns; optional `patch` as base64 git patch on `run` (32 MiB, applied after snapshot prepare, not in `source_hash`); optional `Idempotency-Key`; 201 `{session_id, kind}` for `local`, `{session_id, kind, snapshot_hit, source_hash}` for `run` (`snapshot_hit` is whether workspace prepare reused a snapshot); unknown `kind` is 400 |
 | `GET` | `/sessions` | operator or worker token; session list (`rusui sessions`); optional `project` and `limit`; `include=stats` adds `usage.cpu_millis` and `usage.memory_bytes` from one container-runtime sample for each ready managed environment (`rusui top`); sleeping, archived, and process environments omit `usage` |
-| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, `execution_mode`, `act`, `tools` (active ACP kinds), `services` (name, port, starting/healthy/unhealthy/exited), `services_error` when `.rusui/services.yaml` is invalid, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, revoked grant, or another member's user-mode session |
+| `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, `pinned`, `execution_mode`, `act`, `tools` (active ACP kinds), `services` (name, port, starting/healthy/unhealthy/exited), `services_error` when `.rusui/services.yaml` is invalid, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, revoked grant, or another member's user-mode session |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript, console file diff, and declared services; no terminal |
 | `GET` | `/sessions/{id}/read/follow` | operator token; SSE of the transcript then live `entry` / `state` / `turn` / `service` until completed, failed, or cancelled; query `after=<seq>` resumes without a gap or a repeat; worker token is 401 |
 | `GET` | `/sessions/{id}/logs` | operator or worker token; action receipts for the session |
@@ -324,6 +325,8 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/sessions/{id}/cancel` | operator or worker token; ends the turn, drops queued prompts, and stops the guest's processes |
 | `POST` | `/sessions/{id}/archive` | operator or worker token; sleeps the environment, refuses prompts, and keeps the session row (`rusui archive`) |
 | `POST` | `/sessions/{id}/unarchive` | operator or worker token; allows prompts again on the same environment (`rusui unarchive`); tenant operators may reopen a foreign session only with a live access grant |
+| `POST` | `/sessions/{id}/pin` | operator or worker token; keeps the environment awake across idle sleep (`rusui pin`); not a second environment kind; 409 archived |
+| `POST` | `/sessions/{id}/unpin` | operator or worker token; restores idle sleep (`rusui unpin`) |
 | `GET` | `/sessions/{id}/grants` | operator token; live cross-tenant access grants for a session the caller owns; 404 unknown or foreign-owned |
 | `POST` | `/sessions/{id}/grants` | operator token; JSON `tenant` of the grantee; owning tenant only; 201 created, 409 duplicate live grant |
 | `DELETE` | `/sessions/{id}/grants/{tenant}` | operator token; revoke a live grant; owning tenant only; 204; 404 unknown grant |

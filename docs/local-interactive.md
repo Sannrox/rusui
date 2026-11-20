@@ -209,9 +209,12 @@ rusui preview [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -ser
 rusui preview [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -port 3000 SESSION_ID
 ```
 
-A managed environment sleeps after `-env-idle-sleep`. Opening the console
-terminal (observe or write), minting a preview, following a live preview
-grant, or sending `rusui prompt` or a console prompt wakes it first. The
+A managed environment sleeps after `-env-idle-sleep`. `rusui pin SESSION_ID`
+keeps that same environment awake until `rusui unpin SESSION_ID`; this is not
+a second environment kind. Archive still sleeps it and clears the pin.
+Opening the console terminal (observe or write), minting a preview, following
+a live preview grant, or sending `rusui prompt` or a console prompt wakes it
+first. The
 wake runs `.agents/resume` and the declared services once, then the
 action proceeds on the same environment id and handle. The wake receipt
 names its cause: `operator terminal`, `operator terminal write`,

@@ -696,6 +696,49 @@ func (s *Server) unarchiveSession(w http.ResponseWriter, r *http.Request) {
 	s.setSessionArchive(w, r, false)
 }
 
+func (s *Server) pinSession(w http.ResponseWriter, r *http.Request) {
+	s.setSessionPin(w, r, true)
+}
+
+func (s *Server) unpinSession(w http.ResponseWriter, r *http.Request) {
+	s.setSessionPin(w, r, false)
+}
+
+func (s *Server) setSessionPin(w http.ResponseWriter, r *http.Request, pin bool) {
+	if !s.operatorOrWorkerOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "id", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.visibleOwnedSession(r, id); errors.Is(err, store.ErrNoRows) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if pin {
+		err = s.Eng.PinSession(id)
+	} else {
+		err = s.Eng.UnpinSession(id)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	sess, err := store.GetSession(s.Eng.Store, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "session": sess})
+}
+
 func (s *Server) setSessionArchive(w http.ResponseWriter, r *http.Request, archive bool) {
 	if !s.operatorOrWorkerOK(r) {
 		http.Error(w, "auth", http.StatusUnauthorized)

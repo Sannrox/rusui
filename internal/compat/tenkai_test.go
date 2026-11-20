@@ -38,6 +38,7 @@ var contractVersions = map[string]map[string]string{
 		"sha256:ed9751fbf6815c015253dc8440100b0198b33e1e6d654b32fee1a09ebe4af27a": "1.0.0",
 		"sha256:23aebe272ebe28fcd61b480c923598275eab1f3730c09b872d33119929bef1c5": "1.1.0",
 		"sha256:4742cb28a8ec033c2dd915bfddb52bb185b2cfbc89734a27251f08b58a43da99": "1.2.0",
+		"sha256:1cac81ba84b51c71e1490b5a02d1a1f8f78c746cd8d57418ed203e7a189a6747": "1.3.0",
 	},
 }
 

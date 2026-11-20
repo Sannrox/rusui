@@ -162,6 +162,12 @@ func TestTenantGrantAllowsReopenAndRevoke(t *testing.T) {
 	if code := postJSONStatus(t, hs.URL+path+"/archive", "tok-globex-secret", `{}`); code != http.StatusNotFound {
 		t.Fatalf("globex archived via grant: %d", code)
 	}
+	if code := postJSONStatus(t, hs.URL+path+"/pin", "tok-globex-secret", `{}`); code != http.StatusNotFound {
+		t.Fatalf("globex pinned via grant: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/unpin", "tok-globex-secret", `{}`); code != http.StatusNotFound {
+		t.Fatalf("globex unpinned via grant: %d", code)
+	}
 	if code := postJSONStatus(t, hs.URL+path+"/turns", "tok-globex-secret", `{"prompt":"nope"}`); code != http.StatusNotFound {
 		t.Fatalf("globex prompted via grant: %d", code)
 	}

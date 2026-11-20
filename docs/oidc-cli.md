@@ -115,7 +115,7 @@ Operator API commands use:
 
 The saved login works with `read`, `envlog`, `sync`, `put`, `retry`,
 `disposition`, `sessions`, `prompt`, `logs`, `approve`, `archive`,
-`unarchive`, `review`, and the API-facing ACP editor adapter. Tokens near
+`unarchive`, `pin`, `unpin`, `review`, and the API-facing ACP editor adapter. Tokens near
 expiry refresh automatically before a command starts, only against the
 endpoint pinned at login. Refresh failure is reported; the CLI does not
 silently select another credential. If a long-running stream or operation

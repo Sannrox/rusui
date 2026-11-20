@@ -66,7 +66,9 @@ not imply isolation; multiple local sessions may share that physical host.
 A managed session has no operator-chosen location; it runs on the plane host
 ([ADR 0034](docs/decisions/0034-operator-host-location-deferred.md)). It offers
 no graphical desktop; the operator uses the terminal and HTTP preview
-([ADR 0036](docs/decisions/0036-environment-desktop-deferred.md)).
+([ADR 0036](docs/decisions/0036-environment-desktop-deferred.md)). An operator
+pin keeps that same environment from idle sleep until unpin or archive; it is
+not a second environment kind.
 _Avoid_: project, runner, snapshot (the prepared tree)
 
 **Runner**:
