@@ -554,7 +554,8 @@ func TestPreviewCommentPostsFollowUp(t *testing.T) {
 		return res.StatusCode
 	}
 
-	if code := post(prev.URL, url.Values{"text": {"save button"}, "url": {prev.URL + "/settings"}, "selector": {"#save"}}, false); code != http.StatusNoContent {
+	page := prev.URL + "/settings"
+	if code := post(prev.URL, url.Values{"text": {"save button"}, "url": {page}, "selector": {"#save"}}, false); code != http.StatusNoContent {
 		t.Fatalf("comment %d", code)
 	}
 	sess, err := store.GetSession(e.Store, sid)
@@ -563,6 +564,21 @@ func TestPreviewCommentPostsFollowUp(t *testing.T) {
 	}
 	if !strings.Contains(sess.Prompt, "preview comment") || !strings.Contains(sess.Prompt, "url: ") || !strings.Contains(sess.Prompt, "selector: #save") || !strings.Contains(sess.Prompt, "save button") {
 		t.Fatalf("follow-up %q", sess.Prompt)
+	}
+	comments := sessionActionsOfType(t, hs, sid, actionPreviewComment)
+	if len(comments) != 1 {
+		t.Fatalf("comment rows %d: %+v", len(comments), comments)
+	}
+	if strings.Contains(comments[0].Body, grant) {
+		t.Fatalf("grant token in receipt %s", comments[0].Body)
+	}
+	var payload struct {
+		URL      string `json:"url"`
+		Selector string `json:"selector"`
+		Text     string `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(comments[0].Body), &payload); err != nil || payload.URL != page || payload.Selector != "#save" || payload.Text != "save button" {
+		t.Fatalf("receipt %+v err=%v body=%s", payload, err, comments[0].Body)
 	}
 
 	readReq, err := http.NewRequest(http.MethodGet, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/read", nil)
@@ -622,6 +638,9 @@ func TestPreviewCommentPostsFollowUp(t *testing.T) {
 	}
 	if after, _ := store.GetSession(e.Store, sid); strings.Contains(after.Prompt, "nope") {
 		t.Fatalf("refused comment reached session: %q", after.Prompt)
+	}
+	if later := sessionActionsOfType(t, hs, sid, actionPreviewComment); len(later) != 1 {
+		t.Fatalf("refused comment inserted action %d: %+v", len(later), later)
 	}
 }
 

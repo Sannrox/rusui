@@ -80,6 +80,14 @@ func TestSessionReceiptListsOperatorEnvActions(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.InsertAction(e.Store, store.Action{
+		ID: "comment-1", SessionID: &sid, Repo: "example/test-repo", Item: 8,
+		Type: "preview.comment", ReasonCode: "recorded", EvidenceClass: "plane_observed",
+		LimitSentence: "The operator posted a preview comment for this session.",
+		Body:          `{"url":"/settings","selector":"#save","text":"save button"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	req, err := http.NewRequest(http.MethodGet, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/receipt", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -98,13 +106,15 @@ func TestSessionReceiptListsOperatorEnvActions(t *testing.T) {
 	if err := json.Unmarshal(body, &exp); err != nil {
 		t.Fatal(err)
 	}
-	var put, mint *receipt.Action
+	var put, mint, comment *receipt.Action
 	for i := range exp.Actions {
 		switch exp.Actions[i].Type {
 		case "workspace.put":
 			put = &exp.Actions[i]
 		case "preview.mint":
 			mint = &exp.Actions[i]
+		case "preview.comment":
+			comment = &exp.Actions[i]
 		}
 	}
 	if put == nil || !strings.Contains(put.Body, `"path":"shot.png"`) {
@@ -112,6 +122,9 @@ func TestSessionReceiptListsOperatorEnvActions(t *testing.T) {
 	}
 	if mint == nil || !strings.Contains(mint.Body, `"port":3000`) || !strings.Contains(mint.Body, `"expires_at"`) {
 		t.Fatalf("missing preview.mint %+v", exp.Actions)
+	}
+	if comment == nil || !strings.Contains(comment.Body, `"url":"/settings"`) || !strings.Contains(comment.Body, `"selector":"#save"`) || !strings.Contains(comment.Body, `"text":"save button"`) {
+		t.Fatalf("missing preview.comment %+v", exp.Actions)
 	}
 }
 

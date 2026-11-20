@@ -410,9 +410,10 @@ func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess
 	return u, envRow, g.ExpiresAt, true
 }
 
-// previewComment turns a preview-page comment into a session follow-up.
-// It fails closed on origin: a POST must carry the preview origin, and
-// nothing posts while PreviewBase is unset.
+// previewComment records a preview.comment action (url, selector, text;
+// never the grant token) and turns the same fields into a session
+// follow-up. It fails closed on origin: a POST must carry the preview
+// origin, and nothing posts while PreviewBase is unset.
 func (s *Server) previewComment(w http.ResponseWriter, r *http.Request) {
 	if s.PreviewBase == "" || !previewOriginOK(r.Header.Get("Origin"), s.PreviewBase) {
 		http.Error(w, "origin", http.StatusForbidden)
@@ -459,6 +460,17 @@ func (s *Server) previewComment(w http.ResponseWriter, r *http.Request) {
 	}
 	if b.Len() > previewCommentCap {
 		http.Error(w, "oversized", http.StatusBadRequest)
+		return
+	}
+	sess, err := store.GetSession(s.Eng.Store, g.SessionID)
+	if err != nil {
+		http.Error(w, "session gone", http.StatusConflict)
+		return
+	}
+	if err := recordOperatorEnvAction(s.Eng.Store, sess, actionPreviewComment,
+		"The operator posted a preview comment for this session.",
+		map[string]string{"url": page, "selector": sel, "text": text}); err != nil {
+		http.Error(w, err.Error(), 500)
 		return
 	}
 	if _, _, err := s.Eng.PromptFollowUp(g.SessionID, b.String()); err != nil {

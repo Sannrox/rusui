@@ -251,6 +251,9 @@ func TestShareGrantReadOnlyCommentTerminalPlane(t *testing.T) {
 	if res.StatusCode != http.StatusForbidden || !strings.Contains(string(msg), "read-only") {
 		t.Fatalf("comment %d %s", res.StatusCode, msg)
 	}
+	if comments := sessionActionsOfType(t, hs, sid, actionPreviewComment); len(comments) != 0 {
+		t.Fatalf("share comment inserted action %+v", comments)
+	}
 
 	term, err := http.NewRequest(http.MethodGet, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/terminal", nil)
 	if err != nil {
