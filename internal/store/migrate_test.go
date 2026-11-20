@@ -148,6 +148,14 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='halt_events'`).Scan(&haltEvents); err != nil || haltEvents != 1 {
 		t.Fatalf("halt_events missing after upgrade: %d %v", haltEvents, err)
 	}
+	var previewServiceCol int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('preview_grants') WHERE name='service_name'`).Scan(&previewServiceCol); err != nil || previewServiceCol != 1 {
+		t.Fatalf("preview_grants.service_name missing after upgrade: %d %v", previewServiceCol, err)
+	}
+	var envServices int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='environment_services'`).Scan(&envServices); err != nil || envServices != 1 {
+		t.Fatalf("environment_services missing after upgrade: %d %v", envServices, err)
+	}
 
 	j, err := JobState(s, "Sannrox/rusui", 42)
 	if err != nil {

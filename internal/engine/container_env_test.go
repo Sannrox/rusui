@@ -91,6 +91,25 @@ func TestContainerDriverLifecycleAndScripts(t *testing.T) {
 	}
 }
 
+func TestInvalidServicesFileDoesNotFailProvision(t *testing.T) {
+	h := setup(t)
+	rt := &env.FakeRuntime{DefaultContents: map[string][]byte{
+		env.ServicesRusuiPath: []byte("services:\n  web:\n    command: pnpm dev\n    portal: {}\n"),
+	}}
+	h.e.Container = env.Container{RT: rt, Image: "rusui-guest:test"}
+	created, err := h.e.ProvisionEnvironment(engine.EnvSpec{Name: "box-bad", Kind: env.KindContainer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rt.Execs) != 0 {
+		t.Fatalf("started services from invalid file %#v", rt.Execs)
+	}
+	got, err := store.ListEnvironmentServices(h.st, created.ID)
+	if err != nil || got.ParseError == "" || len(got.Services) != 0 {
+		t.Fatalf("parse error on session: %+v %v", got, err)
+	}
+}
+
 func TestContainerWakeStartsServices(t *testing.T) {
 	h := setup(t)
 	rt := &env.FakeRuntime{DefaultContents: map[string][]byte{

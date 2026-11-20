@@ -939,9 +939,104 @@ func readyPreviewSession(t *testing.T, e *engine.Engine, prompt string) int64 {
 	return sid
 }
 
+func TestAPIMintPreviewNamedService(t *testing.T) {
+	t.Parallel()
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "app-ok")
+	}))
+	t.Cleanup(backend.Close)
+	_, bport, err := net.SplitHostPort(backend.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, _ := strconv.Atoi(bport)
+
+	s, hs, e := consoleEnv(t)
+	prev := httptest.NewServer(s.PreviewHandler())
+	t.Cleanup(prev.Close)
+	s.PreviewBase = prev.URL
+	sid := readyPreviewSession(t, e, "named-preview")
+	sess, _ := store.GetSession(e.Store, sid)
+	envRow, _ := store.GetEnvironment(e.Store, sess.EnvironmentID)
+	if err := os.MkdirAll(filepath.Join(envRow.Handle, ".rusui"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(envRow.Handle, env.ServicesRusuiPath), []byte("services:\n  web:\n    command: true\n    port: "+strconv.Itoa(port)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	body, code := postMintPreviewJSON(t, hs, "op-tok", sid, `{"service":"web"}`)
+	if code != http.StatusOK {
+		t.Fatalf("named mint %d %s", code, body)
+	}
+	var n int
+	var name string
+	if err := e.Store.DB.QueryRow(`SELECT COUNT(*), COALESCE(MAX(service_name),'') FROM preview_grants WHERE session_id=?`, sid).Scan(&n, &name); err != nil || n != 1 || name != "web" {
+		t.Fatalf("named grant n=%d name=%q err=%v", n, name, err)
+	}
+
+	if body, code := postMintPreviewJSON(t, hs, "op-tok", sid, `{"service":"nope"}`); code != http.StatusConflict || !strings.Contains(string(body), "not declared") {
+		t.Fatalf("undeclared %d %s", code, body)
+	}
+	if err := os.WriteFile(filepath.Join(envRow.Handle, env.ServicesRusuiPath), []byte("services:\n  worker:\n    command: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if body, code := postMintPreviewJSON(t, hs, "op-tok", sid, `{"service":"worker"}`); code != http.StatusConflict || !strings.Contains(string(body), "no port") {
+		t.Fatalf("portless %d %s", code, body)
+	}
+	missLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	miss := missLn.Addr().(*net.TCPAddr).Port
+	_ = missLn.Close()
+	if err := os.WriteFile(filepath.Join(envRow.Handle, env.ServicesRusuiPath), []byte("services:\n  web:\n    command: true\n    port: "+strconv.Itoa(miss)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if body, code := postMintPreviewJSON(t, hs, "op-tok", sid, `{"service":"web"}`); code != http.StatusConflict || !strings.Contains(string(body), "not healthy") {
+		t.Fatalf("unhealthy %d %s", code, body)
+	}
+	if body, code := postMintPreviewJSON(t, hs, "op-tok", sid, `{"service":"web","port":`+strconv.Itoa(port)+`}`); code != http.StatusBadRequest {
+		t.Fatalf("both %d %s", code, body)
+	}
+	if err := e.Store.DB.QueryRow(`SELECT COUNT(*) FROM preview_grants WHERE session_id=?`, sid).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("refused mints still one grant: %d %v", n, err)
+	}
+}
+
+func TestAPIMintPreviewRawPortHasNoServiceName(t *testing.T) {
+	t.Parallel()
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "app-ok")
+	}))
+	t.Cleanup(backend.Close)
+	_, bport, err := net.SplitHostPort(backend.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, _ := strconv.Atoi(bport)
+	s, hs, e := consoleEnv(t)
+	prev := httptest.NewServer(s.PreviewHandler())
+	t.Cleanup(prev.Close)
+	s.PreviewBase = prev.URL
+	sid := readyPreviewSession(t, e, "raw-preview")
+	if body, code := postMintPreview(t, hs, "op-tok", sid, port); code != http.StatusOK {
+		t.Fatalf("raw mint %d %s", code, body)
+	}
+	var name any
+	if err := e.Store.DB.QueryRow(`SELECT service_name FROM preview_grants WHERE session_id=?`, sid).Scan(&name); err != nil || name != nil {
+		t.Fatalf("raw service_name=%v err=%v", name, err)
+	}
+}
+
 func postMintPreview(t *testing.T, hs *httptest.Server, token string, sid int64, port int) ([]byte, int) {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPost, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/preview", strings.NewReader(`{"port":`+strconv.Itoa(port)+`}`))
+	return postMintPreviewJSON(t, hs, token, sid, `{"port":`+strconv.Itoa(port)+`}`)
+}
+
+func postMintPreviewJSON(t *testing.T, hs *httptest.Server, token string, sid int64, body string) ([]byte, int) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/preview", strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -951,7 +1046,7 @@ func postMintPreview(t *testing.T, hs *httptest.Server, token string, sid int64,
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, _ := io.ReadAll(res.Body)
+	got, _ := io.ReadAll(res.Body)
 	_ = res.Body.Close()
-	return body, res.StatusCode
+	return got, res.StatusCode
 }

@@ -66,10 +66,64 @@ func TestSessionReadMatchesConsoleTranscriptAndDiff(t *testing.T) {
 	if !strings.Contains(view.Diff, "note.txt") || !strings.Contains(view.Diff, "-hello") || !strings.Contains(view.Diff, "+hello-guest") {
 		t.Fatalf("read diff %s", view.Diff)
 	}
+	if view.Services == nil {
+		t.Fatal("read omitted services")
+	}
 
 	again := authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10)+"/read", "op-tok")
 	if again.body != read.body {
 		t.Fatalf("second read changed\n%s\n%s", read.body, again.body)
+	}
+}
+
+func TestSessionDetailAndReadListServices(t *testing.T) {
+	t.Parallel()
+	_, hs, e := consoleEnv(t)
+	sid := createRunSession(t, hs, "svc")
+	sess, err := store.GetSession(e.Store, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReplaceEnvironmentServices(e.Store, sess.EnvironmentID, store.EnvironmentServiceSet{
+		Services: []store.EnvironmentService{{Name: "web", Port: 3000, State: "healthy"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	detail := authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10), "op-tok")
+	if detail.code != http.StatusOK {
+		t.Fatalf("detail %d %s", detail.code, detail.body)
+	}
+	var got struct {
+		Services []store.EnvironmentService `json:"services"`
+	}
+	if err := json.Unmarshal([]byte(detail.body), &got); err != nil || len(got.Services) != 1 || got.Services[0].Name != "web" || got.Services[0].State != "healthy" {
+		t.Fatalf("detail services %s %v", detail.body, err)
+	}
+	read := authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10)+"/read", "op-tok")
+	if read.code != http.StatusOK {
+		t.Fatalf("read %d %s", read.code, read.body)
+	}
+	var view sessionRead
+	if err := json.Unmarshal([]byte(read.body), &view); err != nil || len(view.Services) != 1 || view.Services[0].Port != 3000 {
+		t.Fatalf("read services %s %v", read.body, err)
+	}
+	console := consoleGet(t, hs, "/console/sessions/"+strconv.FormatInt(sid, 10))
+	if !strings.Contains(console, "web") || !strings.Contains(console, "healthy") {
+		t.Fatalf("console services %s", console)
+	}
+
+	if err := store.ReplaceEnvironmentServices(e.Store, sess.EnvironmentID, store.EnvironmentServiceSet{
+		ParseError: "env: services.yaml: field portal not found in type env.serviceSpec",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	detail = authedGet(t, hs, "/sessions/"+strconv.FormatInt(sid, 10), "op-tok")
+	var bad struct {
+		Services      []store.EnvironmentService `json:"services"`
+		ServicesError string                     `json:"services_error"`
+	}
+	if err := json.Unmarshal([]byte(detail.body), &bad); err != nil || bad.ServicesError == "" || len(bad.Services) != 0 {
+		t.Fatalf("parse error %s %v", detail.body, err)
 	}
 }
 

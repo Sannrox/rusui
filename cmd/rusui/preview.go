@@ -16,27 +16,29 @@ func previewCLI(args []string) {
 	os.Exit(previewMain(args, os.Stdout, os.Stderr))
 }
 
-// previewMain mints a preview grant for one environment port and prints
-// the preview-origin URL. The operator token stays on the plane request;
-// stdout is only that URL (grant as `?g=`).
+// previewMain mints a preview grant for a named service or a raw port and
+// prints the preview-origin URL. The operator token stays on the plane
+// request; stdout is only that URL (grant as `?g=`).
 func previewMain(args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("preview", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	base := fs.String("url", "http://127.0.0.1:8080", "plane URL")
 	token := fs.String("token", os.Getenv("RUSUI_OPERATOR_TOKEN"), "operator token")
 	port := fs.Int("port", 0, "environment port to preview")
+	service := fs.String("service", "", "declared service name to preview")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if fs.NArg() != 1 || *port < 1024 || *port > 65535 {
-		_, _ = fmt.Fprintln(errw, "usage: rusui preview [-url URL] [-token TOKEN] -port PORT SESSION_ID")
+	name := strings.TrimSpace(*service)
+	if fs.NArg() != 1 || (name == "" && (*port < 1024 || *port > 65535)) || (name != "" && *port != 0) {
+		_, _ = fmt.Fprintln(errw, "usage: rusui preview [-url URL] [-token TOKEN] (-service NAME | -port PORT) SESSION_ID")
 		return 2
 	}
 	if _, err := strconv.ParseInt(fs.Arg(0), 10, 64); err != nil {
 		_, _ = fmt.Fprintln(errw, "preview: session id")
 		return 2
 	}
-	req, err := newPreviewRequest(*base, *token, fs.Arg(0), *port)
+	req, err := newPreviewRequest(*base, *token, fs.Arg(0), *port, name)
 	if err != nil {
 		_, _ = fmt.Fprintln(errw, err)
 		return 1
@@ -72,8 +74,14 @@ func previewMain(args []string, out, errw io.Writer) int {
 	return 0
 }
 
-func newPreviewRequest(planeURL, token, id string, port int) (*http.Request, error) {
-	body, err := json.Marshal(map[string]int{"port": port})
+func newPreviewRequest(planeURL, token, id string, port int, service string) (*http.Request, error) {
+	payload := map[string]any{}
+	if service != "" {
+		payload["service"] = service
+	} else {
+		payload["port"] = port
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}

@@ -108,7 +108,7 @@ func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "port", 400)
 		return
 	}
-	u, envRow, expires, ok := s.createPreviewGrant(w, r, sess, port)
+	u, envRow, expires, ok := s.createPreviewGrant(w, r, sess, port, "")
 	if !ok {
 		return
 	}
@@ -136,13 +136,18 @@ func (s *Server) mintPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Port int `json:"port"`
+		Port    int    `json:"port"`
+		Service string `json:"service"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
 		http.Error(w, "port", http.StatusBadRequest)
 		return
 	}
-	u, _, _, ok := s.createPreviewGrant(w, r, sess, req.Port)
+	if req.Service != "" && req.Port != 0 {
+		http.Error(w, "service and port are mutually exclusive", http.StatusBadRequest)
+		return
+	}
+	u, _, _, ok := s.createPreviewGrant(w, r, sess, req.Port, req.Service)
 	if !ok {
 		return
 	}
@@ -152,7 +157,9 @@ func (s *Server) mintPreview(w http.ResponseWriter, r *http.Request) {
 
 // createPreviewGrant wakes the session environment and stores one preview
 // grant. On refusal it writes the response and returns ok=false.
-func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess *store.Session, port int) (string, *store.Environment, time.Time, bool) {
+// A non-empty service name resolves the declared port and requires health
+// at mint. A raw port records no service name.
+func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess *store.Session, port int, service string) (string, *store.Environment, time.Time, bool) {
 	envRow, ok := s.wakeForOperator(w, sess.ID, "operator preview")
 	if !ok {
 		return "", nil, time.Time{}, false
@@ -161,7 +168,14 @@ func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess
 		http.Error(w, "environment not ready", http.StatusConflict)
 		return "", nil, time.Time{}, false
 	}
-	if port < 1024 || port > 65535 {
+	service = strings.TrimSpace(service)
+	if service != "" {
+		resolved, ok := s.resolvePreviewService(w, envRow, service)
+		if !ok {
+			return "", nil, time.Time{}, false
+		}
+		port = resolved.Port
+	} else if port < 1024 || port > 65535 {
 		http.Error(w, "port", 400)
 		return "", nil, time.Time{}, false
 	}
@@ -189,7 +203,7 @@ func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess
 	tok := hex.EncodeToString(raw)
 	g := store.PreviewGrant{
 		TokenHash: store.HashPreviewToken(tok), SessionID: sess.ID, EnvironmentID: envRow.ID,
-		Handle: envRow.Handle, Port: port, ExpiresAt: time.Now().UTC().Add(previewTTL),
+		Handle: envRow.Handle, Port: port, ServiceName: service, ExpiresAt: time.Now().UTC().Add(previewTTL),
 	}
 	if err := store.PutPreviewGrant(s.Eng.Store, g); err != nil {
 		if errors.Is(err, store.ErrEnvironmentUnavailable) {
@@ -484,13 +498,42 @@ func scrubRefererGrant(h http.Header) {
 	h.Set("Referer", u.String())
 }
 
-func (s *Server) previewDial(envRow *store.Environment, port int) (string, error) {
-	var d env.Driver
-	if envRow.Driver == env.KindContainer {
-		d = s.Eng.Container
-	} else {
-		d = s.Eng.Env
+func (s *Server) resolvePreviewService(w http.ResponseWriter, envRow *store.Environment, name string) (env.Service, bool) {
+	d := s.sessionEnvDriver(envRow)
+	if d == nil {
+		http.Error(w, "environment driver unavailable", http.StatusConflict)
+		return env.Service{}, false
 	}
+	svcs, err := env.WorkspaceServices(d, envRow.Handle)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return env.Service{}, false
+	}
+	svc, ok := env.ServiceNamed(svcs, name)
+	if !ok {
+		http.Error(w, "service not declared", http.StatusConflict)
+		return env.Service{}, false
+	}
+	if svc.Port == 0 {
+		http.Error(w, "service has no port", http.StatusConflict)
+		return env.Service{}, false
+	}
+	if env.ProbeService(d, envRow.Handle, svc) != env.ServiceHealthy {
+		http.Error(w, "service not healthy", http.StatusConflict)
+		return env.Service{}, false
+	}
+	return svc, true
+}
+
+func (s *Server) sessionEnvDriver(envRow *store.Environment) env.Driver {
+	if envRow.Driver == env.KindContainer {
+		return s.Eng.Container
+	}
+	return s.Eng.Env
+}
+
+func (s *Server) previewDial(envRow *store.Environment, port int) (string, error) {
+	d := s.sessionEnvDriver(envRow)
 	pf, ok := d.(env.PortForwarder)
 	if !ok || d == nil {
 		return "", fmt.Errorf("port forward unavailable")

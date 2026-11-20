@@ -66,11 +66,11 @@ func TestContainerCapturesHookOutput(t *testing.T) {
 		t.Fatalf("missing resume %+v", resume)
 	}
 	rt.SetFileContent(id, ServicesRusuiPath, []byte("services:\n  web:\n    command: pnpm dev\n"))
-	svcs, err := d.StartServices(id)
+	svcs, err := d.StartServices(id, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(svcs) != 1 || svcs[0].Name != "web" || string(svcs[0].Output) != "ran pnpm dev\n" {
+	if len(svcs.Captures) != 1 || svcs.Captures[0].Name != "web" || string(svcs.Captures[0].Output) != "ran pnpm dev\n" {
 		t.Fatalf("services %+v", svcs)
 	}
 }

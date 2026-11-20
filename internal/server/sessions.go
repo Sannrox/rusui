@@ -243,10 +243,19 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	svcSet, err := store.ListSessionServices(s.Eng.Store, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	response := map[string]any{
 		"session": sess, "turns": turns, "processes": processes,
 		"environment_state": envState, "cancelled": cancelled,
 		"tools": store.SpaceToolSet(sess.ExecutionMode, grants),
+		"services": svcSet.Services,
+	}
+	if svcSet.ParseError != "" {
+		response["services_error"] = svcSet.ParseError
 	}
 	publication, published, err := engine.SessionPublication(s.Eng.Store, id)
 	if err != nil {

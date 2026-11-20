@@ -69,4 +69,4 @@ value = "sha256:d810e28e4f7f18de9700c26c0a73a43521d11bd0b75f9862a2de801242361c61
 
 [compatibility.components.rusui.provides]
 "rusui.admission" = "1.1.0"
-"rusui.environment" = "1.0.0"
+"rusui.environment" = "1.1.0"
