@@ -856,7 +856,7 @@ func ListSessionsFilter(s *Store, f SessionListFilter) ([]Session, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config, COALESCE(s.tenant_id, 'default'), COALESCE(NULLIF(s.created_by,''), s.tenant_id, 'default'), COALESCE(NULLIF(s.execution_mode,''), 'space'), COALESCE(s.act,'')
+	q := `SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config, COALESCE(s.tenant_id, 'default'), COALESCE(NULLIF(s.created_by,''), s.tenant_id, 'default'), COALESCE(NULLIF(s.execution_mode,''), 'space'), COALESCE(s.act,''), COALESCE(e.pinned, 0)
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	args := []any{}
 	var where []string
@@ -886,14 +886,15 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 	for rows.Next() {
 		var sess Session
 		var created string
-		var archived int
+		var archived, pinned int
 		var archivedAt sql.NullString
-		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig, &sess.TenantID, &sess.CreatedBy, &sess.ExecutionMode, &sess.Act); err != nil {
+		if err := rows.Scan(&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig, &sess.TenantID, &sess.CreatedBy, &sess.ExecutionMode, &sess.Act, &pinned); err != nil {
 			return nil, err
 		}
 		if err := applySessionArchive(&sess, archived, archivedAt, created); err != nil {
 			return nil, err
 		}
+		sess.Pinned = pinned != 0
 		out = append(out, sess)
 	}
 	if err := rows.Err(); err != nil {
@@ -1125,17 +1126,18 @@ func GetSessionTx(tx *sql.Tx, id int64) (*Session, error) {
 func scanSession(q sessionRow, id int64) (*Session, error) {
 	var sess Session
 	var created string
-	var archived int
+	var archived, pinned int
 	var archivedAt sql.NullString
-	err := q.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config, COALESCE(s.tenant_id, 'default'), COALESCE(NULLIF(s.created_by,''), s.tenant_id, 'default'), COALESCE(NULLIF(s.execution_mode,''), 'space'), COALESCE(s.act,'')
+	err := q.QueryRow(`SELECT s.id, s.environment_id, e.state, s.kind, s.repo, s.item, s.item_kind, s.state, s.project, s.prompt, s.guest_session_id, s.size, COALESCE(s.mode, ''), s.archived, s.archived_at, COALESCE(s.parent_session_id, 0), s.created_at, s.guest_name, s.guest_pin, s.guest_config, COALESCE(s.tenant_id, 'default'), COALESCE(NULLIF(s.created_by,''), s.tenant_id, 'default'), COALESCE(NULLIF(s.execution_mode,''), 'space'), COALESCE(s.act,''), COALESCE(e.pinned, 0)
 FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id WHERE s.id=?`, id).Scan(
-		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig, &sess.TenantID, &sess.CreatedBy, &sess.ExecutionMode, &sess.Act)
+		&sess.ID, &sess.EnvironmentID, &sess.EnvironmentState, &sess.Kind, &sess.Repo, &sess.Item, &sess.ItemKind, &sess.State, &sess.Project, &sess.Prompt, &sess.GuestSessionID, &sess.Size, &sess.Mode, &archived, &archivedAt, &sess.ParentSessionID, &created, &sess.GuestName, &sess.GuestPin, &sess.GuestConfig, &sess.TenantID, &sess.CreatedBy, &sess.ExecutionMode, &sess.Act, &pinned)
 	if err != nil {
 		return nil, err
 	}
 	if err := applySessionArchive(&sess, archived, archivedAt, created); err != nil {
 		return nil, err
 	}
+	sess.Pinned = pinned != 0
 	if err := fillSessionRetention(q, &sess); err != nil {
 		return nil, err
 	}
@@ -1211,7 +1213,7 @@ func SetSessionEnvironment(s *Store, sessionID, envID int64) error {
 }
 
 func GetEnvironment(s *Store, id int64) (*Environment, error) {
-	row := s.DB.QueryRow(`SELECT id, name, driver, state, handle, source_hash, expires_at, slept_at, cpu_millis, memory_bytes, created_at FROM environments WHERE id=?`, id)
+	row := s.DB.QueryRow(`SELECT id, name, driver, state, handle, source_hash, expires_at, slept_at, cpu_millis, memory_bytes, created_at, pinned FROM environments WHERE id=?`, id)
 	return scanEnvironment(row)
 }
 
@@ -1247,9 +1249,11 @@ func UpdateEnvironment(s *Store, e Environment) error {
 func scanEnvironment(row interface{ Scan(...any) error }) (*Environment, error) {
 	var e Environment
 	var handle, source, exp, slept, created sql.NullString
-	if err := row.Scan(&e.ID, &e.Name, &e.Driver, &e.State, &handle, &source, &exp, &slept, &e.CPUMillis, &e.MemoryBytes, &created); err != nil {
+	var pinned int
+	if err := row.Scan(&e.ID, &e.Name, &e.Driver, &e.State, &handle, &source, &exp, &slept, &e.CPUMillis, &e.MemoryBytes, &created, &pinned); err != nil {
 		return nil, err
 	}
+	e.Pinned = pinned != 0
 	e.Handle = handle.String
 	e.SourceHash = source.String
 	if exp.Valid {

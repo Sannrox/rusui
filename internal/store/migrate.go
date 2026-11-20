@@ -10,7 +10,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 60
+const CurrentSchema = 61
 
 // ReadableFloor is the oldest schema version whose binary can still read and
 // write a store at CurrentSchema (ADR 0089 D8). An expand-only migration,
@@ -747,6 +747,14 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 61 {
+		if err := migrateV61(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 61); err != nil {
+			return err
+		}
+	}
 	if err := writeFloor(s.DB); err != nil {
 		return err
 	}
@@ -756,6 +764,53 @@ func (s *Store) migrate() error {
 		}
 	}
 	return nil
+}
+
+// migrateV61 records an operator pin on an environment so idle sleep
+// skips it until unpin or archive (#780). SQLite cannot alter a CHECK, so
+// environment_receipts is rebuilt to admit pin/unpin kinds. Expand-only:
+// ReadableFloor stays 58.
+func migrateV61(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('environments') WHERE name='pinned'`).Scan(&n); err != nil {
+		return err
+	}
+	if n == 0 {
+		if _, err := db.Exec(`ALTER TABLE environments ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	var hasPinKind int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='environment_receipts' AND sql LIKE '%''pin''%'`).Scan(&hasPinKind); err != nil {
+		return err
+	}
+	if hasPinKind > 0 {
+		return nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`
+CREATE TABLE environment_receipts_v61 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  environment_id INTEGER NOT NULL,
+  session_id INTEGER,
+  kind TEXT NOT NULL CHECK (kind IN ('sleep', 'wake', 'expire', 'replace', 'secret', 'pin', 'unpin')),
+  state TEXT NOT NULL CHECK (state IN ('succeeded', 'failed')),
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+INSERT INTO environment_receipts_v61 (id, environment_id, session_id, kind, state, detail, created_at)
+  SELECT id, environment_id, session_id, kind, state, detail, created_at FROM environment_receipts;
+DROP TABLE environment_receipts;
+ALTER TABLE environment_receipts_v61 RENAME TO environment_receipts;
+CREATE INDEX IF NOT EXISTS environment_receipts_session ON environment_receipts(session_id, id);
+`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // migrateV60 stores an optional operator git patch on a run session until

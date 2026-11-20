@@ -15,8 +15,8 @@ func ListIdleContainerEnvironments(s *Store, now time.Time, ttl, idle time.Durat
 		return nil, nil
 	}
 	cutoff := now.Add(ttl - idle).UTC().Format(time.RFC3339Nano)
-	rows, err := s.DB.Query(`SELECT id, name, driver, state, handle, source_hash, expires_at, slept_at, cpu_millis, memory_bytes, created_at
-FROM environments WHERE name!=? AND driver='container' AND state=? AND expires_at IS NOT NULL AND expires_at<=? ORDER BY id`,
+	rows, err := s.DB.Query(`SELECT id, name, driver, state, handle, source_hash, expires_at, slept_at, cpu_millis, memory_bytes, created_at, pinned
+FROM environments WHERE name!=? AND driver='container' AND state=? AND COALESCE(pinned, 0)=0 AND expires_at IS NOT NULL AND expires_at<=? ORDER BY id`,
 		LocalEnvironmentName, EnvReady, cutoff)
 	if err != nil {
 		return nil, err
@@ -52,10 +52,14 @@ func reserveEnvironmentSleep(s *Store, id int64, now time.Time, ttl, idle time.D
 		reserved = false // Tx may rerun this callback
 		var state, driver, name string
 		var expiresAt sql.NullString
-		if err := tx.QueryRow(`SELECT state, driver, name, expires_at FROM environments WHERE id=?`, id).Scan(&state, &driver, &name, &expiresAt); err != nil {
+		var pinned int
+		if err := tx.QueryRow(`SELECT state, driver, name, expires_at, COALESCE(pinned, 0) FROM environments WHERE id=?`, id).Scan(&state, &driver, &name, &expiresAt, &pinned); err != nil {
 			return err
 		}
 		if state != EnvReady || driver == "" || name == LocalEnvironmentName {
+			return nil
+		}
+		if idle > 0 && pinned != 0 {
 			return nil
 		}
 		if idle > 0 {
@@ -122,6 +126,46 @@ func InsertEnvironmentReceipt(s *Store, envID int64, kind, state, detail string,
 VALUES (?, (SELECT id FROM sessions WHERE environment_id=? ORDER BY id LIMIT 1), ?, ?, ?, ?)`,
 		envID, envID, kind, state, detail, now.UTC().Format(time.RFC3339Nano))
 	return err
+}
+
+// SetEnvironmentPinned records or clears the idle-sleep pin. A transition
+// writes a pin or unpin receipt with state succeeded. Idempotent.
+func SetEnvironmentPinned(s *Store, envID int64, pinned bool, now time.Time) (changed bool, err error) {
+	want := 0
+	kind := "unpin"
+	if pinned {
+		want = 1
+		kind = "pin"
+	}
+	err = s.Tx(func(tx *sql.Tx) error {
+		changed = false
+		var current int
+		if err := tx.QueryRow(`SELECT COALESCE(pinned, 0) FROM environments WHERE id=?`, envID).Scan(&current); err != nil {
+			return err
+		}
+		if current == want {
+			return nil
+		}
+		res, err := tx.Exec(`UPDATE environments SET pinned=? WHERE id=? AND pinned=?`, want, envID, current)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return nil
+		}
+		if _, err := tx.Exec(`INSERT INTO environment_receipts (environment_id, session_id, kind, state, detail, created_at)
+VALUES (?, (SELECT id FROM sessions WHERE environment_id=? ORDER BY id LIMIT 1), ?, 'succeeded', '', ?)`,
+			envID, envID, kind, now.UTC().Format(time.RFC3339Nano)); err != nil {
+			return err
+		}
+		changed = true
+		return nil
+	})
+	return changed, err
 }
 
 // ReplaceSessionEnvironment points the session at its replacement

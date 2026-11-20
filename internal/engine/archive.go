@@ -19,6 +19,9 @@ func (e *Engine) ArchiveSession(sessionID int64) error {
 			return err
 		}
 	}
+	if _, err := store.SetEnvironmentPinned(e.Store, sess.EnvironmentID, false, e.now()); err != nil {
+		return err
+	}
 	turns, err := store.ListTurnsForSession(e.Store, sessionID)
 	if err != nil {
 		return err

@@ -135,6 +135,12 @@ func main() {
 		case "unarchive":
 			unarchiveCLI(os.Args[2:])
 			return
+		case "pin":
+			pinCLI(os.Args[2:])
+			return
+		case "unpin":
+			unpinCLI(os.Args[2:])
+			return
 		case "resume":
 			resumeCLI(os.Args[2:])
 			return

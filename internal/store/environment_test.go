@@ -109,6 +109,62 @@ func TestIdleSleepReservationRechecksRecentActivity(t *testing.T) {
 	}
 }
 
+func TestIdleSleepReservationHonorsPin(t *testing.T) {
+	s := openTestStore(t)
+
+	now := time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
+	ttl, idle := 72*time.Hour, 5*time.Minute
+	expires := now.Add(ttl - idle - time.Minute)
+	envID, err := InsertEnvironment(s, Environment{
+		Name: "idle-pin", Driver: "container", State: EnvReady,
+		Handle: "ctr-pin", ExpiresAt: &expires, CreatedAt: now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionID, err := insertID(s.DB, `INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at)
+VALUES (?, 'run', 'example/test-repo', 1, 'issue', 'open', ?) RETURNING id`, envID, now.Format(time.RFC3339Nano))
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err := SetEnvironmentPinned(s, envID, true, now)
+	if err != nil || !changed {
+		t.Fatalf("pin changed=%v err=%v", changed, err)
+	}
+	sess, err := GetSession(s, sessionID)
+	if err != nil || !sess.Pinned {
+		t.Fatalf("session pin %+v err=%v", sess, err)
+	}
+	candidates, err := ListIdleContainerEnvironments(s, now, ttl, idle)
+	if err != nil || len(candidates) != 0 {
+		t.Fatalf("pinned idle candidates %+v err=%v", candidates, err)
+	}
+	if reserved, err := ReserveIdleEnvironmentSleep(s, envID, now, ttl, idle); err != nil || reserved {
+		t.Fatalf("pinned idle reserve reserved=%v err=%v", reserved, err)
+	}
+	got, err := GetEnvironment(s, envID)
+	if err != nil || got.State != EnvReady || !got.Pinned {
+		t.Fatalf("pinned environment %+v err=%v", got, err)
+	}
+	if reserved, err := ReserveEnvironmentSleep(s, envID, now); err != nil || !reserved {
+		t.Fatalf("pin blocked explicit sleep: reserved=%v err=%v", reserved, err)
+	}
+	if err := RestoreEnvironmentReady(s, envID); err != nil {
+		t.Fatal(err)
+	}
+	changed, err = SetEnvironmentPinned(s, envID, false, now)
+	if err != nil || !changed {
+		t.Fatalf("unpin changed=%v err=%v", changed, err)
+	}
+	if reserved, err := ReserveIdleEnvironmentSleep(s, envID, now, ttl, idle); err != nil || !reserved {
+		t.Fatalf("unpinned idle reserve reserved=%v err=%v", reserved, err)
+	}
+	receipts, err := ListEnvironmentReceipts(s, sessionID)
+	if err != nil || len(receipts) != 2 || receipts[0].Kind != "pin" || receipts[0].State != "succeeded" || receipts[1].Kind != "unpin" || receipts[1].State != "succeeded" {
+		t.Fatalf("pin receipts %+v err=%v", receipts, err)
+	}
+}
+
 func TestIdleSleepListsPastTTL(t *testing.T) {
 	s := openTestStore(t)
 

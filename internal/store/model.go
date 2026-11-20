@@ -16,6 +16,7 @@ type Environment struct {
 	SleptAt     *time.Time
 	CPUMillis   int
 	MemoryBytes int64
+	Pinned      bool
 	CreatedAt   time.Time
 }
 
@@ -57,6 +58,7 @@ type Session struct {
 	Wait               string     `json:"wait,omitempty"`
 	Archived           bool       `json:"archived"`
 	ArchivedAt         *time.Time `json:"archived_at,omitempty"`
+	Pinned             bool       `json:"pinned"`
 	ParentSessionID    int64      `json:"parent_session_id,omitempty"`
 	TenantID           string     `json:"tenant_id,omitempty"`
 	CreatedBy          string     `json:"created_by,omitempty"`

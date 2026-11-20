@@ -160,6 +160,10 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_patches'`).Scan(&sessionPatches); err != nil || sessionPatches != 1 {
 		t.Fatalf("session_patches missing after upgrade: %d %v", sessionPatches, err)
 	}
+	var pinnedCol int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('environments') WHERE name='pinned'`).Scan(&pinnedCol); err != nil || pinnedCol != 1 {
+		t.Fatalf("environments.pinned missing after upgrade: %d %v", pinnedCol, err)
+	}
 
 	j, err := JobState(s, "Sannrox/rusui", 42)
 	if err != nil {
