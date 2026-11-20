@@ -215,6 +215,18 @@ rusui preview [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -ser
 rusui preview [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -port 3000 SESSION_ID
 ```
 
+Mint a share grant when project `share` is true. The invitee opens one declared
+service through a preview-origin URL. TTL is `1h` (default), `4h`, or `24h`.
+The grant is read-only: no terminal, no `POST /comment`, no plane routes, no
+raw-port mint. List and revoke end a live grant. Operator-token rotation ends
+outstanding share grants. Overlay cannot enable sharing.
+
+```bash
+rusui share [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -service web [-ttl 1h|4h|24h] SESSION_ID
+rusui share [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -list SESSION_ID
+rusui share [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -revoke HASH SESSION_ID
+```
+
 A managed environment sleeps after `-env-idle-sleep`. `rusui pin SESSION_ID`
 keeps that same environment awake until `rusui unpin SESSION_ID`; this is not
 a second environment kind. Archive still sleeps it and clears the pin.
@@ -240,6 +252,7 @@ A preview grant survives sleep. Its identity is the environment id and
 handle ([ADR 0012](decisions/0012-operator-access.md)), and sleep keeps
 both, so the same grant URL works after wake without a new mint. In
 practice a live grant keeps the environment awake until the grant ends.
+A share grant does not keep the environment awake past its own expiry.
 
 Preview HTML and `POST /comment` live on that origin, not on `-addr`. Set
 `RUSUI_PREVIEW_BASE` to a loopback URL with an explicit port that is not

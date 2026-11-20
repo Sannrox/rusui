@@ -11,6 +11,7 @@ import (
 
 const (
 	actionPreviewMint  = "preview.mint"
+	actionPreviewShare = "preview.share"
 	actionWorkspacePut = "workspace.put"
 )
 

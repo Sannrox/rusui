@@ -99,6 +99,9 @@ type ProjectYAML struct {
 	// MCPServers are remote MCP tool servers the session connects to
 	// directly. Refused when defaults.mcp_gateway is set.
 	MCPServers []MCPServer `yaml:"mcp_servers"`
+	// Share enables operator-invited viewer preview grants (ADR 0096).
+	// Default off. Overlay cannot enable it.
+	Share bool `yaml:"share"`
 }
 
 // MCPServer is a remote MCP tool server reached over Streamable HTTP.
@@ -186,6 +189,8 @@ type Project struct {
 	// Tenant is the isolation key; empty means the default tenant.
 	Tenant     string
 	MCPServers []MCPServer
+	// Share is the project opt-in for share preview grants (ADR 0096).
+	Share bool
 }
 
 type LocalRuntime struct {
@@ -324,6 +329,7 @@ func Parse(raw []byte) (*Effective, error) {
 			TaskBase:     taskBase,
 			Tenant:       y.Tenant,
 			MCPServers:   y.MCPServers,
+			Share:        y.Share,
 		}
 		for name, ry := range y.Repos {
 			if err := validGitHubRepoName(name); err != nil {

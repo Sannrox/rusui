@@ -122,11 +122,11 @@ silently select another credential. If a long-running stream or operation
 later loses access after expiry, rerun the command to refresh credentials.
 
 `attach` uses console and terminal authority and still requires the static
-operator token. `preview` mints a preview grant and still requires the static
-operator token. Runner/worker-only commands, including `run`, `drain`, and
-`resume`, keep their existing worker credentials. Saved OIDC credentials
-never authorize worker claim/completion routes, turn actions, console
-cookies, terminal write leases, or preview grants.
+operator token. `preview` and `share` mint preview grants and still require
+the static operator token. Runner/worker-only commands, including `run`,
+`drain`, and `resume`, keep their existing worker credentials. Saved OIDC
+credentials never authorize worker claim/completion routes, turn actions,
+console cookies, terminal write leases, preview grants, or share grants.
 
 ## Logout, revocation, and rollback
 

@@ -30,6 +30,9 @@ func (e *Engine) cancelOneSession(sessionID int64) error {
 	if err != nil {
 		return err
 	}
+	if err := store.RevokeShareGrantsForSession(e.Store, sessionID); err != nil {
+		return err
+	}
 	if sess.Kind == store.SessionKindLocal {
 		_, err := e.CancelLocalSession(sessionID)
 		return err

@@ -98,6 +98,15 @@ func TestConfigurationHTTPTableDocumentsPostReviews(t *testing.T) {
 	if !strings.Contains(table, "`POST` | `/sessions/{id}/preview` | operator token") {
 		t.Fatal("HTTP table missing POST /sessions/{id}/preview with operator auth")
 	}
+	if !strings.Contains(table, "`POST` | `/sessions/{id}/share` | operator token") {
+		t.Fatal("HTTP table missing POST /sessions/{id}/share with operator auth")
+	}
+	if !strings.Contains(table, "`GET` | `/sessions/{id}/share` | operator token") {
+		t.Fatal("HTTP table missing GET /sessions/{id}/share with operator auth")
+	}
+	if !strings.Contains(table, "`DELETE` | `/sessions/{id}/share/{hash}` | operator token") {
+		t.Fatal("HTTP table missing DELETE /sessions/{id}/share/{hash} with operator auth")
+	}
 	if strings.Contains(table, "`POST` | `/comment`") {
 		t.Fatal("plane HTTP table must not list preview-origin POST /comment")
 	}
@@ -126,6 +135,9 @@ func TestConfigurationDocumentsPreviewOrigin(t *testing.T) {
 	}
 	if !strings.Contains(table, "`?g=`") {
 		t.Fatal("preview-origin table missing grant query ?g=")
+	}
+	if !strings.Contains(table, "noindex") || !strings.Contains(table, "no-referrer") {
+		t.Fatal("preview origin docs missing noindex and no-referrer")
 	}
 	if !strings.Contains(table, "text/html") || !strings.Contains(table, "comment control") {
 		t.Fatal("preview origin docs missing in-page HTML comment control")

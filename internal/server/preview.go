@@ -44,7 +44,44 @@ func (s *Server) PreviewHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /comment", s.previewComment)
 	mux.HandleFunc("/", s.previewProxy)
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mux.ServeHTTP(&previewHeaderWriter{ResponseWriter: w}, r)
+	})
+}
+
+// previewHeaderWriter stamps crawl-refusal headers on every preview-origin
+// response, including reverse-proxied bodies (ADR 0096 D2).
+type previewHeaderWriter struct {
+	http.ResponseWriter
+	wrote bool
+}
+
+func (w *previewHeaderWriter) WriteHeader(code int) {
+	w.mark()
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *previewHeaderWriter) Write(b []byte) (int, error) {
+	w.mark()
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *previewHeaderWriter) Flush() {
+	w.mark()
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w *previewHeaderWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w *previewHeaderWriter) mark() {
+	if w.wrote {
+		return
+	}
+	w.Header().Set("X-Robots-Tag", "noindex")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.wrote = true
 }
 
 // PreviewListener is the bind address and mux for the isolated preview
@@ -108,7 +145,7 @@ func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "port", 400)
 		return
 	}
-	u, envRow, expires, ok := s.createPreviewGrant(w, r, sess, port, "")
+	u, envRow, expires, ok := s.createPreviewGrant(w, r, sess, previewMint{Port: port})
 	if !ok {
 		return
 	}
@@ -147,7 +184,7 @@ func (s *Server) mintPreview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "service and port are mutually exclusive", http.StatusBadRequest)
 		return
 	}
-	u, _, _, ok := s.createPreviewGrant(w, r, sess, req.Port, req.Service)
+	u, _, _, ok := s.createPreviewGrant(w, r, sess, previewMint{Port: req.Port, Service: req.Service})
 	if !ok {
 		return
 	}
@@ -155,11 +192,129 @@ func (s *Server) mintPreview(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"url": u})
 }
 
+func (s *Server) mintShare(w http.ResponseWriter, r *http.Request) {
+	if !s.OperatorBrowserOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	sess, err := s.visibleOwnedSession(r, mustID(r))
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Port    int    `json:"port"`
+		Service string `json:"service"`
+		TTL     string `json:"ttl"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
+		http.Error(w, "body", http.StatusBadRequest)
+		return
+	}
+	if req.Port != 0 {
+		http.Error(w, "raw-port mint is operator-grant-only", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.Service) == "" {
+		http.Error(w, "service", http.StatusBadRequest)
+		return
+	}
+	ttl, ok := store.ParseShareTTL(req.TTL)
+	if !ok {
+		http.Error(w, "ttl", http.StatusBadRequest)
+		return
+	}
+	u, _, _, ok := s.createPreviewGrant(w, r, sess, previewMint{
+		Service: req.Service, Class: store.PreviewClassShare, TTL: ttl,
+	})
+	if !ok {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"url": u})
+}
+
+func (s *Server) listShare(w http.ResponseWriter, r *http.Request) {
+	if !s.OperatorBrowserOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	sess, err := s.visibleOwnedSession(r, mustID(r))
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := s.FenceOperatorToken(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	list, err := store.ListShareGrants(s.Eng.Store, sess.ID, s.nowUTC())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	out := make([]map[string]any, 0, len(list))
+	for _, g := range list {
+		out = append(out, map[string]any{
+			"token_hash": g.TokenHash,
+			"service":    g.ServiceName,
+			"port":       g.Port,
+			"expires_at": g.ExpiresAt.UTC().Format(time.RFC3339Nano),
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+func (s *Server) revokeShare(w http.ResponseWriter, r *http.Request) {
+	if !s.OperatorBrowserOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	sess, err := s.visibleOwnedSession(r, mustID(r))
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	hash := strings.TrimSpace(r.PathValue("hash"))
+	if hash == "" {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := store.RevokeShareGrant(s.Eng.Store, sess.ID, hash); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type previewMint struct {
+	Port    int
+	Service string
+	Class   string
+	TTL     time.Duration
+}
+
 // createPreviewGrant wakes the session environment and stores one preview
 // grant. On refusal it writes the response and returns ok=false.
 // A non-empty service name resolves the declared port and requires health
-// at mint. A raw port records no service name.
-func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess *store.Session, port int, service string) (string, *store.Environment, time.Time, bool) {
+// at mint. A raw port records no service name and is operator-grant-only.
+func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess *store.Session, mint previewMint) (string, *store.Environment, time.Time, bool) {
+	class := mint.Class
+	if class == "" {
+		class = store.PreviewClassOperator
+	}
+	if class == store.PreviewClassShare {
+		proj, ok := s.Eng.PolicySnapshot().Project(sess.Project)
+		if !ok || !proj.Share {
+			http.Error(w, "sharing disabled", http.StatusConflict)
+			return "", nil, time.Time{}, false
+		}
+		if strings.TrimSpace(mint.Service) == "" || mint.Port != 0 {
+			http.Error(w, "service", http.StatusBadRequest)
+			return "", nil, time.Time{}, false
+		}
+	}
 	envRow, ok := s.wakeForOperator(w, sess.ID, "operator preview")
 	if !ok {
 		return "", nil, time.Time{}, false
@@ -168,7 +323,8 @@ func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess
 		http.Error(w, "environment not ready", http.StatusConflict)
 		return "", nil, time.Time{}, false
 	}
-	service = strings.TrimSpace(service)
+	service := strings.TrimSpace(mint.Service)
+	port := mint.Port
 	if service != "" {
 		resolved, ok := s.resolvePreviewService(w, envRow, service)
 		if !ok {
@@ -201,9 +357,27 @@ func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess
 		return "", nil, time.Time{}, false
 	}
 	tok := hex.EncodeToString(raw)
+	ttl := mint.TTL
+	if ttl <= 0 {
+		ttl = previewTTL
+	}
+	exp := s.nowUTC().Add(ttl)
+	if class == store.PreviewClassShare && envRow.ExpiresAt != nil && envRow.ExpiresAt.Before(exp) {
+		exp = envRow.ExpiresAt.UTC()
+	}
+	var gen int
+	if class == store.PreviewClassShare {
+		var err error
+		gen, err = s.operatorGeneration()
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return "", nil, time.Time{}, false
+		}
+	}
 	g := store.PreviewGrant{
 		TokenHash: store.HashPreviewToken(tok), SessionID: sess.ID, EnvironmentID: envRow.ID,
-		Handle: envRow.Handle, Port: port, ServiceName: service, ExpiresAt: time.Now().UTC().Add(previewTTL),
+		Handle: envRow.Handle, Port: port, ServiceName: service, ExpiresAt: exp,
+		Class: class, OperatorGeneration: gen,
 	}
 	if err := store.PutPreviewGrant(s.Eng.Store, g); err != nil {
 		if errors.Is(err, store.ErrEnvironmentUnavailable) {
@@ -221,8 +395,14 @@ func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess
 	if service != "" {
 		receipt["service"] = service
 	}
-	if err := recordOperatorEnvAction(s.Eng.Store, sess, actionPreviewMint,
-		"The operator minted a preview grant for this session.", receipt); err != nil {
+	action := actionPreviewMint
+	limit := "The operator minted a preview grant for this session."
+	if class == store.PreviewClassShare {
+		action = actionPreviewShare
+		limit = "The operator minted a share grant for this session."
+		receipt["class"] = store.PreviewClassShare
+	}
+	if err := recordOperatorEnvAction(s.Eng.Store, sess, action, limit, receipt); err != nil {
 		http.Error(w, err.Error(), 500)
 		return "", nil, time.Time{}, false
 	}
@@ -240,6 +420,10 @@ func (s *Server) previewComment(w http.ResponseWriter, r *http.Request) {
 	}
 	g, envRow, ok := s.previewGrant(w, r)
 	if !ok {
+		return
+	}
+	if g.Class == store.PreviewClassShare {
+		http.Error(w, "share grant is read-only", http.StatusForbidden)
 		return
 	}
 	// Sleep keeps the grant's binding; a follow-up resumes the session.
@@ -316,14 +500,36 @@ func (s *Server) previewGrant(w http.ResponseWriter, r *http.Request) (*store.Pr
 		http.Error(w, "unknown grant", http.StatusUnauthorized)
 		return nil, nil, false
 	}
-	if g.Revoked || time.Now().UTC().After(g.ExpiresAt) {
+	if g.Revoked || s.nowUTC().After(g.ExpiresAt) {
 		http.Error(w, "expired", http.StatusForbidden)
 		return nil, nil, false
+	}
+	if g.Class == store.PreviewClassShare {
+		gen, err := s.operatorGeneration()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return nil, nil, false
+		}
+		if g.OperatorGeneration != gen {
+			http.Error(w, "expired", http.StatusForbidden)
+			return nil, nil, false
+		}
 	}
 	sess, err := store.GetSession(s.Eng.Store, g.SessionID)
 	if err != nil {
 		http.Error(w, "session gone", http.StatusConflict)
 		return nil, nil, false
+	}
+	if g.Class == store.PreviewClassShare {
+		cancelled, err := store.SessionCancelled(s.Eng.Store, sess.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return nil, nil, false
+		}
+		if cancelled {
+			http.Error(w, "session cancelled", http.StatusConflict)
+			return nil, nil, false
+		}
 	}
 	envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID)
 	if err != nil || envRow.Handle != g.Handle || envRow.ID != g.EnvironmentID {
@@ -391,6 +597,9 @@ func (s *Server) previewProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unavailable", http.StatusBadGateway)
 	}
 	proxy.ModifyResponse = func(res *http.Response) error {
+		if g.Class == store.PreviewClassShare {
+			return nil
+		}
 		return injectPreviewCommentChrome(res, grantTok, page)
 	}
 	r.Host = target.Host
@@ -607,4 +816,25 @@ func planeUnspecified(host string) bool {
 func mustID(r *http.Request) int64 {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	return id
+}
+
+func (s *Server) nowUTC() time.Time {
+	if s != nil && s.Eng != nil && s.Eng.Clock != nil {
+		return s.Eng.Clock.Now().UTC()
+	}
+	return time.Now().UTC()
+}
+
+// FenceOperatorToken binds the current operator token to a generation so
+// rotation ends outstanding share grants before TTL.
+func (s *Server) FenceOperatorToken() error {
+	_, err := s.operatorGeneration()
+	return err
+}
+
+func (s *Server) operatorGeneration() (int, error) {
+	if s == nil || s.Eng == nil || s.Eng.Store == nil || s.OperatorTok == "" {
+		return 0, nil
+	}
+	return store.EnsureOperatorGeneration(s.Eng.Store, store.HashOperatorToken(s.OperatorTok))
 }
