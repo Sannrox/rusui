@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,9 +10,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/sannrox/rusui/internal/env"
 )
@@ -39,7 +43,8 @@ func syncCLI(args []string) {
 // syncMain fetches a session's published pull request head into a local
 // checkout with the operator's own git remote and credentials. With
 // -workspace it applies the environment HEAD and uncommitted files
-// instead. It does not take the terminal write lease or start a turn.
+// instead. -follow keeps applying later workspace trees until interrupted.
+// It does not take the terminal write lease or start a turn.
 func syncMain(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -48,6 +53,8 @@ func syncMain(args []string, stdout, stderr io.Writer) int {
 	remote := fs.String("remote", "origin", "git remote of the session's repository")
 	dir := fs.String("dir", ".", "local git checkout")
 	workspace := fs.Bool("workspace", false, "apply the environment working tree instead of the published pull request")
+	follow := fs.Bool("follow", false, "keep applying later workspace trees until interrupted")
+	pollInterval := fs.Duration("poll-interval", time.Second, "workspace follow poll interval")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -55,8 +62,8 @@ func syncMain(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "sync:", err)
 		return 1
 	}
-	if fs.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "usage: rusui sync [-url URL] [-token TOKEN] [-remote NAME] [-dir DIR] [-workspace] SESSION_ID")
+	if fs.NArg() != 1 || *pollInterval <= 0 {
+		_, _ = fmt.Fprintln(stderr, "usage: rusui sync [-url URL] [-token TOKEN] [-remote NAME] [-dir DIR] [-workspace] [-follow] [-poll-interval DURATION] SESSION_ID")
 		return 2
 	}
 	id := fs.Arg(0)
@@ -64,9 +71,17 @@ func syncMain(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "sync: invalid session id")
 		return 2
 	}
+	if *follow && !*workspace {
+		_, _ = fmt.Fprintln(stderr, "sync: -follow requires -workspace")
+		return 1
+	}
 	var err error
-	if *workspace {
-		err = runWorkspaceSync(*url, *token, *remote, *dir, id, stdout)
+	if *follow {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		err = followWorkspaceSync(ctx, *url, *token, *remote, *dir, id, *pollInterval, stdout)
+	} else if *workspace {
+		_, err = runWorkspaceSync(context.Background(), *url, *token, *remote, *dir, id, nil, stdout, true)
 	} else {
 		err = runSync(*url, *token, *remote, *dir, id, stdout)
 	}
@@ -158,74 +173,120 @@ func runSync(planeURL, token, remote, dir, id string, stdout io.Writer) error {
 	return nil
 }
 
-func runWorkspaceSync(planeURL, token, remote, dir, id string, stdout io.Writer) error {
-	view, err := loadSyncSession(planeURL, token, id)
+// workspaceTree is one applied environment HEAD plus working-tree files.
+type workspaceTree struct {
+	head  string
+	files map[string]env.ExportEntry
+}
+
+func followWorkspaceSync(ctx context.Context, planeURL, token, remote, dir, id string, interval time.Duration, stdout io.Writer) error {
+	var last *workspaceTree
+	reportUnchanged := true
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil
+		}
+		tree, err := runWorkspaceSync(ctx, planeURL, token, remote, dir, id, last, stdout, reportUnchanged)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		last = tree
+		reportUnchanged = false
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil
+		case <-timer.C:
+		}
+	}
+}
+
+func runWorkspaceSync(ctx context.Context, planeURL, token, remote, dir, id string, last *workspaceTree, stdout io.Writer, reportUnchanged bool) (*workspaceTree, error) {
+	view, err := loadSyncSessionContext(ctx, planeURL, token, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if view.Session != nil && view.Session.Archived {
-		return fmt.Errorf("session %s is archived", id)
+		return nil, fmt.Errorf("session %s is archived", id)
 	}
 	if view.Cancelled {
-		return fmt.Errorf("session %s was cancelled", id)
+		return nil, fmt.Errorf("session %s was cancelled", id)
 	}
 	repo := ""
 	if view.Session != nil {
 		repo = view.Session.Repo
 	}
 	if repo == "" {
-		return fmt.Errorf("session %s has no repository", id)
+		return nil, fmt.Errorf("session %s has no repository", id)
 	}
 	if _, err := git(dir, "rev-parse", "--git-dir"); err != nil {
-		return fmt.Errorf("%s is not a git checkout", dir)
+		return nil, fmt.Errorf("%s is not a git checkout", dir)
 	}
 	remoteURL, err := git(dir, "remote", "get-url", remote)
 	if err != nil {
-		return fmt.Errorf("no git remote %q", remote)
+		return nil, fmt.Errorf("no git remote %q", remote)
 	}
 	if !remoteNamesRepo(remoteURL, repo) {
-		return fmt.Errorf("remote %q does not name %s; pass -remote", remote, repo)
+		return nil, fmt.Errorf("remote %q does not name %s; pass -remote", remote, repo)
 	}
 
-	res, err := planeClient(planeURL, token, "/sessions/"+id+"/workspace/export")
+	res, err := planeClientContext(ctx, planeURL, token, "/sessions/"+id+"/workspace/export")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if res.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("session %s not found", id)
+		return nil, fmt.Errorf("session %s not found", id)
 	}
 	if res.StatusCode >= 300 {
 		msg := bytesTrim(body)
 		switch {
 		case strings.Contains(msg, "cancelled"):
-			return fmt.Errorf("session %s was cancelled", id)
+			return nil, fmt.Errorf("session %s was cancelled", id)
 		case strings.Contains(msg, "archived"):
-			return fmt.Errorf("session %s is archived", id)
+			return nil, fmt.Errorf("session %s is archived", id)
 		case strings.Contains(msg, "unpublished"):
-			return fmt.Errorf("session %s has no git workspace", id)
+			return nil, fmt.Errorf("session %s has no git workspace", id)
 		}
-		return fmt.Errorf("%s %s", res.Status, msg)
+		return nil, fmt.Errorf("%s %s", res.Status, msg)
 	}
 	head, bundle, files, err := env.ReadWorkspaceExport(bytes.NewReader(body))
 	if err != nil {
-		return err
+		return nil, err
 	}
+	tree := &workspaceTree{head: head, files: files}
 
 	if workspaceMatches(dir, head, files) {
-		_, _ = fmt.Fprintf(stdout, "session %s workspace %s already up to date\n", id, head)
-		return nil
+		if reportUnchanged {
+			_, _ = fmt.Fprintf(stdout, "session %s workspace %s already up to date\n", id, head)
+		}
+		return tree, nil
 	}
-	if dirty, err := git(dir, "status", "--porcelain"); err != nil {
-		return err
-	} else if dirty != "" {
-		return fmt.Errorf("local checkout is dirty")
+	ours := last != nil && workspaceMatches(dir, last.head, last.files)
+	if !ours {
+		if dirty, err := git(dir, "status", "--porcelain"); err != nil {
+			return nil, err
+		} else if dirty != "" {
+			return nil, fmt.Errorf("local checkout is dirty")
+		}
 	}
 
+	if err := applyWorkspaceTree(dir, id, head, bundle, files, last); err != nil {
+		return nil, err
+	}
+	_, _ = fmt.Fprintf(stdout, "session %s workspace %s\n", id, head)
+	return tree, nil
+}
+
+func applyWorkspaceTree(dir, id, head string, bundle []byte, files map[string]env.ExportEntry, last *workspaceTree) error {
 	tmp, err := os.MkdirTemp("", fmt.Sprintf("rusui-sync-%d-*", os.Getpid()))
 	if err != nil {
 		return err
@@ -238,19 +299,24 @@ func runWorkspaceSync(planeURL, token, remote, dir, id string, stdout io.Writer)
 	if _, err := git(dir, "fetch", "--no-tags", bundlePath, "+HEAD:refs/rusui/workspace/"+id); err != nil {
 		return fmt.Errorf("fetch workspace: %w", err)
 	}
-	if _, err := git(dir, "checkout", "-q", "--detach", head); err != nil {
+	if last != nil {
+		for rel := range last.files {
+			_ = os.Remove(filepath.Join(dir, filepath.FromSlash(rel)))
+		}
+	}
+	if _, err := git(dir, "checkout", "-f", "-q", "--detach", head); err != nil {
 		return err
 	}
-	if err := applyExportTree(dir, files); err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintf(stdout, "session %s workspace %s\n", id, head)
-	return nil
+	return applyExportTree(dir, files)
 }
 
 func loadSyncSession(planeURL, token, id string) (syncSessionView, error) {
+	return loadSyncSessionContext(context.Background(), planeURL, token, id)
+}
+
+func loadSyncSessionContext(ctx context.Context, planeURL, token, id string) (syncSessionView, error) {
 	var view syncSessionView
-	res, err := planeClient(planeURL, token, "/sessions/"+id)
+	res, err := planeClientContext(ctx, planeURL, token, "/sessions/"+id)
 	if err != nil {
 		return view, err
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net/http/httptest"
@@ -492,4 +493,280 @@ func TestSyncWorkspaceCLIBlackbox(t *testing.T) {
 	}
 
 	contains(sync(1, "-workspace", "999999"), "session 999999 not found")
+}
+
+func TestSyncFollowRequiresWorkspace(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := syncMain([]string{"-url", "http://127.0.0.1:1", "-token", "op", "-follow", "1"}, &out, &errOut)
+	if code != 1 || !strings.Contains(errOut.String(), "-follow requires -workspace") {
+		t.Fatalf("code %d err %q", code, errOut.String())
+	}
+}
+
+func TestSyncFollowPollIntervalUsage(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := syncMain([]string{"-url", "http://127.0.0.1:1", "-token", "op", "-workspace", "-follow", "-poll-interval", "0", "1"}, &out, &errOut)
+	if code != 2 || !strings.Contains(errOut.String(), "usage: rusui sync") {
+		t.Fatalf("code %d err %q", code, errOut.String())
+	}
+}
+
+// TestSyncWorkspaceFollowCLIBlackbox keeps one rusui sync -workspace -follow
+// process running: a later uncommitted environment file appears locally,
+// interrupt leaves that tree, operator dirt still refuses, and unknown,
+// archived, and cancelled sessions end the watch.
+func TestSyncWorkspaceFollowCLIBlackbox(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	bin := buildRusuiCLI(t)
+
+	t.Run("applies new file then interrupt leaves tree", func(t *testing.T) {
+		h := newWorkspaceFollowHarness(t, bin)
+		cmd, stdout, stderr := h.startFollow()
+		h.waitFile("dirty.txt", "uncommitted\n")
+		if err := os.WriteFile(filepath.Join(h.ws, "live.txt"), []byte("appeared\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		h.waitFile("live.txt", "appeared\n")
+		if err := cmd.Process.Signal(os.Interrupt); err != nil {
+			t.Fatal(err)
+		}
+		if code := waitCmd(t, cmd, 5*time.Second); code != 0 {
+			t.Fatalf("interrupt exit %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+		}
+		got, err := os.ReadFile(filepath.Join(h.local, "live.txt"))
+		if err != nil || string(got) != "appeared\n" {
+			t.Fatalf("left tree %q %v", got, err)
+		}
+	})
+
+	t.Run("dirty local refuses", func(t *testing.T) {
+		h := newWorkspaceFollowHarness(t, bin)
+		cmd, stdout, stderr := h.startFollow()
+		h.waitFile("dirty.txt", "uncommitted\n")
+		if err := os.WriteFile(filepath.Join(h.local, "extra.txt"), []byte("nope\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if code := waitCmd(t, cmd, 5*time.Second); code != 1 {
+			t.Fatalf("dirty exit %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "local checkout is dirty") {
+			t.Fatalf("stderr %q", stderr.String())
+		}
+		if _, err := os.Stat(filepath.Join(h.local, "extra.txt")); err != nil {
+			t.Fatal("dirty refusal removed extra.txt")
+		}
+	})
+
+	t.Run("unknown", func(t *testing.T) {
+		h := newWorkspaceFollowHarness(t, bin)
+		out := h.sync(1, "-workspace", "-follow", "-poll-interval", "20ms", "999999")
+		if !strings.Contains(out, "session 999999 not found") {
+			t.Fatalf("output %q", out)
+		}
+	})
+
+	t.Run("cancelled", func(t *testing.T) {
+		h := newWorkspaceFollowHarness(t, bin)
+		cmd, stdout, stderr := h.startFollow()
+		h.waitFile("dirty.txt", "uncommitted\n")
+		if err := h.eng.CancelSession(h.sid); err != nil {
+			t.Fatal(err)
+		}
+		if code := waitCmd(t, cmd, 5*time.Second); code != 1 {
+			t.Fatalf("cancelled exit %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "session "+h.id+" was cancelled") {
+			t.Fatalf("stderr %q", stderr.String())
+		}
+		got, err := os.ReadFile(filepath.Join(h.local, "dirty.txt"))
+		if err != nil || string(got) != "uncommitted\n" {
+			t.Fatalf("left tree %q %v", got, err)
+		}
+	})
+
+	t.Run("archived", func(t *testing.T) {
+		h := newWorkspaceFollowHarness(t, bin)
+		cmd, stdout, stderr := h.startFollow()
+		h.waitFile("dirty.txt", "uncommitted\n")
+		if err := h.eng.ArchiveSession(h.sid); err != nil {
+			t.Fatal(err)
+		}
+		if code := waitCmd(t, cmd, 5*time.Second); code != 1 {
+			t.Fatalf("archived exit %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "session "+h.id+" is archived") {
+			t.Fatalf("stderr %q", stderr.String())
+		}
+	})
+}
+
+func buildRusuiCLI(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), fmt.Sprintf("rusui-%d", os.Getpid()))
+	cmd := exec.Command("go", "build", "-o", bin, ".")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("build CLI: %v\n%s", err, out)
+	}
+	return bin
+}
+
+type workspaceFollowHarness struct {
+	t         *testing.T
+	bin, url  string
+	local, ws string
+	id        string
+	sid       int64
+	eng       *engine.Engine
+}
+
+func newWorkspaceFollowHarness(t *testing.T, bin string) *workspaceFollowHarness {
+	t.Helper()
+	root := t.TempDir()
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(root, "gitconfig"))
+	t.Setenv("GIT_AUTHOR_NAME", "t")
+	t.Setenv("GIT_AUTHOR_EMAIL", "t@example.invalid")
+	t.Setenv("GIT_COMMITTER_NAME", "t")
+	t.Setenv("GIT_COMMITTER_EMAIL", "t@example.invalid")
+	run := func(dir string, args ...string) string {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	bare := filepath.Join(root, "example", "test-repo.git")
+	run(root, "init", "-q", "--bare", "-b", "main", bare)
+	upstream := filepath.Join(root, "upstream")
+	run(root, "init", "-q", "-b", "main", upstream)
+	if err := os.WriteFile(filepath.Join(upstream, "README"), []byte("initial\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(upstream, "add", "README")
+	run(upstream, "commit", "-q", "-m", "initial")
+	run(upstream, "push", "-q", bare, "main")
+	local := filepath.Join(root, "local")
+	run(root, "clone", "-q", bare, local)
+
+	st, err := store.Open(filepath.Join(root, fmt.Sprintf("follow-%d.db", os.Getpid())))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	pol, err := policy.Parse([]byte(reviewCLIPolicy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng := engine.New(st, pol, gh.NewFake(), &clock.Fake{T: time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)})
+	eng.Env = envpkg.Process{Root: filepath.Join(root, "envs")}
+	eng.ReloadPolicy(pol)
+	hs := httptest.NewServer((&server.Server{Eng: eng, WorkerSec: "wsec", OperatorTok: "op"}).Handler())
+	t.Cleanup(hs.Close)
+
+	sid, err := eng.StartRun("test", "workspace follow", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetSession(st, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow, err := store.GetEnvironment(st, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws := filepath.Join(root, "envs", "follow-ws")
+	if err := os.MkdirAll(ws, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	envRow.Handle = ws
+	envRow.Driver = envpkg.KindProcess
+	envRow.State = store.EnvReady
+	if err := store.UpdateEnvironment(st, *envRow); err != nil {
+		t.Fatal(err)
+	}
+	run(ws, "init", "-q", "-b", "main")
+	if err := os.WriteFile(filepath.Join(ws, "README"), []byte("initial\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run(ws, "add", "README")
+	run(ws, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(ws, "dirty.txt"), []byte("uncommitted\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return &workspaceFollowHarness{t: t, bin: bin, url: hs.URL, local: local, ws: ws, id: strconv.FormatInt(sid, 10), sid: sid, eng: eng}
+}
+
+func (h *workspaceFollowHarness) startFollow() (*exec.Cmd, *bytes.Buffer, *bytes.Buffer) {
+	h.t.Helper()
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	cmd := exec.Command(h.bin, "sync", "-url", h.url, "-token", "op", "-dir", h.local, "-workspace", "-follow", "-poll-interval", "20ms", h.id)
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	if err := cmd.Start(); err != nil {
+		h.t.Fatal(err)
+	}
+	h.t.Cleanup(func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+	})
+	return cmd, stdout, stderr
+}
+
+func (h *workspaceFollowHarness) waitFile(name, want string) {
+	h.t.Helper()
+	path := filepath.Join(h.local, name)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		b, err := os.ReadFile(path)
+		if err == nil && string(b) == want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	h.t.Fatalf("timeout waiting for %s", name)
+}
+
+func (h *workspaceFollowHarness) sync(wantCode int, args ...string) string {
+	h.t.Helper()
+	cmd := exec.Command(h.bin, append([]string{"sync", "-url", h.url, "-token", "op", "-dir", h.local}, args...)...)
+	out, err := cmd.CombinedOutput()
+	code := 0
+	if exit, ok := errors.AsType[*exec.ExitError](err); ok {
+		code = exit.ExitCode()
+	} else if err != nil {
+		h.t.Fatal(err)
+	}
+	if code != wantCode {
+		h.t.Fatalf("sync %v exit %d, want %d:\n%s", args, code, wantCode, out)
+	}
+	return string(out)
+}
+
+func waitCmd(t *testing.T, cmd *exec.Cmd, timeout time.Duration) int {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		cmd.Process = nil
+		if err == nil {
+			return 0
+		}
+		if exit, ok := errors.AsType[*exec.ExitError](err); ok {
+			return exit.ExitCode()
+		}
+		t.Fatal(err)
+		return -1
+	case <-time.After(timeout):
+		_ = cmd.Process.Kill()
+		<-done
+		cmd.Process = nil
+		t.Fatalf("command did not exit within %s", timeout)
+		return -1
+	}
 }

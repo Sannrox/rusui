@@ -173,10 +173,13 @@ container is woken only when the runtime cannot copy the workspace as it
 is. A second run with nothing new says `already up to date`. It exits
 non-zero and changes no local files when the session is unknown, was
 cancelled, is archived, has no git workspace, or the local checkout is
-dirty.
+dirty. `-follow` keeps applying later environment trees until you
+interrupt it. It polls the same workspace export. Interrupt leaves the
+last applied tree. A dirty local checkout still refuses. Unknown,
+archived, and cancelled sessions end the watch with an explicit error.
 
 ```bash
-rusui sync [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] [-remote origin] [-dir .] -workspace SESSION_ID
+rusui sync [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] [-remote origin] [-dir .] -workspace [-follow] [-poll-interval 1s] SESSION_ID
 ```
 
 Copy a local file into a live session workspace. The path is relative to the
