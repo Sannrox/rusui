@@ -864,6 +864,131 @@ func TestAPIMintPreviewGrant(t *testing.T) {
 	}
 }
 
+// A successful preview mint receipts session, port or service, and expiry,
+// never the grant token. A refused mint inserts nothing.
+func TestPreviewMintReceiptsPortExpiryNotToken(t *testing.T) {
+	t.Parallel()
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "app-ok")
+	}))
+	t.Cleanup(backend.Close)
+	_, bport, err := net.SplitHostPort(backend.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, _ := strconv.Atoi(bport)
+
+	s, hs, e := consoleEnv(t)
+	prev := httptest.NewServer(s.PreviewHandler())
+	t.Cleanup(prev.Close)
+	s.PreviewBase = prev.URL
+	sid := readyPreviewSession(t, e, "preview-receipt")
+
+	if body, code := postMintPreview(t, hs, "op-tok", sid, 80); code != http.StatusBadRequest {
+		t.Fatalf("low port %d %s", code, body)
+	}
+	body, code := postMintPreview(t, hs, "op-tok", sid, port)
+	if code != http.StatusOK {
+		t.Fatalf("mint %d %s", code, body)
+	}
+	var got struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	grant := grantFrom(got.URL)
+	if grant == "" {
+		t.Fatal("no grant")
+	}
+
+	mints := sessionActionsOfType(t, hs, sid, actionPreviewMint)
+	if len(mints) != 1 {
+		t.Fatalf("mint rows %d: %+v", len(mints), mints)
+	}
+	a := mints[0]
+	if a.SessionID == nil || *a.SessionID != sid {
+		t.Fatalf("session %+v", a)
+	}
+	var payload struct {
+		SessionID int64  `json:"session_id"`
+		Port      int    `json:"port"`
+		Service   string `json:"service"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	if err := json.Unmarshal([]byte(a.Body), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.SessionID != sid || payload.Port != port || payload.Service != "" || payload.ExpiresAt == "" {
+		t.Fatalf("body %+v", payload)
+	}
+	if strings.Contains(a.Body, grant) || strings.Contains(a.ID, grant) {
+		t.Fatalf("grant token in action %+v", a)
+	}
+}
+
+func TestPreviewMintReceiptsNamedServiceNotToken(t *testing.T) {
+	t.Parallel()
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "app-ok")
+	}))
+	t.Cleanup(backend.Close)
+	_, bport, err := net.SplitHostPort(backend.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, _ := strconv.Atoi(bport)
+
+	s, hs, e := consoleEnv(t)
+	prev := httptest.NewServer(s.PreviewHandler())
+	t.Cleanup(prev.Close)
+	s.PreviewBase = prev.URL
+	sid := readyPreviewSession(t, e, "named-preview-receipt")
+	sess, _ := store.GetSession(e.Store, sid)
+	envRow, _ := store.GetEnvironment(e.Store, sess.EnvironmentID)
+	if err := os.MkdirAll(filepath.Join(envRow.Handle, ".rusui"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(envRow.Handle, env.ServicesRusuiPath), []byte("services:\n  web:\n    command: true\n    port: "+strconv.Itoa(port)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	body, code := postMintPreviewJSON(t, hs, "op-tok", sid, `{"service":"web"}`)
+	if code != http.StatusOK {
+		t.Fatalf("named mint %d %s", code, body)
+	}
+	var got struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	grant := grantFrom(got.URL)
+	if grant == "" {
+		t.Fatal("no grant")
+	}
+
+	mints := sessionActionsOfType(t, hs, sid, actionPreviewMint)
+	if len(mints) != 1 {
+		t.Fatalf("mint rows %d: %+v", len(mints), mints)
+	}
+	var payload struct {
+		SessionID int64  `json:"session_id"`
+		Port      int    `json:"port"`
+		Service   string `json:"service"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	if err := json.Unmarshal([]byte(mints[0].Body), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.SessionID != sid || payload.Port != port || payload.Service != "web" || payload.ExpiresAt == "" {
+		t.Fatalf("body %+v", payload)
+	}
+	if strings.Contains(mints[0].Body, grant) {
+		t.Fatalf("grant token in body %q", mints[0].Body)
+	}
+}
+
 func TestAPIMintPreviewErrorsMintNothing(t *testing.T) {
 	t.Parallel()
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

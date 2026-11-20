@@ -69,6 +69,10 @@ func (s *Server) writeWorkspaceUpload(r *http.Request, rel string) error {
 	if rel == "" && hdr != nil {
 		rel = hdr.Filename
 	}
+	clean, ok := env.SafeWorkspaceRel(rel)
+	if !ok {
+		return fmt.Errorf("path")
+	}
 	var wr env.WorkspaceWriter
 	if envRow.Driver == env.KindContainer {
 		c, ok := s.Eng.Container.(env.Container)
@@ -83,7 +87,12 @@ func (s *Server) writeWorkspaceUpload(r *http.Request, rel string) error {
 		}
 		wr = p
 	}
-	return wr.WriteFile(envRow.Handle, rel, src, env.WorkspaceUploadCap)
+	if err := wr.WriteFile(envRow.Handle, clean, src, env.WorkspaceUploadCap); err != nil {
+		return err
+	}
+	return recordOperatorEnvAction(s.Eng.Store, sess, actionWorkspacePut,
+		"The operator copied a file into the session workspace.",
+		map[string]string{"path": clean})
 }
 
 var errNotFound = fmt.Errorf("not found")

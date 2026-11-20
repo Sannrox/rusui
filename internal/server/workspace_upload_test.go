@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -94,6 +95,80 @@ func TestWorkspaceUploadOversized(t *testing.T) {
 	if code != http.StatusBadRequest {
 		t.Fatalf("oversize %d", code)
 	}
+}
+
+// A successful put receipts the destination path and never the file bytes.
+// A second put is a second row. A refused put inserts nothing.
+func TestWorkspacePutReceiptsPathNotBytes(t *testing.T) {
+	t.Parallel()
+	s, hs, e := consoleEnv(t)
+	sid, err := e.StartRun("test", "upload-receipt", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, _ := store.GetSession(e.Store, sid)
+	envRow, _ := store.GetEnvironment(e.Store, sess.EnvironmentID)
+	p := e.Env.(env.Process)
+	ws := filepath.Join(p.Root, "sess")
+	if err := os.MkdirAll(ws, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	envRow.Handle = ws
+	envRow.Driver = env.KindProcess
+	envRow.State = store.EnvReady
+	_ = store.UpdateEnvironment(e.Store, *envRow)
+
+	secret := []byte("workspace-put-secret-bytes-798")
+	code, body := postWorkspace(t, hs, s.OperatorTok, sid, "dir/note.txt", secret)
+	if code != http.StatusNoContent {
+		t.Fatalf("put %d %s", code, body)
+	}
+	code, body = postWorkspace(t, hs, s.OperatorTok, sid, "dir/note.txt", []byte("second-put-bytes"))
+	if code != http.StatusNoContent {
+		t.Fatalf("second put %d %s", code, body)
+	}
+	code, _ = postWorkspace(t, hs, s.OperatorTok, sid, "../secret", []byte("escaped-bytes"))
+	if code != http.StatusBadRequest {
+		t.Fatalf("escape %d", code)
+	}
+
+	puts := sessionActionsOfType(t, hs, sid, actionWorkspacePut)
+	if len(puts) != 2 {
+		t.Fatalf("put rows %d: %+v", len(puts), puts)
+	}
+	for _, a := range puts {
+		if a.SessionID == nil || *a.SessionID != sid {
+			t.Fatalf("session %+v", a)
+		}
+		var payload struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal([]byte(a.Body), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Path != "dir/note.txt" {
+			t.Fatalf("path %q", payload.Path)
+		}
+		if strings.Contains(a.Body, string(secret)) || strings.Contains(a.Body, "second-put-bytes") || strings.Contains(a.Body, "escaped-bytes") {
+			t.Fatalf("file bytes in body %q", a.Body)
+		}
+	}
+}
+
+func sessionActionsOfType(t *testing.T, hs *httptest.Server, sid int64, typ string) []store.Action {
+	t.Helper()
+	raw := getJSON(t, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/logs", "op-tok")
+	var acts []store.Action
+	if err := json.Unmarshal([]byte(raw), &acts); err != nil {
+		t.Fatal(err)
+	}
+	out := make([]store.Action, 0)
+	for _, a := range acts {
+		if a.Type == typ {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 func postWorkspace(t *testing.T, hs *httptest.Server, token string, sid int64, path string, data []byte) (int, string) {

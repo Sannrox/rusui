@@ -60,6 +60,61 @@ func TestSessionReceiptExportsStoredReview(t *testing.T) {
 	}
 }
 
+func TestSessionReceiptListsOperatorEnvActions(t *testing.T) {
+	t.Parallel()
+	_, hs, e := consoleEnv(t)
+	sid := seedSessionReview(t, e.Store, "example/test-repo", 8, "keep", "")
+	if err := store.InsertAction(e.Store, store.Action{
+		ID: "put-1", SessionID: &sid, Repo: "example/test-repo", Item: 8,
+		Type: "workspace.put", ReasonCode: "recorded", EvidenceClass: "plane_observed",
+		LimitSentence: "The operator copied a file into the session workspace.",
+		Body:          `{"path":"shot.png"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.InsertAction(e.Store, store.Action{
+		ID: "mint-1", SessionID: &sid, Repo: "example/test-repo", Item: 8,
+		Type: "preview.mint", ReasonCode: "recorded", EvidenceClass: "plane_observed",
+		LimitSentence: "The operator minted a preview grant for this session.",
+		Body:          `{"session_id":` + strconv.FormatInt(sid, 10) + `,"port":3000,"expires_at":"2026-11-20T00:00:00Z"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodGet, hs.URL+"/sessions/"+strconv.FormatInt(sid, 10)+"/receipt", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer op-tok")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	body, _ := io.ReadAll(res.Body)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("%d %s", res.StatusCode, body)
+	}
+	var exp receipt.Export
+	if err := json.Unmarshal(body, &exp); err != nil {
+		t.Fatal(err)
+	}
+	var put, mint *receipt.Action
+	for i := range exp.Actions {
+		switch exp.Actions[i].Type {
+		case "workspace.put":
+			put = &exp.Actions[i]
+		case "preview.mint":
+			mint = &exp.Actions[i]
+		}
+	}
+	if put == nil || !strings.Contains(put.Body, `"path":"shot.png"`) {
+		t.Fatalf("missing workspace.put %+v", exp.Actions)
+	}
+	if mint == nil || !strings.Contains(mint.Body, `"port":3000`) || !strings.Contains(mint.Body, `"expires_at"`) {
+		t.Fatalf("missing preview.mint %+v", exp.Actions)
+	}
+}
+
 func TestSessionReceiptAuthAndMissingReview(t *testing.T) {
 	t.Parallel()
 	_, hs, e := consoleEnv(t)
