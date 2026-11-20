@@ -32,6 +32,7 @@ var admissionRoutes = map[string]bool{"POST /projects/{slug}/sessions": true}
 var contractVersions = map[string]map[string]string{
 	"rusui.admission": {
 		"sha256:22c6c0d985699fc8dcda1dc026f479757194918bb0cabe319146ccdaea61f18f": "1.0.0",
+		"sha256:0c53e378b810734971a0d2b04b52cd6474f2cc470f159eb822075a5bccceeb59": "1.1.0",
 	},
 	"rusui.environment": {
 		"sha256:ed9751fbf6815c015253dc8440100b0198b33e1e6d654b32fee1a09ebe4af27a": "1.0.0",

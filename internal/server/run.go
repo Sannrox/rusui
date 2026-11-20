@@ -113,9 +113,11 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"session_id": task.SessionID, "kind": "run", "task_id": task.ID, "revision": task.Revision,
-		})
+		hash, hit := s.Eng.SnapshotReport(r.PathValue("slug"), req.Guest, req.Repo, req.BaseSHA)
+		body := runCreateBody(task.SessionID, hash, hit)
+		body["task_id"] = task.ID
+		body["revision"] = task.Revision
+		_ = json.NewEncoder(w).Encode(body)
 		return
 	}
 	act, createdBy := "", ""
@@ -137,7 +139,15 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(map[string]any{"session_id": id, "kind": "run"})
+	hash, hit := s.Eng.SnapshotReport(r.PathValue("slug"), req.Guest, "", "")
+	_ = json.NewEncoder(w).Encode(runCreateBody(id, hash, hit))
+}
+
+func runCreateBody(sessionID int64, sourceHash string, snapshotHit bool) map[string]any {
+	return map[string]any{
+		"session_id": sessionID, "kind": "run",
+		"snapshot_hit": snapshotHit, "source_hash": sourceHash,
+	}
 }
 
 func (s *Server) createSchedule(w http.ResponseWriter, r *http.Request) {

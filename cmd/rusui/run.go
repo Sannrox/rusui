@@ -164,12 +164,17 @@ func runMain(args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY,
 // and attach commands so the operator can continue from the same terminal.
 func writeRunHandle(stderr io.Writer, body []byte) {
 	var created struct {
-		SessionID int64 `json:"session_id"`
+		SessionID   int64 `json:"session_id"`
+		SnapshotHit bool  `json:"snapshot_hit"`
 	}
 	if err := json.Unmarshal(body, &created); err != nil || created.SessionID < 1 {
 		return
 	}
-	_, _ = fmt.Fprintf(stderr, "session %d\n", created.SessionID)
+	label := "miss"
+	if created.SnapshotHit {
+		label = "hit"
+	}
+	_, _ = fmt.Fprintf(stderr, "session %d snapshot %s\n", created.SessionID, label)
 	if parsed, err := server.ParseSessionURL(os.Getenv("RUSUI_SESSION_URL")); err == nil && parsed != nil {
 		_, _ = fmt.Fprintln(stderr, parsed.For(created.SessionID))
 	}

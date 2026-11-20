@@ -1,7 +1,10 @@
 package engine_test
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,8 +93,17 @@ func (b *setupBox) wantBuilt(t *testing.T, handle, want string) {
 
 func TestSecondEnvironmentGetsSetupWritesWithoutSetup(t *testing.T) {
 	b := newSetupBox(t)
+	hash := engine.SourceHash("rusui-guest:test", "aaa", nil)
+	gotHash, hit := b.h.e.SnapshotReport("test", "", "example/test-repo", "aaa")
+	if hit || gotHash != hash {
+		t.Fatalf("first report hash=%s hit=%v, want miss %s", gotHash, hit, hash)
+	}
 	first := b.mustProvision(t, "box-1", "aaa")
 	b.wantBuilt(t, first.Handle, "built from pin-a\n")
+	gotHash, hit = b.h.e.SnapshotReport("test", "", "example/test-repo", "aaa")
+	if !hit || gotHash != hash {
+		t.Fatalf("after prepare hash=%s hit=%v, want hit %s", gotHash, hit, hash)
+	}
 	second := b.mustProvision(t, "box-2", "aaa")
 	b.wantBuilt(t, second.Handle, "built from pin-a\n")
 	if n := b.setupRuns(); n != 1 {
@@ -100,6 +112,79 @@ func TestSecondEnvironmentGetsSetupWritesWithoutSetup(t *testing.T) {
 	if b.tree.Calls != 1 {
 		t.Fatalf("pin fetched %d times", b.tree.Calls)
 	}
+}
+
+func TestOldHashOnlyStampIsSnapshotMiss(t *testing.T) {
+	b := newSetupBox(t)
+	hash := engine.SourceHash("rusui-guest:test", "aaa", nil)
+	dir := filepath.Join(b.root, hash)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".rusui-snapshot"), []byte(hash), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, hit := b.h.e.SnapshotReport("test", "", "example/test-repo", "aaa"); hit {
+		t.Fatal("hash-only stamp reported a hit")
+	}
+	b.mustProvision(t, "box-old", "aaa")
+	if n := b.setupRuns(); n != 1 {
+		t.Fatalf("setup ran %d times, want miss on hash-only stamp", n)
+	}
+}
+
+func TestCreateRunJSONReportsSnapshotHit(t *testing.T) {
+	b := newSetupBox(t)
+	hash := engine.SourceHash("rusui-guest:test", "aaa", nil)
+	first := createRunJSON(t, b.h)
+	if first["snapshot_hit"] != false || first["source_hash"] != hash {
+		t.Fatalf("first create %+v, want miss %s", first, hash)
+	}
+	if _, ok := first["session_id"]; !ok {
+		t.Fatalf("first create missing session_id %+v", first)
+	}
+	b.mustProvision(t, "box-1", "aaa")
+	if n := b.setupRuns(); n != 1 {
+		t.Fatalf("setup ran %d times on miss", n)
+	}
+	second := createRunJSON(t, b.h)
+	if second["snapshot_hit"] != true || second["source_hash"] != hash {
+		t.Fatalf("second create %+v, want hit %s", second, hash)
+	}
+	if _, ok := second["session_id"]; !ok {
+		t.Fatalf("second create missing session_id %+v", second)
+	}
+	b.mustProvision(t, "box-2", "aaa")
+	if n := b.setupRuns(); n != 1 {
+		t.Fatalf("setup ran %d times after hit, want no rerun", n)
+	}
+}
+
+func createRunJSON(t *testing.T, h *harn) map[string]any {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, h.http.URL+"/projects/test/sessions", strings.NewReader(`{"kind":"run","prompt":"hi"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer wsec")
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(res.Body)
+	_ = res.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("code %d %s", res.StatusCode, body)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("json %s: %v", body, err)
+	}
+	return out
 }
 
 func TestEnvironmentAfterTTLStillReusesSetupWrites(t *testing.T) {

@@ -118,7 +118,9 @@
   "POST /projects/{slug}/sessions": [
     ":object",
     "kind:string",
-    "session_id:number"
+    "session_id:number",
+    "snapshot_hit:bool",
+    "source_hash:string"
   ],
   "POST /sessions/{id}/turns": [
     ":object",
