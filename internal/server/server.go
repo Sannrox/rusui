@@ -132,6 +132,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /console/sessions/{id}/files", s.consoleFile)
 	mux.HandleFunc("POST /console/sessions/{id}/files", s.consoleUploadFile)
 	mux.HandleFunc("POST /sessions/{id}/workspace", s.putWorkspaceFile)
+	mux.HandleFunc("GET /sessions/{id}/workspace", s.listWorkspaceFiles)
 	mux.HandleFunc("GET /console/approvals", s.consoleApprovals)
 	mux.HandleFunc("POST /console/approvals/{id}", s.consoleDecide)
 	mux.HandleFunc("GET /console/environments", s.consoleEnvironments)

@@ -5,9 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // Workspace file states a container inspection reports instead of a body.
@@ -27,9 +31,19 @@ const (
 	FileClean = "clean"
 )
 
-// ErrWorkspaceReplaced is a /workspace that is no longer a real
-// directory, such as a symlink the guest put in its place (#447).
-var ErrWorkspaceReplaced = errors.New("env: workspace replaced")
+var (
+	// ErrWorkspaceReplaced is a /workspace that is no longer a real
+	// directory, such as a symlink the guest put in its place (#447).
+	ErrWorkspaceReplaced = errors.New("env: workspace replaced")
+	// ErrWorkspacePath is a workspace-relative path that escapes the
+	// workspace or is otherwise refused.
+	ErrWorkspacePath = errors.New("env: path")
+	// ErrWorkspaceMissing is a list target that does not exist.
+	ErrWorkspaceMissing = errors.New("env: missing")
+	// ErrWorkspaceNotDir is a list target that is not a real directory
+	// (a file or any symlink).
+	ErrWorkspaceNotDir = errors.New("env: not a directory")
+)
 
 // workspaceRoot enters /workspace and refuses (exit 13) unless it is the
 // real directory: a guest that replaces /workspace with a symlink, for
@@ -40,6 +54,33 @@ var ErrWorkspaceReplaced = errors.New("env: workspace replaced")
 // listWorkspaceScript prints every top-level workspace entry that is not
 // a directory, NUL-separated, like os.ReadDir without the directories.
 const listWorkspaceScript = `cd -P /workspace 2>/dev/null && [ "$(pwd -P)" = /workspace ] || exit 13; for f in * .[!.]* ..?*; do [ -e "$f" ] || [ -L "$f" ] || continue; if [ -d "$f" ] && [ ! -L "$f" ]; then continue; fi; printf '%s\0' "$f"; done`
+
+// listWorkspaceDirScript lists one directory of the real /workspace,
+// including directories, NUL-separated. $1 is a relative directory or
+// empty for the top level. Intermediate components and the target must
+// be real directories, not symlinks (exit 10); a missing target is 11;
+// ".." is 14. The path is never interpolated into the script.
+const listWorkspaceDirScript = `cd -P /workspace 2>/dev/null && [ "$(pwd -P)" = /workspace ] || exit 13
+rest=$1
+while [ -n "$rest" ]; do
+  part=${rest%%/*}
+  if [ "$part" = "$rest" ]; then
+    rest=
+  else
+    rest=${rest#*/}
+  fi
+  if [ -z "$part" ] || [ "$part" = "." ]; then
+    continue
+  fi
+  [ "$part" = ".." ] && exit 14
+  [ -L "$part" ] && exit 10
+  [ -d "$part" ] || { [ -e "$part" ] && exit 10; exit 11; }
+  cd -- "$part" || exit 10
+done
+for f in * .[!.]* ..?*; do
+  [ -e "$f" ] || [ -L "$f" ] || continue
+  printf '%s\0' "$f"
+done`
 
 // readWorkspaceScript prints one top-level workspace file. The name is
 // $1 and the size cap $2, never part of the script text. The read is
@@ -62,6 +103,110 @@ func (d DockerCLI) WorkspaceNames(id string) ([]string, error) {
 			names = append(names, n)
 		}
 	}
+	return names, nil
+}
+
+func workspaceListRel(rel string) (string, error) {
+	if rel == "" || rel == "." {
+		return "", nil
+	}
+	clean, ok := SafeWorkspaceRel(rel)
+	if !ok {
+		return "", ErrWorkspacePath
+	}
+	return clean, nil
+}
+
+func parseWorkspaceList(out []byte) []string {
+	var names []string
+	for n := range strings.SplitSeq(string(out), "\x00") {
+		if n != "" {
+			names = append(names, n)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+func mapListExit(err error) error {
+	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
+		switch ee.ExitCode() {
+		case 10:
+			return ErrWorkspaceNotDir
+		case 11:
+			return ErrWorkspaceMissing
+		case 13:
+			return ErrWorkspaceReplaced
+		case 14:
+			return ErrWorkspacePath
+		}
+	}
+	return nil
+}
+
+func mapUnixListErr(err error) error {
+	switch {
+	case errors.Is(err, unix.ENOENT):
+		return ErrWorkspaceMissing
+	case errors.Is(err, unix.ENOTDIR), errors.Is(err, unix.ELOOP):
+		return ErrWorkspaceNotDir
+	default:
+		return fmt.Errorf("env: list workspace: %w", err)
+	}
+}
+
+// WorkspaceList lists one directory of a guest workspace, including
+// directories. Empty rel is the top level. It does not follow
+// symlinks and refuses a replaced /workspace.
+func (d DockerCLI) WorkspaceList(id, rel string) ([]string, error) {
+	clean, err := workspaceListRel(rel)
+	if err != nil {
+		return nil, err
+	}
+	out, err := exec.Command(d.bin(), "exec", id, "sh", "-c", listWorkspaceDirScript, "sh", clean).Output()
+	if mapped := mapListExit(err); mapped != nil {
+		return nil, mapped
+	}
+	if err != nil {
+		return nil, fmt.Errorf("env: list workspace: %w", err)
+	}
+	return parseWorkspaceList(out), nil
+}
+
+// ListWorkspace lists one directory of a process workspace, including
+// directories. Empty rel is the top level. It walks with O_NOFOLLOW.
+func (Process) ListWorkspace(handle, rel string) ([]string, error) {
+	if handle == "" {
+		return nil, fmt.Errorf("env: workspace missing")
+	}
+	clean, err := workspaceListRel(rel)
+	if err != nil {
+		return nil, err
+	}
+	dirfd, err := unix.Open(handle, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, mapUnixListErr(err)
+	}
+	if clean != "" {
+		for part := range strings.SplitSeq(clean, "/") {
+			if part == "" || part == "." {
+				continue
+			}
+			next, err := unix.Openat(dirfd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+			_ = unix.Close(dirfd)
+			if err != nil {
+				return nil, mapUnixListErr(err)
+			}
+			dirfd = next
+		}
+	}
+	f := os.NewFile(uintptr(dirfd), handle)
+	defer func() { _ = f.Close() }()
+	names, err := f.Readdirnames(-1)
+	if err != nil {
+		return nil, fmt.Errorf("env: list workspace: %w", err)
+	}
+	slices.Sort(names)
 	return names, nil
 }
 
@@ -98,6 +243,7 @@ func (d DockerCLI) WorkspaceFile(id, name string, limit int64) ([]byte, string, 
 // workspace without touching the host filesystem.
 type WorkspaceInspector interface {
 	WorkspaceNames(id string) ([]string, error)
+	WorkspaceList(id, rel string) ([]string, error)
 	WorkspaceFile(id, name string, limit int64) ([]byte, string, error)
 	WorkspaceSnapshot(id string, fileCap, totalCap int64) ([]WorkspaceEntry, error)
 	WorkspaceGitDiff(id string, cap int64) ([]byte, string, error)
