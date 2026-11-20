@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/sannrox/rusui/internal/acp"
+	"github.com/sannrox/rusui/internal/store"
 )
 
 var updateGolden = flag.Bool("update", false, "rewrite testdata golden files")
@@ -62,6 +63,16 @@ func TestOperatorAPIResponseShapes(t *testing.T) {
 	for _, want := range []string{"session", "entry", "state"} {
 		follow(s.expect(want))
 	}
+	sess, err := store.GetSession(e.Store, c.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReplaceEnvironmentServices(e.Store, sess.EnvironmentID, store.EnvironmentServiceSet{
+		Services: []store.EnvironmentService{{Name: "web", Port: 3000, State: "healthy"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	follow(s.expect("service"))
 	setTurns(t, e, c.SessionID, "completed")
 	for {
 		ev := s.nextNonComment()

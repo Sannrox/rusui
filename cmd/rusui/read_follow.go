@@ -50,6 +50,12 @@ type followTurnV struct {
 	ApprovalSeq int64  `json:"approval_seq"`
 }
 
+// followServiceV is a declared service's health on the follow stream.
+type followServiceV struct {
+	Name  string `json:"name"`
+	State string `json:"state"`
+}
+
 // Program status reports (OSC 7501, revision 0.4) written to a terminal
 // when the followed session state changes. They are constants, so plane
 // data never reaches the terminal as a control sequence.
@@ -92,18 +98,19 @@ type followReader struct {
 	// reconnect, or a new turn in the same state, writes nothing.
 	status string
 
-	cursor  int64
-	header  bool
-	state   followStateV
-	turn    followTurnV
-	end     *followStateV
-	receive bool
+	cursor   int64
+	header   bool
+	state    followStateV
+	turn     followTurnV
+	services map[string]string
+	end      *followStateV
+	receive  bool
 }
 
 // followRead follows one session until it ends. With terminal set, it also
 // writes a program status report on stdout each time the state changes.
 func followRead(url, token, id string, stdout, stderr io.Writer, terminal bool) int {
-	f := &followReader{url: strings.TrimRight(url, "/"), token: token, id: id, stdout: stdout, terminal: terminal}
+	f := &followReader{url: strings.TrimRight(url, "/"), token: token, id: id, stdout: stdout, terminal: terminal, services: map[string]string{}}
 	client, err := planeHTTP(url)
 	if err != nil {
 		f.report(statusError)
@@ -264,6 +271,19 @@ func (f *followReader) handle(event, data string) error {
 			f.turn = tr
 			_, _ = fmt.Fprintln(f.stdout, formatFollowTurn(tr))
 		}
+	case "service":
+		var svc followServiceV
+		if err := json.Unmarshal([]byte(data), &svc); err != nil {
+			return fmt.Errorf("decode service: %w", err)
+		}
+		f.receive = true
+		// A reconnect resends the current health; it is printed once
+		// per name and state, not as a spinner.
+		if f.services[svc.Name] == svc.State {
+			return nil
+		}
+		f.services[svc.Name] = svc.State
+		_, _ = fmt.Fprintln(f.stdout, formatFollowService(svc))
 	}
 	return nil
 }
@@ -295,4 +315,9 @@ func formatFollowState(st followStateV) string {
 		line += fmt.Sprintf(" (turn %d revision %d)", st.TurnID, st.Revision)
 	}
 	return line
+}
+
+// formatFollowService is the one line for a health change: "service: NAME STATE".
+func formatFollowService(svc followServiceV) string {
+	return "service: " + visibleText(svc.Name) + " " + visibleText(svc.State)
 }

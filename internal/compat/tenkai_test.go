@@ -37,6 +37,7 @@ var contractVersions = map[string]map[string]string{
 	"rusui.environment": {
 		"sha256:ed9751fbf6815c015253dc8440100b0198b33e1e6d654b32fee1a09ebe4af27a": "1.0.0",
 		"sha256:23aebe272ebe28fcd61b480c923598275eab1f3730c09b872d33119929bef1c5": "1.1.0",
+		"sha256:4742cb28a8ec033c2dd915bfddb52bb185b2cfbc89734a27251f08b58a43da99": "1.2.0",
 	},
 }
 

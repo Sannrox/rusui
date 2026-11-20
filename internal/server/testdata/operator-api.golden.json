@@ -31,6 +31,7 @@
     "cancelled:bool",
     "environment_state:string",
     "processes:array",
+    "services:array",
     "session.CreatedAt:string",
     "session.EnvironmentID:number",
     "session.GuestSessionID:string",
@@ -55,7 +56,6 @@
     "session.tenant_id:string",
     "session.write_override:bool",
     "session:object",
-    "services:array",
     "tools:array",
     "tools[]:string",
     "turns:array",
@@ -97,6 +97,11 @@
     "id:string",
     "kind:string",
     "seq:number"
+  ],
+  "GET /sessions/{id}/read/follow event:service": [
+    ":object",
+    "name:string",
+    "state:string"
   ],
   "GET /sessions/{id}/read/follow event:session": [
     ":object",

@@ -90,13 +90,13 @@ func (s *sseStream) next() sseEvent {
 	return sseEvent{}
 }
 
-// expect skips heartbeats, and turn records unless want is one, and
-// returns the next event, which must be want.
+// expect skips heartbeats, and turn or service records unless want is
+// one, and returns the next event, which must be want.
 func (s *sseStream) expect(want string) sseEvent {
 	s.t.Helper()
 	for {
 		ev := s.next()
-		if ev.event == "comment" || ev.event == "turn" && want != "turn" {
+		if ev.event == "comment" || (ev.event == "turn" && want != "turn") || (ev.event == "service" && want != "service") {
 			continue
 		}
 		if ev.event != want {
@@ -182,6 +182,26 @@ func turnOf(t *testing.T, ev sseEvent) followTurn {
 		t.Fatal(err)
 	}
 	return tr
+}
+
+func serviceOf(t *testing.T, ev sseEvent) followService {
+	t.Helper()
+	var svc followService
+	if err := json.Unmarshal([]byte(ev.data), &svc); err != nil {
+		t.Fatal(err)
+	}
+	return svc
+}
+
+func setServices(t *testing.T, e *engine.Engine, sid int64, svcs ...store.EnvironmentService) {
+	t.Helper()
+	sess, err := store.GetSession(e.Store, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReplaceEnvironmentServices(e.Store, sess.EnvironmentID, store.EnvironmentServiceSet{Services: svcs}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // nextNonComment is the next event other than a heartbeat.
@@ -589,4 +609,71 @@ func TestFollowReadNoTurnRecordOnFailure(t *testing.T) {
 	if ev := s.nextNonComment(); ev.event != "end" {
 		t.Fatalf("event %q %s, want end", ev.event, ev.data)
 	}
+}
+
+// A declared service's health is one follow record per name and state,
+// not a spinner of the same health (#790).
+func TestFollowReadServiceHealthEmitsOncePerChange(t *testing.T) {
+	_, hs, e := consoleEnv(t)
+	sid := createRunSession(t, hs, "p")
+	s, _ := openFollow(t, hs, sid, 0, "op-tok")
+	s.expect("session")
+	s.expect("state")
+
+	setServices(t, e, sid, store.EnvironmentService{Name: "web", Port: 3000, State: "starting"})
+	if got := serviceOf(t, s.expect("service")); got != (followService{Name: "web", State: "starting"}) {
+		t.Fatalf("starting %+v", got)
+	}
+	setServices(t, e, sid, store.EnvironmentService{Name: "web", Port: 3000, State: "healthy"})
+	if got := serviceOf(t, s.expect("service")); got != (followService{Name: "web", State: "healthy"}) {
+		t.Fatalf("healthy %+v", got)
+	}
+
+	// Rewriting the same health, then moving unrelated follow state, must
+	// not send another service record.
+	setServices(t, e, sid, store.EnvironmentService{Name: "web", Port: 3000, State: "healthy"})
+	setTurns(t, e, sid, "leased")
+	if ev := s.nextNonComment(); ev.event != "state" || stateOf(t, ev).State != followRunning {
+		t.Fatalf("after same health %q %s", ev.event, ev.data)
+	}
+
+	setServices(t, e, sid, store.EnvironmentService{Name: "web", Port: 3000, State: "unhealthy"})
+	if got := serviceOf(t, s.expect("service")); got != (followService{Name: "web", State: "unhealthy"}) {
+		t.Fatalf("unhealthy %+v", got)
+	}
+	setServices(t, e, sid, store.EnvironmentService{Name: "web", Port: 3000, State: "exited"})
+	if got := serviceOf(t, s.expect("service")); got != (followService{Name: "web", State: "exited"}) {
+		t.Fatalf("exited %+v", got)
+	}
+
+	s.cancel()
+	again, _ := openFollow(t, hs, sid, 0, "op-tok")
+	again.expect("session")
+	again.expect("state")
+	if got := serviceOf(t, again.expect("service")); got != (followService{Name: "web", State: "exited"}) {
+		t.Fatalf("resent %+v", got)
+	}
+}
+
+// A session with no services file follows as before: no service record
+// and no error (#790).
+func TestFollowReadNoServicesFileUnchanged(t *testing.T) {
+	_, hs, e := consoleEnv(t)
+	sid := createRunSession(t, hs, "p")
+	s, _ := openFollow(t, hs, sid, 0, "op-tok")
+	s.expect("session")
+	if ev := s.nextNonComment(); ev.event != "state" {
+		t.Fatalf("event %q %s, want state", ev.event, ev.data)
+	}
+	setTurns(t, e, sid, "completed")
+	if ev := s.nextNonComment(); ev.event != "state" {
+		t.Fatalf("event %q %s, want state", ev.event, ev.data)
+	}
+	if ev := s.nextNonComment(); ev.event != "turn" {
+		t.Fatalf("event %q %s, want turn", ev.event, ev.data)
+	}
+	if ev := s.nextNonComment(); ev.event != "end" {
+		t.Fatalf("event %q %s, want end", ev.event, ev.data)
+	}
+	s.closed()
 }

@@ -243,6 +243,26 @@ func TestFollowTokenMovesOnlyWithFollowedState(t *testing.T) {
 		t.Fatal(err)
 	}
 	moved("a session state change")
+	if err := ReplaceEnvironmentServices(s, 1, EnvironmentServiceSet{
+		Services: []EnvironmentService{{Name: "web", Port: 3000, State: "starting"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	moved("a service health change")
+	if err := ReplaceEnvironmentServices(s, 1, EnvironmentServiceSet{
+		Services: []EnvironmentService{{Name: "web", Port: 3000, State: "starting"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if again := token(); again != prev {
+		t.Fatalf("token moved after rewriting the same service health: %q %q", prev, again)
+	}
+	if err := ReplaceEnvironmentServices(s, 1, EnvironmentServiceSet{
+		Services: []EnvironmentService{{Name: "web", Port: 3000, State: "healthy"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	moved("a service becoming healthy")
 }
 
 func TestRepositoryFreeOperatorEnvironmentName(t *testing.T) {
