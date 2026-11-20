@@ -203,7 +203,7 @@ func sourceGitPin(s *store.Store, sess *store.Session, rev store.ReviewRevision,
 func boundActions(actions []store.Action, revisionID int64) []Action {
 	out := make([]Action, 0)
 	for _, a := range actions {
-		if a.ReviewRevisionID == nil || *a.ReviewRevisionID != revisionID {
+		if !includeReceiptAction(a, revisionID) {
 			continue
 		}
 		out = append(out, Action{
@@ -212,6 +212,19 @@ func boundActions(actions []store.Action, revisionID int64) []Action {
 		})
 	}
 	return out
+}
+
+// includeReceiptAction keeps review-bound rows and operator environment
+// mutations (preview mint, workspace put) that have no review revision.
+func includeReceiptAction(a store.Action, revisionID int64) bool {
+	if a.ReviewRevisionID != nil {
+		return *a.ReviewRevisionID == revisionID
+	}
+	switch a.Type {
+	case "preview.mint", "workspace.put":
+		return true
+	}
+	return false
 }
 
 func evidenceSummary(actions []Action) EvidenceSummary {

@@ -213,6 +213,19 @@ func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess
 		http.Error(w, err.Error(), 500)
 		return "", nil, time.Time{}, false
 	}
+	receipt := map[string]any{
+		"session_id": sess.ID,
+		"port":       port,
+		"expires_at": g.ExpiresAt.UTC().Format(time.RFC3339Nano),
+	}
+	if service != "" {
+		receipt["service"] = service
+	}
+	if err := recordOperatorEnvAction(s.Eng.Store, sess, actionPreviewMint,
+		"The operator minted a preview grant for this session.", receipt); err != nil {
+		http.Error(w, err.Error(), 500)
+		return "", nil, time.Time{}, false
+	}
 	u := strings.TrimRight(s.PreviewBase, "/") + "/?g=" + tok
 	return u, envRow, g.ExpiresAt, true
 }

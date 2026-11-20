@@ -181,9 +181,10 @@ rusui sync [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] [-remot
 
 Copy a local file into a live session workspace. The path is relative to the
 workspace. The cap is 32 MiB. The file is stored as bytes; the console does
-not render it as HTML. `rusui get` copies one workspace-relative file out
-under the same cap and path rules. It does not take the terminal write lease
-and does not run the guest.
+not render it as HTML. A successful put appends a `workspace.put` action
+receipt with the destination path, not the file bytes. `rusui get` copies one
+workspace-relative file out under the same cap and path rules. It does not
+take the terminal write lease and does not run the guest.
 
 ```bash
 rusui put [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -file ./shot.png SESSION_ID shot.png
@@ -196,7 +197,9 @@ rusui ls [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_I
 Mint a preview grant for a declared service or a raw environment port. The
 command prints a preview-origin URL that already carries the grant (`?g=`).
 The operator token stays on the plane; the CLI does not print the grant
-except as that query. `-service NAME` reads `port` from `.rusui/services.yaml`
+except as that query. A successful mint appends a `preview.mint` action
+receipt with the session, port or service name, and expiry, not the grant
+token. `-service NAME` reads `port` from `.rusui/services.yaml`
 and requires the service to be healthy. `-port PORT` is operator-only and
 records no service name. Unset `RUSUI_PREVIEW_BASE`, an unknown session, an
 environment that is not ready after wake, an undeclared, portless, or
