@@ -189,6 +189,8 @@ projects:
 		strings.Replace(good, "rusui:\n", "rusui:\n    permissions: [{command: npm, verdict: reject}]\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    tenant: Acme\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    task_base: branch\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    gitlab:\n      group/project:\n        project_id: 1\n        comment: true\n", 1),
+		strings.Replace(good, "rusui:\n", "rusui:\n    gitlab:\n      group/project: {}\n", 1),
 	}
 	for i, c := range cases {
 		if _, err := Parse([]byte(c)); err == nil {
@@ -503,5 +505,43 @@ func TestEgressAllow(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "rusui") {
 			t.Fatalf("accepted or unnamed project: %q: %v", bad, err)
 		}
+	}
+}
+
+func TestParseGitLabDoesNotAliasGitHub(t *testing.T) {
+	e, err := Parse([]byte(`
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+projects:
+  rusui:
+    repos:
+      group/project:
+        visibility: public
+    gitlab:
+      group/project:
+        project_id: 99
+        visibility: public
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gh, ok := e.Repo("group/project")
+	if !ok || gh.Provider != ProviderGitHub || gh.ProjectID != 0 {
+		t.Fatalf("github %+v ok=%v", gh, ok)
+	}
+	gl, ok := e.GitLabByProjectID(99)
+	if !ok || gl.Provider != ProviderGitLab || gl.ProjectPath != "group/project" || gl.Origin != GitLabOrigin {
+		t.Fatalf("gitlab %+v ok=%v", gl, ok)
+	}
+	if GitLabSourceKey(99) == "group/project" {
+		t.Fatal("gitlab key aliased github path")
+	}
+	if _, ok := e.Repo(GitLabSourceKey(99)); !ok {
+		t.Fatal("gitlab source missing")
+	}
+	if !e.HasGitLab() {
+		t.Fatal("HasGitLab")
 	}
 }

@@ -64,7 +64,7 @@ func snapshotStamp(hash string) []byte {
 // snapshot and skip plane hooks and setup. A hash-only stamp is not a
 // hit (#512).
 func (e *Engine) snapshotHit(repo, pin, hash string) bool {
-	if e.Tree == nil || repo == "" || pin == "" || hash == "" || policy.IsProjectKey(repo) {
+	if e.Tree == nil || repo == "" || pin == "" || hash == "" || policy.IsProjectKey(repo) || policy.IsGitLabSource(repo) {
 		return false
 	}
 	return snapshotComplete(filepath.Join(e.snapshotRoot(), hash), hash)
@@ -97,8 +97,8 @@ func (e *Engine) SnapshotReport(project, guest, repo, pin string) (sourceHash st
 // steps run on every new environment. setup is nil when setup was not
 // attempted. hit is true only on the snapshotComplete path.
 func (e *Engine) prepareWorkspace(d env.Driver, handle, repo, pin, hash string) (setup *env.Capture, hooks []env.Capture, hit bool, err error) {
-	if policy.IsProjectKey(repo) {
-		// Empty workspace, no .git, no setup (ADR 0048).
+	if policy.IsProjectKey(repo) || policy.IsGitLabSource(repo) {
+		// Empty workspace, no .git, no setup (ADR 0048 / ADR 0021).
 		return nil, nil, false, nil
 	}
 	root := e.snapshotRoot()

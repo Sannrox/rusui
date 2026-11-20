@@ -17,8 +17,8 @@ The single human who holds `RUSUI_OPERATOR_TOKEN`. Plane API authorization is th
 _Avoid_: team, org, IdP user, second operator, Slack user as operator
 
 **Bound repository**:
-A GitHub `owner/name` listed under a project. Review requires at least one. GitHub is optional on the project itself. `visibility` (`public` or `private`) is a policy attribute of that bound repository, not of this source repo.
-_Avoid_: Using the repository full name as the policy identity
+A GitHub `owner/name` listed under a project's `repos:`, or a GitLab.com project listed under `gitlab:` with a numeric `project_id`. Store identity for GitLab is `gitlab.com:{project_id}` so it cannot alias a GitHub path. Review requires at least one bound source. GitHub is optional on the project itself. `visibility` (`public` or `private`) is a policy attribute of that bound source, not of this source repo.
+_Avoid_: Using the repository full name as the policy identity; overloading `repos:` with a GitLab path
 
 **Session kind**:
 The runtime accepts `review`, `run`, and `scheduled`. The experimental

@@ -362,6 +362,69 @@ func openStore(t *testing.T) *store.Store {
 	return s
 }
 
+func TestExportReceiptGitLabSourceHasNoCredential(t *testing.T) {
+	s := openStore(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	secret := "glpat-" + strings.Repeat("a", 20)
+	repo := "gitlab.com:99"
+	polRes, err := s.DB.Exec(`INSERT INTO policy_revisions (hash, payload) VALUES ('pol-gl', 'version: 2\nprojects: {}\n')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	polID, _ := polRes.LastInsertId()
+	res, err := s.DB.Exec(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, prompt, guest_name, guest_pin, guest_config, created_at) VALUES (1,'review',?,7,'issue','completed','demo','do not export','shikigami','pin-1','cfg',?)`, repo, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sid, _ := res.LastInsertId()
+	turnRes, err := s.DB.Exec(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, state) VALUES (?, 'review', 1, 1, 1, 'completed')`, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tid, _ := turnRes.LastInsertId()
+	snap := `{"repo":"gitlab.com:99","item":7,"item_kind":"issue","provider":"gitlab","origin":"https://gitlab.com","project_id":99,"project_path":"group/project"}`
+	if _, err := s.DB.Exec(`INSERT INTO snapshots (repo, item, revision, item_kind, item_hash, main_sha, payload) VALUES (?, 7, 1, 'issue', 'h', '', ?)`, repo, snap); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`INSERT INTO events (session_id, source, delivery_id, repo, item, item_kind, received_at) VALUES (?, 'gitlab', 'gitlab:https://gitlab.com:msg_1', ?, 7, 'issue', ?)`, sid, repo, now); err != nil {
+		t.Fatal(err)
+	}
+	art := map[string]any{
+		"schema_version": 1, "repo": repo, "item": 7, "item_kind": "issue",
+		"claimed_revision": 1, "snapshot_hash": "h", "verdict": "keep",
+	}
+	raw, err := json.Marshal(art)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload, policy_revision_id) VALUES (?, 1, 'h', '', ?, ?)`, tid, string(raw), polID); err != nil {
+		t.Fatal(err)
+	}
+	exp, err := FromStore(s, sid, []string{secret})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exp.Provider != "gitlab" || exp.Origin != "https://gitlab.com" || exp.ProjectID != 99 || exp.ProjectPath != "group/project" {
+		t.Fatalf("source %+v", exp)
+	}
+	if exp.ExternalItemID != "7" || exp.DeliveryID != "gitlab:https://gitlab.com:msg_1" || exp.SnapshotHash != "h" {
+		t.Fatalf("ids %+v", exp)
+	}
+	if exp.PolicyRevisionID != polID {
+		t.Fatalf("policy %d", exp.PolicyRevisionID)
+	}
+	out, err := exp.JSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), secret) || strings.Contains(exp.Markdown(), secret) {
+		t.Fatalf("leaked gitlab credential")
+	}
+	if strings.Contains(string(out), `"token"`) || strings.Contains(strings.ToLower(string(out)), "glpat-") {
+		t.Fatalf("credential field %s", out)
+	}
+}
+
 func empty(v, fallback string) string {
 	if v == "" {
 		return fallback

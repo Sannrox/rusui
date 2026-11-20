@@ -19,6 +19,7 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/gl"
 	"github.com/sannrox/rusui/internal/oidc"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/slack"
@@ -53,6 +54,10 @@ type Server struct {
 	GitHubToken      string
 	GitHubTokens     gh.TokenSource
 	AgentGitHubToken string // operator credential for implement sessions (ADR 0015)
+	// GitLabWebhookSec is the GitLab.com signing token. GitLabToken is the
+	// read_api credential; it is redacted from receipts and never given to guests.
+	GitLabWebhookSec string
+	GitLabToken      string
 	// RepoTokens is set when plane publication is on (ADR 0044): implement
 	// guests get no GitHub credential and git pushes use a token scoped to
 	// the one repository.
@@ -98,6 +103,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /freeze", s.freeze)
 	mux.HandleFunc("POST /guests/conformance", s.qualifyGuest)
 	mux.HandleFunc("POST /hooks/github", s.githubHook)
+	mux.HandleFunc("POST /hooks/gitlab", s.gitlabHook)
 	mux.HandleFunc("POST /hooks/events", s.eventsHook)
 	mux.HandleFunc("POST /hooks/sessions/{id}", s.sessionWebhookHook)
 	mux.HandleFunc("POST /hooks/slack", s.slackHook)
@@ -256,6 +262,49 @@ func (s *Server) githubHook(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(200)
 	w.Write([]byte("ok"))
+}
+
+func (s *Server) gitlabHook(w http.ResponseWriter, r *http.Request) {
+	body, ok := readHookBody(w, r, githubHookBodyCap)
+	if !ok {
+		return
+	}
+	id := r.Header.Get("webhook-id")
+	ts := r.Header.Get("webhook-timestamp")
+	sig := r.Header.Get("webhook-signature")
+	now := time.Now().UTC()
+	if s.Eng != nil && s.Eng.Clock != nil {
+		now = s.Eng.Clock.Now().UTC()
+	}
+	if s.GitLabWebhookSec == "" || !gl.Verify(s.GitLabWebhookSec, id, ts, sig, body) {
+		http.Error(w, "bad sig", http.StatusUnauthorized)
+		return
+	}
+	if !gl.TimestampFresh(ts, now, gl.MaxTimestampAge) {
+		http.Error(w, "stale", http.StatusUnauthorized)
+		return
+	}
+	ev, err := gl.ParseIssueWebhook(r.Header.Get("X-Gitlab-Event"), body)
+	if err != nil {
+		if errors.Is(err, gl.ErrConfidential) {
+			http.Error(w, "confidential", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	bound, ok := s.Eng.PolicySnapshot().GitLabByProjectID(ev.ProjectID)
+	if !ok {
+		http.Error(w, "unbound", http.StatusNotFound)
+		return
+	}
+	repo := policy.GitLabSourceKey(bound.ProjectID)
+	if err := s.Eng.IngestGitLabDelivery(gl.DeliveryID(id), repo, ev.IID, "issue"); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
 }
 
 func (s *Server) eventsHook(w http.ResponseWriter, r *http.Request) {

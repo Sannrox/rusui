@@ -126,7 +126,7 @@ func (e *Engine) maybeAdmitRepair(it snapshot.Item) {
 	}
 	pol := e.PolicySnapshot()
 	r, ok := pol.Repo(it.Repo)
-	if !ok {
+	if !ok || r.Provider == policy.ProviderGitLab {
 		return
 	}
 	key := RepairEffortKey(it.Repo, it.Item)

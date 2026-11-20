@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/sannrox/rusui/internal/ops"
@@ -26,7 +27,7 @@ const (
 var (
 	// ErrNoReview means the session has no completed review revision.
 	ErrNoReview = errors.New("no completed review")
-	tokenShapes = regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|xai-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,})`)
+	tokenShapes = regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9_-]{20,}|xai-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,})`)
 	authHeader  = regexp.MustCompile(`(?i)\b(bearer\s+|basic\s+|authorization:\s*token\s+)[A-Za-z0-9._~+/=-]{16,}`)
 )
 
@@ -45,6 +46,13 @@ type Export struct {
 	Repo             string          `json:"repo"`
 	Item             int             `json:"item"`
 	ItemKind         string          `json:"item_kind"`
+	Provider         string          `json:"provider,omitempty"`
+	Origin           string          `json:"origin,omitempty"`
+	ProjectID        int64           `json:"project_id,omitempty"`
+	ProjectPath      string          `json:"project_path,omitempty"`
+	ExternalItemID   string          `json:"external_item_id,omitempty"`
+	DeliveryID       string          `json:"delivery_id,omitempty"`
+	SnapshotHash     string          `json:"snapshot_hash,omitempty"`
 	SourceGitPin     string          `json:"source_git_pin"`
 	GuestName        string          `json:"guest_name,omitempty"`
 	GuestPin         string          `json:"guest_pin,omitempty"`
@@ -155,6 +163,19 @@ func FromStore(s *store.Store, sessionID int64, secrets []string) (Export, error
 	exp.PolicyRevisionID = rev.PolicyRevisionID
 	exp.PolicyRevision = rev.PolicyRevision
 	exp.SourceGitPin = sourceGitPin(s, sess, rev, art)
+	exp.SnapshotHash = art.SnapshotHash
+	if it, err := store.LoadSnapshot(s, sess.Repo, sess.Item, rev.ClaimedRevision); err == nil {
+		exp.Provider = it.Provider
+		exp.Origin = it.Origin
+		exp.ProjectID = it.ProjectID
+		exp.ProjectPath = it.ProjectPath
+		if it.Provider != "" && it.Item > 0 {
+			exp.ExternalItemID = strconv.Itoa(it.Item)
+		}
+	}
+	if id, err := store.LatestEventDelivery(s, sess.ID); err == nil {
+		exp.DeliveryID = id
+	}
 	exp.EvidenceSummary = evidenceSummary(exp.Actions)
 	exp.GitHubAction = githubAction(exp.Actions)
 	if art.InputTokens != nil || art.OutputTokens != nil {
@@ -249,6 +270,12 @@ func firstNonEmpty(values ...string) string {
 func redactExport(exp Export, secrets []string) Export {
 	exp.PolicyRevision = redact(exp.PolicyRevision, secrets)
 	exp.Repo = redact(exp.Repo, secrets)
+	exp.Provider = redact(exp.Provider, secrets)
+	exp.Origin = redact(exp.Origin, secrets)
+	exp.ProjectPath = redact(exp.ProjectPath, secrets)
+	exp.ExternalItemID = redact(exp.ExternalItemID, secrets)
+	exp.DeliveryID = redact(exp.DeliveryID, secrets)
+	exp.SnapshotHash = redact(exp.SnapshotHash, secrets)
 	exp.SourceGitPin = redact(exp.SourceGitPin, secrets)
 	exp.GuestName = redact(exp.GuestName, secrets)
 	exp.GuestPin = redact(exp.GuestPin, secrets)
@@ -295,6 +322,27 @@ func (e Export) Markdown() string {
 	fmt.Fprintf(&b, "- Claimed revision: %d\n", e.ClaimedRevision)
 	if e.Repo != "" {
 		fmt.Fprintf(&b, "- Item: %s#%d (%s)\n", e.Repo, e.Item, e.ItemKind)
+	}
+	if e.Provider != "" {
+		fmt.Fprintf(&b, "- Provider: %s\n", e.Provider)
+	}
+	if e.Origin != "" {
+		fmt.Fprintf(&b, "- Origin: %s\n", e.Origin)
+	}
+	if e.ProjectID != 0 {
+		fmt.Fprintf(&b, "- Project id: %d\n", e.ProjectID)
+	}
+	if e.ProjectPath != "" {
+		fmt.Fprintf(&b, "- Project path: %s\n", e.ProjectPath)
+	}
+	if e.ExternalItemID != "" {
+		fmt.Fprintf(&b, "- External item: %s\n", e.ExternalItemID)
+	}
+	if e.DeliveryID != "" {
+		fmt.Fprintf(&b, "- Delivery: %s\n", e.DeliveryID)
+	}
+	if e.SnapshotHash != "" {
+		fmt.Fprintf(&b, "- Snapshot hash: %s\n", e.SnapshotHash)
 	}
 	fmt.Fprintf(&b, "- Verdict: %s\n", emptyDash(e.Verdict))
 	fmt.Fprintf(&b, "- Evidence: %d server_verified, %d plane_observed, %d model_assertion\n",
