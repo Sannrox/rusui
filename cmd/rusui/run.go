@@ -2,22 +2,55 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/sannrox/rusui/internal/server"
 )
 
-func runCLI(args []string) {
-	os.Exit(runMain(args, os.Stdout, os.Stderr, isTerminal(os.Stderr)))
+type pathList []string
+
+func (p *pathList) String() string { return strings.Join(*p, ",") }
+
+func (p *pathList) Set(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("empty path")
+	}
+	*p = append(*p, value)
+	return nil
 }
 
-func runMain(args []string, stdout, stderr io.Writer, stderrTTY bool) int {
+func loadPromptAttachments(paths []string) ([]map[string]string, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	out := make([]map[string]string, 0, len(paths))
+	for _, path := range paths {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, map[string]string{
+			"name":    filepath.Base(path),
+			"content": base64.StdEncoding.EncodeToString(body),
+		})
+	}
+	return out, nil
+}
+
+func runCLI(args []string) {
+	os.Exit(runMain(args, os.Stdin, os.Stdout, os.Stderr, isTerminal(os.Stdin), isTerminal(os.Stderr)))
+}
+
+func runMain(args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY, stderrTTY bool) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
@@ -32,12 +65,23 @@ func runMain(args []string, stdout, stderr io.Writer, stderrTTY bool) int {
 	ref := fs.String("ref", "", "source ref")
 	base := fs.String("base-sha", "", "pinned base commit")
 	paths := fs.String("paths", "", "comma-separated allowed paths")
+	follow := fs.Bool("follow", false, "print the create result, then follow until the session ends")
+	var files pathList
+	fs.Var(&files, "file", "attach a file to the first turn (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
+	if prompt == "" && !stdinTTY {
+		b, err := io.ReadAll(stdin)
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, err)
+			return 1
+		}
+		prompt = strings.TrimSpace(string(b))
+	}
 	if *project == "" || prompt == "" {
-		_, _ = fmt.Fprintln(stderr, "usage: rusui run -project SLUG [-url URL] [-token TOKEN] [-guest NAME] [-idempotency-key KEY] [-effort KEY -repo REPO -ref REF -base-sha SHA -paths PATHS] PROMPT")
+		_, _ = fmt.Fprintln(stderr, "usage: rusui run -project SLUG [-url URL] [-token TOKEN] [-guest NAME] [-file PATH] [-follow] [-idempotency-key KEY] [-effort KEY -repo REPO -ref REF -base-sha SHA -paths PATHS] [PROMPT]")
 		return 2
 	}
 	payload := map[string]any{"kind": "run", "prompt": prompt}
@@ -58,6 +102,14 @@ func runMain(args []string, stdout, stderr io.Writer, stderrTTY bool) int {
 		if *paths != "" {
 			payload["allowed_paths"] = strings.Split(*paths, ",")
 		}
+	}
+	if len(files) > 0 {
+		atts, err := loadPromptAttachments(files)
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, err)
+			return 1
+		}
+		payload["attachments"] = atts
 	}
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(*url, "/")+"/projects/"+*project+"/sessions", bytes.NewReader(body))
@@ -95,7 +147,17 @@ func runMain(args []string, stdout, stderr io.Writer, stderrTTY bool) int {
 	if stderrTTY {
 		writeRunHandle(stderr, b)
 	}
-	return 0
+	if !*follow {
+		return 0
+	}
+	var created struct {
+		SessionID int64 `json:"session_id"`
+	}
+	if err := json.Unmarshal(b, &created); err != nil || created.SessionID < 1 {
+		_, _ = fmt.Fprintln(stderr, "run: follow: response")
+		return 1
+	}
+	return followRead(*url, *token, strconv.FormatInt(created.SessionID, 10), stdout, stderr, isTerminal(stdout))
 }
 
 // writeRunHandle prints the new session id and the documented follow, read,

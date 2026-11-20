@@ -16,7 +16,42 @@ import (
 	"github.com/sannrox/rusui/internal/store"
 )
 
-const receiptPageSize = 100
+const (
+	receiptPageSize = 100
+	// promptAttachmentBodyCap matches follow-up turns: two 32 MiB
+	// workspace parts plus 1 MiB of JSON framing.
+	promptAttachmentBodyCap = int64(env.WorkspaceUploadCap) + int64(env.WorkspaceUploadCap)/2 + 1<<20
+)
+
+type promptAttachment struct {
+	Name    string `json:"name"`
+	Content string `json:"content"`
+}
+
+func decodePromptFiles(atts []promptAttachment) ([]store.PromptFile, error) {
+	if len(atts) == 0 {
+		return nil, nil
+	}
+	files := make([]store.PromptFile, 0, len(atts))
+	for _, a := range atts {
+		raw, err := base64.StdEncoding.DecodeString(a.Content)
+		if err != nil {
+			return nil, fmt.Errorf("attachment")
+		}
+		files = append(files, store.PromptFile{Name: a.Name, Body: raw})
+	}
+	return files, nil
+}
+
+func writePromptFileError(w http.ResponseWriter, err error) {
+	switch err.Error() {
+	case "oversize", "path", "attachment empty", "unsupported",
+		"native Claude attachments unsupported", "native Codex attachments unsupported":
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	default:
+		http.Error(w, err.Error(), http.StatusConflict)
+	}
+}
 
 func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	if !s.operatorOrWorkerOK(r) {
@@ -401,15 +436,12 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, int64(env.WorkspaceUploadCap)+int64(env.WorkspaceUploadCap)/2+1<<20)
+	r.Body = http.MaxBytesReader(w, r.Body, promptAttachmentBodyCap)
 	var req struct {
-		Prompt      string `json:"prompt"`
-		Steer       bool   `json:"steer"`
-		Queued      bool   `json:"queued"`
-		Attachments []struct {
-			Name    string `json:"name"`
-			Content string `json:"content"`
-		} `json:"attachments"`
+		Prompt      string             `json:"prompt"`
+		Steer       bool               `json:"steer"`
+		Queued      bool               `json:"queued"`
+		Attachments []promptAttachment `json:"attachments"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -423,14 +455,10 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "attachments are not a steer", http.StatusBadRequest)
 		return
 	}
-	var files []store.PromptFile
-	for _, a := range req.Attachments {
-		raw, err := base64.StdEncoding.DecodeString(a.Content)
-		if err != nil {
-			http.Error(w, "attachment", http.StatusBadRequest)
-			return
-		}
-		files = append(files, store.PromptFile{Name: a.Name, Body: raw})
+	files, err := decodePromptFiles(req.Attachments)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	if len(files) > 0 {
 		guestName, guestEntry, guestErr := s.Eng.SessionGuest(id)
@@ -489,12 +517,7 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 		turnID, pending, err = s.Eng.PromptFollowUpFiles(id, req.Prompt, files)
 	}
 	if err != nil {
-		switch err.Error() {
-		case "oversize", "path", "attachment empty", "unsupported":
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		default:
-			http.Error(w, err.Error(), http.StatusConflict)
-		}
+		writePromptFileError(w, err)
 		return
 	}
 	out := map[string]any{"turn_id": turnID, "pending_revision": pending, "delivery": delivery}

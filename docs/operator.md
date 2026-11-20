@@ -62,6 +62,22 @@ guest:
 rusui run -project rusui -guest shikigami 'Inspect the project'
 ```
 
+Pipe the prompt when no prompt args are given and stdin is not a terminal.
+Prompt args still win when present. Empty stdin with no args is usage.
+
+```bash
+cat notes.md | rusui run -project rusui
+rusui run -project rusui -file shot.png -file notes.md 'Inspect these'
+rusui run -project rusui -follow 'Inspect the project'
+```
+
+`-file` is repeatable on `rusui run` and `rusui prompt` and uses the same
+kinds and size caps as `POST /sessions/{id}/turns` (image, PDF, plain text,
+Markdown; 8 MiB per part, 16 MiB aggregate). Steer refuses attachments.
+`-follow` prints the create JSON, then follows with `rusui read -follow`
+until the session is completed, failed, or cancelled. Without `-follow`,
+`rusui run` still returns after create.
+
 `GET /projects/{slug}/guests` returns the default and allowed names with pins
 (#631). Argv, image, and secrets stay off that response.
 
