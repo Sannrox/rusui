@@ -50,6 +50,9 @@ type FakeRuntime struct {
 	Samples     map[string]Sample
 	SampleErr   error
 	SampleCalls [][]string
+	// FailCaptureWhenStopped makes CaptureTree fail unless the fake
+	// container is running, so export can prove it wakes only then.
+	FailCaptureWhenStopped bool
 	// secrets are outside Contents so workspace snapshot, read, and
 	// CaptureTree never observe injected values.
 	secrets map[string]map[string]string
@@ -328,6 +331,10 @@ func (f *FakeRuntime) PlaceTree(id, srcDir string) error {
 // through Files is written empty.
 func (f *FakeRuntime) CaptureTree(id, destDir string) error {
 	f.mu.Lock()
+	if f.FailCaptureWhenStopped && (f.alive == nil || !f.alive[id]) {
+		f.mu.Unlock()
+		return fmt.Errorf("env: container not running")
+	}
 	files := map[string][]byte{}
 	for path, ok := range f.Files[id] {
 		if ok {
