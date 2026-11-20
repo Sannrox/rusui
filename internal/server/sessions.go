@@ -79,7 +79,61 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	s.annotateSessionWait(list)
 	w.Header().Set("Content-Type", "application/json")
+	if r.URL.Query().Get("include") == "stats" {
+		_ = json.NewEncoder(w).Encode(s.withSessionUsage(list))
+		return
+	}
 	_ = json.NewEncoder(w).Encode(list)
+}
+
+type sessionListItem struct {
+	store.Session
+	Usage *env.Sample `json:"usage,omitempty"`
+}
+
+func (s *Server) withSessionUsage(list []store.Session) []sessionListItem {
+	items := make([]sessionListItem, len(list))
+	handles := make([]string, 0, len(list))
+	at := map[int]string{}
+	seen := map[string]bool{}
+	for i, sess := range list {
+		items[i].Session = sess
+		if sess.Archived {
+			continue
+		}
+		envRow, err := store.GetEnvironment(s.Eng.Store, sess.EnvironmentID)
+		if err != nil || envRow.State != store.EnvReady || envRow.Driver != env.KindContainer || envRow.Handle == "" {
+			continue
+		}
+		at[i] = envRow.Handle
+		if !seen[envRow.Handle] {
+			seen[envRow.Handle] = true
+			handles = append(handles, envRow.Handle)
+		}
+	}
+	sampler, ok := sessionSampler(s.Eng)
+	if !ok || len(handles) == 0 {
+		return items
+	}
+	samples, err := sampler.Sample(handles...)
+	if err != nil {
+		return items
+	}
+	for i, handle := range at {
+		if sample, ok := samples[handle]; ok {
+			u := sample
+			items[i].Usage = &u
+		}
+	}
+	return items
+}
+
+func sessionSampler(e *engine.Engine) (env.Sampler, bool) {
+	if e == nil || e.Container == nil {
+		return nil, false
+	}
+	s, ok := e.Container.(env.Sampler)
+	return s, ok
 }
 
 func (s *Server) annotateSessionWait(list []store.Session) {
@@ -251,7 +305,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 	response := map[string]any{
 		"session": sess, "turns": turns, "processes": processes,
 		"environment_state": envState, "cancelled": cancelled,
-		"tools": store.SpaceToolSet(sess.ExecutionMode, grants),
+		"tools":    store.SpaceToolSet(sess.ExecutionMode, grants),
 		"services": svcSet.Services,
 	}
 	if svcSet.ParseError != "" {
