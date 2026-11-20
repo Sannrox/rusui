@@ -12,12 +12,11 @@ cd "${ROOT_PATH}"
 
 source "${ROOT_PATH}/scripts/lib/init.sh"
 
-golang::setup_env
-
 # GOLANG CI LINT
 GOLANGCI_LINT=golangci-lint
 GOLANGCI_LINT_OPTS=${GOLANGCI_LINT_OPTS:-}
 GOLANGCI_LINT_VERSION="v2.12.2"
+GOLANGCI_LINT_INSTALL_URL="https://raw.githubusercontent.com/golangci/golangci-lint/${GOLANGCI_LINT_VERSION}/install.sh"
 
 
 function check_if_golangci_lint_is_in_path(){
@@ -70,14 +69,52 @@ function run_golangci_lint(){
     "${GOLANGCI_LINT}" run -v -c .golangci.yaml --new-from-rev "${base_rev}" ${GOLANGCI_LINT_OPTS} ./...
 }
 
+# Download the pinned installer to dest, retrying a non-200 GET. curl -f
+# exits 22 on HTTP error; piping that into sh used to fail validate with no
+# lint output.
+function fetch_golangci_lint_installer(){
+    local url="$1"
+    local dest="$2"
+    local attempts=3
+    local attempt=1
+    local status=0
+
+    while (( attempt <= attempts )); do
+        if curl -sfL --output "${dest}" "${url}"; then
+            return 0
+        else
+            status=$?
+        fi
+        if (( attempt < attempts )); then
+            echo "Retrying golangci-lint installer fetch (${attempt}/${attempts}) after HTTP/curl exit ${status}" >&2
+            sleep 1
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    echo "Failed to fetch golangci-lint installer from ${url} after ${attempts} attempts (HTTP/curl exit ${status})." >&2
+    return "${status}"
+}
+
 function install_golangci_lint(){
-	mkdir -p "${GOPATH}/bin"
-	curl -sfL "https://raw.githubusercontent.com/golangci/golangci-lint/${GOLANGCI_LINT_VERSION}/install.sh" \
-		| sed -e '/install -d/d' \
-		| sh -s -- -b "${GOPATH}/bin" "${GOLANGCI_LINT_VERSION}"
+    mkdir -p "${GOPATH}/bin"
+    local installer status=0
+    installer="$(mktemp "${TMPDIR:-/tmp}/golangci-lint-install.$$.XXXXXX")"
+    if fetch_golangci_lint_installer "${GOLANGCI_LINT_INSTALL_URL}" "${installer}"; then
+        sed -e '/install -d/d' "${installer}" \
+            | sh -s -- -b "${GOPATH}/bin" "${GOLANGCI_LINT_VERSION}" || status=$?
+    else
+        status=$?
+    fi
+    rm -f -- "${installer}"
+    return "${status}"
 }
 
 
-check_if_golangci_lint_is_in_path
-check_golangci_lint_version
-run_golangci_lint
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    PYTHONDONTWRITEBYTECODE=1 python3 "${ROOT_PATH}/scripts/test-validate-golangci-lint.py"
+    golang::setup_env
+    check_if_golangci_lint_is_in_path
+    check_golangci_lint_version
+    run_golangci_lint
+fi
