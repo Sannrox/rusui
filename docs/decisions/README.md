@@ -48,7 +48,7 @@ is stale.
 | [0032](0032-named-services.md) | Named services declare a port and a health path | Accepted |
 | [0033](0033-third-party-identity-deferred.md) | Plane-minted third-party identity is deferred | Superseded by 0097 |
 | [0034](0034-operator-host-location-deferred.md) | A registered operator host is not a session location yet | Accepted |
-| [0035](0035-live-environment-fork-deferred.md) | Live environment fork is deferred | Accepted |
+| [0035](0035-live-environment-fork-deferred.md) | Live environment fork is deferred | Accepted; amended by 0098 |
 | [0036](0036-environment-desktop-deferred.md) | A graphical desktop in the environment is deferred | Accepted |
 | [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Superseded by 0096 |
 | [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
@@ -111,6 +111,7 @@ is stale.
 | [0095](0095-drop-1.0-freeze-as-product-goal.md) | Drop the 1.0 freeze as the product goal | Accepted |
 | [0096](0096-operator-invited-viewer-preview.md) | Operator-invited viewer preview grants | Accepted |
 | [0097](0097-package-registry-guest-identity.md) | Plane-minted package-registry identity for one guest audience | Accepted |
+| [0098](0098-snapshot-only-clone-retained.md) | Snapshot-only clone retained | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR

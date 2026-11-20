@@ -1,10 +1,13 @@
 # ADR 0035: Live environment fork is deferred
 
-- Status: Accepted
+- Status: Accepted; amended by 0098
 - Date: 2026-09-28
 - Amends: [ADR 0001](0001-environment-plane.md) D4 (`Fork` on the
   driver) and [ADR 0007](0007-environment-snapshot.md) (a snapshot is the
   only clone source).
+- Amended by: [ADR 0098](0098-snapshot-only-clone-retained.md).
+  2026-11-20 retain: D3 still unmet; snapshot remains the only clone
+  source. This record stays Accepted.
 - Resolves: [#325](https://github.com/Sannrox/rusui/issues/325)
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0009](0009-credential-broker.md) (per-turn grant),
@@ -15,7 +18,8 @@
   [#122](https://github.com/Sannrox/rusui/issues/122) (child-session
   delegation, a sibling question),
   [ADR 0040](0040-child-session-delegation-deferred.md) (child sessions
-  are deferred).
+  are deferred),
+  [ADR 0098](0098-snapshot-only-clone-retained.md) (2026-11-20 retain).
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
 
