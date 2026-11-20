@@ -25,12 +25,17 @@ Live comments stay off in the default profile (`comment: false`). Repair
 stays off (`repair` empty). Close, merge, and land stay unauthorized by
 this sequence.
 
-[#141](https://github.com/Sannrox/rusui/issues/141) is the M6 freeze
+[#141](https://github.com/Sannrox/rusui/issues/141) closed the historical
+M6 freeze
 ([ADR 0086](docs/decisions/0086-supported-1.0-core-contract.md)).
-[#110](https://github.com/Sannrox/rusui/issues/110) remains a
-maintenance-track gate, not a freeze dependency. GitHub Issues remain
-the planning source of truth; this file does not silently edit Issue
-dependencies.
+[ADR 0095](docs/decisions/0095-drop-1.0-freeze-as-product-goal.md)
+drops freeze-as-identity: the product contract is shipped behavior and
+admitted work, and GitHub Issues are the backlog. A numbered release
+remains [#146](https://github.com/Sannrox/rusui/issues/146), a quality
+bar, not product identity. [#110](https://github.com/Sannrox/rusui/issues/110)
+remains a maintenance-track gate, not a freeze dependency. GitHub Issues
+remain the planning source of truth; this file does not silently edit
+Issue dependencies.
 
 ## Shape
 
@@ -39,7 +44,7 @@ dependencies.
 | **M1 Dependable sessions** | Leave a real managed session, return, steer, recover interruptions | Core gate |
 | **M2 Verified delivery** | One bounded issue becomes an attributable PR; humans merge | Core gate |
 | **M4 Daily remote workspace** | Complete the session and delivery loop from the terminal; independent install/restore | Core gate |
-| **M6 Stable core** | Freeze the demonstrated terminal workflow and support limits | Core 1.0 gate |
+| **M6 Stable core** | Record the demonstrated terminal workflow and support limits | Historical core gate |
 | **M3 Continuous maintenance** | Two repositories stay reviewed; eligible repairs run under policy | Separate maintenance release gate |
 | **M5 Agent and infrastructure choice** | Add selected capabilities when measured need justifies them | Optional capability releases |
 
@@ -84,7 +89,8 @@ one sibling repository at twenty or more sessions per week with zero
 observed credential leaks and no unauthorized action in the measured run.
 A finite sample is evidence, not a future guarantee. This gate is required
 for a maintenance release or autonomous-maintenance claim, not for the
-remote-workspace 1.0. Live comment/close/merge are separate promotions.
+current remote-workspace contract. Live comment/close/merge are separate
+promotions.
 
 Planning issues: [#104](https://github.com/Sannrox/rusui/issues/104)–[#110](https://github.com/Sannrox/rusui/issues/110).
 
@@ -95,23 +101,26 @@ follow, inspect, steer, approve, attach to, and recover a managed session,
 then obtain its result, without using the browser console. Terminal access
 to services and previews belongs here when needed to verify the task.
 The existing console and editor ACP facade remain supported surfaces;
-their completeness is not a core-1.0 gate under
+their completeness is not a gate for the current contract under
 [ADR 0046](docs/decisions/0046-workspace-first-sequence.md).
 
 The [U8 self-hosting journey](docs/proofs/u8-operator-journey.md) was an
 author exercise on a clean machine. Under
 [ADR 0085](docs/decisions/0085-freeze-on-author-validated-journey.md) the
-stable-core freeze may start on it. A documented terminal-only exercise
+historical freeze started on it. A documented terminal-only exercise
 with shipped binaries and an independent self-hosting maintainer, including
-installation, disconnect/reconnect, upgrade, and restore, is the 1.0
-publish gate instead.
+installation, disconnect/reconnect, upgrade, and restore, remains the
+numbered-release quality bar
+([#146](https://github.com/Sannrox/rusui/issues/146)).
 
 Planning issues: [#111](https://github.com/Sannrox/rusui/issues/111)–[#118](https://github.com/Sannrox/rusui/issues/118).
 
-## M5 Optional tracks (not required for core 1.0)
+## M5 Optional tracks
 
-Each earlier gate stays named. Absence from core 1.0 is allowed only as
-recorded in [ADR 0046](docs/decisions/0046-workspace-first-sequence.md).
+Each earlier gate stays named. Absence from the current contract is
+allowed only as recorded in
+[ADR 0046](docs/decisions/0046-workspace-first-sequence.md). Deferred
+ADRs stay in force until a later accepted ADR adopts that track.
 
 | Track | Treatment |
 | --- | --- |
@@ -128,28 +137,32 @@ Planning issues: [#119](https://github.com/Sannrox/rusui/issues/119)–[#140](ht
 
 ## M6 Stable core
 
-[ADR 0086](docs/decisions/0086-supported-1.0-core-contract.md) freezes
-the demonstrated terminal workflow and support limits. The freeze
-started on the author-validated self-hosting journey
+[ADR 0086](docs/decisions/0086-supported-1.0-core-contract.md) recorded
+the demonstrated terminal workflow and support limits. The historical
+freeze started on the author-validated self-hosting journey
 ([ADR 0085](docs/decisions/0085-freeze-on-author-validated-journey.md)).
-Until an independent journey with a go outcome is recorded, the
-contract claims no external self-hosting readiness, and publishing 1.0
+[ADR 0095](docs/decisions/0095-drop-1.0-freeze-as-product-goal.md)
+drops freeze-as-identity: [ARCHITECTURE.md](ARCHITECTURE.md) is the
+current contract, and GitHub Issues are the backlog. Until an
+independent journey with a go outcome is recorded, the contract claims
+no external self-hosting readiness, and a numbered release
 ([#146](https://github.com/Sannrox/rusui/issues/146)) requires that
 journey. The C3 independent-review brief is
 [docs/independent-review.md](docs/independent-review.md)
-([#664](https://github.com/Sannrox/rusui/issues/664)). M3's thirty-day observation and M5's excluded optional tracks
-are not required for the remote-workspace 1.0; a maintenance or
-optional-capability release keeps its own gates.
+([#664](https://github.com/Sannrox/rusui/issues/664)). M3's thirty-day
+observation and M5's deferred optional tracks are not required for the
+current remote-workspace contract; a maintenance or optional-capability
+release keeps its own gates.
 
 Planning issues: [#141](https://github.com/Sannrox/rusui/issues/141)–[#146](https://github.com/Sannrox/rusui/issues/146).
 
-## Core 1.0 operator and runtime scope
+## Current operator and runtime scope
 
 - Audience: one-maintainer self-hosting. Shared small-team use is M5.
   Hosted multi-tenant SaaS and billing are out of scope.
 - Primary operator path: terminal CLI and HTTP+SSE. Browser console and
-  editor ACP remain clients of the same API; neither is a core-1.0
-  completeness gate.
+  editor ACP remain clients of the same API; neither is a completeness
+  gate for the current contract.
 - Merge authority: humans merge core delivery.
 - Persistence: SQLite with WAL and one writer.
 - Reasoning: ACP-owned guest loop; rusui owns environments, admission,
@@ -167,7 +180,7 @@ policy or infrastructure.
 | # | Assumption | Verify | If false |
 | --- | --- | --- | --- |
 | A1 | Grok CLI keeps stdio ACP and `session/request_permission` under `--permission-mode default` | [ADR 0002](docs/decisions/0002-grok-acp-agent-set.md) | Drive shikigami through `serve` |
-| A2 | A KVM-capable Linux host is available only if the optional microVM track is chosen | `ls /dev/kvm` on that host | Leave microVMs absent from core 1.0 |
+| A2 | A KVM-capable Linux host is available only if the optional microVM track is chosen | `ls /dev/kvm` on that host | Leave microVMs as an optional track |
 | A3 | GitHub App tokens plus a git smart-HTTP proxy can enforce repository and branch scope | [ADR 0009](docs/decisions/0009-credential-broker.md) | Rulesets plus post-push verification |
 | A5 | shikigami accepts an ACP server through its ADR process | Open the ADR | Drive shikigami through `serve`; weaker receipt capture |
 

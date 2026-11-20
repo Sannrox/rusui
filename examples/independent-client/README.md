@@ -1,6 +1,6 @@
 # Independent operator client
 
-A bounded HTTP+SSE client for the supported 1.0 operator API. It is the
+A bounded HTTP+SSE client for the supported operator API. It is the
 C4 example: dispatch a `run` session, follow (and reconnect) the
 transcript stream, approve when a pending approval exists, and retrieve
 the session and its action receipts.

@@ -1,8 +1,9 @@
-# Independent operator client (1.0)
+# Independent operator client
 
-A contributor can integrate against the frozen public API without the
-in-tree CLI, console, or any `internal/` Go package. This page is the C4
-scenario, the support profile, and the sanitized reproduction.
+A contributor can integrate against the published operator HTTP+SSE API
+without the in-tree CLI, console, or any `internal/` Go package. This
+page is the C4 scenario, the support profile, and the sanitized
+reproduction.
 
 The reusable program is
 [`examples/independent-client`](../examples/independent-client/).
@@ -15,8 +16,7 @@ results (session JSON and action receipts).
 
 Supported pair: `rusui` / `rusui-runner` from the same git commit as this
 checkout, schema of that commit, policy v2, operator HTTP+SSE. Mixing
-commits is unsupported ([compatibility.md](compatibility.md),
-[ADR 0086](decisions/0086-supported-1.0-core-contract.md)).
+commits is unsupported ([compatibility.md](compatibility.md)).
 
 Credential: one operator bearer (`RUSUI_OPERATOR_TOKEN`, or `-token`).
 The worker secret, guest grant, and database path are out of scope.

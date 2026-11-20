@@ -386,8 +386,8 @@ it also requires `implement: true`. Overlay cannot enable it. `land`
 remains unauthorized by the current contract and should stay false.
 The test fixture's comments/close settings are for dry-run coverage, not an
 operator profile. The `local` session kind is experimental, default-off, and
-outside the supported 1.0 core; enabling it requires the explicit
-`local_runtime` configuration below.
+outside the supported unattended topology; enabling it requires the
+explicit `local_runtime` configuration below.
 
 ```yaml
 version: 2

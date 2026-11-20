@@ -99,7 +99,7 @@ is stale.
 | [0083](0083-retain-single-operator-access.md) | Retain single-operator access for shared sessions | Accepted on merge; amended by 0088 |
 | [0084](0084-core-draft-actions.md) | Definition drafts are operator-applied core Actions | Accepted |
 | [0085](0085-freeze-on-author-validated-journey.md) | The stable-core freeze starts on the author-validated journey | Accepted; amended by 0086 |
-| [0086](0086-supported-1.0-core-contract.md) | Freeze the supported 1.0 core contract | Accepted; amended by 0090 |
+| [0086](0086-supported-1.0-core-contract.md) | Freeze the supported 1.0 core contract | Superseded by 0095 |
 | [0087](0087-acp-guest-session-load.md) | Resume ACP guests with session/load | Accepted |
 | [0088](0088-issuer-vouched-subjects.md) | A configured issuer vouches for several subjects | Proposed |
 | [0089](0089-redundant-plane.md) | The plane survives the loss of its host | Accepted |
@@ -108,6 +108,7 @@ is stale.
 | [0092](0092-plane-admit-hook.md) | Plane-stored admit hook | Accepted |
 | [0093](0093-egress-full-proxy.md) | Egress class full forwards HTTP(S) through a link proxy | Accepted |
 | [0094](0094-guest-kernel-isolation-profile.md) | A verified operator backend gives each environment its own guest kernel | Proposed |
+| [0095](0095-drop-1.0-freeze-as-product-goal.md) | Drop the 1.0 freeze as the product goal | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR

@@ -1,15 +1,18 @@
-# Independent security review brief (1.0)
+# Independent security review brief
 
 This is the written C3 scope for
 [#143](https://github.com/Sannrox/rusui/issues/143). A reviewer can
 execute it without further design. It does not commission a reviewer,
-perform the review, or remediate findings. Publishing 1.0 remains
+perform the review, or remediate findings. A numbered release remains
 [#146](https://github.com/Sannrox/rusui/issues/146).
 
 The support profile is
-[ADR 0086](decisions/0086-supported-1.0-core-contract.md). This brief
-does not claim external self-hosting readiness. Author-validated
-install, disconnect/reconnect, upgrade, and restore stay U8 until #146.
+[ARCHITECTURE.md](../ARCHITECTURE.md)
+([ADR 0095](decisions/0095-drop-1.0-freeze-as-product-goal.md)).
+[ADR 0086](decisions/0086-supported-1.0-core-contract.md) remains the
+historical freeze record. This brief does not claim external
+self-hosting readiness. Author-validated install, disconnect/reconnect,
+upgrade, and restore stay U8 until #146.
 
 Timebox: five reviewer-days. Finite evidence. Do not promise absence of
 vulnerabilities.
@@ -31,7 +34,7 @@ Review this immutable tuple. Mixing commits is unsupported.
 | Named guests in scope | `shikigami`, `grok`, `claude` (Claude Code CLI 2.1.283), `codex` |
 | Conformance | `scripts/compat-conformance.sh` at the candidate (`internal/compat`) |
 
-C1 freeze: [ADR 0086](decisions/0086-supported-1.0-core-contract.md)
+C1 historical freeze: [ADR 0086](decisions/0086-supported-1.0-core-contract.md)
 ([#141](https://github.com/Sannrox/rusui/issues/141)). C2 checks:
 [compatibility.md](compatibility.md)
 ([#142](https://github.com/Sannrox/rusui/issues/142)). C4 public-API
@@ -93,7 +96,7 @@ completeness gate, non-loopback listen, `-allow-insecure`.
 ## Boundaries in scope
 
 Examine these six surfaces on the candidate. Skip unselected optional
-backends (ADR 0086 exclusions).
+backends (deferred ADRs).
 
 ### 1. Selected credential
 
@@ -123,7 +126,7 @@ Policy v2; unknown fields fail closed; overlay cannot widen or enable
 `repair`. Pause stops new claims and apply. Halt cancels leased turns.
 Unmatched `session/request_permission` waits; inbox history is not a
 grant. `max_concurrent_leases` default 1.
-`max_reviews_per_repo_per_utc_day` is a 1.0 meter.
+`max_reviews_per_repo_per_utc_day` is a current meter.
 
 ### 5. Action publication
 
@@ -150,8 +153,8 @@ not recovery inputs and are unsigned.
 Five reviewer-days, in this order:
 
 1. Read this brief, [ARCHITECTURE.md](../ARCHITECTURE.md),
-   [SECURITY.md](../SECURITY.md), ADR 0086, and the ADRs cited per
-   boundary.
+   [SECURITY.md](../SECURITY.md), ADR 0095, ADR 0086, and the ADRs
+   cited per boundary.
 2. Build the candidate (`make all`) and run
    `scripts/compat-conformance.sh`. Record commit and schema from the
    printed report.
@@ -229,7 +232,7 @@ Do not spend the five days here. Name them as omissions in the report:
 Use this rubric in the report. It is the #143 gate, not a CVSS product
 claim.
 
-| Severity | Meaning | 1.0 gate |
+| Severity | Meaning | Release gate |
 | --- | --- | --- |
 | Critical | Unauthenticated write, or theft of a plane secret from the default topology | Must fix or remove the capability; independently recheck |
 | High | Guest-to-host, guest obtains a GitHub write or core credential, overlay widens policy, restore rehydrates live grants | Same as critical |

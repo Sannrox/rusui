@@ -71,7 +71,7 @@ removes prompt data and records `retention.expire`.
 
 SQLite remains the single-host default. PostgreSQL backs the redundant
 topology only ([ADR 0089](decisions/0089-redundant-plane.md)), which stays
-outside the 1.0 core until
+deferred until
 [#700](https://github.com/Sannrox/rusui/issues/700).
 
 Set `RUSUI_STORE_URL=postgres://...` to use it. An empty database gets the

@@ -1,10 +1,9 @@
-# Compatibility (1.0)
+# Compatibility
 
-The supported 1.0 core is
-[ADR 0086](decisions/0086-supported-1.0-core-contract.md). This page is
-the operator map: versions, failure behavior, and how to reproduce the
-checks. The product contract remains
-[ARCHITECTURE.md](../ARCHITECTURE.md).
+This page is the operator map of current topology: versions, failure
+behavior, and how to reproduce the checks. It is not a freeze class.
+The product contract remains [ARCHITECTURE.md](../ARCHITECTURE.md)
+([ADR 0095](decisions/0095-drop-1.0-freeze-as-product-goal.md)).
 
 ## Version tuple
 
@@ -14,7 +13,7 @@ is unsupported. Release binaries send the commit on `POST /runners/hello`
 and the plane returns 409 when they differ. Dev builds that report
 `unknown` skip that check.
 
-| Surface | 1.0 version | Unsupported input |
+| Surface | Current version | Unsupported input |
 | --- | --- | --- |
 | SQLite schema | current `schema_migrations` version (forward from implicit v1); a newer schema whose floor this binary meets | schema newer than the binary's floor allows; interrupted upgrade |
 | Policy | v2; unknown fields fail closed | v1 files; unknown fields |
@@ -24,7 +23,7 @@ and the plane returns 409 when they differ. Dev builds that report
 | Diagnostics export | redacted `diagnostics.json` | using the bundle as recovery input |
 | Review receipt export | JSON+Markdown schema 1 (`rusui receipt`) | using the files as recovery input; signed bundles |
 | Signed portable session bundles | excluded | not defined |
-| Postgres / HA plane | excluded | not a 1.0 store |
+| Postgres | not the current store | Postgres DSN |
 
 ## Migration window
 
