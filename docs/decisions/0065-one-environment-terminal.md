@@ -9,7 +9,9 @@
   option 1
 - Related: [ADR 0012](0012-operator-access.md) (one write lease),
   [ARCHITECTURE.md](../../ARCHITECTURE.md) (unchanged until rewritten),
-  [#502](https://github.com/Sannrox/rusui/issues/502) (implementation)
+  [#502](https://github.com/Sannrox/rusui/issues/502) (implementation),
+  [ADR 0099](0099-two-attributed-humans-space-mode.md) (a second
+  attributed actor may attach; the write lease stays exclusive)
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
 

@@ -1,7 +1,12 @@
 # ADR 0083: Retain single-operator access for shared sessions
 
-- Status: Accepted on merge; amended by 0088
+- Status: Accepted on merge; amended by 0088, 0099
 - Amended by: [ADR 0088](0088-issuer-vouched-subjects.md) (a configured issuer may vouch for several subjects) opens the D2 gate.
+  [ADR 0099](0099-two-attributed-humans-space-mode.md) supersedes D1
+  for space-mode attributed read, prompt, and attach. Two humans do
+  not share `RUSUI_OPERATOR_TOKEN` for that case. D2 and D3 still
+  gate a new plane-operator credential class. This record stays
+  Accepted.
 - Date: 2026-10-20
 - Amends: [ADR 0039](0039-shared-operator-governance-deferred.md)
   (restates the D3 gate and fixes the form a later actor must take).

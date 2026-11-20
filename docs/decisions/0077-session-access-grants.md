@@ -1,10 +1,16 @@
 # ADR 0077: Sessions are tenant-owned; cross-tenant access is an audited grant
 
-- Status: Accepted; amended by 0078
+- Status: Accepted; amended by 0078, 0099
 - Date: 2026-10-13
 - Amends: [ADR 0076](0076-tenant-isolation.md) (by-id read and reopen
   may follow an explicit grant); [ADR 0012](0012-operator-access.md)
   (owner-only grant administration).
+- Amended by: [ADR 0078](0078-session-execution-modes.md) (user-mode
+  rows are not shared by grant);
+  [ADR 0099](0099-two-attributed-humans-space-mode.md) (a live
+  space-mode grant includes prompt and attach; GET and reopen stand;
+  list, cancel, archive, children, grant admin, and approval decide
+  stay owner-only).
 - Resolves: [#606](https://github.com/Sannrox/rusui/issues/606).
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [ADR 0076](0076-tenant-isolation.md).
