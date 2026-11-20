@@ -297,8 +297,12 @@ curl -fsS http://127.0.0.1:8080/readyz
 "$BIN/rusui" run -project rusui -token "$RUSUI_WORKER_SECRET" "bounded session"
 ```
 
-`run` creates a `run` session through the public API. Container turns still
-need the guest image, plane TLS, and a runner.
+`run` creates a `run` session through the public API. Stdout is the create
+JSON (`session_id`, `kind`). When stderr is a terminal, rusui also prints
+that session id, the `read -follow`, `read`, and `attach` commands for it,
+and `RUSUI_SESSION_URL` when that template is set. Redirected stderr stays
+quiet so scripts can keep parsing stdout. Container turns still need the
+guest image, plane TLS, and a runner.
 
 List sessions and send prompts with the CLI:
 
