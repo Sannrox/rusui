@@ -9,10 +9,17 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/sannrox/rusui/internal/server"
 )
 
 func runCLI(args []string) {
-	fs := flag.NewFlagSet("run", flag.ExitOnError)
+	os.Exit(runMain(args, os.Stdout, os.Stderr, isTerminal(os.Stderr)))
+}
+
+func runMain(args []string, stdout, stderr io.Writer, stderrTTY bool) int {
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	fs.SetOutput(stderr)
 	url := fs.String("url", "http://127.0.0.1:8080", "plane URL")
 	project := fs.String("project", "", "project slug")
 	guest := fs.String("guest", "", "project-allowed guest (default from policy)")
@@ -25,11 +32,13 @@ func runCLI(args []string) {
 	ref := fs.String("ref", "", "source ref")
 	base := fs.String("base-sha", "", "pinned base commit")
 	paths := fs.String("paths", "", "comma-separated allowed paths")
-	_ = fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
 	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
 	if *project == "" || prompt == "" {
-		fmt.Fprintln(os.Stderr, "usage: rusui run -project SLUG [-url URL] [-token TOKEN] [-guest NAME] [-idempotency-key KEY] [-effort KEY -repo REPO -ref REF -base-sha SHA -paths PATHS] PROMPT")
-		os.Exit(2)
+		_, _ = fmt.Fprintln(stderr, "usage: rusui run -project SLUG [-url URL] [-token TOKEN] [-guest NAME] [-idempotency-key KEY] [-effort KEY -repo REPO -ref REF -base-sha SHA -paths PATHS] PROMPT")
+		return 2
 	}
 	payload := map[string]any{"kind": "run", "prompt": prompt}
 	if *guest != "" {
@@ -53,8 +62,8 @@ func runCLI(args []string) {
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(*url, "/")+"/projects/"+*project+"/sessions", bytes.NewReader(body))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if *token != "" {
@@ -65,22 +74,44 @@ func runCLI(args []string) {
 	}
 	client, err := planeHTTP(*url)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(res.Body)
 	if res.StatusCode >= 300 {
-		fmt.Fprintf(os.Stderr, "run: %s %s\n", res.Status, b)
-		os.Exit(1)
+		_, _ = fmt.Fprintf(stderr, "run: %s %s\n", res.Status, b)
+		return 1
 	}
-	os.Stdout.Write(b)
+	_, _ = stdout.Write(b)
 	if len(b) == 0 || b[len(b)-1] != '\n' {
-		fmt.Println()
+		_, _ = fmt.Fprintln(stdout)
 	}
+	if stderrTTY {
+		writeRunHandle(stderr, b)
+	}
+	return 0
+}
+
+// writeRunHandle prints the new session id and the documented follow, read,
+// and attach commands so the operator can continue from the same terminal.
+func writeRunHandle(stderr io.Writer, body []byte) {
+	var created struct {
+		SessionID int64 `json:"session_id"`
+	}
+	if err := json.Unmarshal(body, &created); err != nil || created.SessionID < 1 {
+		return
+	}
+	_, _ = fmt.Fprintf(stderr, "session %d\n", created.SessionID)
+	if parsed, err := server.ParseSessionURL(os.Getenv("RUSUI_SESSION_URL")); err == nil && parsed != nil {
+		_, _ = fmt.Fprintln(stderr, parsed.For(created.SessionID))
+	}
+	_, _ = fmt.Fprintf(stderr, "rusui read -follow %d\n", created.SessionID)
+	_, _ = fmt.Fprintf(stderr, "rusui read %d\n", created.SessionID)
+	_, _ = fmt.Fprintf(stderr, "rusui attach %d\n", created.SessionID)
 }
