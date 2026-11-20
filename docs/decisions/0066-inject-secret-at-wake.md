@@ -7,9 +7,11 @@
 - Supersedes: [ADR 0053](0053-wake-secret-injection-refused.md)
 - Resolves: [#484](https://github.com/Sannrox/rusui/issues/484)
   option 1
-- Related: [ADR 0033](0033-third-party-identity-deferred.md) (OIDC and
-  plane-minted third-party identity stay deferred; this ADR is
-  injection of stored secret ids),
+- Related: [ADR 0033](0033-third-party-identity-deferred.md)
+  (deferred minting; superseded by 0097 for one package-registry
+  audience),
+  [ADR 0097](0097-package-registry-guest-identity.md) (a minted
+  registry identity is not this stored-secret injection),
   [ARCHITECTURE.md](../../ARCHITECTURE.md) (unchanged until rewritten),
   [#503](https://github.com/Sannrox/rusui/issues/503) (implementation)
 - Discussion: none. GitHub Discussions are disabled. Merging with this

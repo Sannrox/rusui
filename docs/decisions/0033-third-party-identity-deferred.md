@@ -1,6 +1,6 @@
 # ADR 0033: Plane-minted third-party identity is deferred
 
-- Status: Accepted
+- Status: Superseded by [ADR 0097](0097-package-registry-guest-identity.md)
 - Date: 2026-09-28
 - Amends: [ADR 0009](0009-credential-broker.md) (the guest holds only
   the per-turn grant; that grant reaches only plane proxies).
