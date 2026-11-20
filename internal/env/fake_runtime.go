@@ -46,6 +46,10 @@ type FakeRuntime struct {
 	// Replaced marks ids whose /workspace is no longer a real directory.
 	Replaced map[string]bool
 	alive    map[string]bool
+	// Samples are live CPU and memory readings keyed by handle.
+	Samples     map[string]Sample
+	SampleErr   error
+	SampleCalls [][]string
 	// secrets are outside Contents so workspace snapshot, read, and
 	// CaptureTree never observe injected values.
 	secrets map[string]map[string]string
@@ -94,6 +98,25 @@ func (f *FakeRuntime) CreateAndStart(spec Spec) (string, error) {
 		}
 	}
 	return id, nil
+}
+
+func (f *FakeRuntime) Sample(ids ...string) (map[string]Sample, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.SampleCalls = append(f.SampleCalls, append([]string(nil), ids...))
+	if f.SampleErr != nil {
+		return nil, f.SampleErr
+	}
+	out := map[string]Sample{}
+	for _, id := range ids {
+		if f.alive != nil && !f.alive[id] {
+			continue
+		}
+		if s, ok := f.Samples[id]; ok {
+			out[id] = s
+		}
+	}
+	return out, nil
 }
 
 func (f *FakeRuntime) Stop(id string) error {

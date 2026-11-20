@@ -53,8 +53,11 @@ The owned directory is removed unless `-keep`. Walkthrough:
 
 `rusui drain -url URL -token TOKEN` POSTs `/drain` (worker auth), pauses new
 claims, and lists leased turns. `rusui resume [-project P]` POSTs `/resume`
-(worker auth) and lifts that pause. `rusui archive SESSION` sleeps that
-session's environment and refuses prompts until `rusui unarchive SESSION`.
+(worker auth) and lifts that pause. `rusui top` lists session id, environment
+state, declared size, and one live CPU and memory sample for ready managed
+container environments the operator can read. Sleeping, archived, and process
+environments show that state without a live sample. `rusui archive SESSION`
+sleeps that session's environment and refuses prompts until `rusui unarchive SESSION`.
 `rusui preview SESSION_ID -service NAME` mints a preview-origin URL (`?g=` grant)
 for a declared service when it is healthy. `-port PORT` is the operator-only
 raw mint and records no service name. The flags are mutually exclusive. Unset
@@ -280,6 +283,7 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `GET` | `/auth/oidc` | public OIDC client metadata; 404 when disabled |
 | `GET` | `/auth/oidc/session` | validate operator bearer; 204 when accepted, 401 when refused |
 | `POST` | `/projects/{slug}/sessions` | operator or worker token; JSON `kind` `run` (prompt) or `local`; optional `attachments` `[{name, content}]` as base64 on `run`, same kinds and caps as follow-up turns; optional `Idempotency-Key`; 201 `{session_id, kind}` for `local`, `{session_id, kind, snapshot_hit, source_hash}` for `run` (`snapshot_hit` is whether workspace prepare reused a snapshot); unknown `kind` is 400 |
+| `GET` | `/sessions` | operator or worker token; session list (`rusui sessions`); optional `project` and `limit`; `include=stats` adds `usage.cpu_millis` and `usage.memory_bytes` from one container-runtime sample for each ready managed environment (`rusui top`); sleeping, archived, and process environments omit `usage` |
 | `GET` | `/sessions/{id}` | operator or worker token; session detail without environment receipt history; `cancelled`, `execution_mode`, `act`, `tools` (active ACP kinds), `services` (name, port, starting/healthy/unhealthy/exited), `services_error` when `.rusui/services.yaml` is invalid, and `publication` (repo, pull request, SHA) once a turn published (`rusui sync`); 404 unknown, foreign-tenant, revoked grant, or another member's user-mode session |
 | `GET` | `/sessions/{id}/read` | operator token; durable transcript, console file diff, and declared services; no terminal |
 | `GET` | `/sessions/{id}/read/follow` | operator token; SSE of the transcript then live `entry` / `state` / `turn` until completed, failed, or cancelled; query `after=<seq>` resumes without a gap or a repeat; worker token is 401 |

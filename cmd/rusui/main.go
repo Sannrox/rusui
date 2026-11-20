@@ -63,6 +63,9 @@ func main() {
 		case "sessions":
 			sessionsCLI(os.Args[2:])
 			return
+		case "top":
+			topCLI(os.Args[2:])
+			return
 		case "attach":
 			attachCLI(os.Args[2:])
 			return
