@@ -162,7 +162,10 @@ not render it as HTML.
 
 ```bash
 rusui put [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -file ./shot.png SESSION_ID shot.png
+rusui ls [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] SESSION_ID [PATH]
 ```
+
+`rusui ls` prints workspace-relative names under PATH (the top level when PATH is omitted). One directory per call. Path escape, a replaced `/workspace`, and a missing environment are explicit errors. The environment is not written. put copies a file in; get copies one file out.
 
 Mint a preview grant for a ready environment port. The command prints a
 preview-origin URL that already carries the grant (`?g=`). The operator

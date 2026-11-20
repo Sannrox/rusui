@@ -43,7 +43,9 @@ type FakeRuntime struct {
 	StartHook  func(id string) error
 	StopHook   func(id string) error
 	GuestAddrs map[string]string
-	alive      map[string]bool
+	// Replaced marks ids whose /workspace is no longer a real directory.
+	Replaced map[string]bool
+	alive    map[string]bool
 	// secrets are outside Contents so workspace snapshot, read, and
 	// CaptureTree never observe injected values.
 	secrets map[string]map[string]string
@@ -358,6 +360,56 @@ func (f *FakeRuntime) WorkspaceNames(id string) ([]string, error) {
 		}
 	}
 	slices.Sort(out)
+	return out, nil
+}
+
+// WorkspaceList lists one fake directory, including implied directories
+// from nested content keys.
+func (f *FakeRuntime) WorkspaceList(id, rel string) ([]string, error) {
+	clean, err := workspaceListRel(rel)
+	if err != nil {
+		return nil, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Replaced[id] {
+		return nil, ErrWorkspaceReplaced
+	}
+	files := f.Contents[id]
+	if clean != "" {
+		if _, isFile := files[clean]; isFile {
+			return nil, ErrWorkspaceNotDir
+		}
+	}
+	prefix := ""
+	if clean != "" {
+		prefix = clean + "/"
+	}
+	seen := map[string]bool{}
+	found := clean == ""
+	for name := range files {
+		if clean == "" {
+			part, _, _ := strings.Cut(name, "/")
+			if part != "" {
+				seen[part] = true
+			}
+			continue
+		}
+		if name == clean {
+			return nil, ErrWorkspaceNotDir
+		}
+		if rest, ok := strings.CutPrefix(name, prefix); ok {
+			found = true
+			part, _, _ := strings.Cut(rest, "/")
+			if part != "" {
+				seen[part] = true
+			}
+		}
+	}
+	if !found {
+		return nil, ErrWorkspaceMissing
+	}
+	out := slices.Sorted(maps.Keys(seen))
 	return out, nil
 }
 
