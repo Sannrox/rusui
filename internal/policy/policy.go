@@ -73,11 +73,13 @@ type ProjectGuests struct {
 }
 
 type ProjectYAML struct {
-	Guests       *ProjectGuests      `yaml:"guests"`
-	Repos        map[string]RepoYAML `yaml:"repos"`
-	SessionKinds []string            `yaml:"session_kinds"`
-	LocalRuntime *LocalRuntimeYAML   `yaml:"local_runtime"`
-	Egress       string              `yaml:"egress"`
+	Guests *ProjectGuests      `yaml:"guests"`
+	Repos  map[string]RepoYAML `yaml:"repos"`
+	// GitLab binds GitLab.com project issues. Overlay cannot add this map.
+	GitLab       map[string]GitLabYAML `yaml:"gitlab"`
+	SessionKinds []string              `yaml:"session_kinds"`
+	LocalRuntime *LocalRuntimeYAML     `yaml:"local_runtime"`
+	Egress       string                `yaml:"egress"`
 	// EgressAllow lists the destinations (host or host:port) a custom
 	// egress class forwards to the guest, in addition to trusted.
 	EgressAllow []string       `yaml:"egress_allow"`
@@ -124,6 +126,14 @@ type RepoYAML struct {
 	MaxRepairsPerRepoPerUTCDay *int     `yaml:"max_repairs_per_repo_per_utc_day"`
 }
 
+// GitLabYAML binds one GitLab.com project. Write capabilities are not
+// accepted on this object; unknown fields fail closed.
+type GitLabYAML struct {
+	ProjectID  int64   `yaml:"project_id"`
+	Visibility *string `yaml:"visibility"`
+	Review     *bool   `yaml:"review"`
+}
+
 type AllowRule struct {
 	Tool    string `yaml:"tool" json:"tool"`
 	Kind    string `yaml:"kind" json:"kind"`
@@ -146,6 +156,12 @@ type Repo struct {
 	MaxRepairsPerRepoPerUTCDay int
 	NeverRelease               bool
 	NeverLeakPrivateToPublic   bool
+	// Provider is github (default) or gitlab. GitLab sources use Origin,
+	// ProjectID, and ProjectPath; they never alias a GitHub owner/name.
+	Provider    string
+	Origin      string
+	ProjectID   int64
+	ProjectPath string
 }
 
 type Project struct {
@@ -310,11 +326,15 @@ func Parse(raw []byte) (*Effective, error) {
 			MCPServers:   y.MCPServers,
 		}
 		for name, ry := range y.Repos {
+			if err := validGitHubRepoName(name); err != nil {
+				return nil, err
+			}
 			if _, ok := out.Repos[name]; ok {
 				return nil, fmt.Errorf("policy: %s bound to more than one project", name)
 			}
 			r := Repo{
 				Project:                    slug,
+				Provider:                   ProviderGitHub,
 				Visibility:                 "private",
 				Review:                     true,
 				MaxReviewsPerRepoPerUTCDay: 50,
@@ -390,6 +410,52 @@ func Parse(raw []byte) (*Effective, error) {
 			}
 			out.Repos[name] = r
 			p.Repos = append(p.Repos, name)
+		}
+		for path, gy := range y.GitLab {
+			if err := validGitLabPath(path); err != nil {
+				return nil, err
+			}
+			if gy.ProjectID <= 0 {
+				return nil, fmt.Errorf("policy: gitlab %s project_id required", path)
+			}
+			key := GitLabSourceKey(gy.ProjectID)
+			if _, ok := out.Repos[key]; ok {
+				return nil, fmt.Errorf("policy: gitlab project %d bound to more than one project", gy.ProjectID)
+			}
+			r := Repo{
+				Project:                    slug,
+				Provider:                   ProviderGitLab,
+				Origin:                     GitLabOrigin,
+				ProjectID:                  gy.ProjectID,
+				ProjectPath:                path,
+				Visibility:                 "private",
+				Review:                     true,
+				MaxReviewsPerRepoPerUTCDay: 50,
+				MaxRepairsPerRepoPerUTCDay: DefaultMaxRepairs,
+				NeverRelease:               true,
+				NeverLeakPrivateToPublic:   true,
+			}
+			if f.Defaults.Visibility != "" {
+				r.Visibility = f.Defaults.Visibility
+			}
+			if f.Defaults.MaxReviewsPerRepoPerUTCDay != 0 {
+				r.MaxReviewsPerRepoPerUTCDay = f.Defaults.MaxReviewsPerRepoPerUTCDay
+			}
+			if f.Defaults.Review != nil {
+				r.Review = *f.Defaults.Review
+			}
+			r.ProtectedLabels = mergeProtectedLabels(f.Defaults.ProtectedLabels)
+			if gy.Visibility != nil {
+				r.Visibility = *gy.Visibility
+			}
+			if gy.Review != nil {
+				r.Review = *gy.Review
+			}
+			if r.Visibility != "public" && r.Visibility != "private" {
+				return nil, fmt.Errorf("policy: gitlab %s invalid visibility", path)
+			}
+			out.Repos[key] = r
+			p.Repos = append(p.Repos, key)
 		}
 		sort.Strings(p.Repos)
 		out.Projects[slug] = p
@@ -679,6 +745,22 @@ func validBudgets(slug string, in map[string]int) (map[string]int, error) {
 func (e *Effective) Repo(name string) (Repo, bool) {
 	r, ok := e.Repos[name]
 	return r, ok
+}
+
+func (e *Effective) GitLabByProjectID(id int64) (Repo, bool) {
+	if id <= 0 {
+		return Repo{}, false
+	}
+	return e.Repo(GitLabSourceKey(id))
+}
+
+func (e *Effective) HasGitLab() bool {
+	for _, r := range e.Repos {
+		if r.Provider == ProviderGitLab {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *Effective) Project(slug string) (Project, bool) {

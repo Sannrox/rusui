@@ -99,6 +99,13 @@ projects:
         implement: false
         land: false
         repair: ""
+    # GitLab.com project issues only (ADR 0021). Identity is project_id,
+    # not the path. Overlay cannot add this map. Write flags are refused.
+    # gitlab:
+    #   group/project:
+    #     project_id: 123
+    #     visibility: public
+    #     review: true
 `
 
 // StarterYAML returns a copy of the conservative operator policy template.

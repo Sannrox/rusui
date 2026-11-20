@@ -35,6 +35,7 @@ func TestHookBodyCap(t *testing.T) {
 		atCap int
 	}{
 		{"/hooks/github", githubHookBodyCap, http.StatusUnauthorized},
+		{"/hooks/gitlab", githubHookBodyCap, http.StatusUnauthorized},
 		{"/hooks/events", hookBodyCap, http.StatusUnauthorized},
 		// No webhook exists for session 1, so a read body ends in 404.
 		{"/hooks/sessions/1", hookBodyCap, http.StatusNotFound},

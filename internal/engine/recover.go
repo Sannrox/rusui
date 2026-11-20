@@ -2,7 +2,9 @@ package engine
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -52,7 +54,10 @@ func (e *Engine) ReconcileConfigured() error {
 	}
 	pol := e.PolicySnapshot()
 	var first error
-	for repo := range pol.Repos {
+	for repo, r := range pol.Repos {
+		if r.Provider == policy.ProviderGitLab {
+			continue
+		}
 		if e.HookIDs[repo] == "" {
 			e.exception("delivery reconcile skipped for " + repo + ": no hook id")
 			continue
@@ -71,7 +76,11 @@ func (e *Engine) ReconcileConfigured() error {
 // locally tracked non-terminal items (including items closed during downtime).
 func (e *Engine) CatchUpConfigured() error {
 	var open []snapshot.Item
-	for repo := range e.PolicySnapshot().Repos {
+	pol := e.PolicySnapshot()
+	for repo, r := range pol.Repos {
+		if r.Provider == policy.ProviderGitLab {
+			continue
+		}
 		items, err := e.GitHub.ListOpenItems(repo)
 		if err != nil {
 			e.exception("list open " + repo + ": " + err.Error())
@@ -79,7 +88,56 @@ func (e *Engine) CatchUpConfigured() error {
 		}
 		open = append(open, items...)
 	}
+	if err := e.catchUpGitLab(&open); err != nil {
+		e.exception("gitlab catch-up: " + err.Error())
+	}
 	return e.CatchUpOpenAndLocal(open)
+}
+
+func (e *Engine) catchUpGitLab(open *[]snapshot.Item) error {
+	if e.GitLab == nil {
+		return nil
+	}
+	pol := e.PolicySnapshot()
+	var first error
+	for repo, r := range pol.Repos {
+		if r.Provider != policy.ProviderGitLab {
+			continue
+		}
+		var after time.Time
+		_ = e.Store.Tx(func(tx *store.Tx) error {
+			at, _, err := store.ReconcileCheckpointTx(tx, repo)
+			if err != nil || at == "" {
+				return nil
+			}
+			t, err := time.Parse(time.RFC3339, at)
+			if err == nil {
+				after = t.Add(-2 * time.Minute)
+			}
+			return nil
+		})
+		items, err := e.GitLab.ListIssues(r.ProjectID, r.ProjectPath, after)
+		if err != nil {
+			if first == nil {
+				first = err
+			}
+			continue
+		}
+		var newest time.Time
+		for _, it := range items {
+			*open = append(*open, it)
+			if t, err := time.Parse(time.RFC3339, it.UpdatedAt); err == nil && t.After(newest) {
+				newest = t
+			}
+		}
+		if newest.IsZero() {
+			continue
+		}
+		_ = e.Store.Tx(func(tx *store.Tx) error {
+			return store.AdvanceReconcileCheckpointTx(tx, repo, newest.UTC().Format(time.RFC3339), "")
+		})
+	}
+	return first
 }
 
 // RetryApplyAttempts retries apply rows left planned, in_flight, or

@@ -61,7 +61,7 @@ func (s *Server) exportSecrets() []string {
 		getenv = os.Getenv
 	}
 	out := append([]string(nil), ops.SecretValues(getenv)...)
-	for _, v := range []string{s.WorkerSec, s.OperatorTok, s.WebhookSec, s.SlackSec, s.ModelKey, s.GitHubToken, s.AgentGitHubToken} {
+	for _, v := range []string{s.WorkerSec, s.OperatorTok, s.WebhookSec, s.SlackSec, s.ModelKey, s.GitHubToken, s.AgentGitHubToken, s.GitLabWebhookSec, s.GitLabToken} {
 		if v != "" {
 			out = append(out, v)
 		}

@@ -19,6 +19,7 @@ import (
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/flight"
 	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/gl"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/snapshot"
 	"github.com/sannrox/rusui/internal/store"
@@ -51,6 +52,8 @@ type Engine struct {
 	Store        *store.Store
 	policy       *policy.Effective
 	GitHub       gh.Client
+	// GitLab refreshes bound GitLab.com issues. Nil when policy has none.
+	GitLab gl.Client
 	// Publisher is set only when plane publication is on (ADR 0044).
 	Publisher PullPublisher
 	// Comments posts live review comments when policy comment is on.
@@ -197,8 +200,16 @@ func (e *Engine) PolicySnapshot() *policy.Effective {
 }
 
 func (e *Engine) IngestWebhook(deliveryID, repo string, item int, kind string) error {
+	return e.ingestDelivery(deliveryID, "github", repo, item, kind)
+}
+
+func (e *Engine) IngestGitLabDelivery(deliveryID, repo string, item int, kind string) error {
+	return e.ingestDelivery(deliveryID, "gitlab", repo, item, kind)
+}
+
+func (e *Engine) ingestDelivery(deliveryID, source, repo string, item int, kind string) error {
 	return e.Store.Tx(func(tx *store.Tx) error {
-		ins, err := store.InsertDeliveryTx(tx, deliveryID, repo, item, kind, e.now())
+		ins, err := store.InsertDeliveryTx(tx, deliveryID, source, repo, item, kind, e.now())
 		if err != nil {
 			return err
 		}
@@ -526,7 +537,7 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 	if err != nil {
 		return false, err
 	}
-	it, ferr := e.GitHub.GetItem(repo, item, kind)
+	it, ferr := e.fetchItem(repo, item, kind)
 	if ferr == nil && expectedKind != "" && it.ItemKind != expectedKind {
 		ferr = fmt.Errorf("expected a pull request")
 	}
@@ -586,6 +597,16 @@ func (e *Engine) stepRefresh(filterRepo string, filterItem int, expectedKind str
 		return true, ErrReviewIneligible
 	}
 	return true, nil
+}
+
+func (e *Engine) fetchItem(repo string, item int, kind string) (snapshot.Item, error) {
+	if r, ok := e.PolicySnapshot().Repo(repo); ok && r.Provider == policy.ProviderGitLab {
+		if e.GitLab == nil {
+			return snapshot.Item{}, fmt.Errorf("gitlab: no client")
+		}
+		return e.GitLab.GetIssue(r.ProjectID, r.ProjectPath, item)
+	}
+	return e.GitHub.GetItem(repo, item, kind)
 }
 
 var errNoWork = fmt.Errorf("no work")
@@ -1687,6 +1708,9 @@ func actionHash(repo string, item int, typ string, revID int64, target string) s
 }
 
 func (e *Engine) ApplyAttempt(repo string, item int) error {
+	if policy.IsGitLabSource(repo) {
+		return nil
+	}
 	var j *store.Job
 	var revID int64
 	var payload string

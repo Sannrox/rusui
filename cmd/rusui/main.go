@@ -15,6 +15,7 @@ import (
 	"github.com/sannrox/rusui/internal/engine"
 	envpkg "github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/gh"
+	"github.com/sannrox/rusui/internal/gl"
 	"github.com/sannrox/rusui/internal/guest"
 	"github.com/sannrox/rusui/internal/oidc"
 	"github.com/sannrox/rusui/internal/ops"
@@ -218,6 +219,17 @@ func main() {
 		log.Fatal("store clock: ", err)
 	}
 	eng := engine.New(st, p, api, clk)
+	if p.HasGitLab() {
+		glTok := os.Getenv("RUSUI_GITLAB_TOKEN")
+		glSec := os.Getenv("RUSUI_GITLAB_WEBHOOK_SECRET")
+		if glTok == "" {
+			log.Fatal("policy binds a GitLab.com project; set RUSUI_GITLAB_TOKEN (read_api)")
+		}
+		if glSec == "" {
+			log.Fatal("policy binds a GitLab.com project; set RUSUI_GITLAB_WEBHOOK_SECRET (signing token)")
+		}
+		eng.GitLab = gl.NewAPI(glTok)
+	}
 	eng.Secrets = engine.SecretsFromEnv(os.Environ())
 	if pre, setup, err := engine.ReadPlaneHooks(filepath.Join(filepath.Dir(*pol), "hooks")); err != nil {
 		log.Fatal(err)
@@ -342,6 +354,8 @@ func main() {
 		GitHubToken:       token,
 		GitHubTokens:      tokens,
 		AgentGitHubToken:  os.Getenv("RUSUI_AGENT_GITHUB_TOKEN"),
+		GitLabWebhookSec:  os.Getenv("RUSUI_GITLAB_WEBHOOK_SECRET"),
+		GitLabToken:       os.Getenv("RUSUI_GITLAB_TOKEN"),
 		NoCoauthorTrailer: os.Getenv("RUSUI_DISABLE_COAUTHOR_TRAILER") == "1",
 		NoSessionTrailer:  os.Getenv("RUSUI_DISABLE_SESSION_TRAILER") == "1",
 		GuestHTTPSOnly:    tlsCert != "" && tlsKey != "",

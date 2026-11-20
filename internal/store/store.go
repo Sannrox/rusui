@@ -603,7 +603,10 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-func InsertDeliveryTx(tx *sql.Tx, id, repo string, item int, kind string, at time.Time) (inserted bool, err error) {
+func InsertDeliveryTx(tx *sql.Tx, id, source, repo string, item int, kind string, at time.Time) (inserted bool, err error) {
+	if source == "" {
+		source = "github"
+	}
 	res, err := tx.Exec(`INSERT INTO deliveries (delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING`,
 		id, repo, item, kind, at.UTC().Format(time.RFC3339Nano))
 	if err != nil {
@@ -618,7 +621,7 @@ func InsertDeliveryTx(tx *sql.Tx, id, repo string, item int, kind string, at tim
 			session = sid.Int64
 		}
 		if _, err := tx.Exec(`INSERT INTO events (session_id, source, delivery_id, repo, item, item_kind, received_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT DO NOTHING`,
-			session, "github", id, repo, item, kind, at.UTC().Format(time.RFC3339Nano)); err != nil {
+			session, source, id, repo, item, kind, at.UTC().Format(time.RFC3339Nano)); err != nil {
 			return false, err
 		}
 	}
@@ -648,6 +651,18 @@ func InsertEventTx(tx *sql.Tx, id, source, repo string, item int, kind string, a
 		}
 	}
 	return n == 1, nil
+}
+
+func LatestEventDelivery(s *Store, sessionID int64) (string, error) {
+	var id string
+	err := s.DB.QueryRow(`SELECT delivery_id FROM events WHERE session_id=? ORDER BY received_at DESC, id DESC LIMIT 1`, sessionID).Scan(&id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return id, nil
 }
 
 func CountEvents(s *Store, repo string, item int) (int, error) {

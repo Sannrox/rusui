@@ -134,6 +134,8 @@ reported and exits successfully.
 | `RUSUI_STORE_URL` | no | A `postgres://` or `postgresql://` URL. Overrides `-db` and opens PostgreSQL for the redundant topology ([upgrade.md](upgrade.md#postgresql-store)). Unset keeps SQLite at `-db`. |
 | `RUSUI_GITHUB_API` | no | Default `https://api.github.com` |
 | `RUSUI_GITHUB_HOOK_IDS` | for reconcile | `owner/repo=hookid`, comma-separated |
+| `RUSUI_GITLAB_TOKEN` | when policy binds `gitlab:` | `read_api` Issues API; Guest project access token or dedicated Guest account. Required to start if any GitLab.com project is bound. Never given to guests. |
+| `RUSUI_GITLAB_WEBHOOK_SECRET` | when policy binds `gitlab:` | GitLab signing token (`whsec_…`). Required to start if any GitLab.com project is bound. No `X-Gitlab-Token` fallback. |
 | `RUSUI_SLACK_USERS` | for inbound Slack | Empty allowlist → 403 |
 | `RUSUI_SLACK_BOT_TOKEN` | optional outbound | Exception and run-session `chat.postMessage` |
 | `RUSUI_SLACK_CHANNEL` | optional outbound | Exception and run-session channel |
@@ -307,6 +309,7 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/retry` | operator token; JSON `target` `OWNER/REPO` (every failed review job) or `OWNER/REPO#ITEM` (one); same as Slack `retry` (`rusui retry`); 409 when the item has no failed review job; tenant operators only for repositories of their tenant |
 | `POST` | `/drain` | worker secret; pause claims and list live turns |
 | `POST` | `/hooks/github` | `X-Hub-Signature-256`; 25 MiB body cap (GitHub's payload cap), 413 above it |
+| `POST` | `/hooks/gitlab` | Standard Webhooks `webhook-id`, `webhook-timestamp`, `webhook-signature`; GitLab.com Issue Hook only; 25 MiB body cap, 413 above it; 401 bad or stale signature; 400 confidential or unsupported; 404 unbound project |
 | `POST` | `/hooks/events` | `X-Rusui-Signature-256` (same webhook secret); 202; 1 MiB body cap, 413 above it |
 | `GET`/`POST` | `/sessions/{id}/webhook` | operator or worker token; mint or return the session webhook path and signing secret |
 | `POST` | `/hooks/sessions/{id}` | per-session `X-Rusui-Signature-256`; 202 valid, 401 bad signature (stored refusal), 404 missing or archived; 1 MiB body cap, 413 above it (not stored) |
@@ -361,6 +364,10 @@ capability downgrade refuses delivery. Attachments cannot accompany a steer.
 
 GitHub webhook events: `issues`, `pull_request`, `issue_comment`.
 Forward the tunnel to `http://127.0.0.1:8080/hooks/github`.
+
+GitLab.com Issue Hook: `open`, `update`, `close`, `reopen` to
+`http://127.0.0.1:8080/hooks/gitlab`. Merge requests, comments, confidential
+issues, Self-Managed origins, and live GitLab writes are out of this profile.
 
 A two-project plan is one parent prompt plus an independent review of
 each repository's pull request or blocked reason. Private context stays

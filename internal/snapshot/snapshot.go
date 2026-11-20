@@ -31,6 +31,10 @@ type Item struct {
 	MergedIntoDefault   bool     `json:"merged_into_default"`
 	MergeCommitSHA      string   `json:"merge_commit_sha"`
 	BaseRef             string   `json:"base_ref"`
+	Provider            string   `json:"provider,omitempty"`
+	Origin              string   `json:"origin,omitempty"`
+	ProjectID           int64    `json:"project_id,omitempty"`
+	ProjectPath         string   `json:"project_path,omitempty"`
 }
 
 // GitPin is the tree identity for an environment snapshot (ADR 0007).
@@ -64,6 +68,10 @@ func ItemHash(it Item) string {
 		UpdatedAt           string   `json:"updated_at"`
 		NonBotCommentCount  int      `json:"non_bot_comment_count"`
 		LinkedSameRepoItems []int    `json:"linked_same_repo_items"`
+		Provider            string   `json:"provider,omitempty"`
+		Origin              string   `json:"origin,omitempty"`
+		ProjectID           int64    `json:"project_id,omitempty"`
+		ProjectPath         string   `json:"project_path,omitempty"`
 	}
 	h := hashable{
 		Repo: it.Repo, Item: it.Item, ItemKind: it.ItemKind, State: it.State,
@@ -71,6 +79,7 @@ func ItemHash(it Item) string {
 		Draft: it.Draft, Merged: it.Merged,
 		HeadSHA: it.HeadSHA, BaseSHA: it.BaseSHA, UpdatedAt: it.UpdatedAt,
 		NonBotCommentCount: it.NonBotCommentCount, LinkedSameRepoItems: linked,
+		Provider: it.Provider, Origin: it.Origin, ProjectID: it.ProjectID, ProjectPath: it.ProjectPath,
 	}
 	if it.ItemKind != "pull" {
 		h.HeadSHA = ""

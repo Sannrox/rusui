@@ -35,8 +35,12 @@ The server **refuses to start** unless these are set, unless you pass
 | `RUSUI_WEBHOOK_SECRET` | HMAC for `POST /hooks/github` and `POST /hooks/events` |
 | `RUSUI_WORKER_SECRET` | Bearer token for runner / job endpoints |
 | `RUSUI_SLACK_SECRET` | Slack signing secret |
+| `RUSUI_GITLAB_WEBHOOK_SECRET` | Standard Webhooks signing token for `POST /hooks/gitlab` when policy binds a GitLab.com project |
+| `RUSUI_GITLAB_TOKEN` | `read_api` Issues API when policy binds a GitLab.com project. Guests never receive it. |
 
 Also required to start: `RUSUI_GITHUB_TOKEN` or `GITHUB_TOKEN` (read-only).
+When policy binds `gitlab:`, `RUSUI_GITLAB_TOKEN` and
+`RUSUI_GITLAB_WEBHOOK_SECRET` are also required.
 `RUSUI_SLACK_USERS` is the inbound allowlist (Slack user ids). An empty
 allowlist 403s every slash command.
 

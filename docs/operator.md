@@ -380,6 +380,33 @@ Generic signed intake: `POST /hooks/events` with `X-Rusui-Signature-256`
 
 `RUSUI_GITHUB_HOOK_IDS=owner/repo=123` is required for delivery reconcile.
 
+## 4a. GitLab.com project issues
+
+Bind a GitLab.com project under `projects.<slug>.gitlab`, not under `repos:`.
+The store identity is `gitlab.com:{project_id}` so a GitHub `owner/name` with
+the same path cannot alias it. Overlay cannot add this map.
+
+Create a **project** webhook (Maintainer or Owner) for ordinary Issue events
+only; leave confidential-issue events disabled:
+
+- Payload URL: `https://<your-tunnel>/hooks/gitlab`
+- Signing token: `$RUSUI_GITLAB_WEBHOOK_SECRET` (`whsec_` plus the Standard
+  Webhooks key). Plain `X-Gitlab-Token` is refused.
+- Events: Issue Hook `open`, `update`, `close`, `reopen`
+
+The handler verifies HMAC over `{webhook-id}.{webhook-timestamp}.{raw body}`,
+rejects timestamps older than five minutes, persists the namespaced delivery
+id, then returns 2xx. It does not fetch GitLab on that path. Refresh uses
+`RUSUI_GITLAB_TOKEN` (`read_api`, Guest). Prefer a project access token with
+role Guest where the GitLab.com subscription permits one; GitLab.com Free
+cannot mint project tokens, so use a dedicated account with Guest membership
+on the bound project(s). Guests never receive this token.
+
+GitHub-only remainder: merge requests, comments, close, implement, land,
+repair, GitHub App reconcile (`RUSUI_GITHUB_HOOK_IDS`), and live GitHub
+writes stay on the GitHub path. This profile does not replace GitHub intake,
+does not accept Self-Managed origins, and does not write to GitLab.
+
 ## 5. Tunnel
 
 GitHub and Slack cannot reach `127.0.0.1`. Point a tunnel at the process.
@@ -461,6 +488,8 @@ unset the env vars listed in [configuration.md](configuration.md).
 | `GET /healthz` fails | Process not listening; wrong `-addr` |
 | `GET /readyz` 503 / `diagnose` exit 1 | Read the JSON checks: missing runtime or a store that does not answer is `unavailable`; bad policy/TLS/CA is `misconfigured` |
 | GitHub webhook 401 | Secret mismatch, or tunnel not hitting `/hooks/github` |
+| GitLab webhook 401 | Signing token mismatch, stale `webhook-timestamp`, or missing Standard Webhooks headers |
+| GitLab webhook 404 | Project id not bound under `gitlab:` (not `repos:`) |
 | Runner `auth` / 401 | Secret mismatch between processes |
 | Slack 403 `user` | `RUSUI_SLACK_USERS` missing that user id, or empty |
 | Slack 401 | Signing secret / timestamp skew > 5 minutes |
