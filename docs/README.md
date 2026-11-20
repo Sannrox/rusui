@@ -60,15 +60,17 @@ Use these for precise commands, fields, interfaces, and source layout.
 Read these for rationale, boundaries, direction, and the evidence behind claims.
 
 - [Product contract](../ARCHITECTURE.md) and [noun glossary](../CONTEXT.md).
-  The 1.0 freeze is
-  [ADR 0086](decisions/0086-supported-1.0-core-contract.md).
+  [ADR 0095](decisions/0095-drop-1.0-freeze-as-product-goal.md) dropped
+  freeze-as-identity;
+  [ADR 0086](decisions/0086-supported-1.0-core-contract.md) remains the
+  historical freeze record.
 - [Vision](../VISION.md) and [roadmap](../ROADMAP.md) describe proposed or
   sequenced work; they do not change the current contract.
 - [Architecture decisions](decisions/README.md), including their status and
   superseded records.
 - [Supported unattended topology](supported-topology.md) explains what the
   current evidence supports and its limits.
-- [Compatibility](compatibility.md) maps the 1.0 versions to executable
+- [Compatibility](compatibility.md) maps current versions to executable
   checks and the restore path.
 - [Independent operator client](independent-client.md) is the C4 evidence
   that a contributor can integrate from the published contract.

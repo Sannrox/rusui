@@ -23,16 +23,19 @@ This is not ClawSweeper, Tatara, or a Kafka fleet. GitHub is intake. The
 server is the source of truth. Slack is the human socket. Guests never receive a GitHub write credential (ADR 0080). Schema changes are versioned migrations
 (`schema_migrations`), not `CREATE IF NOT EXISTS` drift.
 
-## Supported 1.0 core
+## Supported core
 
-[ADR 0086](docs/decisions/0086-supported-1.0-core-contract.md) freezes this
-file as the 1.0 product contract. The supported claim is the
-terminal-first remote workspace on one version tuple: `rusui` and
-`rusui-runner` from the same git commit, one runner on the plane host,
-Docker or Podman CLI, digest-pinned `$RUSUI_GUEST_IMAGE`, default guest
-shikigami ACP, SQLite WAL, loopback listen. Named guests `shikigami`,
-`grok`, `claude` (Claude Code CLI 2.1.283), and `codex` are in that
-tuple; generic ACP guests need a plane-signed conformance receipt.
+[ADR 0095](docs/decisions/0095-drop-1.0-freeze-as-product-goal.md) drops
+freeze-as-identity. This file is the product contract: shipped behavior
+and admitted work. GitHub Issues are the backlog. The current topology
+is one version tuple: `rusui` and `rusui-runner` from the same git
+commit, one runner on the plane host, Docker or Podman CLI,
+digest-pinned `$RUSUI_GUEST_IMAGE`, default guest shikigami ACP, SQLite
+WAL, loopback listen. Named guests `shikigami`, `grok`, `claude` (Claude
+Code CLI 2.1.283), and `codex` are in that tuple; generic ACP guests
+need a plane-signed conformance receipt.
+[ADR 0086](docs/decisions/0086-supported-1.0-core-contract.md) remains
+the historical freeze record.
 
 **Supported:** session/turn/environment identity in [CONTEXT.md](CONTEXT.md);
 CLI and HTTP+SSE (`run`, `read`/`read -follow`, `attach`, `prompt`,
@@ -45,33 +48,53 @@ behavior, and conformance checks:
 [docs/compatibility.md](docs/compatibility.md).
 
 **Author-validated only:** install, disconnect/reconnect, upgrade, and
-restore as run in U8. Independent self-hosting is the 1.0 publish gate
-([#146](https://github.com/Sannrox/rusui/issues/146)), not this freeze.
-The C3 review brief is
+restore as run in U8. Independent self-hosting is the numbered-release
+quality bar ([#146](https://github.com/Sannrox/rusui/issues/146)), not
+product identity. The C3 review brief is
 [docs/independent-review.md](docs/independent-review.md); it does not
 change this contract.
 
 **Narrowed:** bounded issue-to-PR is one pinned-path implement task and
 one pull request at a time. `rusui read` does not promise a workspace
-diff for container sessions. Lost claim-response recovery is not a 1.0
-guarantee.
+diff for container sessions. Lost claim-response recovery is not a
+current guarantee.
 
 **Experimental:** local-interactive Sumika profile, process driver,
 core definition drafts, browser-console completeness, editor-ACP
 completeness.
 
-**Excluded:** microVMs, runner fleet, HA/Postgres, shared-operator
-governance, live fork, desktop, unauthenticated preview, third-party
-identity minting, plugins, disconnected execution, Docker Desktop /
-Podman Desktop guest link, live close/merge/land, the thirty-day
-maintenance observation (that remains a maintenance-release gate), and
-signed portable session bundles. Live comments are off in the default
-profile (`comment: false`) and independently gated. Repair is off
-(`repair` empty) until a maintainer sets the `docs` category.
+**Deferred:** microVMs
+([ADR 0028](docs/decisions/0028-container-isolation-profile.md)), runner
+fleet ([ADR 0029](docs/decisions/0029-single-host-runner.md)),
+HA/Postgres ([ADR 0089](docs/decisions/0089-redundant-plane.md),
+[#700](https://github.com/Sannrox/rusui/issues/700)), shared-operator
+governance ([ADR 0039](docs/decisions/0039-shared-operator-governance-deferred.md),
+[ADR 0083](docs/decisions/0083-retain-single-operator-access.md)), live
+fork ([ADR 0035](docs/decisions/0035-live-environment-fork-deferred.md)),
+desktop ([ADR 0036](docs/decisions/0036-environment-desktop-deferred.md)),
+unauthenticated preview
+([ADR 0037](docs/decisions/0037-shared-preview-deferred.md)),
+third-party identity minting
+([ADR 0033](docs/decisions/0033-third-party-identity-deferred.md)),
+plugins ([ADR 0043](docs/decisions/0043-extension-contract-deferred.md)),
+disconnected execution
+([ADR 0042](docs/decisions/0042-disconnected-execution-deferred.md)),
+Docker Desktop / Podman Desktop guest link
+([ADR 0062](docs/decisions/0062-guest-link-desktop-podman-deferred.md)),
+the thirty-day maintenance observation
+([ADR 0046](docs/decisions/0046-workspace-first-sequence.md) M3; that
+remains a maintenance-release gate), and signed portable session
+bundles. A later accepted ADR must adopt a track before it is the
+described runtime. Lifting the freeze does not implement these tracks
+and does not reverse those ADRs.
+
+**Never:** live close, merge, land, or unnamed GitHub writes. Live
+comments remain policy `comment` only (`comment: false` in the default
+profile). Repair is off (`repair` empty) until a maintainer sets the
+`docs` category.
 
 Dropping a supported guarantee needs a later ADR. Details below remain
-the runtime contract; where they conflict with ADR 0086, ADR 0086 wins
-until this file is edited.
+the runtime contract.
 
 ## Operator authentication
 
@@ -203,8 +226,8 @@ same-host, same-user socket only; remote pairing is out of scope.
 
 The managed runner, container, terminal write lease, and ACP editor contracts
 remain unchanged. The local profile is experimental and is not part of the
-supported 1.0 core
-([ADR 0086](docs/decisions/0086-supported-1.0-core-contract.md),
+supported unattended topology
+([ADR 0016](docs/decisions/0016-local-interactive-runtime.md),
 [ADR 0045](docs/decisions/0045-local-unattended-promotion-deferred.md)).
 Issues #183 and #184 established the observation API and runtime adapter;
 #185 provides the unified attach client, and #186 deferred cross-profile

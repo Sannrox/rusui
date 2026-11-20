@@ -1,6 +1,8 @@
 # ADR 0086: Freeze the supported 1.0 core contract
 
-- Status: Accepted; amended by 0090
+- Status: Superseded by [ADR 0095](0095-drop-1.0-freeze-as-product-goal.md)
+- Status notes: Freeze-as-identity only; this file remains the historical
+  freeze record.
 - Amended by: [ADR 0090](0090-receipt-evidence-and-policy-binding.md)
   (receipt evidence classes, `evidence_summary`, and the claim-time policy
   revision).

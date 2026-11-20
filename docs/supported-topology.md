@@ -2,10 +2,11 @@
 
 > **Explanation.** This page describes the supported unattended profile and
 > the limits of its evidence. Follow the [operator guide](operator.md) to
-> configure and run it. The 1.0 freeze is
-> [ADR 0086](decisions/0086-supported-1.0-core-contract.md).
+> configure and run it. Current topology, not a freeze class:
+> [ARCHITECTURE.md](../ARCHITECTURE.md),
+> [ADR 0095](decisions/0095-drop-1.0-freeze-as-product-goal.md).
 
-## Supported 1.0 version tuple
+## Current version tuple
 
 `rusui` and `rusui-runner` from the same git commit, one runner on the
 plane host, Docker or Podman CLI, digest-pinned `$RUSUI_GUEST_IMAGE`,
@@ -13,7 +14,7 @@ default guest shikigami ACP. Mixing commits is unsupported; release
 binaries refuse a runner hello from a different commit. Schema, policy,
 restore, and export versions: [compatibility.md](compatibility.md).
 
-| Piece | 1.0 value |
+| Piece | Current value |
 | --- | --- |
 | Binaries | `rusui` + `rusui-runner`, same commit (git tag via `scripts/lib/version.sh`) |
 | Host OS | Linux or macOS |
@@ -34,7 +35,7 @@ Desktop are not this tuple
 
 ## Agent and runtime matrix
 
-| Harness | Protocol | 1.0 class | Notes |
+| Harness | Protocol | Class | Notes |
 | --- | --- | --- | --- |
 | shikigami | ACP | supported (default) | Baked in the reference image |
 | grok | ACP | supported | Named built-in |
@@ -42,7 +43,7 @@ Desktop are not this tuple
 | codex | app-server | supported | Named built-in |
 | generic ACP | ACP subset | supported with signed receipt | [ADR 0082](decisions/0082-signed-conformance-receipts.md) |
 | `claude-agent-acp` | — | excluded | Not spawned |
-| Sumika local | PTY | experimental / excluded from unattended 1.0 | [ADR 0045](decisions/0045-local-unattended-promotion-deferred.md) |
+| Sumika local | PTY | experimental / excluded from unattended topology | [ADR 0045](decisions/0045-local-unattended-promotion-deferred.md) |
 | process driver | host process | test/dev only | Not public-repo unattended |
 | Firecracker / microVM | — | excluded | [ADR 0028](decisions/0028-container-isolation-profile.md) |
 
