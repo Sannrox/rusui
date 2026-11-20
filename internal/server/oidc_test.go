@@ -35,6 +35,8 @@ func TestOIDCSeparatesOperatorAPIFromBrowserAndWorker(t *testing.T) {
 		{"POST", "/jobs/claim", raw, 401},
 		{"POST", "/runners/hello", raw, 401},
 		{"GET", "/console/sessions", raw, 303},
+		{"POST", "/sessions/1/preview", raw, 401},
+		{"POST", "/sessions/1/preview", "worker", 401},
 	} {
 		request := httptest.NewRequest(tc.method, tc.path, nil)
 		request.Host = "127.0.0.1"

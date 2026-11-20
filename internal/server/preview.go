@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -85,26 +86,75 @@ func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", 404)
 		return
 	}
-	envRow, ok := s.wakeForOperator(w, sess.ID, "operator preview")
-	if !ok {
-		return
-	}
-	if envRow.Handle == "" || envRow.State != store.EnvReady {
-		http.Error(w, "environment not ready", http.StatusConflict)
-		return
-	}
 	port, err := strconv.Atoi(r.FormValue("port"))
-	if err != nil || port < 1024 || port > 65535 {
+	if err != nil {
 		http.Error(w, "port", 400)
 		return
 	}
+	u, envRow, expires, ok := s.createPreviewGrant(w, r, sess, port)
+	if !ok {
+		return
+	}
+	s.renderConsole(w, consolePage{
+		Title: "Preview", View: "table", Authed: true, CSRF: s.consoleCSRF(),
+		Heading: "Preview grant", Head: []string{"session", "environment", "port", "url", "expires"},
+		Rows: [][]string{{
+			strconv.FormatInt(sess.ID, 10), envRow.Handle, strconv.Itoa(port), u, expires.Format(time.RFC3339),
+		}},
+		Notice: "grant is a separate secret; it is not the operator cookie",
+		Sess:   sess,
+	})
+}
+
+// mintPreview is the operator HTTP mint (`rusui preview`). It uses the
+// static operator token, not OIDC (ADR 0074).
+func (s *Server) mintPreview(w http.ResponseWriter, r *http.Request) {
+	if !s.OperatorBrowserOK(r) {
+		http.Error(w, "auth", http.StatusUnauthorized)
+		return
+	}
+	sess, err := s.visibleOwnedSession(r, mustID(r))
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Port int `json:"port"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
+		http.Error(w, "port", http.StatusBadRequest)
+		return
+	}
+	u, _, _, ok := s.createPreviewGrant(w, r, sess, req.Port)
+	if !ok {
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"url": u})
+}
+
+// createPreviewGrant wakes the session environment and stores one preview
+// grant. On refusal it writes the response and returns ok=false.
+func (s *Server) createPreviewGrant(w http.ResponseWriter, r *http.Request, sess *store.Session, port int) (string, *store.Environment, time.Time, bool) {
+	envRow, ok := s.wakeForOperator(w, sess.ID, "operator preview")
+	if !ok {
+		return "", nil, time.Time{}, false
+	}
+	if envRow.Handle == "" || envRow.State != store.EnvReady {
+		http.Error(w, "environment not ready", http.StatusConflict)
+		return "", nil, time.Time{}, false
+	}
+	if port < 1024 || port > 65535 {
+		http.Error(w, "port", 400)
+		return "", nil, time.Time{}, false
+	}
 	if _, err := s.previewDial(envRow, port); err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
-		return
+		return "", nil, time.Time{}, false
 	}
 	if s.PreviewBase == "" {
 		http.Error(w, "preview origin unset", http.StatusConflict)
-		return
+		return "", nil, time.Time{}, false
 	}
 	plane := "http://" + r.Host
 	if r.TLS != nil {
@@ -112,12 +162,12 @@ func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	if !PreviewOriginIsolated(plane, s.PreviewBase) {
 		http.Error(w, "preview origin not isolated", http.StatusConflict)
-		return
+		return "", nil, time.Time{}, false
 	}
 	raw := make([]byte, 16)
 	if _, err := rand.Read(raw); err != nil {
 		http.Error(w, err.Error(), 500)
-		return
+		return "", nil, time.Time{}, false
 	}
 	tok := hex.EncodeToString(raw)
 	g := store.PreviewGrant{
@@ -127,21 +177,13 @@ func (s *Server) consoleMintPreview(w http.ResponseWriter, r *http.Request) {
 	if err := store.PutPreviewGrant(s.Eng.Store, g); err != nil {
 		if errors.Is(err, store.ErrEnvironmentUnavailable) {
 			http.Error(w, err.Error(), http.StatusConflict)
-			return
+			return "", nil, time.Time{}, false
 		}
 		http.Error(w, err.Error(), 500)
-		return
+		return "", nil, time.Time{}, false
 	}
 	u := strings.TrimRight(s.PreviewBase, "/") + "/?g=" + tok
-	s.renderConsole(w, consolePage{
-		Title: "Preview", View: "table", Authed: true, CSRF: s.consoleCSRF(),
-		Heading: "Preview grant", Head: []string{"session", "environment", "port", "url", "expires"},
-		Rows: [][]string{{
-			strconv.FormatInt(sess.ID, 10), envRow.Handle, strconv.Itoa(port), u, g.ExpiresAt.Format(time.RFC3339),
-		}},
-		Notice: "grant is a separate secret; it is not the operator cookie",
-		Sess:   sess,
-	})
+	return u, envRow, g.ExpiresAt, true
 }
 
 // previewComment turns a preview-page comment into a session follow-up.

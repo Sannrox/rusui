@@ -164,6 +164,17 @@ not render it as HTML.
 rusui put [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -file ./shot.png SESSION_ID shot.png
 ```
 
+Mint a preview grant for a ready environment port. The command prints a
+preview-origin URL that already carries the grant (`?g=`). The operator
+token stays on the plane; the CLI does not print the grant except as that
+query. Unset `RUSUI_PREVIEW_BASE`, an unknown session, an environment that
+is not ready after wake, and a port outside 1024-65535 are explicit errors
+and mint nothing.
+
+```bash
+rusui preview [-url http://127.0.0.1:8080] [-token "$RUSUI_OPERATOR_TOKEN"] -port 3000 SESSION_ID
+```
+
 A managed environment sleeps after `-env-idle-sleep`. Opening the console
 terminal (observe or write), minting a preview, following a live preview
 grant, or sending `rusui prompt` or a console prompt wakes it first. The

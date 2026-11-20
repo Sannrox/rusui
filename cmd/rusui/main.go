@@ -84,6 +84,9 @@ func main() {
 		case "put":
 			putCLI(os.Args[2:])
 			return
+		case "preview":
+			previewCLI(os.Args[2:])
+			return
 		case "approve":
 			approveCLI(os.Args[2:])
 			return
