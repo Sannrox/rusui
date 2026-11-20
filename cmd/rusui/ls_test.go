@@ -43,6 +43,18 @@ func TestLsMainPrintsNamesAndPath(t *testing.T) {
 	}
 }
 
+func TestLsMainFileIsNotADirectory(t *testing.T) {
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write([]byte{0x00, 0x01})
+	}))
+	t.Cleanup(hs.Close)
+	var errb bytes.Buffer
+	if code := lsMain([]string{"-url", hs.URL, "-token", "op", "7", "note.bin"}, io.Discard, &errb); code != 1 || !strings.Contains(errb.String(), "not a directory") {
+		t.Fatalf("file %d %s", code, errb.String())
+	}
+}
+
 func TestLsMainUsageAndErrors(t *testing.T) {
 	var errb bytes.Buffer
 	if code := lsMain(nil, io.Discard, &errb); code != 2 || !strings.Contains(errb.String(), "usage:") {
