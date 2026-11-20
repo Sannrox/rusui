@@ -101,7 +101,7 @@ func interpretGitDiff(raw []byte, cap int64) ([]byte, string, error) {
 	return raw, "", nil
 }
 
-func gitOutput(dir string, args ...string) ([]byte, error) {
+func gitCmd(dir string, args ...string) *exec.Cmd {
 	cmd := exec.Command("git", append([]string{"-c", "safe.directory=*"}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = []string{
@@ -112,7 +112,11 @@ func gitOutput(dir string, args ...string) ([]byte, error) {
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_TERMINAL_PROMPT=0",
 	}
-	out, err := cmd.Output()
+	return cmd
+}
+
+func gitOutput(dir string, args ...string) ([]byte, error) {
+	out, err := gitCmd(dir, args...).Output()
 	if err != nil {
 		if ee, ok := errors.AsType[*exec.ExitError](err); ok && ee.ExitCode() == 1 {
 			return out, nil

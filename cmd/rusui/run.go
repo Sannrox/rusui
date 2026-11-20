@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/server"
 )
 
@@ -26,6 +27,30 @@ func (p *pathList) Set(value string) error {
 	}
 	*p = append(*p, value)
 	return nil
+}
+
+func loadSessionPatch(path string) ([]byte, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if st.IsDir() {
+		return nil, fmt.Errorf("patch: directory")
+	}
+	if st.Size() > env.WorkspaceUploadCap {
+		return nil, fmt.Errorf("oversize")
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > env.WorkspaceUploadCap {
+		return nil, fmt.Errorf("oversize")
+	}
+	if len(body) == 0 {
+		return nil, fmt.Errorf("patch empty")
+	}
+	return body, nil
 }
 
 func loadPromptAttachments(paths []string) ([]map[string]string, error) {
@@ -66,6 +91,7 @@ func runMain(args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY,
 	base := fs.String("base-sha", "", "pinned base commit")
 	paths := fs.String("paths", "", "comma-separated allowed paths")
 	follow := fs.Bool("follow", false, "print the create result, then follow until the session ends")
+	patch := fs.String("patch", "", "local git patch applied after snapshot prepare")
 	var files pathList
 	fs.Var(&files, "file", "attach a file to the first turn (repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -81,7 +107,7 @@ func runMain(args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY,
 		prompt = strings.TrimSpace(string(b))
 	}
 	if *project == "" || prompt == "" {
-		_, _ = fmt.Fprintln(stderr, "usage: rusui run -project SLUG [-url URL] [-token TOKEN] [-guest NAME] [-file PATH] [-follow] [-idempotency-key KEY] [-effort KEY -repo REPO -ref REF -base-sha SHA -paths PATHS] [PROMPT]")
+		_, _ = fmt.Fprintln(stderr, "usage: rusui run -project SLUG [-url URL] [-token TOKEN] [-guest NAME] [-file PATH] [-patch FILE] [-follow] [-idempotency-key KEY] [-effort KEY -repo REPO -ref REF -base-sha SHA -paths PATHS] [PROMPT]")
 		return 2
 	}
 	payload := map[string]any{"kind": "run", "prompt": prompt}
@@ -110,6 +136,14 @@ func runMain(args []string, stdin io.Reader, stdout, stderr io.Writer, stdinTTY,
 			return 1
 		}
 		payload["attachments"] = atts
+	}
+	if *patch != "" {
+		raw, err := loadSessionPatch(*patch)
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, err)
+			return 1
+		}
+		payload["patch"] = base64.StdEncoding.EncodeToString(raw)
 	}
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(*url, "/")+"/projects/"+*project+"/sessions", bytes.NewReader(body))

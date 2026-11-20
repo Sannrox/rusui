@@ -10,7 +10,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 59
+const CurrentSchema = 60
 
 // ReadableFloor is the oldest schema version whose binary can still read and
 // write a store at CurrentSchema (ADR 0089 D8). An expand-only migration,
@@ -739,6 +739,14 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 60 {
+		if err := migrateV60(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 60); err != nil {
+			return err
+		}
+	}
 	if err := writeFloor(s.DB); err != nil {
 		return err
 	}
@@ -748,6 +756,18 @@ func (s *Store) migrate() error {
 		}
 	}
 	return nil
+}
+
+// migrateV60 stores an optional operator git patch on a run session until
+// workspace prepare applies it (#797). Expand-only: ReadableFloor stays 58.
+func migrateV60(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS session_patches (
+  session_id INTEGER PRIMARY KEY,
+  body BLOB NOT NULL
+);
+`)
+	return err
 }
 
 // migrateV59 stores a nullable service name on preview grants and replaces

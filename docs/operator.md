@@ -68,9 +68,11 @@ Prompt args still win when present. Empty stdin with no args is usage.
 ```bash
 cat notes.md | rusui run -project rusui
 rusui run -project rusui -file shot.png -file notes.md 'Inspect these'
+rusui run -project rusui -patch ./local.patch 'Inspect the project'
 rusui run -project rusui -follow 'Inspect the project'
 ```
 
+`-patch` is a local git patch applied after snapshot place and setup, not part of `source_hash` (32 MiB, same cap as `rusui put`). A patch that does not apply fails the start; there is no running guest.
 `-file` is repeatable on `rusui run` and `rusui prompt` and uses the same
 kinds and size caps as `POST /sessions/{id}/turns` (image, PDF, plain text,
 Markdown; 8 MiB per part, 16 MiB aggregate). Steer refuses attachments.

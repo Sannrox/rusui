@@ -167,6 +167,9 @@ func ClearSessionDataTx(s *Store, tx *sql.Tx, sessionID int64) error {
 	if _, err := tx.Exec(`DELETE FROM prompt_attachments WHERE session_id=?`, sessionID); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(`DELETE FROM session_patches WHERE session_id=?`, sessionID); err != nil {
+		return err
+	}
 	if err := DeleteFlightRecordsTx(tx, sessionID); err != nil {
 		return err
 	}

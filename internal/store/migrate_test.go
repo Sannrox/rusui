@@ -156,6 +156,10 @@ func TestV1DatabaseUpgradesInPlace(t *testing.T) {
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='environment_services'`).Scan(&envServices); err != nil || envServices != 1 {
 		t.Fatalf("environment_services missing after upgrade: %d %v", envServices, err)
 	}
+	var sessionPatches int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_patches'`).Scan(&sessionPatches); err != nil || sessionPatches != 1 {
+		t.Fatalf("session_patches missing after upgrade: %d %v", sessionPatches, err)
+	}
 
 	j, err := JobState(s, "Sannrox/rusui", 42)
 	if err != nil {
