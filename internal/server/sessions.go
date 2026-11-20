@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sannrox/rusui/internal/acp"
@@ -21,6 +22,9 @@ const (
 	// promptAttachmentBodyCap matches follow-up turns: two 32 MiB
 	// workspace parts plus 1 MiB of JSON framing.
 	promptAttachmentBodyCap = int64(env.WorkspaceUploadCap) + int64(env.WorkspaceUploadCap)/2 + 1<<20
+	// sessionCreateBodyCap is the run-create body: existing attachment
+	// framing plus a 32 MiB git patch as base64.
+	sessionCreateBodyCap = promptAttachmentBodyCap + int64(env.WorkspaceUploadCap) + int64(env.WorkspaceUploadCap)/3
 )
 
 type promptAttachment struct {
@@ -43,10 +47,28 @@ func decodePromptFiles(atts []promptAttachment) ([]store.PromptFile, error) {
 	return files, nil
 }
 
+func decodeSessionPatch(s string) ([]byte, error) {
+	if strings.TrimSpace(s) == "" {
+		return nil, nil
+	}
+	raw, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return nil, fmt.Errorf("patch")
+	}
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("patch empty")
+	}
+	if len(raw) > env.WorkspaceUploadCap {
+		return nil, fmt.Errorf("oversize")
+	}
+	return raw, nil
+}
+
 func writePromptFileError(w http.ResponseWriter, err error) {
 	switch err.Error() {
 	case "oversize", "path", "attachment empty", "unsupported",
-		"native Claude attachments unsupported", "native Codex attachments unsupported":
+		"native Claude attachments unsupported", "native Codex attachments unsupported",
+		"patch", "patch empty":
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	default:
 		http.Error(w, err.Error(), http.StatusConflict)

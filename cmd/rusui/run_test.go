@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sannrox/rusui/internal/env"
 )
 
 func TestRunMainPrintsJSONWithoutHandleWhenStderrIsRedirected(t *testing.T) {
@@ -174,6 +176,54 @@ func TestRunMainTTYWithoutArgsDoesNotReadStdin(t *testing.T) {
 	var out, errw bytes.Buffer
 	code := runMain([]string{"-project", "demo", "-token", "tok"}, failReader{t}, &out, &errw, true, false)
 	if code != 2 || !strings.Contains(errw.String(), "usage: rusui run") {
+		t.Fatalf("code %d stderr %q", code, errw.String())
+	}
+}
+
+func TestRunMainSendsPatchAsBase64(t *testing.T) {
+	dir := t.TempDir()
+	patchPath := filepath.Join(dir, "local.patch")
+	patch := []byte("--- a/README\n+++ b/README\n@@ -1 +1 @@\n-old\n+new\n")
+	if err := os.WriteFile(patchPath, patch, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	hs := startRunCreateServerFn(t, `{"session_id":11,"kind":"run"}`, func(_ *http.Request, raw []byte) {
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Errorf("body %s: %v", raw, err)
+		}
+	})
+	var out, errw bytes.Buffer
+	code := runMain([]string{"-url", hs.URL, "-project", "demo", "-token", "tok", "-patch", patchPath, "inspect"}, strings.NewReader(""), &out, &errw, true, false)
+	if code != 0 {
+		t.Fatalf("code %d stderr %q", code, errw.String())
+	}
+	if got["prompt"] != "inspect" || got["patch"] != base64.StdEncoding.EncodeToString(patch) {
+		t.Fatalf("payload %+v", got)
+	}
+}
+
+func TestRunMainPatchMissingFileIsError(t *testing.T) {
+	var out, errw bytes.Buffer
+	code := runMain([]string{"-project", "demo", "-token", "tok", "-patch", filepath.Join(t.TempDir(), "no.patch"), "inspect"}, strings.NewReader(""), &out, &errw, true, false)
+	if code != 1 || errw.Len() == 0 {
+		t.Fatalf("code %d stderr %q", code, errw.String())
+	}
+}
+
+func TestRunMainPatchOversizedIsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "big.patch")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(env.WorkspaceUploadCap + 1); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	var out, errw bytes.Buffer
+	code := runMain([]string{"-project", "demo", "-token", "tok", "-patch", path, "inspect"}, strings.NewReader(""), &out, &errw, true, false)
+	if code != 1 || !strings.Contains(errw.String(), "oversize") {
 		t.Fatalf("code %d stderr %q", code, errw.String())
 	}
 }

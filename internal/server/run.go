@@ -16,7 +16,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "auth", http.StatusUnauthorized)
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, promptAttachmentBodyCap)
+	r.Body = http.MaxBytesReader(w, r.Body, sessionCreateBodyCap)
 	var req struct {
 		Kind          string             `json:"kind"`
 		Guest         string             `json:"guest"`
@@ -33,12 +33,18 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		Argv          []string           `json:"argv"`
 		Cwd           string             `json:"cwd"`
 		Attachments   []promptAttachment `json:"attachments"`
+		Patch         string             `json:"patch"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	files, err := decodePromptFiles(req.Attachments)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	patch, err := decodeSessionPatch(req.Patch)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -63,7 +69,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "execution_mode", http.StatusConflict)
 			return
 		}
-		if req.Guest != "" || req.Prompt != "" || req.EffortKey != "" || req.Repo != "" || req.Ref != "" || req.BaseSHA != "" || len(req.AllowedPaths) > 0 || len(req.ContextRefs) > 0 || len(files) > 0 {
+		if req.Guest != "" || req.Prompt != "" || req.EffortKey != "" || req.Repo != "" || req.Ref != "" || req.BaseSHA != "" || len(req.AllowedPaths) > 0 || len(req.ContextRefs) > 0 || len(files) > 0 || len(patch) > 0 {
 			http.Error(w, "local session uses its policy-configured runtime", http.StatusBadRequest)
 			return
 		}
@@ -94,6 +100,10 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	pinned := req.EffortKey != "" || req.Repo != "" || req.Ref != "" || req.BaseSHA != "" || len(req.AllowedPaths) > 0
 	if pinned {
+		if len(patch) > 0 {
+			http.Error(w, "patch", http.StatusBadRequest)
+			return
+		}
 		if !worker {
 			http.Error(w, "auth", http.StatusUnauthorized)
 			return
@@ -132,7 +142,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "execution_mode", http.StatusConflict)
 		return
 	}
-	id, err := s.Eng.StartRunFiles(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size, req.Mode, req.Guest, req.ExecutionMode, act, createdBy, files)
+	id, err := s.Eng.StartRunFiles(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size, req.Mode, req.Guest, req.ExecutionMode, act, createdBy, files, patch)
 	if err != nil {
 		writePromptFileError(w, err)
 		return

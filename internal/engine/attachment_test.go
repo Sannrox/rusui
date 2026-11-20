@@ -181,7 +181,7 @@ func TestPromptAttachmentPDFAndUnsupported(t *testing.T) {
 
 func TestCreateRunFilesReachClaim(t *testing.T) {
 	h := setup(t)
-	sid, err := h.e.StartRunFiles("test", "inspect", "", "", "", "", "", "", "", []store.PromptFile{{Name: "shot.png", Body: png1x1}})
+	sid, err := h.e.StartRunFiles("test", "inspect", "", "", "", "", "", "", "", []store.PromptFile{{Name: "shot.png", Body: png1x1}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

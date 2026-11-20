@@ -26,10 +26,10 @@ func (e *Engine) StartRunGuest(project, prompt, idem, size, mode, guest string) 
 }
 
 func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode, act, createdBy string) (int64, error) {
-	return e.StartRunFiles(project, prompt, idem, size, mode, guest, execMode, act, createdBy, nil)
+	return e.StartRunFiles(project, prompt, idem, size, mode, guest, execMode, act, createdBy, nil, nil)
 }
 
-func (e *Engine) StartRunFiles(project, prompt, idem, size, mode, guest, execMode, act, createdBy string, files []store.PromptFile) (int64, error) {
+func (e *Engine) StartRunFiles(project, prompt, idem, size, mode, guest, execMode, act, createdBy string, files []store.PromptFile, patch []byte) (int64, error) {
 	pol := e.PolicySnapshot()
 	p, ok := pol.Project(project)
 	if !ok || !p.AllowsKind(policy.KindRun) {
@@ -54,6 +54,9 @@ func (e *Engine) StartRunFiles(project, prompt, idem, size, mode, guest, execMod
 		return 0, fmt.Errorf("prompt required")
 	}
 	if err := prepareCreatePromptFiles(prompt, files, entry); err != nil {
+		return 0, err
+	}
+	if err := validateSessionPatch(patch); err != nil {
 		return 0, err
 	}
 	repo, sha := e.operatorSessionPin(p)
@@ -149,6 +152,9 @@ func (e *Engine) StartRunFiles(project, prompt, idem, size, mode, guest, execMod
 				return err
 			}
 			if err := e.bindCreatePromptFilesTx(tx, sid, repo, item, files); err != nil {
+				return err
+			}
+			if err := store.PutSessionPatchTx(tx, sid, patch); err != nil {
 				return err
 			}
 			if idem != "" {
