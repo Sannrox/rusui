@@ -63,6 +63,10 @@ type Engine struct {
 	HookID  string
 	HookIDs map[string]string
 	Notify  func(string)
+	// NotifyRunStart and NotifyRunEnd are optional outbound hooks for
+	// operator run sessions. The plane leaves them nil when Slack is unset.
+	NotifyRunStart func(sessionID int64, project string)
+	NotifyRunEnd   func(sessionID int64, state string)
 
 	FetchTimeout time.Duration
 	OwnerTTL     time.Duration
@@ -748,6 +752,9 @@ func (e *Engine) expireLeaseTx(tx *store.Tx, j *store.Job) error {
 	if err != nil {
 		return err
 	}
+	if j.State == "failed" {
+		e.notifyRunTerminalTx(tx, turn.SessionID)
+	}
 	return store.TouchSessionEnvironmentTx(tx, turn.SessionID, now, now.Add(e.envTTL()))
 }
 
@@ -1299,6 +1306,7 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 			if err := e.finishMeasurementTx(tx, j.ID, j.State, art, now); err != nil {
 				return err
 			}
+			e.notifyRunTerminalTx(tx, turn.SessionID)
 			return e.maybeEnqueueApplyTx(tx, j, snap, revID, art)
 		}
 		j.State = "queued"
@@ -1463,6 +1471,7 @@ func (e *Engine) failClosedTx(tx *store.Tx, j *store.Job, gen, claimed int, bump
 		return err
 	}
 	e.exceptionTx(tx, fmt.Sprintf("execution deadline exhausted %s#%d", j.Repo, j.Item))
+	e.notifyRunTerminalTx(tx, turn.SessionID)
 	return e.finishMeasurementTx(tx, j.ID, j.State, Artifact{}, now)
 }
 
@@ -1510,6 +1519,7 @@ func (e *Engine) finalizeFailureTx(tx *store.Tx, j *store.Job, gen, claimed int)
 		return err
 	}
 	if j.State == "failed" {
+		e.notifyRunTerminalTx(tx, turn.SessionID)
 		return e.finishMeasurementTx(tx, j.ID, j.State, Artifact{}, now)
 	}
 	return nil

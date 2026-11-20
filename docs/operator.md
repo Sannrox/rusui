@@ -390,7 +390,7 @@ webhooks do not call Slack. If you want slash commands:
    random placeholder from step 2) and restart `rusui`.
 3. `export RUSUI_SLACK_USERS=U0123ABCD,U0456EFGH` — Slack **user ids**.
    An empty allowlist 403s everyone.
-4. Optional exceptions: `RUSUI_SLACK_BOT_TOKEN` and `RUSUI_SLACK_CHANNEL`.
+4. Optional outbound: `RUSUI_SLACK_BOT_TOKEN` and `RUSUI_SLACK_CHANNEL` for exceptions and run start/end. Unset is a no-op; a post error is logged and does not fail the run.
 
 Commands: `status`, `pause [project]`, `resume [project]`, `sweep [repo]`,
 `retry repo` or `retry repo#item`, `reload`. `implement` is rejected.

@@ -118,8 +118,10 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 	}
 	hash := specHash(spec, pol.Hash)
 	var out *store.Task
+	created := false
 	err = e.admitStart(AdmitRequest{Project: project, Kind: "task", Repo: spec.Repo, BaseSHA: spec.BaseSHA, Actor: sessionTenant(p), PromptSHA256: promptDigest(spec.Prompt)}, "", func(g *admitGate) error {
 		return e.Store.Tx(func(tx *store.Tx) error {
+			created = false
 			paused, err := store.Paused(tx, project)
 			if err != nil {
 				return err
@@ -208,11 +210,15 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 				PolicyHash: pol.Hash, AllowedPaths: string(paths), ContextRefs: string(ctxs),
 				Prompt: spec.Prompt, BudgetRepairs: spec.BudgetRepairs, State: "open",
 			}
+			created = true
 			return nil
 		})
 	})
 	if err != nil {
 		return nil, err
+	}
+	if created && out != nil {
+		e.notifyRunStarted(out.SessionID, project)
 	}
 	return out, nil
 }
