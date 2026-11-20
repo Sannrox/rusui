@@ -215,13 +215,14 @@ func boundActions(actions []store.Action, revisionID int64) []Action {
 }
 
 // includeReceiptAction keeps review-bound rows and operator environment
-// mutations (preview mint, workspace put) that have no review revision.
+// mutations (preview mint, share, comment, workspace put) that have no
+// review revision.
 func includeReceiptAction(a store.Action, revisionID int64) bool {
 	if a.ReviewRevisionID != nil {
 		return *a.ReviewRevisionID == revisionID
 	}
 	switch a.Type {
-	case "preview.mint", "preview.share", "workspace.put":
+	case "preview.mint", "preview.share", "preview.comment", "workspace.put":
 		return true
 	}
 	return false

@@ -302,7 +302,7 @@ reported reason. See [ARCHITECTURE.md](../ARCHITECTURE.md#process-boundary).
 | `POST` | `/sessions/{id}/turns/{tid}/replay` | operator or worker token; rebuild a Shikigami schema-v1 manifest and re-run the turn against the recorded snapshot (optional JSON `snapshot` override); external effects are denied; reports object-revision divergence |
 | `GET` | `/sessions/{id}/terminal` | operator, worker, or turn token; current environment terminal output; not the transcript |
 | `GET` | `/sessions/{id}/envlog` | operator token; last pre-clone, pre-setup, setup, resume, and service output of the session's environment (`rusui envlog`); each capture keeps its last 1 MiB; optional `kind` (`pre-clone`/`pre-setup`/`setup`/`resume`/`service`), `name`, and `omit-body=1` so a list does not materialize bodies |
-| `GET` | `/sessions/{id}/receipt` | operator or worker token; versioned JSON review receipt (`rusui receipt`); includes `workspace.put`, `preview.mint`, and `preview.share` session actions; Markdown when `Accept: text/markdown` or `?format=md`; 404 unknown session or no completed review |
+| `GET` | `/sessions/{id}/receipt` | operator or worker token; versioned JSON review receipt (`rusui receipt`); includes `workspace.put`, `preview.mint`, `preview.share`, and `preview.comment` session actions; Markdown when `Accept: text/markdown` or `?format=md`; 404 unknown session or no completed review |
 | `POST` | `/sessions/{id}/workspace` | operator token; multipart `file` plus `path` query; 32 MiB cap; workspace-relative only; appends a `workspace.put` action receipt with the destination path, not the file bytes |
 | `GET` | `/sessions/{id}/workspace` | operator token; JSON `{names}` for one workspace directory (`rusui ls`); file bytes (`application/octet-stream`, 32 MiB cap) when `path` is a regular file (`rusui get`); optional `path` query; omitted `path` is the top level; path escape is 400; replaced `/workspace` and a missing environment are 409 |
 | `GET` | `/sessions/{id}/workspace/export` | operator token; tar of environment git HEAD plus uncommitted files (`rusui sync -workspace`, and the same command with `-follow`); 404 unknown; 409 cancelled, archived, unpublished, or environment missing |
@@ -394,7 +394,7 @@ or a tailnet; do not bind it off loopback.
 | Method | Path | Auth |
 | --- | --- | --- |
 | `*` | `/` | preview grant (`?g=` or `Authorization: Bearer`); reverse-proxies the granted environment port |
-| `POST` | `/comment` | operator preview grant (`?g=` or `Authorization: Bearer`) and `Origin` matching `RUSUI_PREVIEW_BASE`; 8 KiB form `text`, `url`, `selector`; share grant is 403 |
+| `POST` | `/comment` | operator preview grant (`?g=` or `Authorization: Bearer`) and `Origin` matching `RUSUI_PREVIEW_BASE`; 8 KiB form `text`, `url`, `selector`; appends a `preview.comment` action receipt with url, selector, and text, not the grant token; follow-up prompt stays `preview comment` plus those fields; share grant is 403 |
 
 Every response sets `X-Robots-Tag: noindex` and `Referrer-Policy: no-referrer`.
 A `text/html` response for an operator grant includes a plane-owned comment

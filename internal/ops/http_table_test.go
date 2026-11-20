@@ -133,6 +133,9 @@ func TestConfigurationDocumentsPreviewOrigin(t *testing.T) {
 	if !strings.Contains(table, "`POST` | `/comment`") {
 		t.Fatal("preview-origin table missing POST /comment")
 	}
+	if !strings.Contains(table, "preview.comment") {
+		t.Fatal("preview-origin table missing preview.comment action")
+	}
 	if !strings.Contains(table, "`?g=`") {
 		t.Fatal("preview-origin table missing grant query ?g=")
 	}

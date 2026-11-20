@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	actionPreviewMint  = "preview.mint"
-	actionPreviewShare = "preview.share"
-	actionWorkspacePut = "workspace.put"
+	actionPreviewMint    = "preview.mint"
+	actionPreviewShare   = "preview.share"
+	actionPreviewComment = "preview.comment"
+	actionWorkspacePut   = "workspace.put"
 )
 
 // recordOperatorEnvAction appends one session action for an operator

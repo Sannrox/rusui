@@ -261,9 +261,10 @@ the preview handler on that host:port beside the plane listener. Unset, mint
 refuses. A PreviewBase that shares the plane origin, omits a port, or is
 not loopback fails closed at start. An HTML page on that origin shows a
 comment control. Submitting it creates the same session follow-up as
-`POST /comment` (`preview comment` plus the text). Non-HTML responses have
-no control. Routes, grant query, and body limits:
-[configuration.md](configuration.md#preview-origin).
+`POST /comment` (`preview comment` plus the text). A successful comment
+appends a `preview.comment` action receipt with url, selector, and text,
+not the grant token. Non-HTML responses have no control. Routes, grant
+query, and body limits: [configuration.md](configuration.md#preview-origin).
 
 Attach to either runtime with the same operator command:
 
