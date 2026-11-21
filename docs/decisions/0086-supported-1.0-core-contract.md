@@ -5,7 +5,9 @@
   freeze record.
 - Amended by: [ADR 0090](0090-receipt-evidence-and-policy-binding.md)
   (receipt evidence classes, `evidence_summary`, and the claim-time policy
-  revision).
+  revision),
+  [ADR 0100](0100-signed-portable-session-export.md) (signed operator
+  session export; the freeze-time deferral of portable bundles).
 - Date: 2026-10-30
 - Amends: [ADR 0046](0046-workspace-first-sequence.md) (M6 freeze content),
   [ADR 0085](0085-freeze-on-author-validated-journey.md) (the freeze now

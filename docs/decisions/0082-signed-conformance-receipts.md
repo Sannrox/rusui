@@ -5,7 +5,10 @@
 - Resolves: #616
 - Related: [ADR 0073](0073-session-plane-guest-registry.md) (generic ACP
   guests are admitted by conformance), #600 (conformance runs inside the
-  pinned guest image), [ARCHITECTURE.md](../../ARCHITECTURE.md)
+  pinned guest image), [ARCHITECTURE.md](../../ARCHITECTURE.md),
+  [ADR 0100](0100-signed-portable-session-export.md) (session export
+  generalizes this HMAC pattern with a dedicated key; conformance
+  receipts stay a different object)
 
 ## Context
 

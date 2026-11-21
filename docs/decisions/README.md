@@ -113,6 +113,7 @@ is stale.
 | [0097](0097-package-registry-guest-identity.md) | Plane-minted package-registry identity for one guest audience | Accepted |
 | [0098](0098-snapshot-only-clone-retained.md) | Snapshot-only clone retained | Accepted |
 | [0099](0099-two-attributed-humans-space-mode.md) | Two attributed humans on one space-mode session | Accepted |
+| [0100](0100-signed-portable-session-export.md) | Signed operator session export and import | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR
