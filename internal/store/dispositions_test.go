@@ -1,9 +1,11 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 )
 
 // shadowResult inserts a review result; comment adds its dry-run comment.
@@ -37,6 +39,121 @@ func TestRecordDispositionRefusesUnknownResultAndValue(t *testing.T) {
 	}
 	if _, err := RecordDisposition(s, Disposition{ReviewRevisionID: id, Value: "great"}); !errors.Is(err, ErrInvalidDisposition) {
 		t.Fatalf("invalid value: %v", err)
+	}
+	neg := int64(-1)
+	if _, err := RecordDisposition(s, Disposition{ReviewRevisionID: id, Value: DispositionUseful, Seconds: &neg}); !errors.Is(err, ErrInvalidSeconds) {
+		t.Fatalf("negative seconds: %v", err)
+	}
+}
+
+func reviewResult(t *testing.T, s *Store, repo string, item int, tenant string) int64 {
+	t.Helper()
+	sid, err := insertID(s.DB, `INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, 'review', ?, ?, 'issue', 'open', ?) RETURNING id`,
+		repo, item, time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tenant != "" {
+		if err := SetSessionTenant(s, sid, tenant); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tid, err := insertID(s.DB, `INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'completed') RETURNING id`, sid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := insertID(s.DB, `INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, 'h', 'm', '{}') RETURNING id`, tid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func TestRecordDispositionSecondsRoundTripAndNullOldRows(t *testing.T) {
+	s := openTestStore(t)
+	id := reviewResult(t, s, "o/r", 1, "")
+	got, err := RecordDisposition(s, Disposition{ReviewRevisionID: id, Value: DispositionUseful, Seconds: new(int64(90)), By: Attribution{Actor: "alice"}})
+	if err != nil || got.Seconds == nil || *got.Seconds != 90 {
+		t.Fatalf("record with seconds: %+v %v", got, err)
+	}
+	var stored sql.NullInt64
+	if err := s.DB.QueryRow(`SELECT seconds FROM result_dispositions WHERE id=?`, got.ID).Scan(&stored); err != nil || !stored.Valid || stored.Int64 != 90 {
+		t.Fatalf("stored seconds %v %v", stored, err)
+	}
+
+	omitted := reviewResult(t, s, "o/r", 2, "")
+	plain, err := RecordDisposition(s, Disposition{ReviewRevisionID: omitted, Value: DispositionNeutral})
+	if err != nil || plain.Seconds != nil {
+		t.Fatalf("omit seconds: %+v %v", plain, err)
+	}
+	if err := s.DB.QueryRow(`SELECT seconds FROM result_dispositions WHERE id=?`, plain.ID).Scan(&stored); err != nil || stored.Valid {
+		t.Fatalf("omitted stored as unknown, not zero: %v %v", stored, err)
+	}
+
+	old := reviewResult(t, s, "o/r", 3, "")
+	if _, err := s.DB.Exec(`INSERT INTO result_dispositions (review_revision_id, disposition, wrong_finding, note, recorded_at) VALUES (?, 'useful', 0, '', ?)`,
+		old, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	items, err := InboxItems(s, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[int64]*Disposition{}
+	for _, it := range items {
+		byID[it.ResultID] = it.Disposition
+	}
+	if d := byID[id]; d == nil || d.Seconds == nil || *d.Seconds != 90 {
+		t.Fatalf("inbox seconds %+v", d)
+	}
+	if d := byID[omitted]; d == nil || d.Seconds != nil {
+		t.Fatalf("inbox omitted %+v", d)
+	}
+	if d := byID[old]; d == nil || d.Seconds != nil {
+		t.Fatalf("inbox old row %+v", d)
+	}
+}
+
+func TestCommentGateSumsDispositionSupervisionSecondsPerRepoAndActor(t *testing.T) {
+	s := openTestStore(t)
+	a1 := reviewResult(t, s, "acme/one", 1, "acme")
+	a2 := reviewResult(t, s, "acme/one", 2, "acme")
+	a3 := reviewResult(t, s, "acme/two", 3, "acme")
+	a4 := reviewResult(t, s, "acme/one", 4, "acme")
+	other := reviewResult(t, s, "globex/x", 5, "globex")
+	if _, err := RecordDisposition(s, Disposition{ReviewRevisionID: a1, Value: DispositionUseful, Seconds: new(int64(60)), By: Attribution{Actor: "alice"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RecordDisposition(s, Disposition{ReviewRevisionID: a2, Value: DispositionUseful, Seconds: new(int64(30)), By: Attribution{Actor: "bob"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RecordDisposition(s, Disposition{ReviewRevisionID: a3, Value: DispositionNeutral, Seconds: new(int64(10)), By: Attribution{Actor: "alice"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RecordDisposition(s, Disposition{ReviewRevisionID: a4, Value: DispositionHarmful}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RecordDisposition(s, Disposition{ReviewRevisionID: other, Value: DispositionUseful, Seconds: new(int64(500)), By: Attribution{Actor: "alice"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	g, err := CommentGateReport(s, "acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Supervision.Seconds != 100 {
+		t.Fatalf("tenant total %+v", g.Supervision)
+	}
+	if len(g.Supervision.ByRepo) != 2 || g.Supervision.ByRepo[0] != (SupervisionSum{Repo: "acme/one", Seconds: 90}) || g.Supervision.ByRepo[1] != (SupervisionSum{Repo: "acme/two", Seconds: 10}) {
+		t.Fatalf("by repo %+v", g.Supervision.ByRepo)
+	}
+	if len(g.Supervision.ByActor) != 2 || g.Supervision.ByActor[0] != (SupervisionSum{DecidedBy: "alice", Seconds: 70}) || g.Supervision.ByActor[1] != (SupervisionSum{DecidedBy: "bob", Seconds: 30}) {
+		t.Fatalf("by actor %+v", g.Supervision.ByActor)
+	}
+
+	all, err := CommentGateReport(s, "")
+	if err != nil || all.Supervision.Seconds != 600 {
+		t.Fatalf("all tenants %+v %v", all.Supervision, err)
 	}
 }
 

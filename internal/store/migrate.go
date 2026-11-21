@@ -10,7 +10,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 63
+const CurrentSchema = 64
 
 // ReadableFloor is the oldest schema version whose binary can still read and
 // write a store at CurrentSchema (ADR 0089 D8). An expand-only migration,
@@ -771,6 +771,14 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 64 {
+		if err := migrateV64(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 64); err != nil {
+			return err
+		}
+	}
 	if err := writeFloor(s.DB); err != nil {
 		return err
 	}
@@ -780,6 +788,21 @@ func (s *Store) migrate() error {
 		}
 	}
 	return nil
+}
+
+// migrateV64 records optional maintainer supervision time on a disposition
+// (#711). Seconds are nullable: omit/NULL means unknown, not zero.
+// Expand-only: ReadableFloor stays 62.
+func migrateV64(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('result_dispositions') WHERE name='seconds'`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`ALTER TABLE result_dispositions ADD COLUMN seconds INTEGER`)
+	return err
 }
 
 // migrateV63 records a plane-minted package-registry identity (ADR 0097,

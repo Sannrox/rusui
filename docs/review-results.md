@@ -64,17 +64,21 @@ can be measured. The result id is `result_id` from `rusui inbox`, or
 
 ```sh
 rusui disposition -value useful 42
+rusui disposition -value useful -seconds 90 42
 rusui disposition -value harmful -wrong -note "flagged a correct lock" 43
 rusui disposition            # comment gate report
 ```
 
 A disposition is a record only. It changes no policy, job, or action and
 writes nothing to GitHub. Re-recording keeps history; the latest counts.
-The report reads the 20 most recent disposed results that produced a
-dry-run comment. Below 20 it says `incomplete`; otherwise `fail` or
-`shadow_pass`, which covers the shadow thresholds only. Held-out cases, replay
-duplicates, and private-context leaks are listed as `not_measured`;
-`rusui eval` covers the first two. Promotion stays a `policy.yaml` edit.
+Optional `-seconds N` is the time the maintainer spent. Omitted means
+unknown, not zero. The report reads the 20 most recent disposed results
+that produced a dry-run comment. Below 20 it says `incomplete`; otherwise
+`fail` or `shadow_pass`, which covers the shadow thresholds only. It also
+sums known supervision seconds per repository and per deciding actor.
+Held-out cases, replay duplicates, and private-context leaks are listed as
+`not_measured`; `rusui eval` covers the first two. Promotion stays a
+`policy.yaml` edit.
 
 ## Review receipt export
 
