@@ -45,15 +45,22 @@ rusui inbox -all
 ```
 
 Each item carries `result_id`, `session_id`, repo, item, `verdict`, the
-number of `proposed_actions`, the latest `disposition`, and `state`:
-`current` while the item hash matches the latest snapshot, otherwise
-`superseded`. A superseded result is never published
+number of `proposed_actions`, the latest `disposition`, `created_at` when
+known, and `state`: `current` while the item hash matches the latest
+snapshot, otherwise `superseded`. A superseded result is never published
 ([ADR 0038](decisions/0038-maintenance-eligibility-and-promotion.md) D4).
 `next` is `dispose` for a current result without a disposition. Per
 repository, `repos` reports `reviews_today`, `review_cap`,
-`budget_exhausted`, and the number of `actionable` items (D5). Reading the
-inbox grants and approves nothing. Repeated reviews of one item replace its
-row rather than adding one.
+`budget_exhausted`, `actionable`, and `actionable_today` (D5, D6). Reading
+the inbox grants and approves nothing. Repeated reviews of one item
+replace its row rather than adding one.
+
+When `advisory_digest` is on and a repository has more than 10
+actionable items on a UTC day, routine advisory completions for that
+day become one `digests` entry. Failures, items with proposed actions,
+and exhausted budgets stay listed. Three consecutive days over the
+limit with the digest on stop `comment` and `repair` for that
+repository; advisory keeps running.
 
 ## Result dispositions
 

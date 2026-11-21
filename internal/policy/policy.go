@@ -58,6 +58,7 @@ type DefaultsYAML struct {
 	Review                     *bool    `yaml:"review"`
 	Comments                   bool     `yaml:"comments"`
 	Comment                    bool     `yaml:"comment"`
+	AdvisoryDigest             bool     `yaml:"advisory_digest"`
 	Close                      bool     `yaml:"close"`
 	Implement                  bool     `yaml:"implement"`
 	Land                       bool     `yaml:"land"`
@@ -127,6 +128,7 @@ type RepoYAML struct {
 	Review                     *bool    `yaml:"review"`
 	Comments                   *bool    `yaml:"comments"`
 	Comment                    *bool    `yaml:"comment"`
+	AdvisoryDigest             *bool    `yaml:"advisory_digest"`
 	Close                      *bool    `yaml:"close"`
 	Implement                  *bool    `yaml:"implement"`
 	Land                       *bool    `yaml:"land"`
@@ -157,6 +159,7 @@ type Repo struct {
 	Review                     bool
 	Comments                   bool
 	Comment                    bool
+	AdvisoryDigest             bool
 	Close                      bool
 	Implement                  bool
 	Land                       bool
@@ -381,6 +384,7 @@ func Parse(raw []byte) (*Effective, error) {
 			}
 			r.Comments = f.Defaults.Comments
 			r.Comment = f.Defaults.Comment
+			r.AdvisoryDigest = f.Defaults.AdvisoryDigest
 			r.Close = f.Defaults.Close
 			r.Implement = f.Defaults.Implement
 			r.Land = f.Defaults.Land
@@ -404,6 +408,9 @@ func Parse(raw []byte) (*Effective, error) {
 			}
 			if ry.Comment != nil {
 				r.Comment = *ry.Comment
+			}
+			if ry.AdvisoryDigest != nil {
+				r.AdvisoryDigest = *ry.AdvisoryDigest
 			}
 			if ry.Close != nil {
 				r.Close = *ry.Close

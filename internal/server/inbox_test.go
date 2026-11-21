@@ -3,15 +3,22 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/sannrox/rusui/internal/engine"
+	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/store"
 )
 
 // inboxResult inserts a session of kind with one turn and the given result
 // item hashes, and returns the session id and the last result id.
 func inboxResult(t *testing.T, e *engine.Engine, kind string, item int, hashes ...string) (int64, int64) {
+	return inboxResultAt(t, e, kind, item, "", `{"verdict":"ok","proposed_actions":[{},{}]}`, hashes...)
+}
+
+func inboxResultAt(t *testing.T, e *engine.Engine, kind string, item int, created, payload string, hashes ...string) (int64, int64) {
 	t.Helper()
 	var sid int64
 	if err := e.Store.DB.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, created_at) VALUES (1, ?, 'example/test-repo', ?, 'issue', 'open', '2026-01-01T00:00:00Z') RETURNING id`, kind, item).Scan(&sid); err != nil {
@@ -21,13 +28,32 @@ func inboxResult(t *testing.T, e *engine.Engine, kind string, item int, hashes .
 	if err := e.Store.DB.QueryRow(`INSERT INTO turns (session_id, lane, state) VALUES (?, 'review', 'completed') RETURNING id`, sid).Scan(&tid); err != nil {
 		t.Fatal(err)
 	}
+	if payload == "" {
+		payload = `{"verdict":"keep"}`
+	}
 	var rid int64
 	for _, h := range hashes {
-		if err := e.Store.DB.QueryRow(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, ?, 'm', '{"verdict":"ok","proposed_actions":[{},{}]}') RETURNING id`, tid, h).Scan(&rid); err != nil {
+		if created == "" {
+			if err := e.Store.DB.QueryRow(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload) VALUES (?, 1, ?, 'm', ?) RETURNING id`, tid, h, payload).Scan(&rid); err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		if err := e.Store.DB.QueryRow(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload, created_at) VALUES (?, 1, ?, 'm', ?, ?) RETURNING id`, tid, h, payload, created).Scan(&rid); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return sid, rid
+}
+
+func enableAdvisoryDigest(t *testing.T, e *engine.Engine) {
+	t.Helper()
+	raw := strings.Replace(slackPol, "  comments: true\n", "  comments: true\n  advisory_digest: true\n", 1)
+	p, err := policy.Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.ReloadPolicy(p)
 }
 
 func getInbox(t *testing.T, url, tok string) (int, inboxResponse) {
@@ -100,6 +126,66 @@ func TestInboxListsLatestUndisposedCurrentReviewResults(t *testing.T) {
 	}
 	if it := byResult[done]; it.Disposition == nil || it.Disposition.Value != store.DispositionUseful || it.Next != "" {
 		t.Fatalf("disposed item %+v", it)
+	}
+}
+
+func TestInboxDigestsRoutineResultsOverTheLimit(t *testing.T) {
+	t.Parallel()
+	_, hs, e := consoleEnv(t)
+	enableAdvisoryDigest(t, e)
+	created := e.Clock.Now().UTC().Format(time.RFC3339Nano)
+	for i := 1; i <= 11; i++ {
+		inboxResultAt(t, e, "review", i, created, `{"verdict":"keep"}`, "h")
+	}
+	_, urgent := inboxResultAt(t, e, "review", 12, created, `{"verdict":"keep","proposed_actions":[{}]}`, "h")
+
+	code, got := getInbox(t, hs.URL+"/inbox", "op-tok")
+	if code != http.StatusOK {
+		t.Fatalf("inbox %d", code)
+	}
+	if len(got.Items) != 1 || got.Items[0].ResultID != urgent || got.Items[0].Next != store.InboxNextDispose {
+		t.Fatalf("urgent %+v", got.Items)
+	}
+	if len(got.Digests) != 1 || got.Digests[0].Repo != "example/test-repo" || got.Digests[0].Count != 11 || len(got.Digests[0].ResultIDs) != 11 {
+		t.Fatalf("digest %+v", got.Digests)
+	}
+	if len(got.Repos) != 1 || got.Repos[0].Actionable != 12 || got.Repos[0].ActionableToday != 12 || !got.Repos[0].Digest {
+		t.Fatalf("repos %+v", got.Repos)
+	}
+}
+
+func TestInboxLeavesRoutineResultsUnderTheLimit(t *testing.T) {
+	t.Parallel()
+	_, hs, e := consoleEnv(t)
+	enableAdvisoryDigest(t, e)
+	created := e.Clock.Now().UTC().Format(time.RFC3339Nano)
+	for i := 1; i <= 10; i++ {
+		inboxResultAt(t, e, "review", i, created, `{"verdict":"keep"}`, "h")
+	}
+
+	code, got := getInbox(t, hs.URL+"/inbox", "op-tok")
+	if code != http.StatusOK || len(got.Items) != 10 || len(got.Digests) != 0 {
+		t.Fatalf("under limit items=%d digests=%d", len(got.Items), len(got.Digests))
+	}
+	if len(got.Repos) != 1 || got.Repos[0].ActionableToday != 10 || got.Repos[0].Digest {
+		t.Fatalf("repos %+v", got.Repos)
+	}
+}
+
+func TestInboxDoesNotDigestWhenPolicyOff(t *testing.T) {
+	t.Parallel()
+	_, hs, e := consoleEnv(t)
+	created := e.Clock.Now().UTC().Format(time.RFC3339Nano)
+	for i := 1; i <= 11; i++ {
+		inboxResultAt(t, e, "review", i, created, `{"verdict":"keep"}`, "h")
+	}
+
+	code, got := getInbox(t, hs.URL+"/inbox", "op-tok")
+	if code != http.StatusOK || len(got.Items) != 11 || len(got.Digests) != 0 {
+		t.Fatalf("policy off items=%d digests=%d", len(got.Items), len(got.Digests))
+	}
+	if len(got.Repos) != 1 || got.Repos[0].Digest {
+		t.Fatalf("repos %+v", got.Repos)
 	}
 }
 

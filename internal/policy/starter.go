@@ -3,6 +3,8 @@ package policy
 const starterYAML = `# Operator default (policy v2, keyed by project). Copy to policy.yaml.
 # comments/close authorize v1 dry-run intended-actions, not live GitHub writes.
 # comment authorizes live GitHub comments (default off).
+# advisory_digest groups routine inbox completions over 10 actionable
+# items per UTC day (ADR 0038 D6). Default off. Overlay cannot enable it.
 # repair is a category name or empty (off). Overlay cannot enable it.
 # share is a project opt-in for operator-invited viewer preview grants
 # (ADR 0096). Default off. Overlay cannot enable it. TTL is 1h, 4h, or 24h.
@@ -21,6 +23,7 @@ defaults:
   review: true
   comments: false
   comment: false
+  advisory_digest: false
   close: false
   implement: false
   land: false
@@ -104,6 +107,7 @@ projects:
         review: true
         comments: false
         comment: false
+        advisory_digest: false
         close: false
         implement: false
         land: false

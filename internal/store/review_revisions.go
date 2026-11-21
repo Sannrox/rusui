@@ -3,16 +3,22 @@ package store
 import (
 	"database/sql"
 	"iter"
+	"time"
 )
 
 // ReviewRevision rows hold each immutable review artifact a turn produced.
 
 // InsertReviewRevisionTx records the artifact payload a turn completed
 // against claimedRevision and returns its id. The row keeps the policy
-// revision the turn was claimed under.
-func InsertReviewRevisionTx(tx *sql.Tx, jobID int64, claimedRevision int, itemHash, mainSHA, payload string) (int64, error) {
-	newID, err := scanID(tx.QueryRow(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload, policy_revision_id) VALUES (?,?,?,?,?,(SELECT policy_revision_id FROM turns WHERE id=?)) RETURNING id`,
-		jobID, claimedRevision, itemHash, mainSHA, payload, jobID))
+// revision the turn was claimed under. createdAt is the store time; zero
+// leaves created_at unknown.
+func InsertReviewRevisionTx(tx *sql.Tx, jobID int64, claimedRevision int, itemHash, mainSHA, payload string, createdAt time.Time) (int64, error) {
+	var created any
+	if !createdAt.IsZero() {
+		created = createdAt.UTC().Format(time.RFC3339Nano)
+	}
+	newID, err := scanID(tx.QueryRow(`INSERT INTO review_revisions (job_id, claimed_revision, item_hash, main_sha, payload, policy_revision_id, created_at) VALUES (?,?,?,?,?,(SELECT policy_revision_id FROM turns WHERE id=?),?) RETURNING id`,
+		jobID, claimedRevision, itemHash, mainSHA, payload, jobID, created))
 	if err != nil {
 		return 0, err
 	}

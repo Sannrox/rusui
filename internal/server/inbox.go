@@ -15,11 +15,14 @@ type inboxRepo struct {
 	ReviewCap       int    `json:"review_cap,omitempty"`
 	BudgetExhausted bool   `json:"budget_exhausted"`
 	Actionable      int    `json:"actionable"`
+	ActionableToday int    `json:"actionable_today"`
+	Digest          bool   `json:"digest,omitempty"`
 }
 
 type inboxResponse struct {
-	Items []store.InboxItem `json:"items"`
-	Repos []inboxRepo       `json:"repos"`
+	Items   []store.InboxItem   `json:"items"`
+	Digests []store.InboxDigest `json:"digests,omitempty"`
+	Repos   []inboxRepo         `json:"repos"`
 }
 
 // inbox lists the latest review result per item for the caller's tenant
@@ -49,10 +52,13 @@ func (s *Server) inbox(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	day := s.Eng.Clock.Now().UTC().Format("2006-01-02")
+	now := s.Eng.Clock.Now().UTC()
+	day := now.Format("2006-01-02")
 	pol := s.Eng.PolicySnapshot()
 	resp := inboxResponse{Items: []store.InboxItem{}, Repos: []inboxRepo{}}
 	byRepo := map[string]int{}
+	digestOn := map[string]bool{}
+	visible := []store.InboxItem{}
 	for _, it := range items {
 		i, seen := byRepo[it.Repo]
 		if !seen {
@@ -65,6 +71,7 @@ func (s *Server) inbox(w http.ResponseWriter, r *http.Request) {
 			if p, ok := pol.Repo(it.Repo); ok {
 				rep.ReviewCap = p.MaxReviewsPerRepoPerUTCDay
 				rep.BudgetExhausted = n >= rep.ReviewCap
+				digestOn[it.Repo] = p.AdvisoryDigest
 			}
 			i = len(resp.Repos)
 			byRepo[it.Repo] = i
@@ -72,10 +79,22 @@ func (s *Server) inbox(w http.ResponseWriter, r *http.Request) {
 		}
 		if it.Actionable() {
 			resp.Repos[i].Actionable++
+			if store.InboxUTCDay(it.CreatedAt) == day {
+				resp.Repos[i].ActionableToday++
+			}
 		}
 		if all || it.Actionable() {
-			resp.Items = append(resp.Items, it)
+			visible = append(visible, it)
 		}
+	}
+	for i, rep := range resp.Repos {
+		over := rep.ActionableToday > store.InboxActionableLimit
+		resp.Repos[i].Digest = digestOn[rep.Repo] && over
+	}
+	if all {
+		resp.Items = visible
+	} else {
+		resp.Items, resp.Digests = store.GroupInbox(visible, digestOn)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
