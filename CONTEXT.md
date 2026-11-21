@@ -84,6 +84,10 @@ uses a shared PostgreSQL store instead, with plane-wide jobs under one
 fenced `scheduler` lease ([ADR 0089](docs/decisions/0089-redundant-plane.md), not yet implemented).
 _Avoid_: leader, active-active, SQLite shared between plane processes
 
+**Signed session bundle**:
+An operator-portable HMAC-SHA256 envelope of receipts and transcript metadata, signed under `RUSUI_SESSION_EXPORT_KEY` ([ADR 0100](docs/decisions/0100-signed-portable-session-export.md)). `rusui export-session` / `rusui import-session` are operator-only. Import mints a new session. It does not restore leases, grants, terminals, or guest handles. `rusui restore` stays plane recovery. `rusui receipt` and `rusui diagnostics` stay unsigned.
+_Avoid_: restore, diagnostics bundle, workspace export, second signer
+
 **Snapshot**:
 The prepared, reusable tree identified by `source_hash` (base image digest, git pin, `.agents/setup` bytes). Two sessions may share a snapshot; they never share an environment. A second session starts from a snapshot, never from a live fork ([ADR 0035](docs/decisions/0035-live-environment-fork-deferred.md)). A snapshot hit skips plane pre-clone, pre-setup, and `.agents/setup`.
 _Avoid_: environment, GitHub item snapshot hash, image tag

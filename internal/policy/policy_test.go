@@ -55,6 +55,9 @@ projects:
 	if !ok || p.Egress != EgressTrusted || !p.AllowsKind(KindReview) || p.Share || p.PackageRegistry != "" {
 		t.Fatalf("project %+v", p)
 	}
+	if len(e.SessionExportSources) != 0 {
+		t.Fatalf("session export default %+v", e.SessionExportSources)
+	}
 	if p.MaxConcurrentLeases() != 1 {
 		t.Fatalf("default concurrent leases %d", p.MaxConcurrentLeases())
 	}
@@ -218,11 +221,34 @@ projects:
 		strings.Replace(good, "rusui:\n", "rusui:\n    package_registry: 10.0.0.1\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    gitlab:\n      group/project:\n        project_id: 1\n        comment: true\n", 1),
 		strings.Replace(good, "rusui:\n", "rusui:\n    gitlab:\n      group/project: {}\n", 1),
+		strings.Replace(good, "projects:\n", "session_export_sources: ['']\nprojects:\n", 1),
+		strings.Replace(good, "projects:\n", "session_export_sources: [plane-a, plane-a]\nprojects:\n", 1),
 	}
 	for i, c := range cases {
 		if _, err := Parse([]byte(c)); err == nil {
 			t.Fatalf("case %d accepted", i)
 		}
+	}
+}
+
+func TestParseSessionExportSources(t *testing.T) {
+	e, err := Parse([]byte(`
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+session_export_sources: [plane-a, plane-b]
+projects:
+  rusui:
+    repos:
+      Sannrox/rusui:
+        visibility: public
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e.SessionExportSources) != 2 || e.SessionExportSources[0] != "plane-a" || e.SessionExportSources[1] != "plane-b" {
+		t.Fatalf("%q", e.SessionExportSources)
 	}
 }
 

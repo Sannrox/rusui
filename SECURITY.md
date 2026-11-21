@@ -49,6 +49,9 @@ a `secrets:` allowlist in `policy.yaml`. They are injected at wake and
 removed on sleep. Do not put those values in the guest image.
 `RUSUI_PACKAGE_REGISTRY_TOKEN` stays on the plane; the guest receives
 only a minted token when `package_registry` is named.
+`RUSUI_SESSION_EXPORT_KEY` stays on the plane; it signs operator session
+bundles and is never written into the bundle, diagnostics, hook logs, or
+transcripts. Unset refuses export and import. Guests never receive it.
 
 Never commit tokens, webhook secrets, worker secrets, Slack secrets, local
 SQLite databases, `.version`, or `_output/`.

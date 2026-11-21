@@ -472,7 +472,14 @@ Stop the process (SIGINT). Data that remains until you delete it:
 Secrets live in the operator environment, not in those files. Do not
 embed token values in examples. Restore a copied database with
 `rusui restore -db <copy>` (inventory, clear live leases, drop grants,
-release guests). On the PostgreSQL store, restore the database with the
+release guests). Move receipts and transcript metadata between
+operator-controlled planes with `rusui export-session` and
+`rusui import-session`. Both need `RUSUI_SESSION_EXPORT_KEY` and an
+operator token. Policy `session_export_sources` must admit the source
+plane id (default off). Overlay may only remove a source
+(`session_export_source:<plane_id>=0`). Import mints a new session; it
+does not restore leases, grants, terminals, or guest handles.
+`rusui restore` stays plane recovery. On the PostgreSQL store, restore the database with the
 server's own tooling, then run `rusui restore` with every instance stopped
 and `RUSUI_STORE_URL` set to it; the inventory names only the server and
 database, never credentials. Guest

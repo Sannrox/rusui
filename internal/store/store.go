@@ -350,6 +350,36 @@ func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt strin
 	return sessionID, item, err
 }
 
+// InsertImportedSessionTx mints a completed run session for a verified
+// bundle. It does not copy the source session id, enqueue a turn, or
+// restore a lease, grant, terminal, or guest handle.
+func InsertImportedSessionTx(tx *sql.Tx, project, repo, guestName, guestPin string, now time.Time) (sessionID int64, err error) {
+	var minItem int
+	if err := tx.QueryRow(`SELECT COALESCE(MIN(item),0) FROM sessions WHERE repo=? AND item<0`, repo).Scan(&minItem); err != nil {
+		return 0, err
+	}
+	item := minItem - 1
+	if item >= 0 {
+		item = -1
+	}
+	stamp := now.UTC().Format(time.RFC3339Nano)
+	name := fmt.Sprintf("imported-%s-%d", strings.NewReplacer("/", "-", ":", "_").Replace(repo), item)
+	envID, err := scanID(tx.QueryRow(`INSERT INTO environments (name, driver, state, created_at) VALUES (?,?,?,?) RETURNING id`,
+		name, "process", EnvReady, stamp))
+	if err != nil {
+		return 0, err
+	}
+	newID, err := scanID(tx.QueryRow(`INSERT INTO sessions (environment_id, kind, repo, item, item_kind, state, project, prompt, guest_name, guest_pin, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING id`,
+		envID, SessionKindRun, repo, item, SessionKindRun, "completed", project, "", guestName, guestPin, stamp))
+	if err != nil {
+		return 0, err
+	}
+	if err := ensureSessionRetentionTx(tx, newID, now.UTC()); err != nil {
+		return 0, err
+	}
+	return newID, nil
+}
+
 func InsertSchedule(s *Store, project, name string, everySeconds int, prompt string, sessionID int64) (int64, error) {
 	newID, err := scanID(s.DB.QueryRow(`INSERT INTO schedules(project, name, every_seconds, prompt, session_id, created_at) VALUES(?,?,?,?,?,?) RETURNING id`,
 		project, name, everySeconds, prompt, sessionID, time.Now().UTC().Format(time.RFC3339Nano)))
@@ -926,6 +956,24 @@ FROM sessions s LEFT JOIN environments e ON e.id=s.environment_id`
 
 func ListTurnsForSession(s *Store, sessionID int64) ([]Turn, error) {
 	return listTurnsForSession(s.DB, sessionID)
+}
+
+// TurnSeqBounds is the first and last action rowid for each turn in a session.
+func TurnSeqBounds(s *Store, sessionID int64) (map[int64][2]int64, error) {
+	rows, err := s.DB.Query(`SELECT COALESCE(turn_id, 0), COALESCE(MIN(rowid), 0), COALESCE(MAX(rowid), 0) FROM actions WHERE session_id=? GROUP BY turn_id`, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[int64][2]int64{}
+	for rows.Next() {
+		var id, lo, hi int64
+		if err := rows.Scan(&id, &lo, &hi); err != nil {
+			return nil, err
+		}
+		out[id] = [2]int64{lo, hi}
+	}
+	return out, rows.Err()
 }
 
 func ListTurnsForSessionTx(tx *sql.Tx, sessionID int64) ([]Turn, error) {

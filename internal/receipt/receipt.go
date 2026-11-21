@@ -384,7 +384,7 @@ func (e Export) Markdown() string {
 		}
 	}
 	b.WriteString("\nThis file is an export regenerated from SQLite. It is not a recovery input and does not authorize an action.\n")
-	b.WriteString("Unsigned. Signed portable session bundles are not in the 1.0 contract.\n")
+	b.WriteString("Unsigned. This file is not a signed session bundle; use rusui export-session for that.\n")
 	return b.String()
 }
 
