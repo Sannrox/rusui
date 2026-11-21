@@ -32,6 +32,12 @@ func TestConfigurationHTTPTableDocumentsPostReviews(t *testing.T) {
 	if !strings.Contains(table, "`GET` | `/sessions/{id}/receipt` | operator or worker token") {
 		t.Fatal("HTTP table missing GET /sessions/{id}/receipt with operator or worker auth")
 	}
+	if !strings.Contains(table, "`GET` | `/sessions/{id}/export-session` | operator token") {
+		t.Fatal("HTTP table missing GET /sessions/{id}/export-session with operator auth")
+	}
+	if !strings.Contains(table, "`POST` | `/import-session` | operator token") {
+		t.Fatal("HTTP table missing POST /import-session with operator auth")
+	}
 	if !strings.Contains(table, "`POST` | `/reviews` | operator or worker token") {
 		t.Fatal("HTTP table missing POST /reviews with operator or worker auth")
 	}

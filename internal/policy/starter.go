@@ -9,6 +9,9 @@ const starterYAML = `# Operator default (policy v2, keyed by project). Copy to p
 # package_registry names one already-granted package-registry host for a
 # plane-minted turn identity (ADR 0097). Empty is off. Overlay cannot
 # enable it and may only remove it. Unknown fields fail closed.
+# session_export_sources lists source plane ids admitted for rusui
+# import-session (ADR 0100). Empty/omit is off. Overlay may only remove
+# (session_export_source:<plane_id>=0).
 version: 2
 defaults:
   never_release: true

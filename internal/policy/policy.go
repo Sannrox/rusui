@@ -44,6 +44,9 @@ type File struct {
 	Version  int                    `yaml:"version"`
 	Defaults DefaultsYAML           `yaml:"defaults"`
 	Projects map[string]ProjectYAML `yaml:"projects"`
+	// SessionExportSources is the plane-wide admit list of source plane
+	// ids for rusui import-session. Empty is off. Overlay may only remove.
+	SessionExportSources []string `yaml:"session_export_sources,omitempty"`
 }
 
 type DefaultsYAML struct {
@@ -213,6 +216,9 @@ type Effective struct {
 	Repos    map[string]Repo
 	// MCPGateway is defaults.mcp_gateway; empty means gateway mode is off.
 	MCPGateway string
+	// SessionExportSources is the YAML admit list of source plane ids.
+	// Empty is off. Overlay may only remove entries.
+	SessionExportSources []string
 }
 
 func Load(path string) (*Effective, error) {
@@ -246,6 +252,10 @@ func Parse(raw []byte) (*Effective, error) {
 		return nil, err
 	}
 	out.Guests = guests
+	if err := validSessionExportSources(f.SessionExportSources); err != nil {
+		return nil, err
+	}
+	out.SessionExportSources = append([]string(nil), f.SessionExportSources...)
 	if f.Defaults.MCPGateway != "" {
 		if err := validMCPURL(f.Defaults.MCPGateway); err != nil {
 			return nil, fmt.Errorf("policy: mcp_gateway %w", err)
@@ -481,6 +491,20 @@ func Parse(raw []byte) (*Effective, error) {
 	sum := sha256.Sum256(raw)
 	out.Hash = hex.EncodeToString(sum[:])
 	return out, nil
+}
+
+func validSessionExportSources(ids []string) error {
+	seen := map[string]struct{}{}
+	for _, id := range ids {
+		if id == "" || strings.ContainsAny(id, " \t\n") {
+			return fmt.Errorf("policy: session_export_sources entry %q is invalid", id)
+		}
+		if _, ok := seen[id]; ok {
+			return fmt.Errorf("policy: session_export_sources duplicate %q", id)
+		}
+		seen[id] = struct{}{}
+	}
+	return nil
 }
 
 func validSlug(slug string) error {

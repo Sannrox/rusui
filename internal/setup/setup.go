@@ -25,6 +25,7 @@ import (
 	"github.com/sannrox/rusui/internal/env"
 	"github.com/sannrox/rusui/internal/guest"
 	"github.com/sannrox/rusui/internal/policy"
+	"github.com/sannrox/rusui/internal/sessionexport"
 	"gopkg.in/yaml.v3"
 )
 
@@ -98,7 +99,7 @@ func PathsFor(dir string) Paths {
 }
 
 // generatedSecrets are local-only values setup creates once.
-var generatedSecrets = []string{"RUSUI_WORKER_SECRET", "RUSUI_WEBHOOK_SECRET", "RUSUI_SLACK_SECRET", "RUSUI_OPERATOR_TOKEN", guest.ConformanceKeyEnv}
+var generatedSecrets = []string{"RUSUI_WORKER_SECRET", "RUSUI_WEBHOOK_SECRET", "RUSUI_SLACK_SECRET", "RUSUI_OPERATOR_TOKEN", guest.ConformanceKeyEnv, sessionexport.KeyEnv}
 
 // modelCredentialKeys are the provider keys ModelConfigFromEnv accepts
 // (docs/configuration.md): either alias satisfies "model access", regardless

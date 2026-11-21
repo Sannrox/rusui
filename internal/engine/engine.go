@@ -78,7 +78,10 @@ type Engine struct {
 	Container    env.Driver
 	// ConformanceKey signs and verifies generic ACP guest receipts
 	// (ADR 0082). Without it no generic ACP guest is admitted.
-	ConformanceKey       []byte
+	ConformanceKey []byte
+	// SessionExportKey signs operator session bundles (ADR 0100). It is
+	// not ConformanceKey. Without it export and import are refused.
+	SessionExportKey     []byte
 	EnvTTL               time.Duration
 	EnvIdleSleep         time.Duration
 	CancelEnvWait        time.Duration

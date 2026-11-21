@@ -21,6 +21,7 @@ import (
 	"github.com/sannrox/rusui/internal/ops"
 	"github.com/sannrox/rusui/internal/policy"
 	"github.com/sannrox/rusui/internal/server"
+	"github.com/sannrox/rusui/internal/sessionexport"
 	slackpkg "github.com/sannrox/rusui/internal/slack"
 	"github.com/sannrox/rusui/internal/store"
 )
@@ -51,6 +52,12 @@ func main() {
 			return
 		case "receipt":
 			receiptCLI(os.Args[2:])
+			return
+		case "export-session":
+			exportSessionCLI(os.Args[2:])
+			return
+		case "import-session":
+			importSessionCLI(os.Args[2:])
 			return
 		case "acp":
 			acpCLI(os.Args[2:])
@@ -195,6 +202,10 @@ func main() {
 	if err := p.VerifyConformance(conformanceKey); err != nil {
 		log.Fatal(err)
 	}
+	sessionExportKey, err := sessionexport.ParseKey(os.Getenv(sessionexport.KeyEnv))
+	if err != nil {
+		log.Fatal(err)
+	}
 	token := os.Getenv("RUSUI_GITHUB_TOKEN")
 	if token == "" {
 		token = os.Getenv("GITHUB_TOKEN")
@@ -308,6 +319,7 @@ func main() {
 		},
 	}
 	eng.ConformanceKey = conformanceKey
+	eng.SessionExportKey = sessionExportKey
 	eng.ReloadPolicy(p)
 	poster := &slackpkg.Poster{
 		Token:   os.Getenv("RUSUI_SLACK_BOT_TOKEN"),

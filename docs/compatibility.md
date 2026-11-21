@@ -22,7 +22,7 @@ and the plane returns 409 when they differ. Dev builds that report
 | Restore | `rusui restore -db <copy>` | missing or corrupt file |
 | Diagnostics export | redacted `diagnostics.json` | using the bundle as recovery input |
 | Review receipt export | JSON+Markdown schema 1 (`rusui receipt`) | using the files as recovery input; signed bundles |
-| Signed portable session bundles | excluded | not defined |
+| Signed portable session bundles | HMAC-SHA256 `hmac-v1` (`rusui export-session` / `rusui import-session`) | missing key; bad MAC; missing, stripped, or past expiry; source not admitted |
 | Postgres | not the current store | Postgres DSN |
 
 ## Migration window
@@ -64,6 +64,12 @@ id. Guest handles and live credentials are not portable.
 `records/` JSON and Markdown files from `rusui receipt SESSION_ID`
 (`GET /sessions/{id}/receipt`) are regenerated exports, not recovery
 inputs. They are unsigned.
+
+`rusui export-session` / `rusui import-session` move receipts and
+transcript metadata between operator-controlled planes under
+`RUSUI_SESSION_EXPORT_KEY`. Import mints a new session. It does not
+restore leases, grants, terminals, or guest handles. `rusui restore`
+stays plane recovery.
 
 ## Reproduce
 
