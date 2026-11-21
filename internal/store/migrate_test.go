@@ -696,6 +696,45 @@ INSERT INTO approval_decisions(action_id, decision, decided_at) VALUES ('old', '
 	}
 }
 
+// V64 (#711) adds nullable supervision seconds: a disposition written by
+// the previous release reads back without a duration.
+func TestV64DispositionsGainNullableSeconds(t *testing.T) {
+	storetest.SQLiteOnly(t, "SQLite migration steps; PostgreSQL starts at the baseline")
+	path := filepath.Join(t.TempDir(), "v63.db")
+	st, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.Exec(`
+INSERT INTO review_revisions (id, job_id, claimed_revision, item_hash, main_sha, payload) VALUES (1, 1, 1, 'h', 'm', '{}');
+ALTER TABLE result_dispositions DROP COLUMN seconds;
+DELETE FROM schema_migrations WHERE version>=64;
+INSERT INTO result_dispositions (review_revision_id, disposition, wrong_finding, note, recorded_at)
+  VALUES (1, 'useful', 0, '', '2026-11-01T00:00:00Z');
+`); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	st, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	var sec sql.NullInt64
+	if err := st.DB.QueryRow(`SELECT seconds FROM result_dispositions WHERE review_revision_id=1`).Scan(&sec); err != nil {
+		t.Fatal(err)
+	}
+	if sec.Valid {
+		t.Fatalf("old row gained seconds: %v", sec)
+	}
+	got, err := RecordDisposition(st, Disposition{ReviewRevisionID: 1, Value: DispositionNeutral, Seconds: new(int64(12))})
+	if err != nil || got.Seconds == nil || *got.Seconds != 12 {
+		t.Fatalf("new row %+v %v", got, err)
+	}
+}
+
 // A schema 56 store gains the nullable policy binding on upgrade; older
 // reviews read back with no revision (#661).
 func TestV57ReviewsGainNullablePolicyBinding(t *testing.T) {

@@ -43,7 +43,7 @@ SELECT r.id, s.id, s.repo, s.item, s.item_kind,
        COALESCE(json_array_length(r.payload, '$.proposed_actions'), 0),
        r.item_hash,
        (SELECT n.item_hash FROM snapshots n WHERE n.repo=s.repo AND n.item=s.item ORDER BY n.revision DESC LIMIT 1),
-       d.id, d.disposition, d.wrong_finding, d.note, d.recorded_at
+       d.id, d.disposition, d.wrong_finding, d.note, d.recorded_at, d.seconds
 FROM review_revisions r
 JOIN turns t ON t.id=r.job_id
 JOIN sessions s ON s.id=t.session_id
@@ -66,10 +66,10 @@ WHERE s.kind='review'
 		var it InboxItem
 		var hash string
 		var latest, dValue, dNote, dAt sql.NullString
-		var dID sql.NullInt64
+		var dID, dSeconds sql.NullInt64
 		var dWrong sql.NullBool
 		if err := rows.Scan(&it.ResultID, &it.SessionID, &it.Repo, &it.Item, &it.ItemKind, &it.Verdict, &it.ProposedActions,
-			&hash, &latest, &dID, &dValue, &dWrong, &dNote, &dAt); err != nil {
+			&hash, &latest, &dID, &dValue, &dWrong, &dNote, &dAt, &dSeconds); err != nil {
 			return nil, err
 		}
 		it.State = InboxCurrent
@@ -78,8 +78,13 @@ WHERE s.kind='review'
 		}
 		if dID.Valid {
 			at, _ := time.Parse(time.RFC3339Nano, dAt.String)
-			it.Disposition = &Disposition{ID: dID.Int64, ReviewRevisionID: it.ResultID, Value: dValue.String,
+			d := &Disposition{ID: dID.Int64, ReviewRevisionID: it.ResultID, Value: dValue.String,
 				WrongFinding: dWrong.Bool, Note: dNote.String, RecordedAt: at}
+			if dSeconds.Valid {
+				sec := dSeconds.Int64
+				d.Seconds = &sec
+			}
+			it.Disposition = d
 		}
 		if it.State == InboxCurrent && it.Disposition == nil {
 			it.Next = InboxNextDispose

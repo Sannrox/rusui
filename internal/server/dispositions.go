@@ -36,6 +36,7 @@ func (s *Server) recordDisposition(w http.ResponseWriter, r *http.Request) {
 		Disposition  string `json:"disposition"`
 		WrongFinding bool   `json:"wrong_finding"`
 		Note         string `json:"note"`
+		Seconds      *int64 `json:"seconds"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, dispositionNoteCap+1024))
 	dec.DisallowUnknownFields()
@@ -45,13 +46,13 @@ func (s *Server) recordDisposition(w http.ResponseWriter, r *http.Request) {
 	}
 	d, err := store.RecordDisposition(s.Eng.Store, store.Disposition{
 		ReviewRevisionID: id, Value: req.Disposition, WrongFinding: req.WrongFinding, Note: req.Note,
-		By: attribution(s.identify(r)),
+		Seconds: req.Seconds, By: attribution(s.identify(r)),
 	})
 	switch {
 	case errors.Is(err, store.ErrUnknownResult):
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
-	case errors.Is(err, store.ErrInvalidDisposition):
+	case errors.Is(err, store.ErrInvalidDisposition), errors.Is(err, store.ErrInvalidSeconds):
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	case err != nil:
