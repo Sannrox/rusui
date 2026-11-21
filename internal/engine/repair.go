@@ -124,8 +124,7 @@ func (e *Engine) maybeAdmitRepair(it snapshot.Item) {
 	if it.ItemKind != "issue" || it.State != "open" || !hasLabel(it, RepairLabel) {
 		return
 	}
-	pol := e.PolicySnapshot()
-	r, ok := pol.Repo(it.Repo)
+	r, ok := e.writeRepo(it.Repo)
 	if !ok || r.Provider == policy.ProviderGitLab {
 		return
 	}
@@ -293,8 +292,7 @@ func (e *Engine) recheckRepair(task *store.Task, ask WriteProposal) error {
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrRepairRecheck, err)
 	}
-	pol := e.PolicySnapshot()
-	r, bound := pol.Repo(repo)
+	r, bound := e.writeRepo(repo)
 	if !bound {
 		return fmt.Errorf("%w: repo not bound", ErrRepairRecheck)
 	}

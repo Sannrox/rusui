@@ -626,6 +626,7 @@ defaults:
   review: true
   comments: false
   comment: false
+  advisory_digest: false
   close: false
   implement: false
   land: false

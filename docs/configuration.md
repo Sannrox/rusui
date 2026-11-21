@@ -433,7 +433,14 @@ The current operator starter is the managed policy v2 profile: review, run,
 and scheduled session kinds, with review enabled and comments, comment, close,
 implement, land, and repair disabled. `comments` and `close` authorize dry-run
 intended-actions only. `comment: true` authorizes one live GitHub review
-comment per durable result; it stays false in the starter. The
+comment per durable result; it stays false in the starter.
+`advisory_digest` (default off) groups routine inbox completions once a
+repository has more than 10 actionable items on a UTC day
+([ADR 0038](decisions/0038-maintenance-eligibility-and-promotion.md) D6).
+Overlay cannot enable it. Three consecutive days over the limit with it
+on stop `comment` and `repair` for that repository; advisory keeps
+running. Urgent items (failures, proposed actions, exhausted budgets)
+stay listed. The
 `implement` field is an opt-in for the accepted agent-publication path and
 requires the configured agent GitHub credential; it is off in the starter.
 `repair` is a category name or empty (off). `repair: docs` admits
@@ -458,6 +465,7 @@ defaults:
   review: true
   comments: false
   comment: false
+  advisory_digest: false
   close: false
   implement: false
   land: false
@@ -474,6 +482,7 @@ projects:
         review: true
         comments: false
         comment: false
+        advisory_digest: false
         close: false
         implement: false
         land: false

@@ -55,7 +55,7 @@ func TestGitHubAppPilotGuideIsReviewOnly(t *testing.T) {
 		t.Fatal("policy.example.yaml must bind a repository")
 	}
 	for name, repo := range p.Repos {
-		if repo.Comments || repo.Comment || repo.Close || repo.Implement || repo.Land || repo.Repair != "" {
+		if repo.Comments || repo.Comment || repo.AdvisoryDigest || repo.Close || repo.Implement || repo.Land || repo.Repair != "" {
 			t.Fatalf("policy.example.yaml %s must disable writes: %+v", name, repo)
 		}
 		if !repo.Review {

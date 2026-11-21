@@ -1257,7 +1257,7 @@ func (e *Engine) CompleteWithSteers(jobID int64, gen, claimed int, art Artifact,
 		art.MainSHA = snap.MainSHA
 		art.SnapshotHash = wantHash
 		b, _ := json.Marshal(art)
-		revID, err := store.InsertReviewRevisionTx(tx, j.ID, j.ClaimedRevision, wantHash, snap.MainSHA, string(b))
+		revID, err := store.InsertReviewRevisionTx(tx, j.ID, j.ClaimedRevision, wantHash, snap.MainSHA, string(b), now)
 		if err != nil {
 			return err
 		}
@@ -1676,6 +1676,13 @@ func (e *Engine) runApplyTx(tx *store.Tx, j *store.Job, snap snapshot.Item, revI
 		return err
 	}
 	pol, ok := e.PolicySnapshot().Repo(j.Repo)
+	if ok {
+		var nerr error
+		pol, nerr = e.applyWritePolicy(tx, j.Repo, pol)
+		if nerr != nil {
+			return nerr
+		}
+	}
 	if !ok || (a.Type == "close" && !pol.Close) || (a.Type == "comment" && !pol.Comments && !pol.Comment) {
 		return store.CancelApplyAttemptTx(tx, actionID)
 	}

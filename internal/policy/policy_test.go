@@ -48,7 +48,7 @@ projects:
 		t.Fatal(err)
 	}
 	r, ok := e.Repo("Sannrox/rusui")
-	if !ok || r.Project != "rusui" || !r.Review || r.Comments || r.Comment {
+	if !ok || r.Project != "rusui" || !r.Review || r.Comments || r.Comment || r.AdvisoryDigest {
 		t.Fatalf("repo %+v ok=%v", r, ok)
 	}
 	p, ok := e.Project("rusui")
@@ -63,6 +63,30 @@ projects:
 	}
 	if _, err := Parse([]byte("version: 1\nrepos: {}\n")); err == nil {
 		t.Fatal("v1 accepted")
+	}
+}
+
+func TestParseAdvisoryDigest(t *testing.T) {
+	raw := []byte(`
+version: 2
+defaults:
+  never_release: true
+  never_leak_private_to_public: true
+  advisory_digest: false
+projects:
+  rusui:
+    repos:
+      Sannrox/rusui:
+        visibility: public
+        advisory_digest: true
+`)
+	e, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, ok := e.Repo("Sannrox/rusui")
+	if !ok || !r.AdvisoryDigest {
+		t.Fatalf("advisory digest %+v ok=%v", r, ok)
 	}
 }
 

@@ -202,6 +202,7 @@ func printPolicyExplanation(out io.Writer, effective *policy.Effective, explanat
 	printPolicyField(out, "visibility", explanation.Repo.Visibility, explanation.Sources["visibility"])
 	printPolicyField(out, "review", fmt.Sprint(explanation.Repo.Review), explanation.Sources["review"])
 	printPolicyField(out, "comments", fmt.Sprint(explanation.Repo.Comments), explanation.Sources["comments"])
+	printPolicyField(out, "advisory_digest", fmt.Sprint(explanation.Repo.AdvisoryDigest), explanation.Sources["advisory_digest"])
 	printPolicyField(out, "close", fmt.Sprint(explanation.Repo.Close), explanation.Sources["close"])
 	printPolicyField(out, "implement", fmt.Sprint(explanation.Repo.Implement), explanation.Sources["implement"])
 	printPolicyField(out, "land", fmt.Sprint(explanation.Repo.Land), explanation.Sources["land"])
