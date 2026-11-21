@@ -191,6 +191,18 @@ func (s *Server) operatorActor(p Principal) string {
 	return p.TenantID
 }
 
+// receiptActor is the actor id prompt and attach receipts name (ADR 0099 D5).
+func (s *Server) receiptActor(r *http.Request) string {
+	p := s.identify(r)
+	if p.Class == CredOperator {
+		return s.operatorActor(p)
+	}
+	if s.consoleAuthed(r) {
+		return store.DefaultTenantID
+	}
+	return "operator"
+}
+
 func userMode(sess *store.Session) bool {
 	return store.NormalizeExecutionMode(sess.ExecutionMode) == store.ExecutionUser
 }

@@ -168,7 +168,7 @@ func TestTenantGrantAllowsReopenAndRevoke(t *testing.T) {
 	if code := postJSONStatus(t, hs.URL+path+"/unpin", "tok-globex-secret", `{}`); code != http.StatusNotFound {
 		t.Fatalf("globex unpinned via grant: %d", code)
 	}
-	if code := postJSONStatus(t, hs.URL+path+"/turns", "tok-globex-secret", `{"prompt":"nope"}`); code != http.StatusNotFound {
+	if code := postJSONStatus(t, hs.URL+path+"/turns", "tok-globex-secret", `{"prompt":"nope"}`); code != http.StatusOK {
 		t.Fatalf("globex prompted via grant: %d", code)
 	}
 	if err := store.InsertAction(e.Store, store.Action{
@@ -198,7 +198,7 @@ func TestTenantGrantAllowsReopenAndRevoke(t *testing.T) {
 	if page.StatusCode != http.StatusOK {
 		t.Fatalf("console read after default grant: %d", page.StatusCode)
 	}
-	if code := postJSONStatus(t, hs.URL+path+"/turns", "op-tok", `{"prompt":"nope"}`); code != http.StatusNotFound {
+	if code := postJSONStatus(t, hs.URL+path+"/turns", "op-tok", `{"prompt":"nope"}`); code != http.StatusOK {
 		t.Fatalf("default prompted via grant: %d", code)
 	}
 	form := url.Values{"csrf": {s.consoleCSRF()}, "mode": {"follow_up"}, "prompt": {"nope"}}
@@ -214,7 +214,7 @@ func TestTenantGrantAllowsReopenAndRevoke(t *testing.T) {
 	}
 	_, _ = io.Copy(io.Discard, res.Body)
 	_ = res.Body.Close()
-	if res.StatusCode != http.StatusNotFound {
+	if res.StatusCode != http.StatusSeeOther && res.StatusCode != http.StatusOK {
 		t.Fatalf("console prompt via grant: %d", res.StatusCode)
 	}
 	if code := deleteStatus(t, hs.URL+path+"/grants/globex", "tok-acme-secret"); code != http.StatusNoContent {
@@ -222,6 +222,12 @@ func TestTenantGrantAllowsReopenAndRevoke(t *testing.T) {
 	}
 	if code := getStatus(t, hs.URL+path, "tok-globex-secret"); code != http.StatusNotFound {
 		t.Fatalf("globex read after revoke: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+path+"/turns", "tok-globex-secret", `{"prompt":"after-revoke"}`); code != http.StatusNotFound {
+		t.Fatalf("globex prompted after revoke: %d", code)
+	}
+	if code := getStatus(t, hs.URL+"/console/sessions/"+strconv.FormatInt(sidA, 10)+"/terminal", "tok-globex-secret"); code != http.StatusNotFound {
+		t.Fatalf("globex terminal after revoke: %d", code)
 	}
 	if code := postJSONStatus(t, hs.URL+path+"/unarchive", "tok-globex-secret", `{}`); code != http.StatusNotFound {
 		t.Fatalf("globex reopen after revoke: %d", code)
@@ -260,6 +266,221 @@ func TestTenantGrantAllowsReopenAndRevoke(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("attach continued after revoke")
 	}
+}
+
+func TestSpaceModeGrantAllowsPromptAndAttach(t *testing.T) {
+	s, hs, e := consoleEnv(t)
+	s.TenantToks = map[string]string{"acme": "tok-acme-secret", "globex": "tok-globex-secret"}
+	s.MemberToks = map[string]string{"tok-alice": "acme", "tok-bob": "acme", "tok-carol": "globex"}
+	s.ActorToks = map[string]string{"tok-alice": "alice", "tok-bob": "bob", "tok-carol": "carol"}
+
+	spaceID, err := e.StartRunExec("test", "space-share", "", "", "", "", store.ExecutionSpace, "acme", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetSessionTenant(e.Store, spaceID, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	userID, err := e.StartRunExec("test", "user-private", "", "", "", "", store.ExecutionUser, "alice", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetSessionTenant(e.Store, userID, "acme"); err != nil {
+		t.Fatal(err)
+	}
+	spacePath := "/sessions/" + strconv.FormatInt(spaceID, 10)
+	userPath := "/sessions/" + strconv.FormatInt(userID, 10)
+	termPath := "/console/sessions/" + strconv.FormatInt(spaceID, 10) + "/terminal"
+
+	if code := postJSONStatus(t, hs.URL+spacePath+"/turns", "tok-bob", `{"prompt":"same-tenant"}`); code != http.StatusOK {
+		t.Fatalf("same-tenant space prompt: %d", code)
+	}
+	if !actionBodyHasActor(t, e.Store, spaceID, "bob") {
+		t.Fatal("same-tenant prompt receipt omitted actor")
+	}
+
+	if code := postJSONStatus(t, hs.URL+spacePath+"/grants", "tok-alice", `{"tenant":"globex"}`); code != http.StatusCreated {
+		t.Fatalf("grant globex: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+userPath+"/grants", "tok-alice", `{"tenant":"globex"}`); code != http.StatusCreated {
+		t.Fatalf("grant globex on user-mode: %d", code)
+	}
+	ids := sessionIDs(t, getJSON(t, hs.URL+"/sessions", "tok-carol"))
+	if slices.Contains(ids, spaceID) || slices.Contains(ids, userID) {
+		t.Fatalf("list leaked granted session: %v", ids)
+	}
+	if code := getStatus(t, hs.URL+spacePath, "tok-carol"); code != http.StatusOK {
+		t.Fatalf("grantee GET space: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+spacePath+"/turns", "tok-carol", `{"prompt":"granted"}`); code != http.StatusOK {
+		t.Fatalf("grantee prompt: %d", code)
+	}
+	if !actionBodyHasActor(t, e.Store, spaceID, "carol") {
+		t.Fatal("granted prompt receipt omitted actor")
+	}
+
+	if code := getStatus(t, hs.URL+userPath, "tok-carol"); code != http.StatusNotFound {
+		t.Fatalf("grantee GET user-mode: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+userPath+"/turns", "tok-carol", `{"prompt":"user"}`); code != http.StatusNotFound {
+		t.Fatalf("grantee prompt user-mode: %d", code)
+	}
+	if code := getStatus(t, hs.URL+"/console/sessions/"+strconv.FormatInt(userID, 10)+"/terminal", "tok-carol"); code != http.StatusNotFound {
+		t.Fatalf("grantee terminal user-mode: %d", code)
+	}
+
+	for _, route := range []struct {
+		method, path, body string
+	}{
+		{http.MethodPost, spacePath + "/cancel", `{}`},
+		{http.MethodPost, spacePath + "/archive", `{}`},
+		{http.MethodPost, spacePath + "/children", `{"prompt":"child"}`},
+		{http.MethodGet, spacePath + "/workspace", ""},
+		{http.MethodPost, spacePath + "/write-actions", `{}`},
+		{http.MethodGet, spacePath + "/webhook", ""},
+		{http.MethodGet, spacePath + "/grants", ""},
+		{http.MethodPost, spacePath + "/grants", `{"tenant":"default"}`},
+	} {
+		var code int
+		if route.method == http.MethodGet {
+			code = getStatus(t, hs.URL+route.path, "tok-carol")
+		} else {
+			code = postJSONStatus(t, hs.URL+route.path, "tok-carol", route.body)
+		}
+		if code != http.StatusNotFound {
+			t.Fatalf("grantee %s %s: %d", route.method, route.path, code)
+		}
+	}
+
+	sess, err := store.GetSession(e.Store, spaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow, err := store.GetEnvironment(e.Store, sess.EnvironmentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	envRow.Handle = t.TempDir()
+	envRow.State = store.EnvReady
+	if err := store.UpdateEnvironment(e.Store, *envRow); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := getStatus(t, hs.URL+termPath, "tok-carol"); code != http.StatusOK {
+		t.Fatalf("grantee observer attach: %d", code)
+	}
+	if !terminalAccessHasActor(t, e.Store, envRow.ID, "observe", "carol") {
+		t.Fatal("observer attach receipt omitted actor")
+	}
+	csrf := s.consoleCSRF()
+	ownerLease := postFormBearer(t, hs.URL+termPath+"/lease", "tok-alice", url.Values{"csrf": {csrf}}.Encode())
+	if ownerLease != http.StatusSeeOther && ownerLease != http.StatusOK {
+		t.Fatalf("owner write acquire: %d", ownerLease)
+	}
+	held := postFormBearer(t, hs.URL+termPath+"/lease", "tok-carol", url.Values{"csrf": {csrf}}.Encode())
+	if held != http.StatusConflict {
+		t.Fatalf("second write: %d", held)
+	}
+	lease, ok, err := store.GetTerminalLease(e.Store, envRow.ID)
+	if err != nil || !ok {
+		t.Fatalf("held lease: ok=%v err=%v", ok, err)
+	}
+	gen := url.Values{"csrf": {csrf}, "generation": {strconv.Itoa(lease.Generation)}}.Encode()
+	if code := postFormBearer(t, hs.URL+termPath+"/input", "tok-carol", gen+"&data=steal"); code != http.StatusConflict {
+		t.Fatalf("grantee input while held: %d", code)
+	}
+	if code := postFormBearer(t, hs.URL+termPath+"/revoke", "tok-carol", gen); code != http.StatusConflict {
+		t.Fatalf("grantee revoke while held: %d", code)
+	}
+	if code := getStatus(t, hs.URL+termPath, "tok-bob"); code != http.StatusOK {
+		t.Fatalf("observer while write held: %d", code)
+	}
+	if code := postFormBearer(t, hs.URL+termPath+"/input", "tok-bob", gen+"&data=steal"); code != http.StatusConflict {
+		t.Fatalf("observer input while held: %d", code)
+	}
+	ownerRevoke := postFormBearer(t, hs.URL+termPath+"/revoke", "tok-alice", gen)
+	if ownerRevoke != http.StatusSeeOther && ownerRevoke != http.StatusOK {
+		t.Fatalf("owner revoke: %d", ownerRevoke)
+	}
+	leaseCode := postFormBearer(t, hs.URL+termPath+"/lease", "tok-carol", url.Values{"csrf": {csrf}}.Encode())
+	if leaseCode != http.StatusSeeOther && leaseCode != http.StatusOK {
+		t.Fatalf("grantee write acquire: %d", leaseCode)
+	}
+	if !terminalAccessHasActor(t, e.Store, envRow.ID, "acquire", "carol") {
+		t.Fatal("write attach receipt omitted actor")
+	}
+	held = postFormBearer(t, hs.URL+termPath+"/lease", "tok-alice", url.Values{"csrf": {csrf}}.Encode())
+	if held != http.StatusConflict {
+		t.Fatalf("second write after grantee acquire: %d", held)
+	}
+
+	if code := deleteStatus(t, hs.URL+spacePath+"/grants/globex", "tok-alice"); code != http.StatusNoContent {
+		t.Fatalf("revoke: %d", code)
+	}
+	if code := getStatus(t, hs.URL+spacePath, "tok-carol"); code != http.StatusNotFound {
+		t.Fatalf("GET after revoke: %d", code)
+	}
+	if code := postJSONStatus(t, hs.URL+spacePath+"/turns", "tok-carol", `{"prompt":"revoked"}`); code != http.StatusNotFound {
+		t.Fatalf("prompt after revoke: %d", code)
+	}
+	if code := getStatus(t, hs.URL+termPath, "tok-carol"); code != http.StatusNotFound {
+		t.Fatalf("attach after revoke: %d", code)
+	}
+}
+
+func actionBodyHasActor(t *testing.T, st *store.Store, sessionID int64, actor string) bool {
+	t.Helper()
+	acts, err := store.ListActionsForSession(st, sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `"actor":"` + actor + `"`
+	for _, a := range acts {
+		if a.Type == "operator.steer" && strings.Contains(a.Body, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func terminalAccessHasActor(t *testing.T, st *store.Store, envID int64, action, actor string) bool {
+	t.Helper()
+	rows, err := st.DB.Query(`SELECT detail FROM terminal_access WHERE environment_id=? AND action=?`, envID, action)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	want := `"actor":"` + actor + `"`
+	for rows.Next() {
+		var detail string
+		if err := rows.Scan(&detail); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(detail, want) {
+			return true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return false
+}
+
+func postFormBearer(t *testing.T, rawURL, token, body string) int {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, rawURL, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, res.Body)
+	_ = res.Body.Close()
+	return res.StatusCode
 }
 
 func sessionIDs(t *testing.T, raw string) []int64 {

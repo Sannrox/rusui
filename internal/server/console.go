@@ -460,7 +460,7 @@ func (s *Server) consolePrompt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", http.StatusBadRequest)
 		return
 	}
-	if _, err := s.visibleOwnedSession(r, id); err != nil {
+	if _, err := s.visibleSession(r, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -471,13 +471,14 @@ func (s *Server) consolePrompt(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var notice string
+	actor := s.receiptActor(r)
 	switch r.FormValue("mode") {
 	case "follow_up":
-		_, _, err = s.Eng.PromptFollowUp(id, prompt)
+		_, _, err = s.Eng.PromptFollowUpFilesActor(id, prompt, nil, actor)
 		notice = "Follow-up queued."
 	case "steer":
 		var live bool
-		_, _, live, err = s.Eng.PromptSteer(id, prompt)
+		_, _, live, err = s.Eng.PromptSteerActor(id, prompt, actor)
 		notice = "No live turn; prompt queued as a follow-up."
 		if live {
 			notice = "Steer queued for the running turn."

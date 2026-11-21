@@ -517,7 +517,7 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "id", 400)
 		return
 	}
-	if _, err := s.visibleOwnedSession(r, id); err != nil {
+	if _, err := s.visibleSession(r, id); err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -588,18 +588,19 @@ func (s *Server) followUpTurn(w http.ResponseWriter, r *http.Request) {
 	var pending int
 	var held bool
 	delivery := "follow_up"
+	actor := s.receiptActor(r)
 	switch {
 	case req.Steer:
 		var live bool
-		turnID, pending, live, err = s.Eng.PromptSteer(id, req.Prompt)
+		turnID, pending, live, err = s.Eng.PromptSteerActor(id, req.Prompt, actor)
 		if live {
 			delivery = "steer"
 		}
 	case req.Queued:
 		delivery = "queued"
-		turnID, pending, held, err = s.Eng.PromptQueuedFiles(id, req.Prompt, files)
+		turnID, pending, held, err = s.Eng.PromptQueuedFilesActor(id, req.Prompt, files, actor)
 	default:
-		turnID, pending, err = s.Eng.PromptFollowUpFiles(id, req.Prompt, files)
+		turnID, pending, err = s.Eng.PromptFollowUpFilesActor(id, req.Prompt, files, actor)
 	}
 	if err != nil {
 		writePromptFileError(w, err)
