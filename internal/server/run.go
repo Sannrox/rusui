@@ -115,7 +115,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		task, err := s.Eng.StartTask(r.PathValue("slug"), engine.TaskSpec{
 			EffortKey: req.EffortKey, Prompt: req.Prompt, Repo: req.Repo, Ref: req.Ref, Guest: req.Guest,
 			BaseSHA: req.BaseSHA, AllowedPaths: req.AllowedPaths, ContextRefs: req.ContextRefs,
-			Files: files,
+			Files: files, Trace: store.ParseTraceHeaders(r.Header.Get("Traceparent"), r.Header.Get("Tracestate")),
 		})
 		if err != nil {
 			writePromptFileError(w, err)
@@ -142,7 +142,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "execution_mode", http.StatusConflict)
 		return
 	}
-	id, err := s.Eng.StartRunFiles(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size, req.Mode, req.Guest, req.ExecutionMode, act, createdBy, files, patch)
+	id, err := s.Eng.StartRunFilesInbound(r.PathValue("slug"), req.Prompt, r.Header.Get("Idempotency-Key"), req.Size, req.Mode, req.Guest, req.ExecutionMode, act, createdBy, files, patch, store.ParseTraceHeaders(r.Header.Get("Traceparent"), r.Header.Get("Tracestate")))
 	if err != nil {
 		writePromptFileError(w, err)
 		return

@@ -186,6 +186,7 @@ CREATE TABLE turns (
   execution_deadline_at TEXT,
   retry_count BIGINT NOT NULL DEFAULT 0,
   state TEXT NOT NULL DEFAULT 'queued', claim_token_hash TEXT, policy_revision_id BIGINT,
+  trace_context TEXT,
   UNIQUE(session_id, lane)
 );
 CREATE TABLE events (

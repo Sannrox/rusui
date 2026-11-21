@@ -241,8 +241,12 @@ func InsertJobTx(tx *sql.Tx, j *Job) error {
 	if err != nil {
 		return err
 	}
-	newID, err := scanID(tx.QueryRow(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state) VALUES (?,?,?,?,?,?,?) RETURNING id`,
-		sid, j.Lane, j.PendingRevision, j.ClaimedRevision, j.LeaseGeneration, j.RetryCount, j.State))
+	blob, err := encodeTraceContext(MintTrace(TraceContext{}))
+	if err != nil {
+		return err
+	}
+	newID, err := scanID(tx.QueryRow(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state, trace_context) VALUES (?,?,?,?,?,?,?,?) RETURNING id`,
+		sid, j.Lane, j.PendingRevision, j.ClaimedRevision, j.LeaseGeneration, j.RetryCount, j.State, blob))
 	if err != nil {
 		return err
 	}
@@ -308,18 +312,22 @@ func PutIdempotencyTx(tx *sql.Tx, key string, sessionID int64) error {
 }
 
 func InsertRunSessionTx(tx *sql.Tx, project, repo, prompt string) (sessionID int64, item int, err error) {
-	return insertOperatorSessionTx(tx, SessionKindRun, "run", project, repo, prompt, 0, 0)
+	return InsertRunSessionInboundTx(tx, project, repo, prompt, TraceContext{})
+}
+
+func InsertRunSessionInboundTx(tx *sql.Tx, project, repo, prompt string, inbound TraceContext) (sessionID int64, item int, err error) {
+	return insertOperatorSessionTx(tx, SessionKindRun, "run", project, repo, prompt, 0, 0, inbound)
 }
 
 func InsertChildSessionTx(tx *sql.Tx, project, repo, prompt string, parentID int64) (sessionID int64, item int, err error) {
-	return insertOperatorSessionTx(tx, SessionKindRun, "run", project, repo, prompt, 0, parentID)
+	return insertOperatorSessionTx(tx, SessionKindRun, "run", project, repo, prompt, 0, parentID, TraceContext{})
 }
 
 func InsertScheduledSessionTx(tx *sql.Tx, project, repo, prompt string, scheduleID int64) (sessionID int64, item int, err error) {
-	return insertOperatorSessionTx(tx, SessionKindScheduled, "scheduled", project, repo, prompt, scheduleID, 0)
+	return insertOperatorSessionTx(tx, SessionKindScheduled, "scheduled", project, repo, prompt, scheduleID, 0, TraceContext{})
 }
 
-func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt string, scheduleID, parentSessionID int64) (sessionID int64, item int, err error) {
+func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt string, scheduleID, parentSessionID int64, inbound TraceContext) (sessionID int64, item int, err error) {
 	var minItem int
 	// Scoped by repo only: item numbers are shared across operator session kinds (run, scheduled, ...).
 	if err := tx.QueryRow(`SELECT COALESCE(MIN(item),0) FROM sessions WHERE repo=? AND item<0`, repo).Scan(&minItem); err != nil {
@@ -345,8 +353,12 @@ func insertOperatorSessionTx(tx *sql.Tx, kind, lane, project, repo, prompt strin
 	if err := ensureSessionRetentionTx(tx, sessionID, time.Now().UTC()); err != nil {
 		return 0, 0, err
 	}
-	_, err = tx.Exec(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state) VALUES (?,?,?,?,?,?,?)`,
-		sessionID, lane, 1, 0, 0, 0, "queued")
+	blob, err := encodeTraceContext(MintTrace(inbound))
+	if err != nil {
+		return 0, 0, err
+	}
+	_, err = tx.Exec(`INSERT INTO turns (session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state, trace_context) VALUES (?,?,?,?,?,?,?,?)`,
+		sessionID, lane, 1, 0, 0, 0, "queued", blob)
 	return sessionID, item, err
 }
 
@@ -876,12 +888,16 @@ func TouchRunner(s *Store, name string, at time.Time) error {
 }
 
 func GetTurn(s *Store, id int64) (*Turn, error) {
+	return scanTurn(s.DB.QueryRow(`SELECT id, session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state, COALESCE(trace_context,'') FROM turns WHERE id=?`, id))
+}
+
+func scanTurn(row interface{ Scan(...any) error }) (*Turn, error) {
 	var t Turn
-	err := s.DB.QueryRow(`SELECT id, session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state FROM turns WHERE id=?`, id).Scan(
-		&t.ID, &t.SessionID, &t.Lane, &t.PendingRevision, &t.ClaimedRevision, &t.LeaseGeneration, &t.RetryCount, &t.State)
-	if err != nil {
+	var raw string
+	if err := row.Scan(&t.ID, &t.SessionID, &t.Lane, &t.PendingRevision, &t.ClaimedRevision, &t.LeaseGeneration, &t.RetryCount, &t.State, &raw); err != nil {
 		return nil, err
 	}
+	t.Trace = decodeTraceContext(raw)
 	return &t, nil
 }
 

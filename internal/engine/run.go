@@ -30,6 +30,10 @@ func (e *Engine) StartRunExec(project, prompt, idem, size, mode, guest, execMode
 }
 
 func (e *Engine) StartRunFiles(project, prompt, idem, size, mode, guest, execMode, act, createdBy string, files []store.PromptFile, patch []byte) (int64, error) {
+	return e.StartRunFilesInbound(project, prompt, idem, size, mode, guest, execMode, act, createdBy, files, patch, store.TraceContext{})
+}
+
+func (e *Engine) StartRunFilesInbound(project, prompt, idem, size, mode, guest, execMode, act, createdBy string, files []store.PromptFile, patch []byte, inbound store.TraceContext) (int64, error) {
 	pol := e.PolicySnapshot()
 	p, ok := pol.Project(project)
 	if !ok || !p.AllowsKind(policy.KindRun) {
@@ -110,7 +114,7 @@ func (e *Engine) StartRunFiles(project, prompt, idem, size, mode, guest, execMod
 			if err := g.ready(); err != nil {
 				return err
 			}
-			sid, item, err := store.InsertRunSessionTx(tx, project, repo, prompt)
+			sid, item, err := store.InsertRunSessionInboundTx(tx, project, repo, prompt, inbound)
 			if err != nil {
 				return err
 			}

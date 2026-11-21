@@ -662,6 +662,12 @@ func (s *Server) claim(w http.ResponseWriter, r *http.Request) {
 	}
 	if turn, err := store.GetTurn(s.Eng.Store, c.Job.ID); err == nil {
 		out["session_id"] = turn.SessionID
+		if h := turn.Trace.GuestHeader(); h != "" {
+			out["traceparent"] = h
+			if turn.Trace.State != "" {
+				out["tracestate"] = turn.Trace.State
+			}
+		}
 		if atts, err := store.ListPromptAttachments(s.Eng.Store, turn.SessionID, c.Job.ClaimedRevision); err == nil && len(atts) > 0 {
 			listed := make([]map[string]any, 0, len(atts))
 			for _, a := range atts {
