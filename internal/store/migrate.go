@@ -10,7 +10,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 62
+const CurrentSchema = 63
 
 // ReadableFloor is the oldest schema version whose binary can still read and
 // write a store at CurrentSchema (ADR 0089 D8). An expand-only migration,
@@ -763,6 +763,14 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 63 {
+		if err := migrateV63(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 63); err != nil {
+			return err
+		}
+	}
 	if err := writeFloor(s.DB); err != nil {
 		return err
 	}
@@ -772,6 +780,43 @@ func (s *Store) migrate() error {
 		}
 	}
 	return nil
+}
+
+// migrateV63 records a plane-minted package-registry identity (ADR 0097,
+// #822). SQLite cannot alter a CHECK, so environment_receipts is rebuilt
+// to admit kind package_registry. Expand-only: ReadableFloor stays 62.
+func migrateV63(db *sql.DB) error {
+	var hasKind int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='environment_receipts' AND sql LIKE '%''package_registry''%'`).Scan(&hasKind); err != nil {
+		return err
+	}
+	if hasKind > 0 {
+		return nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`
+CREATE TABLE environment_receipts_v63 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  environment_id INTEGER NOT NULL,
+  session_id INTEGER,
+  kind TEXT NOT NULL CHECK (kind IN ('sleep', 'wake', 'expire', 'replace', 'secret', 'pin', 'unpin', 'package_registry')),
+  state TEXT NOT NULL CHECK (state IN ('succeeded', 'failed')),
+  detail TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+INSERT INTO environment_receipts_v63 (id, environment_id, session_id, kind, state, detail, created_at)
+  SELECT id, environment_id, session_id, kind, state, detail, created_at FROM environment_receipts;
+DROP TABLE environment_receipts;
+ALTER TABLE environment_receipts_v63 RENAME TO environment_receipts;
+CREATE INDEX IF NOT EXISTS environment_receipts_session ON environment_receipts(session_id, id);
+`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // migrateV62 stores preview grant class and the operator generation that

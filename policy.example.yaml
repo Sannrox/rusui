@@ -4,7 +4,9 @@
 # repair is a category name or empty (off). Overlay cannot enable it.
 # share is a project opt-in for operator-invited viewer preview grants
 # (ADR 0096). Default off. Overlay cannot enable it. TTL is 1h, 4h, or 24h.
-# Unknown fields fail closed.
+# package_registry names one already-granted package-registry host for a
+# plane-minted turn identity (ADR 0097). Empty is off. Overlay cannot
+# enable it and may only remove it. Unknown fields fail closed.
 version: 2
 defaults:
   never_release: true
@@ -86,6 +88,7 @@ projects:
   rusui:
     size: medium
     share: false
+    # package_registry: registry.example.com
     # Optional guest choice; omit to retain RUSUI_GUEST fallback.
     # guests:
     #   default: shikigami

@@ -223,6 +223,11 @@ func printPolicyExplanation(out io.Writer, effective *policy.Effective, explanat
 		secrets = strings.Join(explanation.Project.Secrets, ", ")
 	}
 	printPolicyField(out, "secrets", secrets, explanation.Sources["secrets"])
+	packageRegistry := "off"
+	if explanation.Project.PackageRegistry != "" {
+		packageRegistry = explanation.Project.PackageRegistry
+	}
+	printPolicyField(out, "package_registry", packageRegistry, explanation.Sources["package_registry"])
 	for _, rule := range explanation.Project.Permissions {
 		action := rule.Action
 		if action == "" {

@@ -47,6 +47,8 @@ allowlist 403s every slash command.
 Optional project secrets are plane env vars `RUSUI_SECRET_<ID>` matching
 a `secrets:` allowlist in `policy.yaml`. They are injected at wake and
 removed on sleep. Do not put those values in the guest image.
+`RUSUI_PACKAGE_REGISTRY_TOKEN` stays on the plane; the guest receives
+only a minted token when `package_registry` is named.
 
 Never commit tokens, webhook secrets, worker secrets, Slack secrets, local
 SQLite databases, `.version`, or `_output/`.

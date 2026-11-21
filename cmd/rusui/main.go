@@ -234,6 +234,7 @@ func main() {
 		eng.GitLab = gl.NewAPI(glTok)
 	}
 	eng.Secrets = engine.SecretsFromEnv(os.Environ())
+	eng.PackageRegistryIssuer = engine.HTTPPackageRegistryIssuer{Durable: os.Getenv("RUSUI_PACKAGE_REGISTRY_TOKEN")}
 	if pre, setup, err := engine.ReadPlaneHooks(filepath.Join(filepath.Dir(*pol), "hooks")); err != nil {
 		log.Fatal(err)
 	} else {
