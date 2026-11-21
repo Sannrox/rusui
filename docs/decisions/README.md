@@ -49,7 +49,7 @@ is stale.
 | [0033](0033-third-party-identity-deferred.md) | Plane-minted third-party identity is deferred | Superseded by 0097 |
 | [0034](0034-operator-host-location-deferred.md) | A registered operator host is not a session location yet | Accepted |
 | [0035](0035-live-environment-fork-deferred.md) | Live environment fork is deferred | Accepted; amended by 0098 |
-| [0036](0036-environment-desktop-deferred.md) | A graphical desktop in the environment is deferred | Accepted |
+| [0036](0036-environment-desktop-deferred.md) | A graphical desktop in the environment is deferred | Accepted; amended by 0101 |
 | [0037](0037-shared-preview-deferred.md) | Sharing a preview without operator authentication is deferred | Superseded by 0096 |
 | [0038](0038-maintenance-eligibility-and-promotion.md) | Maintenance eligibility and separate action-promotion gates | Accepted |
 | [0039](0039-shared-operator-governance-deferred.md) | Shared-operator governance is deferred | Accepted; amended by 0059, 0074, 0083, 0088, 0099 |
@@ -114,6 +114,7 @@ is stale.
 | [0098](0098-snapshot-only-clone-retained.md) | Snapshot-only clone retained | Accepted |
 | [0099](0099-two-attributed-humans-space-mode.md) | Two attributed humans on one space-mode session | Accepted |
 | [0100](0100-signed-portable-session-export.md) | Signed operator session export and import | Accepted |
+| [0101](0101-environment-desktop-deferral-retained.md) | Environment desktop deferral retained | Accepted |
 <!-- adr-index:end -->
 
 ## When to write an ADR
