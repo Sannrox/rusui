@@ -1,9 +1,12 @@
 # ADR 0036: A graphical desktop in the environment is deferred
 
-- Status: Accepted
+- Status: Accepted; amended by 0101
 - Date: 2026-09-28
 - Amends: none. [ADR 0003](0003-operator-surface.md) stands: ten console
   views, no rusui desktop or mobile client.
+- Amended by: [ADR 0101](0101-environment-desktop-deferral-retained.md).
+  2026-11-21 retain: D3 still unmet; a managed environment still offers
+  no graphical session. This record stays Accepted.
 - Resolves: [#327](https://github.com/Sannrox/rusui/issues/327)
 - Related: [ARCHITECTURE.md](../../ARCHITECTURE.md),
   [VISION.md](../../VISION.md) (no desktop application in rusui),
@@ -12,7 +15,9 @@
   not grant reachability), [ADR 0028](0028-container-isolation-profile.md)
   (container isolation), [#114](https://github.com/Sannrox/rusui/issues/114)
   (terminal), [#115](https://github.com/Sannrox/rusui/issues/115)
-  (preview).
+  (preview),
+  [ADR 0101](0101-environment-desktop-deferral-retained.md) (2026-11-21
+  retain).
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
 
