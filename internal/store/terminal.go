@@ -77,7 +77,7 @@ func CountTerminalAccess(s *Store, envID int64, action string) (int, error) {
 // action, when that row named one.
 func LatestTerminalAccessActor(s *Store, envID int64, action string) (string, bool, error) {
 	var detail string
-	err := s.DB.QueryRow(`SELECT detail FROM terminal_access WHERE environment_id=? AND action=? ORDER BY created_at DESC, rowid DESC LIMIT 1`, envID, action).Scan(&detail)
+	err := s.DB.QueryRow(`SELECT detail FROM terminal_access WHERE environment_id=? AND action=? ORDER BY created_at DESC, id DESC LIMIT 1`, envID, action).Scan(&detail)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
