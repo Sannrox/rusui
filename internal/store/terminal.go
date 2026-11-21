@@ -2,7 +2,9 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -52,7 +54,14 @@ func DeleteTerminalLease(s *Store, envID int64) error {
 	return err
 }
 
-func InsertTerminalAccess(s *Store, envID, sessionID int64, action, detail string) error {
+func InsertTerminalAccess(s *Store, envID, sessionID int64, action, detail, actor string) error {
+	if actor != "" {
+		payload, err := json.Marshal(map[string]string{"actor": actor, "detail": detail})
+		if err != nil {
+			return err
+		}
+		detail = string(payload)
+	}
 	_, err := s.DB.Exec(`INSERT INTO terminal_access (environment_id, session_id, action, detail, created_at) VALUES (?,?,?,?,?)`,
 		envID, sessionID, action, detail, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
@@ -62,4 +71,24 @@ func CountTerminalAccess(s *Store, envID int64, action string) (int, error) {
 	var n int
 	err := s.DB.QueryRow(`SELECT COUNT(*) FROM terminal_access WHERE environment_id=? AND action=?`, envID, action).Scan(&n)
 	return n, err
+}
+
+// LatestTerminalAccessActor is the actor id on the newest access row for
+// action, when that row named one.
+func LatestTerminalAccessActor(s *Store, envID int64, action string) (string, bool, error) {
+	var detail string
+	err := s.DB.QueryRow(`SELECT detail FROM terminal_access WHERE environment_id=? AND action=? ORDER BY created_at DESC, id DESC LIMIT 1`, envID, action).Scan(&detail)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	var payload struct {
+		Actor string `json:"actor"`
+	}
+	if json.Unmarshal([]byte(detail), &payload) != nil || strings.TrimSpace(payload.Actor) == "" {
+		return "", false, nil
+	}
+	return payload.Actor, true, nil
 }

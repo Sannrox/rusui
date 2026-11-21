@@ -55,12 +55,13 @@ func TestOperatorAPIResponseShapes(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("follow %d", res.StatusCode)
 	}
-	// History and the queued state arrive before the turn completes.
+	// History (seeded entry, then the follow-up receipt) and the queued
+	// state arrive before the turn completes.
 	follow := func(ev sseEvent) {
 		key := "GET /sessions/{id}/read/follow event:" + ev.event
 		got[key] = mergeShape(got[key], jsonShape(t, []byte(ev.data)))
 	}
-	for _, want := range []string{"session", "entry", "state"} {
+	for _, want := range []string{"session", "entry", "entry", "state"} {
 		follow(s.expect(want))
 	}
 	sess, err := store.GetSession(e.Store, c.SessionID)

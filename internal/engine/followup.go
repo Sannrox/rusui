@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sannrox/rusui/internal/guest"
@@ -15,16 +16,21 @@ import (
 const createPromptAttachmentSeq = 0
 
 func (e *Engine) PromptFollowUp(sessionID int64, prompt string) (int64, int, error) {
-	return e.promptFollowUp(sessionID, prompt, nil)
+	return e.promptFollowUp(sessionID, prompt, nil, "")
 }
 
 // PromptFollowUpFiles is PromptFollowUp with attachments stored outside
 // the repository (#508).
 func (e *Engine) PromptFollowUpFiles(sessionID int64, prompt string, files []store.PromptFile) (int64, int, error) {
-	return e.promptFollowUp(sessionID, prompt, files)
+	return e.promptFollowUp(sessionID, prompt, files, "")
 }
 
-func (e *Engine) promptFollowUp(sessionID int64, prompt string, files []store.PromptFile) (int64, int, error) {
+// PromptFollowUpFilesActor is PromptFollowUpFiles with the attributed actor id.
+func (e *Engine) PromptFollowUpFilesActor(sessionID int64, prompt string, files []store.PromptFile, actor string) (int64, int, error) {
+	return e.promptFollowUp(sessionID, prompt, files, actor)
+}
+
+func (e *Engine) promptFollowUp(sessionID int64, prompt string, files []store.PromptFile, actor string) (int64, int, error) {
 	if prompt == "" {
 		return 0, 0, fmt.Errorf("prompt required")
 	}
@@ -62,12 +68,16 @@ func (e *Engine) promptFollowUp(sessionID int64, prompt string, files []store.Pr
 		if err != nil {
 			return err
 		}
-		if _, err := e.enqueuePromptTx(tx, j, sessionID, prompt, false, files, e.now()); err != nil {
+		seq, err := e.enqueuePromptTx(tx, j, sessionID, prompt, false, files, e.now())
+		if err != nil {
 			return err
 		}
 		turnID = j.ID
 		pending = j.PendingRevision
-		return nil
+		if actor == "" {
+			return nil
+		}
+		return insertOperatorSteerTx(tx, int64(seq), sess, j, prompt, "follow_up", actor)
 	})
 	return turnID, pending, err
 }
@@ -78,14 +88,19 @@ func (e *Engine) promptFollowUp(sessionID int64, prompt string, files []store.Pr
 // cancel can still drop it. held reports that it waits; false means no
 // turn was running and the prompt is already the pending revision.
 func (e *Engine) PromptQueued(sessionID int64, prompt string) (int64, int, bool, error) {
-	return e.promptQueued(sessionID, prompt, nil)
+	return e.promptQueued(sessionID, prompt, nil, "")
 }
 
 func (e *Engine) PromptQueuedFiles(sessionID int64, prompt string, files []store.PromptFile) (int64, int, bool, error) {
-	return e.promptQueued(sessionID, prompt, files)
+	return e.promptQueued(sessionID, prompt, files, "")
 }
 
-func (e *Engine) promptQueued(sessionID int64, prompt string, files []store.PromptFile) (int64, int, bool, error) {
+// PromptQueuedFilesActor is PromptQueuedFiles with the attributed actor id.
+func (e *Engine) PromptQueuedFilesActor(sessionID int64, prompt string, files []store.PromptFile, actor string) (int64, int, bool, error) {
+	return e.promptQueued(sessionID, prompt, files, actor)
+}
+
+func (e *Engine) promptQueued(sessionID int64, prompt string, files []store.PromptFile, actor string) (int64, int, bool, error) {
 	if prompt == "" {
 		return 0, 0, false, fmt.Errorf("prompt required")
 	}
@@ -132,7 +147,7 @@ func (e *Engine) promptQueued(sessionID int64, prompt string, files []store.Prom
 		held = ok && next.Seq <= seq
 		turnID = j.ID
 		pending = j.PendingRevision
-		return insertOperatorSteerTx(tx, int64(seq), sess, j, prompt, "queued")
+		return insertOperatorSteerTx(tx, int64(seq), sess, j, prompt, "queued", actor)
 	})
 	return turnID, pending, held, err
 }
@@ -181,6 +196,15 @@ type Steer struct {
 }
 
 func (e *Engine) PromptSteer(sessionID int64, prompt string) (int64, int, bool, error) {
+	return e.promptSteer(sessionID, prompt, "")
+}
+
+// PromptSteerActor is PromptSteer with the attributed actor id.
+func (e *Engine) PromptSteerActor(sessionID int64, prompt, actor string) (int64, int, bool, error) {
+	return e.promptSteer(sessionID, prompt, actor)
+}
+
+func (e *Engine) promptSteer(sessionID int64, prompt, actor string) (int64, int, bool, error) {
 	if prompt == "" {
 		return 0, 0, false, fmt.Errorf("prompt required")
 	}
@@ -224,20 +248,27 @@ func (e *Engine) PromptSteer(sessionID int64, prompt string) (int64, int, bool, 
 				return err
 			}
 			pending = j.PendingRevision
-			return insertOperatorSteerTx(tx, id, sess, j, prompt, "steer")
+			return insertOperatorSteerTx(tx, id, sess, j, prompt, "steer", actor)
 		}
 		seq, err := e.enqueuePromptTx(tx, j, sessionID, prompt, false, nil, e.now())
 		if err != nil {
 			return err
 		}
 		pending = j.PendingRevision
-		return insertOperatorSteerTx(tx, int64(seq), sess, j, prompt, "follow_up")
+		return insertOperatorSteerTx(tx, int64(seq), sess, j, prompt, "follow_up", actor)
 	})
 	return turnID, pending, live, err
 }
 
-func insertOperatorSteerTx(tx *store.Tx, id int64, sess *store.Session, j *store.Job, prompt, delivery string) error {
-	body, err := json.Marshal(map[string]string{"actor": "operator", "delivery": delivery, "prompt": prompt})
+func promptReceiptActor(actor string) string {
+	if strings.TrimSpace(actor) == "" {
+		return "operator"
+	}
+	return actor
+}
+
+func insertOperatorSteerTx(tx *store.Tx, id int64, sess *store.Session, j *store.Job, prompt, delivery, actor string) error {
+	body, err := json.Marshal(map[string]string{"actor": promptReceiptActor(actor), "delivery": delivery, "prompt": prompt})
 	if err != nil {
 		return err
 	}

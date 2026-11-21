@@ -31,7 +31,7 @@ type termSess struct {
 }
 
 func (s *Server) consoleTerminal(w http.ResponseWriter, r *http.Request) {
-	if !s.consoleRequire(w, r) {
+	if !s.consoleTermAuth(w, r) {
 		return
 	}
 	sess, _, err := s.termSessionEnv(r)
@@ -39,6 +39,7 @@ func (s *Server) consoleTerminal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	s.recordTerminalAccess(r, sess.EnvironmentID, sess.ID, "observe", "")
 	envRow, ok := s.wakeForOperator(w, sess.ID, "operator terminal")
 	if !ok {
 		return
@@ -66,7 +67,7 @@ func (s *Server) consoleTerminal(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) consoleTermLease(w http.ResponseWriter, r *http.Request) {
-	if !s.consoleRequire(w, r) {
+	if !s.consoleTermAuth(w, r) {
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -96,7 +97,7 @@ func (s *Server) consoleTermLease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if held && time.Now().UTC().Before(lease.ExpiresAt) {
-		_ = store.InsertTerminalAccess(s.Eng.Store, envRow.ID, sess.ID, "refuse", "write lease held")
+		s.recordTerminalAccess(r, envRow.ID, sess.ID, "refuse", "write lease held")
 		http.Error(w, "write lease held", http.StatusConflict)
 		return
 	}
@@ -120,12 +121,12 @@ func (s *Server) consoleTermLease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set(terminalGenerationHeader, strconv.Itoa(gen))
-	_ = store.InsertTerminalAccess(s.Eng.Store, envRow.ID, sess.ID, "acquire", envRow.Handle)
+	s.recordTerminalAccess(r, envRow.ID, sess.ID, "acquire", envRow.Handle)
 	http.Redirect(w, r, "/console/sessions/"+strconv.FormatInt(sess.ID, 10)+"/terminal", http.StatusSeeOther)
 }
 
 func (s *Server) consoleTermRevoke(w http.ResponseWriter, r *http.Request) {
-	if !s.consoleRequire(w, r) {
+	if !s.consoleTermAuth(w, r) {
 		return
 	}
 	if err := r.ParseForm(); err != nil || r.FormValue("csrf") != s.consoleCSRF() {
@@ -148,18 +149,23 @@ func (s *Server) consoleTermRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !held || lease.SessionID != sess.ID || lease.Generation != want {
-		_ = store.InsertTerminalAccess(s.Eng.Store, envRow.ID, sess.ID, "refuse", "stale generation")
+		s.recordTerminalAccess(r, envRow.ID, sess.ID, "refuse", "stale generation")
 		http.Error(w, "stale generation", http.StatusConflict)
+		return
+	}
+	if !s.terminalRevokeAllowed(r, envRow.ID, sess) {
+		s.recordTerminalAccess(r, envRow.ID, sess.ID, "refuse", "write lease held")
+		http.Error(w, "write lease held", http.StatusConflict)
 		return
 	}
 	lease.ExpiresAt = time.Now().UTC().Add(-time.Second)
 	_ = store.PutTerminalLease(s.Eng.Store, *lease)
-	_ = store.InsertTerminalAccess(s.Eng.Store, envRow.ID, sess.ID, "revoke", "")
+	s.recordTerminalAccess(r, envRow.ID, sess.ID, "revoke", "")
 	http.Redirect(w, r, "/console/sessions/"+strconv.FormatInt(sess.ID, 10)+"/terminal", http.StatusSeeOther)
 }
 
 func (s *Server) consoleTermInput(w http.ResponseWriter, r *http.Request) {
-	if !s.consoleRequire(w, r) {
+	if !s.consoleTermAuth(w, r) {
 		return
 	}
 	if err := r.ParseForm(); err != nil || r.FormValue("csrf") != s.consoleCSRF() {
@@ -183,6 +189,11 @@ func (s *Server) consoleTermInput(w http.ResponseWriter, r *http.Request) {
 	want, _ := strconv.Atoi(r.FormValue("generation"))
 	if want != lease.Generation {
 		http.Error(w, "stale generation", http.StatusConflict)
+		return
+	}
+	if !s.terminalWriteHolder(r, envRow.ID) {
+		s.recordTerminalAccess(r, envRow.ID, sess.ID, "refuse", "write lease held")
+		http.Error(w, "write lease held", http.StatusConflict)
 		return
 	}
 	data := r.FormValue("data")
@@ -209,7 +220,7 @@ func (s *Server) consoleTermInput(w http.ResponseWriter, r *http.Request) {
 	}
 	lease.ExpiresAt = time.Now().UTC().Add(terminalLeaseTTL)
 	_ = store.PutTerminalLease(s.Eng.Store, *lease)
-	_ = store.InsertTerminalAccess(s.Eng.Store, envRow.ID, sess.ID, "input", "")
+	s.recordTerminalAccess(r, envRow.ID, sess.ID, "input", "")
 	if r.Header.Get("Accept") == "application/json" {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -218,7 +229,7 @@ func (s *Server) consoleTermInput(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) consoleTermOutput(w http.ResponseWriter, r *http.Request) {
-	if !s.consoleRequire(w, r) {
+	if !s.consoleTermAuth(w, r) {
 		return
 	}
 	sess, _, err := s.termSessionEnv(r)
@@ -300,7 +311,7 @@ func (s *Server) termSessionEnv(r *http.Request) (*store.Session, *store.Environ
 	if err != nil {
 		return nil, nil, fmt.Errorf("id")
 	}
-	sess, err := s.visibleOwnedSession(r, id)
+	sess, err := s.visibleSession(r, id)
 	if err != nil {
 		return nil, nil, fmt.Errorf("not found")
 	}
@@ -309,6 +320,36 @@ func (s *Server) termSessionEnv(r *http.Request) (*store.Session, *store.Environ
 		return nil, nil, fmt.Errorf("environment missing")
 	}
 	return sess, envRow, nil
+}
+
+// consoleTermAuth admits the installing operator cookie or an operator-class
+// API credential. CLI attach uses the latter (ADR 0099 D3).
+func (s *Server) consoleTermAuth(w http.ResponseWriter, r *http.Request) bool {
+	if !s.consoleGate(w, r) {
+		return false
+	}
+	if s.OperatorAPIOK(r) || s.consoleAuthed(r) {
+		return true
+	}
+	http.Redirect(w, r, "/console/signin", http.StatusSeeOther)
+	return false
+}
+
+func (s *Server) recordTerminalAccess(r *http.Request, envID, sessionID int64, action, detail string) {
+	_ = store.InsertTerminalAccess(s.Eng.Store, envID, sessionID, action, detail, s.receiptActor(r))
+}
+
+func (s *Server) terminalWriteHolder(r *http.Request, envID int64) bool {
+	actor, ok, err := store.LatestTerminalAccessActor(s.Eng.Store, envID, "acquire")
+	return err == nil && ok && actor == s.receiptActor(r)
+}
+
+func (s *Server) terminalRevokeAllowed(r *http.Request, envID int64, sess *store.Session) bool {
+	if s.terminalWriteHolder(r, envID) {
+		return true
+	}
+	_, err := s.visibleOwnedSession(r, sess.ID)
+	return err == nil
 }
 
 func (s *Server) ensureTerm(envRow *store.Environment) error {
