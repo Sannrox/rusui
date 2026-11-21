@@ -48,9 +48,17 @@ func runGrok(rw io.ReadWriteCloser, turn Turn, decide Decide) (Result, error) {
 	if err := readJSON(r, &opened); err != nil {
 		return Result{}, err
 	}
+	params = map[string]any{"sessionId": opened.Result.SessionID, "prompt": turn.Prompt}
+	if turn.Traceparent != "" {
+		meta := map[string]any{"traceparent": turn.Traceparent}
+		if turn.Tracestate != "" {
+			meta["tracestate"] = turn.Tracestate
+		}
+		params["_meta"] = meta
+	}
 	if err := writeJSON(rw, map[string]any{
 		"jsonrpc": "2.0", "id": 3, "method": "session/prompt",
-		"params": map[string]any{"sessionId": opened.Result.SessionID, "prompt": turn.Prompt},
+		"params": params,
 	}); err != nil {
 		return Result{}, err
 	}

@@ -78,11 +78,5 @@ func SetGuestSessionTx(tx *sql.Tx, sessionID int64, guestID string) error {
 }
 
 func GetTurnTx(tx *sql.Tx, id int64) (*Turn, error) {
-	var t Turn
-	err := tx.QueryRow(`SELECT id, session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state FROM turns WHERE id=?`, id).Scan(
-		&t.ID, &t.SessionID, &t.Lane, &t.PendingRevision, &t.ClaimedRevision, &t.LeaseGeneration, &t.RetryCount, &t.State)
-	if err != nil {
-		return nil, err
-	}
-	return &t, nil
+	return scanTurn(tx.QueryRow(`SELECT id, session_id, lane, pending_revision, claimed_revision, lease_generation, retry_count, state, COALESCE(trace_context,'') FROM turns WHERE id=?`, id))
 }

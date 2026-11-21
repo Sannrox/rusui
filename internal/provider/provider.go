@@ -99,6 +99,8 @@ type Turn struct {
 	Cursor       string
 	Workspace    string
 	Attachments  []string
+	Traceparent  string
+	Tracestate   string
 	// Observe, when set, receives each event as it is read, before the
 	// turn ends, so a follower sees it live.
 	Observe func(Event)

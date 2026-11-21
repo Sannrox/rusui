@@ -145,3 +145,44 @@ func TestCodexToolElicitationGoesThroughTheFence(t *testing.T) {
 		})
 	}
 }
+
+func TestGrokSessionPromptCarriesTraceMeta(t *testing.T) {
+	clientIn, agentOut := io.Pipe()
+	agentIn, clientOut := io.Pipe()
+	t.Cleanup(func() {
+		_ = clientIn.Close()
+		_ = clientOut.Close()
+		_ = agentIn.Close()
+		_ = agentOut.Close()
+	})
+	const header = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	got := make(chan map[string]any, 1)
+	go func() {
+		r := bufio.NewReader(agentIn)
+		var init map[string]any
+		if err := readJSON(r, &init); err != nil {
+			return
+		}
+		_ = writeJSON(agentOut, map[string]any{"jsonrpc": "2.0", "id": init["id"], "result": map[string]any{"protocolVersion": GrokACPVersion}})
+		var open map[string]any
+		if err := readJSON(r, &open); err != nil {
+			return
+		}
+		_ = writeJSON(agentOut, map[string]any{"jsonrpc": "2.0", "id": open["id"], "result": map[string]any{"sessionId": "grok-sess"}})
+		var prompt map[string]any
+		if err := readJSON(r, &prompt); err != nil {
+			return
+		}
+		got <- prompt
+		_ = writeJSON(agentOut, map[string]any{"jsonrpc": "2.0", "id": 3, "result": map[string]any{"stopReason": "end_turn"}})
+	}()
+	if _, err := runGrok(stdio{Reader: clientIn, WriteCloser: clientOut}, Turn{Prompt: "hi", Workspace: t.TempDir(), Traceparent: header, Tracestate: "vendor=one"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	msg := <-got
+	params, _ := msg["params"].(map[string]any)
+	meta, _ := params["_meta"].(map[string]any)
+	if meta["traceparent"] != header || meta["tracestate"] != "vendor=one" {
+		t.Fatalf("meta %+v", meta)
+	}
+}

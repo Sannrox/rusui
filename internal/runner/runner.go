@@ -57,6 +57,9 @@ type Assignment struct {
 	ItemHash        string `json:"item_hash"`
 	SessionID       int64  `json:"session_id"`
 	TurnToken       string `json:"turn_token"`
+	// Traceparent is this turn's W3C context for session/prompt _meta.
+	Traceparent string `json:"traceparent,omitempty"`
+	Tracestate  string `json:"tracestate,omitempty"`
 	// GuestGrant is the model-proxy and git-proxy credential. It is the
 	// only plane secret copied into the guest environment.
 	GuestGrant   string `json:"guest_grant,omitempty"`

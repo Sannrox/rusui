@@ -12,7 +12,13 @@ tenant. A tenant credential cannot read another tenant's project, and
 rows whose stored session tenant no longer matches are omitted. The row
 names the session id. It does not include the prompt, tool arguments,
 diffs, terminal bytes, file contents, or credentials. Export stays off
-unless `RUSUI_OTEL_ENDPOINT` points at a collector you run.
+unless `RUSUI_OTEL_ENDPOINT` points at a collector you run. When the
+request that admitted the Turn carried a valid W3C `traceparent`, the
+exported `turn` span joins that trace as a child of the caller's span.
+A missing or unusable header starts a new trace. The same context is
+stored with the Turn and sent to the guest as `session/prompt`
+`_meta.traceparent`. The header is never used for identity, tenancy, or
+policy.
 
 A Turn's `tokens_in` and `tokens_out` come only from the model responses
 the plane's model proxy forwarded, summed over the Turn's lease

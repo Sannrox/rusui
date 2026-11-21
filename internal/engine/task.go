@@ -34,6 +34,7 @@ type TaskSpec struct {
 	InstructionPaths []string // repository-offered extra paths; cannot expand scope
 	BudgetRepairs    int
 	Files            []store.PromptFile
+	Trace            store.TraceContext
 }
 
 var fullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -171,7 +172,7 @@ func (e *Engine) StartTask(project string, spec TaskSpec) (*store.Task, error) {
 			if err := g.ready(); err != nil {
 				return err
 			}
-			sid, item, err := store.InsertRunSessionTx(tx, project, spec.Repo, spec.Prompt)
+			sid, item, err := store.InsertRunSessionInboundTx(tx, project, spec.Repo, spec.Prompt, spec.Trace)
 			if err != nil {
 				return err
 			}

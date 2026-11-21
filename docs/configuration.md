@@ -164,7 +164,7 @@ reported and exits successfully.
 | `RUSUI_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY` | model proxy (Claude Code) | Plane secret, sent upstream as `x-api-key`; never copied into the guest. |
 | `RUSUI_GUEST` | no | `grok` (legacy default), `claude`, `codex`, or `shikigami` ([ADR 0025](decisions/0025-provider-boundary.md), [ADR 0060](decisions/0060-shikigami-acp-guest-pin.md)). `shikigami` runs ACP with a per-session state store outside the workspace; the binary must be on `PATH`. |
 | `RUSUI_GUEST_VERSION` | no | Pinned guest version recorded on a Turn measurement when set. Unset stays unknown. |
-| `RUSUI_OTEL_ENDPOINT` | no | Optional collector URL. Unset: measurements stay on the plane and nothing is exported. A collector that is down does not fail the Turn. |
+| `RUSUI_OTEL_ENDPOINT` | no | Optional collector URL. Unset: measurements stay on the plane and nothing is exported. A collector that is down does not fail the Turn. An exported `turn` span joins a valid inbound `traceparent` when one was present at admit. |
 | `RUSUI_GUEST_MODEL` | Claude or shikigami guest | Claude sends the id as `ANTHROPIC_MODEL` and requires it for readiness. Shikigami uses the id in its HTTP configuration; omitted or `auto` selects `gpt-4.1-mini` in the pinned adapter. A model list does not prove this id can prompt. The Grok harness does not take this id. |
 | `RUSUI_MODEL_UPSTREAM` | no | http(s) URL replacing the provider API, e.g. a gateway or a CLI proxy on the plane host. With it set, the provider key may be empty. |
 | `RUSUI_AGENT_GITHUB_TOKEN` | ignored | Guests never receive a GitHub credential ([ADR 0080](decisions/0080-turns-propose-writes-go-through-actions.md)). Kept so existing configs start. |

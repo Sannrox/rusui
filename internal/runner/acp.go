@@ -560,7 +560,7 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 			useAtts = false
 		}
 		go func(blocks []acp.PromptBlock) {
-			pr, err := host.SessionPromptSubmittedBlocks(ctx, sid, blocks, submitted)
+			pr, err := host.SessionPromptSubmittedBlocks(ctx, sid, blocks, submitted, promptTraceMeta(a))
 			result <- promptResponse{prompt: pr, err: err}
 		}(blocks)
 		select {
@@ -603,6 +603,17 @@ func hostACP(ctx context.Context, a *Assignment, host *acp.Client, cwd string, s
 			currentSteerID = steer.ID
 		}
 	}
+}
+
+func promptTraceMeta(a *Assignment) map[string]any {
+	if a == nil || a.Traceparent == "" {
+		return nil
+	}
+	meta := map[string]any{"traceparent": a.Traceparent}
+	if a.Tracestate != "" {
+		meta["tracestate"] = a.Tracestate
+	}
+	return meta
 }
 
 func promptBlocks(a *Assignment, text string) ([]acp.PromptBlock, error) {
@@ -710,6 +721,8 @@ func hostNative(ctx context.Context, a *Assignment, host *acp.Client, cwd, kind 
 		Cursor:       cursor,
 		Prompt:       prompt,
 		Workspace:    cwd,
+		Traceparent:  a.Traceparent,
+		Tracestate:   a.Tracestate,
 		Observe:      transcript.Observe,
 		Resumed:      func(loaded bool) error { return recordResume(host.Rec, a, loaded) },
 	}, claudeDecide(a, host))

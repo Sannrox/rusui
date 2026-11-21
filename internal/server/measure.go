@@ -3,8 +3,6 @@ package server
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -56,7 +54,11 @@ func (s *Server) exportMeasurement(turnID int64) {
 	}
 	base := strings.TrimRight(s.OTelEndpoint, "/")
 	now := time.Now().UTC()
-	s.postOTLP(base+"/v1/traces", tracePayload(*m, now))
+	tc := store.TraceContext{}
+	if turn, err := store.GetTurn(s.Eng.Store, turnID); err == nil && turn != nil {
+		tc = turn.Trace
+	}
+	s.postOTLP(base+"/v1/traces", tracePayload(*m, now, tc))
 	s.postOTLP(base+"/v1/metrics", metricPayload(now))
 }
 
@@ -79,7 +81,7 @@ func (s *Server) postOTLP(url string, payload any) {
 	_ = res.Body.Close()
 }
 
-func tracePayload(m store.Measurement, now time.Time) map[string]any {
+func tracePayload(m store.Measurement, now time.Time, tc store.TraceContext) map[string]any {
 	attrs := []map[string]any{
 		otlpString("terminal_state", m.TerminalState),
 		otlpString("provider", m.Provider),
@@ -97,15 +99,22 @@ func tracePayload(m store.Measurement, now time.Time) map[string]any {
 	if m.DurationMS != nil {
 		start = now.Add(-time.Duration(*m.DurationMS) * time.Millisecond)
 	}
+	if tc.TraceID == "" || tc.SpanID == "" {
+		tc = store.MintTrace(store.TraceContext{})
+	}
+	span := map[string]any{
+		"traceId":           tc.TraceID,
+		"spanId":            tc.SpanID,
+		"name":              "turn",
+		"startTimeUnixNano": strconv.FormatInt(start.UnixNano(), 10),
+		"endTimeUnixNano":   strconv.FormatInt(now.UnixNano(), 10),
+		"attributes":        attrs,
+	}
+	if tc.ParentID != "" {
+		span["parentSpanId"] = tc.ParentID
+	}
 	return map[string]any{"resourceSpans": []any{map[string]any{
-		"scopeSpans": []any{map[string]any{"spans": []any{map[string]any{
-			"traceId":           randomHex(16),
-			"spanId":            randomHex(8),
-			"name":              "turn",
-			"startTimeUnixNano": strconv.FormatInt(start.UnixNano(), 10),
-			"endTimeUnixNano":   strconv.FormatInt(now.UnixNano(), 10),
-			"attributes":        attrs,
-		}}}},
+		"scopeSpans": []any{map[string]any{"spans": []any{span}}},
 	}}}
 }
 
@@ -133,10 +142,4 @@ func otlpString(key, value string) map[string]any {
 
 func otlpInt(key string, value int64) map[string]any {
 	return map[string]any{"key": key, "value": map[string]any{"intValue": strconv.FormatInt(value, 10)}}
-}
-
-func randomHex(n int) string {
-	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
 }

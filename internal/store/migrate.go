@@ -10,7 +10,7 @@ import (
 )
 
 // CurrentSchema is the latest applied schema_migrations.version.
-const CurrentSchema = 65
+const CurrentSchema = 66
 
 // ReadableFloor is the oldest schema version whose binary can still read and
 // write a store at CurrentSchema (ADR 0089 D8). An expand-only migration,
@@ -787,6 +787,14 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	if ver < 66 {
+		if err := migrateV66(s.DB); err != nil {
+			return err
+		}
+		if err := stamp(s.DB, 66); err != nil {
+			return err
+		}
+	}
 	if err := writeFloor(s.DB); err != nil {
 		return err
 	}
@@ -810,6 +818,21 @@ func migrateV65(db *sql.DB) error {
 		return nil
 	}
 	_, err := db.Exec(`ALTER TABLE review_revisions ADD COLUMN created_at TEXT`)
+	return err
+}
+
+// migrateV66 stores the W3C trace minted when a turn is admitted (#827).
+// NULL means unknown (rows from before the column). Expand-only:
+// ReadableFloor stays 62.
+func migrateV66(db *sql.DB) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('turns') WHERE name='trace_context'`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(`ALTER TABLE turns ADD COLUMN trace_context TEXT`)
 	return err
 }
 

@@ -106,6 +106,7 @@ type Turn struct {
 	ExecutionDeadlineAt *time.Time
 	RetryCount          int
 	State               string
+	Trace               TraceContext `json:"-"`
 }
 
 // Process is a durable Rusui identity for one Sumika process generation.

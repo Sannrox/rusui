@@ -136,8 +136,9 @@ type SessionLoadParams struct {
 }
 
 type PromptParams struct {
-	SessionID string        `json:"sessionId"`
-	Prompt    []PromptBlock `json:"prompt"`
+	SessionID string         `json:"sessionId"`
+	Prompt    []PromptBlock  `json:"prompt"`
+	Meta      map[string]any `json:"_meta,omitempty"`
 }
 
 type SessionCancelParams struct {
