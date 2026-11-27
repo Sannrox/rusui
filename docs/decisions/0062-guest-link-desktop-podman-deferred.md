@@ -5,7 +5,8 @@
 - Amends: [ADR 0047](0047-guest-link.md) (guest link proven on native
   Linux Docker; Podman and Docker Desktop unverified).
 - Resolves: [#498](https://github.com/Sannrox/rusui/issues/498)
-- Related: [docs/proofs/498-guest-link-hosts.md](../proofs/498-guest-link-hosts.md)
+- Related: [docs/proofs/498-guest-link-hosts.md](../proofs/498-guest-link-hosts.md),
+  [docs/proofs/785-guest-link-hosts.md](../proofs/785-guest-link-hosts.md)
 - Discussion: none. GitHub Discussions are disabled. Merging with this
   status is the acceptance act.
 
@@ -51,12 +52,18 @@ meets the same pass bar on that host.
 Accept on merge. Validated when the proof names the candidate SHA,
 the pass bar, and a defer for each host.
 
+A later run against `392798f`
+([785-guest-link-hosts.md](../proofs/785-guest-link-hosts.md)) also
+deferred both hosts. D1 through D3 stand.
+
 Reverse with a superseding ADR that records a go or narrow from a
 new predeclared run.
 
 ## Sources
 
 - [#498](https://github.com/Sannrox/rusui/issues/498)
+- [#785](https://github.com/Sannrox/rusui/issues/785)
 - [ADR 0047](0047-guest-link.md)
 - [498-guest-link-hosts.md](../proofs/498-guest-link-hosts.md)
-- Decided against `main` at `aaa74c1`.
+- [785-guest-link-hosts.md](../proofs/785-guest-link-hosts.md)
+- Decided against `main` at `aaa74c1`. The #785 rerun was against `392798f`.

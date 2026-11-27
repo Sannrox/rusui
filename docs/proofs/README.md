@@ -18,6 +18,7 @@
 | #429 managed rerun | [Matrix](429-managed-rerun-matrix.md) | [First results](429-managed-rerun-results.md) (deferred), [second results](429-managed-rerun-2-results.md) (narrow) |
 | #431 issue-to-PR cohort | [Cohort](431-cohort.md), [policy](431-cohort-policy.yaml) | [Results](431-cohort-results.md) (narrow) |
 | #498 guest-link hosts | [Predeclaration and results](498-guest-link-hosts.md) | Docker Desktop defer, Podman defer |
+| #785 guest-link hosts | [Predeclaration and results](785-guest-link-hosts.md) | Docker Desktop defer, Podman defer; ADR 0062 stands |
 | #603 transform authoring | [Walkthrough and results](603-transform-authoring.md) | Fails the bar: publish needs an ADR amending 0080; file feature issues |
 | #679 historical-task benchmark | [Cohort](679-cohort.md), [policy](679-cohort-policy.yaml), [corpus](../../eval/corpus/679-tasks.json) | Results not yet recorded |
 | #698 recovery objective | [Desk research and drill procedure](698-recovery-objective.md) | Proposed objective; drill not yet measured |
