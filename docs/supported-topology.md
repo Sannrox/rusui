@@ -31,7 +31,8 @@ restore, and export versions: [compatibility.md](compatibility.md).
 The reference guest image is a separate digest-pinned artifact, not a
 floating tag and not a per-session download. Docker Desktop and Podman
 Desktop are not this tuple
-([ADR 0062](decisions/0062-guest-link-desktop-podman-deferred.md)).
+([ADR 0062](decisions/0062-guest-link-desktop-podman-deferred.md);
+[#785](proofs/785-guest-link-hosts.md)).
 
 ## Agent and runtime matrix
 

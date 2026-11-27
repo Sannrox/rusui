@@ -17,7 +17,8 @@
   ([#500](https://github.com/Sannrox/rusui/issues/500)); no new
   destinations.
   [ADR 0062](0062-guest-link-desktop-podman-deferred.md) keeps Docker
-  Desktop and Podman unverified; both deferred on the #498 run.
+  Desktop and Podman unverified; both deferred on the #498 run and
+  again on the #785 run.
   [ADR 0093](0093-egress-full-proxy.md) adds, for egress class `full`
   only, a link target served by an HTTP and CONNECT proxy that refuses
   the host and private ranges; the guest keeps no network.
